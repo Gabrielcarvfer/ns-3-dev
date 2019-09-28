@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "net-device-container.h"
+#include "ns3/net-device-container.h"
 #include "ns3/names.h"
 
 namespace ns3 {

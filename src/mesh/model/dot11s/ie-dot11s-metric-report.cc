@@ -18,7 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ie-dot11s-metric-report.h"
+#include "ns3/ie-dot11s-metric-report.h"
 #include "ns3/assert.h"
 
 namespace ns3 {

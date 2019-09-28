@@ -34,7 +34,7 @@
 #include <ns3/mobility-building-info.h>
 #include "ns3/enum.h"
 
-#include "hybrid-buildings-propagation-loss-model.h"
+#include "ns3/hybrid-buildings-propagation-loss-model.h"
 
 
 namespace ns3 {

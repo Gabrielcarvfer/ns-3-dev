@@ -19,8 +19,8 @@
  */
 
 
-#include "lte-interference.h"
-#include "lte-chunk-processor.h"
+#include "ns3/lte-interference.h"
+#include "ns3/lte-chunk-processor.h"
 
 #include <ns3/simulator.h>
 #include <ns3/log.h>

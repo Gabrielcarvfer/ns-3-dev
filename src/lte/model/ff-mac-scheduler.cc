@@ -19,7 +19,7 @@
  */
 
 
-#include "ff-mac-scheduler.h"
+#include "ns3/ff-mac-scheduler.h"
 #include <ns3/log.h>
 #include <ns3/enum.h>
 

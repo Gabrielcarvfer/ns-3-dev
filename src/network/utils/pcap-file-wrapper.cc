@@ -21,7 +21,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/buffer.h"
 #include "ns3/header.h"
-#include "pcap-file-wrapper.h"
+#include "ns3/pcap-file-wrapper.h"
 
 namespace ns3 {
 

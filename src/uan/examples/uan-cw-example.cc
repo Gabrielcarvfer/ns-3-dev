@@ -42,7 +42,7 @@
  * with respect to changes in CW.
  */
 
-#include "uan-cw-example.h"
+#include "ns3/uan-cw-example.h"
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/mobility-module.h"

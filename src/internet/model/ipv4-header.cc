@@ -22,7 +22,7 @@
 #include "ns3/abort.h"
 #include "ns3/log.h"
 #include "ns3/header.h"
-#include "ipv4-header.h"
+#include "ns3/ipv4-header.h"
 
 namespace ns3 {
 

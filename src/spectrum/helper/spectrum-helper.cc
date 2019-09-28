@@ -17,7 +17,7 @@
  *
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
-#include "spectrum-helper.h"
+#include "ns3/spectrum-helper.h"
 #include <ns3/simulator.h>
 #include <ns3/config.h>
 #include <ns3/names.h>

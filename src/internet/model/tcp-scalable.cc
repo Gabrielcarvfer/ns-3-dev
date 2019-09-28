@@ -27,7 +27,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#include "tcp-scalable.h"
+#include "ns3/tcp-scalable.h"
 #include "ns3/log.h"
 
 namespace ns3 {

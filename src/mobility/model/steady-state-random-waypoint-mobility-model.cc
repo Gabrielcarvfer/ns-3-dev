@@ -20,7 +20,7 @@
 #include <cmath>
 #include "ns3/simulator.h"
 #include "ns3/double.h"
-#include "steady-state-random-waypoint-mobility-model.h"
+#include "ns3/steady-state-random-waypoint-mobility-model.h"
 #include "ns3/test.h"
 
 namespace ns3 {

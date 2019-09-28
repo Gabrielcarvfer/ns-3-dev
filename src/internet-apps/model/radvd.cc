@@ -20,7 +20,7 @@
  *         Mehdi Benamor <benamor.mehdi@ensi.rnu.tn>
  */
 
-#include "radvd.h"
+#include "ns3/radvd.h"
 #include "ns3/log.h"
 #include "ns3/abort.h"
 #include "ns3/ipv6-address.h"

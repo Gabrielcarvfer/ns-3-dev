@@ -18,7 +18,7 @@
  *
  */
 
-#include "mac16-address.h"
+#include "ns3/mac16-address.h"
 #include "ns3/address.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"

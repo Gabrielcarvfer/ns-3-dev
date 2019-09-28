@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ssid.h"
+#include "ns3/ssid.h"
 
 namespace ns3 {
 

@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "error-rate-model.h"
+#include "ns3/error-rate-model.h"
 #include "ns3/wifi-tx-vector.h"
 
 namespace ns3 {

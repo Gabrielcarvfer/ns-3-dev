@@ -24,7 +24,6 @@
 #pragma once
 
 #include "ns3/packet.h"
-#include "pending-data.h"
 #include "ns3/sequence-number.h"
 
 #include "ns3/ptr.h"

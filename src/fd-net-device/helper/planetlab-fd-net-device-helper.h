@@ -30,7 +30,7 @@
 #include "ns3/net-device-container.h"
 #include "ns3/node-container.h"
 
-#include "emu-fd-net-device-helper.h"
+#include "ns3/emu-fd-net-device-helper.h"
 
 namespace ns3 {
 

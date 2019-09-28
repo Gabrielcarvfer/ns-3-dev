@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "capability-information.h"
+#include "ns3/capability-information.h"
 
 namespace ns3 {
 

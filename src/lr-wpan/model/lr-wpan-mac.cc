@@ -22,10 +22,10 @@
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  *  Erwan Livolant <erwan.livolant@inria.fr>
  */
-#include "lr-wpan-mac.h"
-#include "lr-wpan-csmaca.h"
-#include "lr-wpan-mac-header.h"
-#include "lr-wpan-mac-trailer.h"
+#include "ns3/lr-wpan-mac.h"
+#include "ns3/lr-wpan-csmaca.h"
+#include "ns3/lr-wpan-mac-header.h"
+#include "ns3/lr-wpan-mac-trailer.h"
 #include <ns3/simulator.h>
 #include <ns3/log.h>
 #include <ns3/uinteger.h>

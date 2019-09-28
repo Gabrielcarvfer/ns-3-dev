@@ -26,7 +26,7 @@
 #include "ns3/frame-capture-model.h"
 #include "ns3/preamble-detection-model.h"
 #include "ns3/mobility-model.h"
-#include "spectrum-wifi-helper.h"
+#include "ns3/spectrum-wifi-helper.h"
 
 namespace ns3 {
 

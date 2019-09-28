@@ -22,7 +22,7 @@
 #include <iomanip>
 #include <cmath>
 #include "ns3/log.h"
-#include "radiotap-header.h"
+#include "ns3/radiotap-header.h"
 
 namespace ns3 {
 

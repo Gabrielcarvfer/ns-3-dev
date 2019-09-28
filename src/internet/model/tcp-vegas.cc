@@ -24,7 +24,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#include "tcp-vegas.h"
+#include "ns3/tcp-vegas.h"
 #include "ns3/log.h"
 
 namespace ns3 {

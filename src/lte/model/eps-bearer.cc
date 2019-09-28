@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "eps-bearer.h"
+#include "ns3/eps-bearer.h"
 #include <ns3/fatal-error.h>
 #include <ns3/attribute-construction-list.h>
 

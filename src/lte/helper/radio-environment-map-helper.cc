@@ -19,7 +19,7 @@
  */
 
 
-#include "radio-environment-map-helper.h"
+#include "ns3/radio-environment-map-helper.h"
 
 #include <ns3/abort.h>
 #include <ns3/log.h>

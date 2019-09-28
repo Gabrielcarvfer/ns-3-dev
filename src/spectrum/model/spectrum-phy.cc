@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "spectrum-phy.h"
+#include "ns3/spectrum-phy.h"
 #include <ns3/net-device.h>
 #include <ns3/mobility-model.h>
 #include <ns3/spectrum-value.h>

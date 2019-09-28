@@ -17,7 +17,7 @@
  *
  * Authors: Pavel Boyko <boyko@iitp.ru>, written after OlsrHelper by Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "aodv-helper.h"
+#include "ns3/aodv-helper.h"
 #include "ns3/aodv-routing-protocol.h"
 #include "ns3/node-list.h"
 #include "ns3/names.h"

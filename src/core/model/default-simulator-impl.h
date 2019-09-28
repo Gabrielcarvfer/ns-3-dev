@@ -20,13 +20,13 @@
 
 #pragma once
 
-#include "simulator-impl.h"
-#include "scheduler.h"
-#include "event-impl.h"
-#include "system-thread.h"
-#include "system-mutex.h"
+#include "ns3/simulator-impl.h"
+#include "ns3/scheduler.h"
+#include "ns3/event-impl.h"
+#include "ns3/system-thread.h"
+#include "ns3/system-mutex.h"
 
-#include "ptr.h"
+#include "ns3/ptr.h"
 
 #include <list>
 

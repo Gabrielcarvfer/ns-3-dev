@@ -30,7 +30,7 @@
 #include "ns3/ptr.h"
 #include "ns3/type-id.h"
 #include "ns3/node.h"
-#include "device-energy-model-container.h"  // #include "device-energy-model.h"
+#include "ns3/device-energy-model-container.h"  // #include "ns3/device-energy-model.h"
 #include "ns3/energy-harvester.h"
 
 namespace ns3 {

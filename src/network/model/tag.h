@@ -20,7 +20,7 @@
 #pragma once
 
 #include "ns3/object-base.h"
-#include "tag-buffer.h"
+#include "ns3/tag-buffer.h"
 #include <stdint.h>
 
 namespace ns3 {

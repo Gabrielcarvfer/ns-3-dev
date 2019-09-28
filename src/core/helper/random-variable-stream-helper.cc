@@ -21,7 +21,7 @@
 #include "ns3/pointer.h"
 #include "ns3/log.h"
 #include "ns3/assert.h"
-#include "random-variable-stream-helper.h"
+#include "ns3/random-variable-stream-helper.h"
 
 /**
  * \file

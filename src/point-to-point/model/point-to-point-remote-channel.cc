@@ -20,8 +20,8 @@
 
 #include <iostream>
 
-#include "point-to-point-remote-channel.h"
-#include "point-to-point-net-device.h"
+#include "ns3/point-to-point-remote-channel.h"
+#include "ns3/point-to-point-net-device.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
 #include "ns3/log.h"

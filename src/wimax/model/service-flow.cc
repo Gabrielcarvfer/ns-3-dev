@@ -20,10 +20,10 @@
  *                               <amine.ismail@UDcast.com>
  */
 
-#include "service-flow.h"
-#include "service-flow-record.h"
+#include "ns3/service-flow.h"
+#include "ns3/service-flow-record.h"
 #include "ns3/simulator.h"
-#include "wimax-tlv.h"
+#include "ns3/wimax-tlv.h"
 
 namespace ns3 {
 

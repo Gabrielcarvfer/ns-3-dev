@@ -21,7 +21,7 @@
 #include "ns3/address-utils.h"
 #include "ns3/packet.h"
 
-#include "flame-header.h"
+#include "ns3/flame-header.h"
 
 namespace ns3 {
 namespace flame {

@@ -17,7 +17,7 @@
  *
  */
 
-#include "tcp-hybla.h"
+#include "ns3/tcp-hybla.h"
 #include "ns3/log.h"
 #include "ns3/tcp-socket-base.h"
 

@@ -21,7 +21,7 @@
 
 
 
-#include "epc-tft.h"
+#include "ns3/epc-tft.h"
 #include "ns3/abort.h"
 #include "ns3/log.h"
 

@@ -23,7 +23,7 @@
 #include <string>
 #include <sstream>
 
-#include "gnuplot-helper.h"
+#include "ns3/gnuplot-helper.h"
 #include "ns3/abort.h"
 #include "ns3/assert.h"
 #include "ns3/config.h"

@@ -20,7 +20,7 @@
 
 #include <cmath>
 
-#include "histogram.h"
+#include "ns3/histogram.h"
 #include "ns3/simulator.h"
 #include "ns3/log.h"
 

@@ -27,7 +27,7 @@
 #include "ns3/ipv6-interface.h"
 #include "ns3/ndisc-cache.h"
 #include "ns3/names.h"
-#include "ipv6-routing-helper.h"
+#include "ns3/ipv6-routing-helper.h"
 
 namespace ns3 {
 

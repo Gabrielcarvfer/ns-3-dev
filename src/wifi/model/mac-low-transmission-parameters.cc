@@ -20,7 +20,7 @@
  *          Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "mac-low-transmission-parameters.h"
+#include "ns3/mac-low-transmission-parameters.h"
 
 namespace ns3 {
 

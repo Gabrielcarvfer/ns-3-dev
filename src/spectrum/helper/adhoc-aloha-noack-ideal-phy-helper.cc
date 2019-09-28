@@ -29,7 +29,7 @@
 #include "ns3/half-duplex-ideal-phy.h"
 #include "ns3/mac48-address.h"
 #include "ns3/aloha-noack-net-device.h"
-#include "adhoc-aloha-noack-ideal-phy-helper.h"
+#include "ns3/adhoc-aloha-noack-ideal-phy-helper.h"
 
 
 

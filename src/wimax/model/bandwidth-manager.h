@@ -23,10 +23,10 @@
 #pragma once
 
 #include <stdint.h>
-#include "wimax-net-device.h"
-#include "ul-job.h"
-#include "bs-uplink-scheduler.h"
-#include "cid.h"
+#include "ns3/wimax-net-device.h"
+#include "ns3/ul-job.h"
+#include "ns3/bs-uplink-scheduler.h"
+#include "ns3/cid.h"
 
 /*
  The same bandwidth manager class serves both for BS and SS though some functions are exclusive to only one of them.

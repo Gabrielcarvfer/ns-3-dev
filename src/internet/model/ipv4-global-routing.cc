@@ -28,8 +28,8 @@
 #include "ns3/ipv4-routing-table-entry.h"
 #include "ns3/boolean.h"
 #include "ns3/node.h"
-#include "ipv4-global-routing.h"
-#include "global-route-manager.h"
+#include "ns3/ipv4-global-routing.h"
+#include "ns3/global-route-manager.h"
 
 namespace ns3 {
 

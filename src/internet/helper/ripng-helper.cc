@@ -22,7 +22,7 @@
 #include "ns3/node-list.h"
 #include "ns3/ipv6-list-routing.h"
 #include "ns3/ripng.h"
-#include "ripng-helper.h"
+#include "ns3/ripng-helper.h"
 
 namespace ns3 {
 

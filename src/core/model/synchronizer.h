@@ -19,8 +19,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "nstime.h"
-#include "object.h"
+#include "ns3/nstime.h"
+#include "ns3/object.h"
 
 /**
  * @file

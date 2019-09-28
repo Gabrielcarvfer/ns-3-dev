@@ -37,7 +37,7 @@
 #include <ns3/propagation-delay-model.h>
 #include <ns3/antenna-model.h>
 #include <ns3/angles.h>
-#include "multi-model-spectrum-channel.h"
+#include "ns3/multi-model-spectrum-channel.h"
 
 namespace ns3 {
 

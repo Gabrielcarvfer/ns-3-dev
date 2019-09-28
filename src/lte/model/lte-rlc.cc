@@ -24,9 +24,9 @@
 
 #include "ns3/lte-rlc.h"
 #include "ns3/lte-rlc-tag.h"
-// #include "lte-mac-sap.h"
+// #include "ns3/lte-mac-sap.h"
 #include "ns3/lte-rlc-sap.h"
-// #include "ff-mac-sched-sap.h"
+// #include "ns3/ff-mac-sched-sap.h"
 
 namespace ns3 {
 

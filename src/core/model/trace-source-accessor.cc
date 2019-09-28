@@ -17,8 +17,8 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "trace-source-accessor.h"
-#include "log.h"
+#include "ns3/trace-source-accessor.h"
+#include "ns3/log.h"
 
 /**
  * \file

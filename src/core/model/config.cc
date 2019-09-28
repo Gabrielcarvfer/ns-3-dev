@@ -17,14 +17,14 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "config.h"
-#include "singleton.h"
-#include "object.h"
-#include "global-value.h"
-#include "object-ptr-container.h"
-#include "names.h"
-#include "pointer.h"
-#include "log.h"
+#include "ns3/config.h"
+#include "ns3/singleton.h"
+#include "ns3/object.h"
+#include "ns3/global-value.h"
+#include "ns3/object-ptr-container.h"
+#include "ns3/names.h"
+#include "ns3/pointer.h"
+#include "ns3/log.h"
 
 #include <sstream>
 

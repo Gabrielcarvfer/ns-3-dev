@@ -19,7 +19,7 @@
  */
 
 #include <ns3/log.h>
-#include "aloha-noack-mac-header.h"
+#include "ns3/aloha-noack-mac-header.h"
 
 
 namespace ns3 {

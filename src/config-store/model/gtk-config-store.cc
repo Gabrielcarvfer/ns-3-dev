@@ -17,9 +17,9 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "gtk-config-store.h"
-#include "raw-text-config.h"
-#include "display-functions.h"
+#include "ns3/gtk-config-store.h"
+#include "ns3/raw-text-config.h"
+#include "ns3/display-functions.h"
 #include "ns3/log.h"
 #include <fstream>
 

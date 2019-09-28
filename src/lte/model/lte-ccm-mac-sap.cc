@@ -19,7 +19,7 @@
  *
  */
 
-#include "lte-ccm-mac-sap.h"
+#include "ns3/lte-ccm-mac-sap.h"
 
 namespace ns3 {
 

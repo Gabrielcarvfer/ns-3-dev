@@ -24,8 +24,8 @@
 #include "ns3/string.h"
 #include "ns3/log.h"
 #include <typeinfo>
-#include "wave-mac-helper.h"
-#include "wifi-80211p-helper.h"
+#include "ns3/wave-mac-helper.h"
+#include "ns3/wifi-80211p-helper.h"
 #include "ns3/unused.h"
 
 namespace ns3 {

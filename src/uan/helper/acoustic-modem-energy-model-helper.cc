@@ -18,7 +18,7 @@
  * Author: Author: Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#include "acoustic-modem-energy-model-helper.h"
+#include "ns3/acoustic-modem-energy-model-helper.h"
 #include "ns3/basic-energy-source-helper.h"
 #include "ns3/uan-phy.h"
 #include "ns3/uan-net-device.h"

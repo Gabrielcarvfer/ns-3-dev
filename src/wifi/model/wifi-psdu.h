@@ -21,7 +21,7 @@
 #pragma once
 
 #include "ns3/nstime.h"
-#include "wifi-mac-header.h"
+#include "ns3/wifi-mac-header.h"
 #include <vector>
 #include <set>
 

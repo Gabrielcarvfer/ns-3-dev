@@ -19,7 +19,7 @@
  */
 
 
-#include "lte-hex-grid-enb-topology-helper.h"
+#include "ns3/lte-hex-grid-enb-topology-helper.h"
 #include <ns3/double.h>
 #include <ns3/log.h>
 #include <ns3/abort.h>

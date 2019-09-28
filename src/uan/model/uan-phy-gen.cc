@@ -19,10 +19,10 @@
  *         Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#include "uan-phy-gen.h"
-#include "uan-transducer.h"
-#include "uan-channel.h"
-#include "uan-net-device.h"
+#include "ns3/uan-phy-gen.h"
+#include "ns3/uan-transducer.h"
+#include "ns3/uan-channel.h"
+#include "ns3/uan-net-device.h"
 #include "ns3/simulator.h"
 #include "ns3/traced-callback.h"
 #include "ns3/ptr.h"

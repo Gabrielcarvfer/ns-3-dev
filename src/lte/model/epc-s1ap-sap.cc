@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "epc-s1ap-sap.h"
+#include "ns3/epc-s1ap-sap.h"
 
 namespace ns3 {
 

@@ -25,7 +25,7 @@
 #include "ns3/callback.h"
 #include "ns3/assert.h"
 #include "ns3/type-id.h"
-#include "buffer.h"
+#include "ns3/buffer.h"
 
 namespace ns3 {
 

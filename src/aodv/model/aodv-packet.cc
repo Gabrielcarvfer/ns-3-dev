@@ -25,7 +25,7 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#include "aodv-packet.h"
+#include "ns3/aodv-packet.h"
 #include "ns3/address-utils.h"
 #include "ns3/packet.h"
 

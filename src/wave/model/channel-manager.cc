@@ -15,7 +15,7 @@
  *
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#include "channel-manager.h"
+#include "ns3/channel-manager.h"
 #include "ns3/log.h"
 #include "ns3/assert.h"
 

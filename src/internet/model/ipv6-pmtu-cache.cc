@@ -18,7 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#include "ipv6-pmtu-cache.h"
+#include "ns3/ipv6-pmtu-cache.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 

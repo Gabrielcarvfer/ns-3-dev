@@ -24,7 +24,7 @@
 
 #include <map>
 
-#include "radvd-interface.h"
+#include "ns3/radvd-interface.h"
 #include "ns3/application.h"
 
 

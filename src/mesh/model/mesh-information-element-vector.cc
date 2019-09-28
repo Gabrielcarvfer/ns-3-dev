@@ -18,7 +18,7 @@
  * Author: Pavel Boyko <boyko@iitp.ru>
  */
 
-#include "mesh-information-element-vector.h"
+#include "ns3/mesh-information-element-vector.h"
 #include "ns3/packet.h"
 #include <algorithm>
 #include "ns3/hwmp-protocol.h"

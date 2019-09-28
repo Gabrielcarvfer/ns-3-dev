@@ -20,8 +20,8 @@
 
 #include "ns3/log.h"
 #include "ns3/double.h"
-#include "wifi-tx-current-model.h"
-#include "wifi-utils.h"
+#include "ns3/wifi-tx-current-model.h"
+#include "ns3/wifi-utils.h"
 
 namespace ns3 {
 

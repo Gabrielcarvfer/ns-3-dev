@@ -17,8 +17,8 @@
  *
  */
 
-#include "simulator-impl.h"
-#include "log.h"
+#include "ns3/simulator-impl.h"
+#include "ns3/log.h"
 
 /**
  * \file

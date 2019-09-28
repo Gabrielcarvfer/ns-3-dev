@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "icmpv4.h"
+#include "ns3/icmpv4.h"
 #include "ns3/packet.h"
 #include "ns3/log.h"
 

@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "udp-echo-helper.h"
+#include "ns3/udp-echo-helper.h"
 #include "ns3/udp-echo-server.h"
 #include "ns3/udp-echo-client.h"
 #include "ns3/uinteger.h"

@@ -19,15 +19,15 @@
  */
 
 #include "ns3/nstime.h"
-#include "wifi-utils.h"
-#include "ctrl-headers.h"
-#include "wifi-mac-header.h"
-#include "wifi-mac-trailer.h"
-#include "wifi-net-device.h"
-#include "ht-configuration.h"
-#include "he-configuration.h"
-#include "wifi-mode.h"
-#include "ampdu-subframe-header.h"
+#include "ns3/wifi-utils.h"
+#include "ns3/ctrl-headers.h"
+#include "ns3/wifi-mac-header.h"
+#include "ns3/wifi-mac-trailer.h"
+#include "ns3/wifi-net-device.h"
+#include "ns3/ht-configuration.h"
+#include "ns3/he-configuration.h"
+#include "ns3/wifi-mode.h"
+#include "ns3/ampdu-subframe-header.h"
 
 namespace ns3 {
 

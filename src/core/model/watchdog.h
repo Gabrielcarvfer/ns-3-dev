@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "nstime.h"
-#include "event-id.h"
+#include "ns3/nstime.h"
+#include "ns3/event-id.h"
 
 /**
  * \file
@@ -188,7 +188,7 @@ private:
  *  Implementation of the templates declared above.
  ********************************************************************/
 
-#include "timer-impl.h"
+#include "ns3/timer-impl.h"
 
 namespace ns3 {
 

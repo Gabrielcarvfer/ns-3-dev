@@ -29,7 +29,7 @@
 #include <ns3/isotropic-antenna-model.h>
 #include <ns3/antenna-model.h>
 #include <cmath>
-#include "tv-spectrum-transmitter.h"
+#include "ns3/tv-spectrum-transmitter.h"
 
 namespace ns3 {
 

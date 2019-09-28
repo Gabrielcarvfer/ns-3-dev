@@ -27,14 +27,14 @@
 #include "ns3/log.h"
 #include "ns3/pointer.h"
 #include "ns3/string.h"
-#include "uan-channel.h"
-#include "uan-phy.h"
-#include "uan-prop-model.h"
-#include "uan-tx-mode.h"
-#include "uan-net-device.h"
-#include "uan-transducer.h"
-#include "uan-noise-model-default.h"
-#include "uan-prop-model-ideal.h"
+#include "ns3/uan-channel.h"
+#include "ns3/uan-phy.h"
+#include "ns3/uan-prop-model.h"
+#include "ns3/uan-tx-mode.h"
+#include "ns3/uan-net-device.h"
+#include "ns3/uan-transducer.h"
+#include "ns3/uan-noise-model-default.h"
+#include "ns3/uan-prop-model-ideal.h"
 
 namespace ns3 {
 

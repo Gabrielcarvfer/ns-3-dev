@@ -20,11 +20,11 @@
  *                               <amine.ismail@UDcast.com>
  */
 
-#include "mac-messages.h"
+#include "ns3/mac-messages.h"
 #include "ns3/address-utils.h"
 #include "ns3/uinteger.h"
 #include "ns3/log.h"
-#include "wimax-tlv.h"
+#include "ns3/wimax-tlv.h"
 
 namespace ns3 {
 

@@ -19,8 +19,8 @@
  */
 
 #include "ns3/log.h"
-#include "aarf-wifi-manager.h"
-#include "wifi-tx-vector.h"
+#include "ns3/aarf-wifi-manager.h"
+#include "ns3/wifi-tx-vector.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 #define Max(a,b) ((a > b) ? a : b)

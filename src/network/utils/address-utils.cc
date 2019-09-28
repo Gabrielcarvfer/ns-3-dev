@@ -17,8 +17,8 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "address-utils.h"
-#include "inet-socket-address.h"
+#include "ns3/address-utils.h"
+#include "ns3/inet-socket-address.h"
 #include "ns3/log.h"
 
 namespace ns3 {

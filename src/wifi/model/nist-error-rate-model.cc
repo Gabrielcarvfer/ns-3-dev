@@ -20,9 +20,9 @@
  */
 
 #include "ns3/log.h"
-#include "nist-error-rate-model.h"
-#include "dsss-error-rate-model.h"
-#include "wifi-phy.h"
+#include "ns3/nist-error-rate-model.h"
+#include "ns3/dsss-error-rate-model.h"
+#include "ns3/wifi-phy.h"
 
 namespace ns3 {
 

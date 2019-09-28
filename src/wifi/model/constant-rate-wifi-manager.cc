@@ -20,9 +20,9 @@
 
 #include "ns3/string.h"
 #include "ns3/log.h"
-#include "constant-rate-wifi-manager.h"
-#include "wifi-tx-vector.h"
-#include "wifi-utils.h"
+#include "ns3/constant-rate-wifi-manager.h"
+#include "ns3/wifi-tx-vector.h"
+#include "ns3/wifi-utils.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 

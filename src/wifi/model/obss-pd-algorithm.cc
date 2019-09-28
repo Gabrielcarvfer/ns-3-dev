@@ -21,10 +21,10 @@
 #include "ns3/log.h"
 #include "ns3/double.h"
 #include "ns3/uinteger.h"
-#include "obss-pd-algorithm.h"
-#include "wifi-net-device.h"
-#include "wifi-phy.h"
-#include "wifi-utils.h"
+#include "ns3/obss-pd-algorithm.h"
+#include "ns3/wifi-net-device.h"
+#include "ns3/wifi-phy.h"
+#include "ns3/wifi-utils.h"
 
 namespace ns3 {
 

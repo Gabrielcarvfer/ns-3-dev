@@ -19,7 +19,7 @@
  *
  */
 
-#include "lte-ffr-algorithm.h"
+#include "ns3/lte-ffr-algorithm.h"
 #include "ns3/uinteger.h"
 #include "ns3/boolean.h"
 #include <ns3/log.h>

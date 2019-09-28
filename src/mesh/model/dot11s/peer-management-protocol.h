@@ -26,9 +26,9 @@
 #include "ns3/event-id.h"
 #include "ns3/nstime.h"
 #include "ns3/traced-value.h"
-#include "ie-dot11s-beacon-timing.h"
-#include "ie-dot11s-peer-management.h"
-#include "peer-link.h"
+#include "ns3/ie-dot11s-beacon-timing.h"
+#include "ns3/ie-dot11s-peer-management.h"
+#include "ns3/peer-link.h"
 
 #include <map>
 namespace ns3 {

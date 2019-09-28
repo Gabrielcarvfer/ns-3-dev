@@ -25,7 +25,7 @@
  * - Budiarto Herman <budiarto.herman@magister.fi>
  */
 
-#include "lte-anr.h"
+#include "ns3/lte-anr.h"
 #include <ns3/log.h>
 #include <ns3/uinteger.h>
 

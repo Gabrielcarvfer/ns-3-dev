@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "wifi-helper.h"
+#include "ns3/wifi-helper.h"
 #include "ns3/yans-wifi-channel.h"
 
 namespace ns3 {

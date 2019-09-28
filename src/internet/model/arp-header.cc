@@ -20,7 +20,7 @@
 
 #include "ns3/assert.h"
 #include "ns3/address-utils.h"
-#include "arp-header.h"
+#include "ns3/arp-header.h"
 #include "ns3/log.h"
 
 namespace ns3 {

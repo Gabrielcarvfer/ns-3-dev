@@ -27,7 +27,7 @@
 #include "ns3/ipv4-interface.h"
 #include "ns3/arp-cache.h"
 #include "ns3/names.h"
-#include "ipv4-routing-helper.h"
+#include "ns3/ipv4-routing-helper.h"
 
 namespace ns3 {
 

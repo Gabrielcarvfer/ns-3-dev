@@ -24,7 +24,7 @@
 #include "ns3/test.h"
 #include "ns3/log.h"
 
-#include "hwmp-rtable.h"
+#include "ns3/hwmp-rtable.h"
 
 namespace ns3 {
 

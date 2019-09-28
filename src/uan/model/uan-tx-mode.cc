@@ -17,7 +17,7 @@
  *
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
-#include "uan-tx-mode.h"
+#include "ns3/uan-tx-mode.h"
 #include "ns3/log.h"
 #include <map>
 #include <utility>

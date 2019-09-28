@@ -21,7 +21,7 @@
  *                Pavel Boyko <boyko@iitp.ru> for matrix
  */
 
-#include "propagation-loss-model.h"
+#include "ns3/propagation-loss-model.h"
 #include "ns3/log.h"
 #include "ns3/mobility-model.h"
 #include "ns3/boolean.h"

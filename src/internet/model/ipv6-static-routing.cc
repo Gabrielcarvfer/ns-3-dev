@@ -27,8 +27,8 @@
 #include "ns3/net-device.h"
 #include "ns3/names.h"
 
-#include "ipv6-static-routing.h"
-#include "ipv6-routing-table-entry.h"
+#include "ns3/ipv6-static-routing.h"
+#include "ns3/ipv6-routing-table-entry.h"
 
 namespace ns3 {
 

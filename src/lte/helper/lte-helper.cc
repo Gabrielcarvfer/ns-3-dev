@@ -21,7 +21,7 @@
  *              Biljana Bojovic <biljana.bojovic@cttc.es> (Carrier Aggregation) 
  */
 
-#include "lte-helper.h"
+#include "ns3/lte-helper.h"
 #include <ns3/string.h>
 #include <ns3/log.h>
 #include <ns3/abort.h>

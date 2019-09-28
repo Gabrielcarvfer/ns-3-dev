@@ -18,7 +18,7 @@
  * Authors: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "extended-capabilities.h"
+#include "ns3/extended-capabilities.h"
 
 namespace ns3 {
 

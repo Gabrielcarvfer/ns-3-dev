@@ -21,7 +21,7 @@
 #include "ns3/ipv6-list-routing.h"
 #include "ns3/node.h"
 
-#include "ipv6-list-routing-helper.h"
+#include "ns3/ipv6-list-routing-helper.h"
 
 namespace ns3 {
 

@@ -16,13 +16,13 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "test.h"
-#include "assert.h"
-#include "abort.h"
-#include "singleton.h"
-#include "system-path.h"
-#include "log.h"
-#include "des-metrics.h"
+#include "ns3/test.h"
+#include "ns3/assert.h"
+#include "ns3/abort.h"
+#include "ns3/singleton.h"
+#include "ns3/system-path.h"
+#include "ns3/log.h"
+#include "ns3/des-metrics.h"
 #include <cmath>
 #include <cstring>
 #include <vector>

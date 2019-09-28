@@ -19,7 +19,7 @@
  *
  */
 
-#include "mpi-interface.h"
+#include "ns3/mpi-interface.h"
 
 #include <ns3/global-value.h>
 #include <ns3/string.h>

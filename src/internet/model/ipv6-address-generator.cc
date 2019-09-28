@@ -22,7 +22,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "ns3/simulation-singleton.h"
-#include "ipv6-address-generator.h"
+#include "ns3/ipv6-address-generator.h"
 
 namespace ns3 {
 

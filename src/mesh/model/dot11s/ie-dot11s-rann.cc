@@ -18,7 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ie-dot11s-rann.h"
+#include "ns3/ie-dot11s-rann.h"
 #include "ns3/assert.h"
 #include "ns3/address-utils.h"
 #include "ns3/packet.h"

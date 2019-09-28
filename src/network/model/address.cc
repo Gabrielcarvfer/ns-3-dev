@@ -20,7 +20,7 @@
 
 #include "ns3/assert.h"
 #include "ns3/log.h"
-#include "address.h"
+#include "ns3/address.h"
 #include <cstring>
 #include <iostream>
 #include <iomanip>

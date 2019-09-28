@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "erp-information.h"
+#include "ns3/erp-information.h"
 
 namespace ns3 {
 

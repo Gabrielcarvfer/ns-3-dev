@@ -23,12 +23,12 @@
 #include "ns3/config.h"
 #include "ns3/double.h"
 #include "ns3/uinteger.h"
-#include "constant-obss-pd-algorithm.h"
-#include "sta-wifi-mac.h"
-#include "wifi-utils.h"
-#include "wifi-phy.h"
-#include "wifi-net-device.h"
-#include "he-configuration.h"
+#include "ns3/constant-obss-pd-algorithm.h"
+#include "ns3/sta-wifi-mac.h"
+#include "ns3/wifi-utils.h"
+#include "ns3/wifi-phy.h"
+#include "ns3/wifi-net-device.h"
+#include "ns3/he-configuration.h"
 
 namespace ns3 {
 

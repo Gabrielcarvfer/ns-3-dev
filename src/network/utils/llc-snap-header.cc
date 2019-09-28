@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "llc-snap-header.h"
+#include "ns3/llc-snap-header.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include <string>

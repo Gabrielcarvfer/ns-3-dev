@@ -28,10 +28,10 @@
 #include <ns3/packet.h>
 #include <ns3/simulator.h>
 
-#include "lte-amc.h"
-#include "lte-control-messages.h"
-#include "lte-enb-net-device.h"
-#include "lte-ue-net-device.h"
+#include "ns3/lte-amc.h"
+#include "ns3/lte-control-messages.h"
+#include "ns3/lte-enb-net-device.h"
+#include "ns3/lte-ue-net-device.h"
 
 #include <ns3/lte-enb-mac.h>
 #include <ns3/lte-radio-bearer-tag.h>

@@ -18,7 +18,7 @@
  * Author: Raj Bhattacharjea <raj.b@gatech.edu>
  */
 #include "tcp-socket-factory-impl.h"
-#include "tcp-l4-protocol.h"
+#include "ns3/tcp-l4-protocol.h"
 #include "ns3/socket.h"
 #include "ns3/assert.h"
 

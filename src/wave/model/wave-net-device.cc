@@ -26,8 +26,8 @@
 #include "ns3/socket.h"
 #include "ns3/object-map.h"
 #include "ns3/object-vector.h"
-#include "wave-net-device.h"
-#include "higher-tx-tag.h"
+#include "ns3/wave-net-device.h"
+#include "ns3/higher-tx-tag.h"
 
 namespace ns3 {
 

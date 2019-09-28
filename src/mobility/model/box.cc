@@ -18,7 +18,7 @@
  * Author: Dan Broyles <dbroyl01@ku.edu>
  */
 
-#include "box.h"
+#include "ns3/box.h"
 #include "ns3/vector.h"
 #include "ns3/assert.h"
 #include "ns3/fatal-error.h"

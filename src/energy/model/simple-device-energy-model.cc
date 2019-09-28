@@ -21,7 +21,7 @@
 #include "ns3/simulator.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/energy-source.h"
-#include "simple-device-energy-model.h"
+#include "ns3/simple-device-energy-model.h"
 #include "ns3/log.h"
 
 namespace ns3 {

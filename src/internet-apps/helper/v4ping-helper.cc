@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "v4ping-helper.h"
+#include "ns3/v4ping-helper.h"
 #include "ns3/v4ping.h"
 #include "ns3/names.h"
 

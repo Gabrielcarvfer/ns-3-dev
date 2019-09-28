@@ -22,8 +22,8 @@
  */
 
 #include "ns3/log.h"
-#include "mac-tx-middle.h"
-#include "wifi-mac-header.h"
+#include "ns3/mac-tx-middle.h"
+#include "ns3/wifi-mac-header.h"
 
 namespace ns3 {
 

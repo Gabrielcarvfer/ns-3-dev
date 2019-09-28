@@ -19,7 +19,7 @@
  *
  */
 
-#include "wimax-tlv.h"
+#include "ns3/wimax-tlv.h"
 
 namespace ns3 {
 

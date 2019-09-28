@@ -20,7 +20,7 @@
 
 #include "ns3/assert.h"
 #include "ns3/address-utils.h"
-#include "dot11s-mac-header.h"
+#include "ns3/dot11s-mac-header.h"
 #include "ns3/packet.h"
 
 namespace ns3 {

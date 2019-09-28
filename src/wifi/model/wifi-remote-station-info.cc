@@ -19,7 +19,7 @@
  */
 
 #include "ns3/simulator.h"
-#include "wifi-remote-station-info.h"
+#include "ns3/wifi-remote-station-info.h"
 
 namespace ns3 {
 

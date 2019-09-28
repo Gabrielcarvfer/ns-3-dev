@@ -20,8 +20,8 @@
  *
  */
 
-#include "planetlab-fd-net-device-helper.h"
-#include "encode-decode.h"
+#include "ns3/planetlab-fd-net-device-helper.h"
+#include "ns3/encode-decode.h"
 
 #include "ns3/abort.h"
 #include "ns3/config.h"

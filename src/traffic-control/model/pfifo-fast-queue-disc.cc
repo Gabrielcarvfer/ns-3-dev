@@ -24,7 +24,7 @@
 #include "ns3/object-factory.h"
 #include "ns3/queue.h"
 #include "ns3/socket.h"
-#include "pfifo-fast-queue-disc.h"
+#include "ns3/pfifo-fast-queue-disc.h"
 
 namespace ns3 {
 

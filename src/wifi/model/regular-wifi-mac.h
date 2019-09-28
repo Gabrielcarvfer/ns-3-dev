@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "wifi-mac.h"
-#include "qos-txop.h"
-#include "ssid.h"
+#include "ns3/wifi-mac.h"
+#include "ns3/qos-txop.h"
+#include "ns3/ssid.h"
 
 namespace ns3 {
 

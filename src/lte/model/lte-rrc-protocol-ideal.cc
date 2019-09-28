@@ -25,11 +25,11 @@
 #include <ns3/node.h>
 #include <ns3/simulator.h>
 
-#include "lte-rrc-protocol-ideal.h"
-#include "lte-ue-rrc.h"
-#include "lte-enb-rrc.h"
-#include "lte-enb-net-device.h"
-#include "lte-ue-net-device.h"
+#include "ns3/lte-rrc-protocol-ideal.h"
+#include "ns3/lte-ue-rrc.h"
+#include "ns3/lte-enb-rrc.h"
+#include "ns3/lte-enb-net-device.h"
+#include "ns3/lte-ue-net-device.h"
 
 namespace ns3 {
 

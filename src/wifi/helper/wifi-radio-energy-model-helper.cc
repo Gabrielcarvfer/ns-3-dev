@@ -18,7 +18,7 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "wifi-radio-energy-model-helper.h"
+#include "ns3/wifi-radio-energy-model-helper.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/wifi-tx-current-model.h"
 #include "ns3/wifi-phy.h"

@@ -28,7 +28,7 @@
 #include <ns3/mobility-helper.h>
 #include <ns3/position-allocator.h>
 #include <ns3/geographic-positions.h>
-#include "tv-spectrum-transmitter-helper.h"
+#include "ns3/tv-spectrum-transmitter-helper.h"
 
 namespace ns3 {
 

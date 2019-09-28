@@ -18,12 +18,12 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ipv4-interface.h"
-#include "loopback-net-device.h"
-#include "ipv4-l3-protocol.h"
-#include "ipv4-queue-disc-item.h"
-#include "arp-l3-protocol.h"
-#include "arp-cache.h"
+#include "ns3/ipv4-interface.h"
+#include "ns3/loopback-net-device.h"
+#include "ns3/ipv4-l3-protocol.h"
+#include "ns3/ipv4-queue-disc-item.h"
+#include "ns3/arp-l3-protocol.h"
+#include "ns3/arp-cache.h"
 #include "ns3/net-device.h"
 #include "ns3/log.h"
 #include "ns3/packet.h"

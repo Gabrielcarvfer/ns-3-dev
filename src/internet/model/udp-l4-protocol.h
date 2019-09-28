@@ -24,7 +24,7 @@
 
 #include "ns3/packet.h"
 #include "ns3/ptr.h"
-#include "ip-l4-protocol.h"
+#include "ns3/ip-l4-protocol.h"
 
 namespace ns3 {
 

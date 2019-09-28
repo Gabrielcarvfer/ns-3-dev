@@ -19,7 +19,7 @@
  */
 
 
-#include "lte-global-pathloss-database.h"
+#include "ns3/lte-global-pathloss-database.h"
 #include "ns3/lte-enb-net-device.h"
 #include "ns3/lte-ue-net-device.h"
 #include "ns3/lte-spectrum-phy.h"

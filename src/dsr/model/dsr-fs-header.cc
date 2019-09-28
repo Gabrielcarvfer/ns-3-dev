@@ -32,7 +32,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "ns3/header.h"
-#include "dsr-fs-header.h"
+#include "ns3/dsr-fs-header.h"
 
 namespace ns3 {
 

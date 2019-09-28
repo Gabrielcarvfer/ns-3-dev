@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "radvd-prefix.h"
+#include "ns3/radvd-prefix.h"
 #include <list>
 #include "ns3/simple-ref-count.h"
 #include "ns3/nstime.h"

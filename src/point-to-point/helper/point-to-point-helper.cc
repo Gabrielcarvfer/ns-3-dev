@@ -33,7 +33,7 @@
 #include "ns3/mpi-receiver.h"
 
 #include "ns3/trace-helper.h"
-#include "point-to-point-helper.h"
+#include "ns3/point-to-point-helper.h"
 
 namespace ns3 {
 

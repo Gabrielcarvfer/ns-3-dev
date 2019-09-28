@@ -23,7 +23,7 @@
 #include "ns3/ptr.h"
 #include "ns3/object-vector.h"
 #include "ipv6-option-demux.h"
-#include "ipv6-option.h"
+#include "ns3/ipv6-option.h"
 
 namespace ns3
 {

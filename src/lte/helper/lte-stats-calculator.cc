@@ -18,7 +18,7 @@
  * Author: Jaume Nin <jnin@cttc.es>
  */
 
-#include "lte-stats-calculator.h"
+#include "ns3/lte-stats-calculator.h"
 
 #include <ns3/log.h>
 #include <ns3/config.h>

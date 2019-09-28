@@ -26,7 +26,7 @@
 #include <iostream>
 #include <cmath>
 
-#include "spectrum-test.h"
+#include "ns3/spectrum-test.h"
 
 using namespace ns3;
 

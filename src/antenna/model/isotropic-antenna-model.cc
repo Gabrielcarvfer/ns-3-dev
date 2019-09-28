@@ -22,8 +22,8 @@
 #include <ns3/log.h>
 #include <ns3/double.h>
 
-#include "antenna-model.h"
-#include "isotropic-antenna-model.h"
+#include "ns3/antenna-model.h"
+#include "ns3/isotropic-antenna-model.h"
 
 
 

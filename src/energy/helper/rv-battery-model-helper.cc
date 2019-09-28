@@ -18,7 +18,7 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "rv-battery-model-helper.h"
+#include "ns3/rv-battery-model-helper.h"
 #include "ns3/energy-source.h"
 
 namespace ns3 {

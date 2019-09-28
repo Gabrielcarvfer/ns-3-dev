@@ -25,7 +25,7 @@
 #include "ns3/ipv4-address.h"
 #include "ns3/ipv6-address.h"
 #include "ns3/sequence-number.h"
-#include "ip-l4-protocol.h"
+#include "ns3/ip-l4-protocol.h"
 
 
 namespace ns3 {

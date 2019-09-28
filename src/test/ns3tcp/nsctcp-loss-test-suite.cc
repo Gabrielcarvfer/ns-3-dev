@@ -36,7 +36,7 @@
 #include "ns3/simulator.h"
 #include "ns3/error-model.h"
 #include "ns3/pointer.h"
-#include "../ns3tcp/ns3tcp-socket-writer.h"
+#include "ns3tcp-socket-writer.h"
 
 using namespace ns3;
 

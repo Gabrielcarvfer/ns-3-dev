@@ -20,7 +20,7 @@
 
 #include "ns3/packet.h"
 
-#include "ipv4-flow-classifier.h"
+#include "ns3/ipv4-flow-classifier.h"
 #include "ns3/udp-header.h"
 #include "ns3/tcp-header.h"
 #include <algorithm>

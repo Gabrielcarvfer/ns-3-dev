@@ -35,9 +35,9 @@
 #include "ns3/ipv4-packet-info-tag.h"
 #include "ns3/ipv6-packet-info-tag.h"
 #include "udp-socket-impl.h"
-#include "udp-l4-protocol.h"
-#include "ipv4-end-point.h"
-#include "ipv6-end-point.h"
+#include "ns3/udp-l4-protocol.h"
+#include "ns3/ipv4-end-point.h"
+#include "ns3/ipv6-end-point.h"
 #include <limits>
 
 namespace ns3 {

@@ -28,10 +28,10 @@
 #include "ns3/nstime.h"
 #include "ns3/buffer.h"
 
-#include "parallel-communication-interface.h"
+#include "ns3/parallel-communication-interface.h"
 
 #ifdef NS3_MPI
-#include "mpi.h"
+#include "ns3/mpi.h"
 #else
 typedef void* MPI_Request;
 #endif

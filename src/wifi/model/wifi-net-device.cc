@@ -24,12 +24,12 @@
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/uinteger.h"
-#include "wifi-net-device.h"
-#include "wifi-phy.h"
-#include "wifi-mac.h"
-#include "ht-configuration.h"
-#include "vht-configuration.h"
-#include "he-configuration.h"
+#include "ns3/wifi-net-device.h"
+#include "ns3/wifi-phy.h"
+#include "ns3/wifi-mac.h"
+#include "ns3/ht-configuration.h"
+#include "ns3/vht-configuration.h"
+#include "ns3/he-configuration.h"
 
 namespace ns3 {
 

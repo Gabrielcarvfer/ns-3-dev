@@ -17,12 +17,12 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "global-value.h"
-#include "fatal-error.h"
-#include "attribute.h"
-#include "string.h"
-#include "uinteger.h"
-#include "log.h"
+#include "ns3/global-value.h"
+#include "ns3/fatal-error.h"
+#include "ns3/attribute.h"
+#include "ns3/string.h"
+#include "ns3/uinteger.h"
+#include "ns3/log.h"
 
 #include "ns3/core-config.h"
 #ifdef HAVE_STDLIB_H

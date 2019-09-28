@@ -27,9 +27,9 @@
 #include <ns3/packet-burst.h>
 #include <ns3/random-variable-stream.h>
 
-#include "lte-ue-mac.h"
-#include "lte-ue-net-device.h"
-#include "lte-radio-bearer-tag.h"
+#include "ns3/lte-ue-mac.h"
+#include "ns3/lte-ue-net-device.h"
+#include "ns3/lte-radio-bearer-tag.h"
 #include <ns3/ff-mac-common.h>
 #include <ns3/lte-control-messages.h>
 #include <ns3/simulator.h>

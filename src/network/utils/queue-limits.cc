@@ -20,7 +20,7 @@
  */
 
 #include "ns3/log.h"
-#include "queue-limits.h"
+#include "ns3/queue-limits.h"
 
 namespace ns3 {
 

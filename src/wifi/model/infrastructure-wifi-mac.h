@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "regular-wifi-mac.h"
+#include "ns3/regular-wifi-mac.h"
 
 namespace ns3 {
 

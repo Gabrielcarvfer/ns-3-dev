@@ -20,7 +20,7 @@
  *                              <Amine.Ismail@UDcast.com>
  */
 
-#include "wimax-mac-queue.h"
+#include "ns3/wimax-mac-queue.h"
 #include "ns3/packet.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/uinteger.h"

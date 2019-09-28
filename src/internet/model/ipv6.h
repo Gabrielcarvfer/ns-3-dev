@@ -29,7 +29,7 @@
 #include "ns3/callback.h"
 
 #include "ns3/ipv6-address.h"
-#include "ipv6-interface-address.h"
+#include "ns3/ipv6-interface-address.h"
 
 namespace ns3 {
 

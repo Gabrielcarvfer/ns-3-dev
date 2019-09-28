@@ -19,7 +19,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *         Junling Bu <linlinjavaer@gmail.com>
  */
-#include "higher-tx-tag.h"
+#include "ns3/higher-tx-tag.h"
 #include "ns3/log.h"
 
 namespace ns3 {

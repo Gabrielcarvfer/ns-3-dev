@@ -19,7 +19,7 @@
  */
 
 #include "ns3/log.h"
-#include "net-device.h"
+#include "ns3/net-device.h"
 
 namespace ns3 {
 

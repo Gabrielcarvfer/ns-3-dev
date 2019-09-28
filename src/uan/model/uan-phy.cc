@@ -18,7 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "uan-phy.h"
+#include "ns3/uan-phy.h"
 
 namespace ns3 {
 

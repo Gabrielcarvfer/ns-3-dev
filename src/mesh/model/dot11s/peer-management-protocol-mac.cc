@@ -18,12 +18,12 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ie-dot11s-configuration.h"
-#include "ie-dot11s-peer-management.h"
-#include "dot11s-mac-header.h"
+#include "ns3/ie-dot11s-configuration.h"
+#include "ns3/ie-dot11s-peer-management.h"
+#include "ns3/dot11s-mac-header.h"
 #include "peer-management-protocol-mac.h"
-#include "peer-management-protocol.h"
-#include "peer-link-frame.h"
+#include "ns3/peer-management-protocol.h"
+#include "ns3/peer-link-frame.h"
 #include "ns3/mesh-wifi-interface-mac.h"
 #include "ns3/simulator.h"
 #include "ns3/mesh-information-element-vector.h"

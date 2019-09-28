@@ -21,8 +21,8 @@
 
 #include "ns3/ptr.h"
 #include "ns3/address.h"
-#include "mac48-address.h"
-#include "mac64-address.h"
+#include "ns3/mac48-address.h"
+#include "ns3/mac64-address.h"
 #include "ns3/net-device.h"
 
 namespace ns3 {

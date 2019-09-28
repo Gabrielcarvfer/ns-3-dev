@@ -20,8 +20,8 @@
 
 #include "ns3/assert.h"
 #include "ns3/net-device.h"
-#include "wimax-channel.h"
-#include "wimax-phy.h"
+#include "ns3/wimax-channel.h"
+#include "ns3/wimax-phy.h"
 
 namespace ns3 {
 

@@ -17,7 +17,7 @@
  *
  */
 
-#include "tcp-highspeed.h"
+#include "ns3/tcp-highspeed.h"
 #include "ns3/log.h"
 
 namespace ns3 {

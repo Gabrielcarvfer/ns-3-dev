@@ -23,8 +23,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "cid.h"
-#include "wimax-connection.h"
+#include "ns3/cid.h"
+#include "ns3/wimax-connection.h"
 #include "ns3/mac48-address.h"
 
 namespace ns3 {

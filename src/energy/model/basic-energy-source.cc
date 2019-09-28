@@ -18,7 +18,7 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "basic-energy-source.h"
+#include "ns3/basic-energy-source.h"
 #include "ns3/log.h"
 #include "ns3/assert.h"
 #include "ns3/double.h"

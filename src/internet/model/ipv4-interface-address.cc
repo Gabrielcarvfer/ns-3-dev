@@ -20,7 +20,7 @@
 
 #include "ns3/log.h"
 #include "ns3/assert.h"
-#include "ipv4-interface-address.h"
+#include "ns3/ipv4-interface-address.h"
 
 namespace ns3 {
 

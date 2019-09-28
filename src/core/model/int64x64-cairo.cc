@@ -17,17 +17,17 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "test.h"
-#include "abort.h"
-#include "assert.h"
-#include "log.h"
+#include "ns3/test.h"
+#include "ns3/abort.h"
+#include "ns3/assert.h"
+#include "ns3/log.h"
 #include <cmath>
 #include <iostream>
-#include "int64x64-cairo.h"
+#include "ns3/int64x64-cairo.h"
 
 // Include directly to allow optimizations within this compilation unit.
 extern "C" {
-#include "cairo-wideint.c"
+#include "ns3/cairo-wideint.c"
 }
 
 /**

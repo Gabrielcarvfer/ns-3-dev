@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "he-capabilities.h"
+#include "ns3/he-capabilities.h"
 
 namespace ns3 {
 

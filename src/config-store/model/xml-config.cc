@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "xml-config.h"
-#include "attribute-default-iterator.h"
-#include "attribute-iterator.h"
+#include "ns3/xml-config.h"
+#include "ns3/attribute-default-iterator.h"
+#include "ns3/attribute-iterator.h"
 #include "ns3/fatal-error.h"
 #include "ns3/log.h"
 #include "ns3/global-value.h"

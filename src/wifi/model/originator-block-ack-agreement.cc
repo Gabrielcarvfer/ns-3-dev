@@ -20,9 +20,9 @@
  */
 
 #include "ns3/log.h"
-#include "originator-block-ack-agreement.h"
-#include "wifi-mac-queue-item.h"
-#include "wifi-utils.h"
+#include "ns3/originator-block-ack-agreement.h"
+#include "ns3/wifi-mac-queue-item.h"
+#include "ns3/wifi-utils.h"
 
 namespace ns3 {
 

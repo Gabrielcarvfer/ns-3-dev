@@ -23,8 +23,8 @@
  *
  */
 
-#include "epc-tft-classifier.h"
-#include "epc-tft.h"
+#include "ns3/epc-tft-classifier.h"
+#include "ns3/epc-tft.h"
 #include "ns3/log.h"
 #include "ns3/packet.h"
 #include "ns3/ipv4-header.h"

@@ -18,7 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "uan-mac-cw.h"
+#include "ns3/uan-mac-cw.h"
 #include "ns3/attribute.h"
 #include "ns3/uinteger.h"
 #include "ns3/double.h"

@@ -62,7 +62,7 @@
 #include "ns3/double.h"
 #include "ns3/simulator.h"
 #include "ns3/abort.h"
-#include "red-queue-disc.h"
+#include "ns3/red-queue-disc.h"
 #include "ns3/drop-tail-queue.h"
 
 namespace ns3 {

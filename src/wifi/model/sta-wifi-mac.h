@@ -22,8 +22,8 @@
 
 #pragma once
 
-#include "infrastructure-wifi-mac.h"
-#include "mgt-headers.h"
+#include "ns3/infrastructure-wifi-mac.h"
+#include "ns3/mgt-headers.h"
 
 class TwoLevelAggregationTest;
 class AmpduAggregationTest;

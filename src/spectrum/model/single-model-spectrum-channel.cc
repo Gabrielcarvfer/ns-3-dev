@@ -35,7 +35,7 @@
 #include <ns3/angles.h>
 
 
-#include "single-model-spectrum-channel.h"
+#include "ns3/single-model-spectrum-channel.h"
 
 
 namespace ns3 {

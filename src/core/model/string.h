@@ -20,7 +20,7 @@
 #pragma once
 
 #include <string>
-#include "attribute-helper.h"
+#include "ns3/attribute-helper.h"
 
 /**
  * \file

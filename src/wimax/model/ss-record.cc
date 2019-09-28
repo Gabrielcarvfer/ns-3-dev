@@ -19,8 +19,8 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#include "ss-record.h"
-#include "service-flow.h"
+#include "ns3/ss-record.h"
+#include "ns3/service-flow.h"
 #include <stdint.h>
 
 namespace ns3 {

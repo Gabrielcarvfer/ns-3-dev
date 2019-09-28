@@ -19,7 +19,7 @@
  *
  */
 
-#include "lte-anr-sap.h"
+#include "ns3/lte-anr-sap.h"
 
 
 namespace ns3 {

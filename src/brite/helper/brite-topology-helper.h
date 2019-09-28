@@ -29,7 +29,7 @@
 #include "ns3/random-variable-stream.h"
 
 //located in BRITE source directory
-#include "Brite.h"
+#include "ns3/Brite.h"
 
 namespace ns3 {
 

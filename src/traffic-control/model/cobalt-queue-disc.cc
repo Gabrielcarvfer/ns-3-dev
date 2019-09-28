@@ -29,7 +29,7 @@
 #include "ns3/enum.h"
 #include "ns3/uinteger.h"
 #include "ns3/abort.h"
-#include "cobalt-queue-disc.h"
+#include "ns3/cobalt-queue-disc.h"
 #include "ns3/object-factory.h"
 #include "ns3/drop-tail-queue.h"
 #include "ns3/net-device-queue-interface.h"

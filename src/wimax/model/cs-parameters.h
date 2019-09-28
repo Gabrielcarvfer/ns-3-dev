@@ -22,8 +22,8 @@
 
 #pragma once
 
-#include "ipcs-classifier-record.h"
-#include "wimax-tlv.h"
+#include "ns3/ipcs-classifier-record.h"
+#include "ns3/wimax-tlv.h"
 
 namespace ns3 {
 

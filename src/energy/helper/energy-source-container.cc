@@ -20,7 +20,7 @@
  *          Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "energy-source-container.h"
+#include "ns3/energy-source-container.h"
 #include "ns3/names.h"
 
 namespace ns3 {

@@ -21,7 +21,7 @@
 #pragma once
 
 #include "ns3/nstime.h"
-#include "wifi-tx-vector.h"
+#include "ns3/wifi-tx-vector.h"
 #include <map>
 
 namespace ns3 {

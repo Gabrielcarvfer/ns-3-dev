@@ -22,10 +22,10 @@
 
 #pragma once
 
-#include "olsr-header.h"
+#include "ns3/olsr-header.h"
 #include "ns3/test.h"
-#include "olsr-state.h"
-#include "olsr-repositories.h"
+#include "ns3/olsr-state.h"
+#include "ns3/olsr-repositories.h"
 
 #include "ns3/object.h"
 #include "ns3/packet.h"

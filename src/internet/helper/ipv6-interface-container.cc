@@ -23,7 +23,7 @@
 #include "ns3/node-list.h"
 #include "ns3/names.h"
 
-#include "ipv6-interface-container.h"
+#include "ns3/ipv6-interface-container.h"
 #include "ns3/ipv6-static-routing-helper.h"
 
 namespace ns3 {

@@ -24,7 +24,7 @@
 #include "ns3/integer.h"
 #include "ns3/boolean.h"
 #include "ns3/trace-source-accessor.h"
-#include "udp-socket.h"
+#include "ns3/udp-socket.h"
 
 namespace ns3 {
 

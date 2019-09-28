@@ -26,8 +26,8 @@
 #include "ns3/minstrel-wifi-manager.h"
 #include "ns3/radiotap-header.h"
 #include "ns3/unused.h"
-#include "wave-mac-helper.h"
-#include "wave-helper.h"
+#include "ns3/wave-mac-helper.h"
+#include "ns3/wave-helper.h"
 
 NS_LOG_COMPONENT_DEFINE ("WaveHelper");
 

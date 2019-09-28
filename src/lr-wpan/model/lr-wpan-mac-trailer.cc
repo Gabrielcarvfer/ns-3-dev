@@ -20,7 +20,7 @@
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  *  Erwan Livolant <erwan.livolant@inria.fr>
  */
-#include "lr-wpan-mac-trailer.h"
+#include "ns3/lr-wpan-mac-trailer.h"
 #include <ns3/packet.h>
 
 namespace ns3 {

@@ -21,9 +21,9 @@
  */
 
 #include <stdint.h>
-#include "ss-manager.h"
+#include "ns3/ss-manager.h"
 #include "ns3/log.h"
-#include "service-flow.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 

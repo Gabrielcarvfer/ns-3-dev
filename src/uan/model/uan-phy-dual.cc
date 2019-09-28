@@ -19,12 +19,12 @@
  *         Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#include "uan-phy.h"
-#include "uan-phy-dual.h"
-#include "uan-phy-gen.h"
-#include "uan-tx-mode.h"
-#include "uan-net-device.h"
-#include "uan-channel.h"
+#include "ns3/uan-phy.h"
+#include "ns3/uan-phy-dual.h"
+#include "ns3/uan-phy-gen.h"
+#include "ns3/uan-tx-mode.h"
+#include "ns3/uan-net-device.h"
+#include "ns3/uan-channel.h"
 #include "ns3/double.h"
 #include "ns3/string.h"
 #include "ns3/log.h"
@@ -32,8 +32,8 @@
 #include "ns3/traced-callback.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/simulator.h"
-#include "uan-header-common.h"
-#include "uan-mac-rc.h"
+#include "ns3/uan-header-common.h"
+#include "ns3/uan-mac-rc.h"
 
 #include <cmath>
 

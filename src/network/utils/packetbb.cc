@@ -26,7 +26,7 @@
 #include "ns3/ipv6-address.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"
-#include "packetbb.h"
+#include "ns3/packetbb.h"
 
 static const uint8_t VERSION = 0;
 /* Packet flags */

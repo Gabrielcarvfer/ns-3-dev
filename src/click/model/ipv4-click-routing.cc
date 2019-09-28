@@ -29,7 +29,7 @@
 #include "ns3/ipv4-interface.h"
 #include "ns3/ipv4-l3-click-protocol.h"
 
-#include "ipv4-click-routing.h"
+#include "ns3/ipv4-click-routing.h"
 #include <string>
 #include <map>
 

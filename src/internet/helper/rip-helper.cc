@@ -22,7 +22,7 @@
 #include "ns3/node-list.h"
 #include "ns3/ipv4-list-routing.h"
 #include "ns3/rip.h"
-#include "rip-helper.h"
+#include "ns3/rip-helper.h"
 
 namespace ns3 {
 

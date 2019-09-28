@@ -22,8 +22,8 @@
  */
 
 #include "ns3/simulator.h"
-#include "wifi-mac-queue.h"
-#include "qos-blocked-destinations.h"
+#include "ns3/wifi-mac-queue.h"
+#include "ns3/qos-blocked-destinations.h"
 
 namespace ns3 {
 

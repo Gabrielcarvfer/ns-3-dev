@@ -30,7 +30,7 @@
 #include "ns3/non-communicating-net-device.h"
 #include "ns3/output-stream-wrapper.h"
 #include "ns3/trace-helper.h"
-#include "spectrum-analyzer-helper.h"
+#include "ns3/spectrum-analyzer-helper.h"
 
 
 

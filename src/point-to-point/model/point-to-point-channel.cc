@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "point-to-point-channel.h"
-#include "point-to-point-net-device.h"
+#include "ns3/point-to-point-channel.h"
+#include "ns3/point-to-point-net-device.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"

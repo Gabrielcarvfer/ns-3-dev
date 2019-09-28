@@ -20,7 +20,7 @@
 
 #include "ns3/names.h"
 #include "ns3/log.h"
-#include "application-container.h"
+#include "ns3/application-container.h"
 
 namespace ns3 {
 

@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "tag-buffer.h"
+#include "ns3/tag-buffer.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include <cstring>

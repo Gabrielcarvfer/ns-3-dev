@@ -21,10 +21,10 @@
 #pragma once
 #include "ns3/header.h"
 #include "ns3/supported-rates.h"
-#include "dot11s-mac-header.h"
-#include "ie-dot11s-configuration.h"
-#include "ie-dot11s-peering-protocol.h"
-#include "ie-dot11s-id.h"
+#include "ns3/dot11s-mac-header.h"
+#include "ns3/ie-dot11s-configuration.h"
+#include "ns3/ie-dot11s-peering-protocol.h"
+#include "ns3/ie-dot11s-id.h"
 namespace ns3
 {
 namespace dot11s

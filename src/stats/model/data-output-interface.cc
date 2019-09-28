@@ -20,7 +20,7 @@
 
 #include "ns3/log.h"
 
-#include "data-output-interface.h"
+#include "ns3/data-output-interface.h"
 
 using namespace ns3;
 

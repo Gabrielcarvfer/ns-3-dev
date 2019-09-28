@@ -23,11 +23,11 @@
 #include "ns3/pointer.h"
 #include "ns3/node.h"
 #include "ns3/assert.h"
-#include "uan-net-device.h"
-#include "uan-phy.h"
-#include "uan-mac.h"
-#include "uan-channel.h"
-#include "uan-transducer.h"
+#include "ns3/uan-net-device.h"
+#include "ns3/uan-phy.h"
+#include "ns3/uan-mac.h"
+#include "ns3/uan-channel.h"
+#include "ns3/uan-transducer.h"
 #include "ns3/log.h"
 
 namespace ns3 {

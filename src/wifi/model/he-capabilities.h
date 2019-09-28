@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "wifi-information-element.h"
+#include "ns3/wifi-information-element.h"
 
 namespace ns3 {
 

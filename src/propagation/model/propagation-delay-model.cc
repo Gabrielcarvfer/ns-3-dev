@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "propagation-delay-model.h"
+#include "ns3/propagation-delay-model.h"
 #include "ns3/mobility-model.h"
 #include "ns3/double.h"
 #include "ns3/string.h"

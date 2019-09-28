@@ -16,21 +16,21 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "simulator.h"
-#include "realtime-simulator-impl.h"
-#include "wall-clock-synchronizer.h"
-#include "scheduler.h"
-#include "event-impl.h"
-#include "synchronizer.h"
+#include "ns3/simulator.h"
+#include "ns3/realtime-simulator-impl.h"
+#include "ns3/wall-clock-synchronizer.h"
+#include "ns3/scheduler.h"
+#include "ns3/event-impl.h"
+#include "ns3/synchronizer.h"
 
-#include "ptr.h"
-#include "pointer.h"
-#include "assert.h"
-#include "fatal-error.h"
-#include "log.h"
-#include "system-mutex.h"
-#include "boolean.h"
-#include "enum.h"
+#include "ns3/ptr.h"
+#include "ns3/pointer.h"
+#include "ns3/assert.h"
+#include "ns3/fatal-error.h"
+#include "ns3/log.h"
+#include "ns3/system-mutex.h"
+#include "ns3/boolean.h"
+#include "ns3/enum.h"
 
 
 #include <cmath>

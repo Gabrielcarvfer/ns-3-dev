@@ -13,7 +13,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#include "nsc-tcp-l4-protocol.h"
+#include "ns3/nsc-tcp-l4-protocol.h"
 #include "nsc-tcp-socket-factory-impl.h"
 #include "ns3/socket.h"
 #include "ns3/assert.h"

@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "config-store.h"
+#include "ns3/config-store.h"
 #include "raw-text-config.h"
 #include "ns3/abort.h"
 #include "ns3/string.h"
@@ -28,7 +28,7 @@
 #include "ns3/enum.h"
 #include "ns3/config-store-config.h"
 #ifdef HAVE_LIBXML2
-#include "xml-config.h"
+#include "ns3/xml-config.h"
 #endif
 
 #include <string>

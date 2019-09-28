@@ -16,7 +16,7 @@
  * Author: George Riley <riley@ece.gatech.edu>
  */
 
-#include "mpi-receiver.h"
+#include "ns3/mpi-receiver.h"
 
 namespace ns3 {
 

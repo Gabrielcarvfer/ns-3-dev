@@ -21,8 +21,8 @@
 #pragma once
 
 #include "ns3/object.h"
-#include "wifi-mode.h"
-#include "qos-txop.h"
+#include "ns3/wifi-mode.h"
+#include "ns3/qos-txop.h"
 #include "ns3/nstime.h"
 #include <vector>
 

@@ -32,9 +32,9 @@
 
 #pragma once
 
-#include "dsdv-rtable.h"
-#include "dsdv-packet-queue.h"
-#include "dsdv-packet.h"
+#include "ns3/dsdv-rtable.h"
+#include "ns3/dsdv-packet-queue.h"
+#include "ns3/dsdv-packet.h"
 #include "ns3/node.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/ipv4-routing-protocol.h"

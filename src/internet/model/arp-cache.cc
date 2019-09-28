@@ -26,10 +26,10 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/names.h"
 
-#include "arp-cache.h"
-#include "arp-header.h"
-#include "ipv4-interface.h"
-#include "ipv4-header.h"
+#include "ns3/arp-cache.h"
+#include "ns3/arp-header.h"
+#include "ns3/ipv4-interface.h"
+#include "ns3/ipv4-header.h"
 
 namespace ns3 {
 

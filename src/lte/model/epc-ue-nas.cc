@@ -23,9 +23,9 @@
 
 #include <ns3/epc-helper.h>
 
-#include "lte-enb-net-device.h"
-#include "epc-ue-nas.h"
-#include "lte-as-sap.h"
+#include "ns3/lte-enb-net-device.h"
+#include "ns3/epc-ue-nas.h"
+#include "ns3/lte-as-sap.h"
 
 namespace ns3 {
 

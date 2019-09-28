@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "udp-socket-factory.h"
+#include "ns3/udp-socket-factory.h"
 #include "ns3/uinteger.h"
 
 namespace ns3 {

@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <list>
 #include "ns3/ipv4-address.h"
-#include "ipv4-interface.h"
+#include "ns3/ipv4-interface.h"
 
 namespace ns3 {
 

@@ -20,7 +20,7 @@
 
 #include "ns3/packet.h"
 #include "ns3/log.h"
-#include "tcp-rx-buffer.h"
+#include "ns3/tcp-rx-buffer.h"
 
 namespace ns3 {
 

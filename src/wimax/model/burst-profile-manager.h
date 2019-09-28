@@ -21,9 +21,9 @@
 #pragma once
 
 #include <stdint.h>
-#include "cid.h"
-#include "wimax-phy.h"
-#include "wimax-net-device.h"
+#include "ns3/cid.h"
+#include "ns3/wimax-phy.h"
+#include "ns3/wimax-net-device.h"
 
 namespace ns3 {
 

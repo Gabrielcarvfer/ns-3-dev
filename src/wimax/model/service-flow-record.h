@@ -22,8 +22,8 @@
 
 #include <stdint.h>
 #include "ns3/nstime.h"
-#include "bs-uplink-scheduler.h"
-#include "bs-net-device.h"
+#include "ns3/bs-uplink-scheduler.h"
+#include "ns3/bs-net-device.h"
 #include "ns3/ptr.h"
 
 namespace ns3 {

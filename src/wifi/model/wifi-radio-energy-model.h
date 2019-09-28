@@ -25,8 +25,8 @@
 #include "ns3/traced-value.h"
 #include "ns3/event-id.h"
 #include "ns3/nstime.h"
-#include "wifi-phy-listener.h"
-#include "wifi-phy-state.h"
+#include "ns3/wifi-phy-listener.h"
+#include "ns3/wifi-phy-state.h"
 
 namespace ns3 {
 

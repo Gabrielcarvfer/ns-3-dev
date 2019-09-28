@@ -21,8 +21,8 @@
 
 #include <stdint.h>
 #include "ns3/nstime.h"
-#include "mobility-model.h"
-#include "constant-velocity-helper.h"
+#include "ns3/mobility-model.h"
+#include "ns3/constant-velocity-helper.h"
 
 namespace ns3 {
 

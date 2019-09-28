@@ -27,7 +27,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
-#include "dynamic-queue-limits.h"
+#include "ns3/dynamic-queue-limits.h"
 
 // Set some static maximums
 static const uint32_t UINTMAX = std::numeric_limits<uint32_t>::max ();

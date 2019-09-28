@@ -24,7 +24,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#include "tcp-htcp.h"
+#include "ns3/tcp-htcp.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 

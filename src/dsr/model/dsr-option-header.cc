@@ -32,7 +32,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "ns3/header.h"
-#include "dsr-option-header.h"
+#include "ns3/dsr-option-header.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/address-utils.h"
 #include "ns3/packet.h"

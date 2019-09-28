@@ -21,9 +21,9 @@
  */
 #pragma once
 
-#include "constant-velocity-helper.h"
-#include "mobility-model.h"
-#include "position-allocator.h"
+#include "ns3/constant-velocity-helper.h"
+#include "ns3/mobility-model.h"
+#include "ns3/position-allocator.h"
 #include "ns3/ptr.h"
 #include "ns3/object.h"
 #include "ns3/nstime.h"

@@ -18,7 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "uan-noise-model-default.h"
+#include "ns3/uan-noise-model-default.h"
 #include "ns3/double.h"
 
 #include <cmath>

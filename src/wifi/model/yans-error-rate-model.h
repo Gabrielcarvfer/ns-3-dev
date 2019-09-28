@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "error-rate-model.h"
+#include "ns3/error-rate-model.h"
 
 namespace ns3 {
 

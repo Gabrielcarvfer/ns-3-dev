@@ -19,7 +19,7 @@
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#include "lte-common.h"
+#include "ns3/lte-common.h"
 #include <ns3/log.h>
 #include <ns3/abort.h>
 

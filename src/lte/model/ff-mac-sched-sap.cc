@@ -18,7 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#include "ff-mac-sched-sap.h"
+#include "ns3/ff-mac-sched-sap.h"
 
 namespace ns3 {
 

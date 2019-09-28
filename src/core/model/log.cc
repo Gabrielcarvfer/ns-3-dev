@@ -17,15 +17,15 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "log.h"
+#include "ns3/log.h"
 
 #include <list>
 #include <utility>
 #include <iostream>
-#include "assert.h"
+#include "ns3/assert.h"
 #include <stdexcept>
 #include "ns3/core-config.h"
-#include "fatal-error.h"
+#include "ns3/fatal-error.h"
 
 #ifdef HAVE_GETENV
 #include <cstring>

@@ -23,8 +23,8 @@
 #include <ns3/double.h>
 #include <cmath>
 
-#include "antenna-model.h"
-#include "parabolic-antenna-model.h"
+#include "ns3/antenna-model.h"
+#include "ns3/parabolic-antenna-model.h"
 
 
 namespace ns3 {

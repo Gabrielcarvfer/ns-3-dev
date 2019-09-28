@@ -23,12 +23,12 @@
 #pragma once
 
 #include "ns3/event-id.h"
-#include "wimax-net-device.h"
+#include "ns3/wimax-net-device.h"
 #include "ns3/nstime.h"
-#include "wimax-mac-header.h"
+#include "ns3/wimax-mac-header.h"
 #include "ns3/uinteger.h"
 #include "ns3/ss-service-flow-manager.h"
-#include "ipcs-classifier.h"
+#include "ns3/ipcs-classifier.h"
 
 namespace ns3 {
 

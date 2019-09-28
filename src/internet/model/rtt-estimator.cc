@@ -28,7 +28,7 @@
 #include <iostream>
 #include <cmath>
 
-#include "rtt-estimator.h"
+#include "ns3/rtt-estimator.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
 

@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "position-allocator.h"
+#include "ns3/position-allocator.h"
 #include "ns3/double.h"
 #include "ns3/string.h"
 #include "ns3/pointer.h"

@@ -24,9 +24,9 @@
 #include "ns3/inet-socket-address.h"
 #include "ns3/log.h"
 #include "ns3/ipv4.h"
-#include "ipv4-end-point.h"
-#include "nsc-tcp-l4-protocol.h"
-#include "nsc-tcp-socket-impl.h"
+#include "ns3/ipv4-end-point.h"
+#include "ns3/nsc-tcp-l4-protocol.h"
+#include "ns3/nsc-tcp-socket-impl.h"
 #include "ns3/simulation-singleton.h"
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
@@ -38,9 +38,9 @@
 // for ntohs().
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include "sim_interface.h"
+#include "ns3/sim_interface.h"
 
-#include "sim_errno.h"
+#include "ns3/sim_errno.h"
 
 
 namespace ns3 {

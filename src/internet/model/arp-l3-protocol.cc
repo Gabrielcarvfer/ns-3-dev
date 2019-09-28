@@ -26,12 +26,12 @@
 #include "ns3/pointer.h"
 #include "ns3/string.h"
 
-#include "ipv4-l3-protocol.h"
-#include "arp-l3-protocol.h"
-#include "arp-header.h"
-#include "arp-cache.h"
-#include "arp-queue-disc-item.h"
-#include "ipv4-interface.h"
+#include "ns3/ipv4-l3-protocol.h"
+#include "ns3/arp-l3-protocol.h"
+#include "ns3/arp-header.h"
+#include "ns3/arp-cache.h"
+#include "ns3/arp-queue-disc-item.h"
+#include "ns3/ipv4-interface.h"
 #include "ns3/traffic-control-layer.h"
 
 namespace ns3 {

@@ -18,7 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#include "ping6.h"
+#include "ns3/ping6.h"
 #include "ns3/log.h"
 #include "ns3/nstime.h"
 #include "ns3/simulator.h"

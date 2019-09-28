@@ -22,9 +22,9 @@
 
 #include <cstdlib>
 #include <iostream>
-#include "rng-stream.h"
-#include "fatal-error.h"
-#include "log.h"
+#include "ns3/rng-stream.h"
+#include "ns3/fatal-error.h"
+#include "ns3/log.h"
 
 /**
  * \file

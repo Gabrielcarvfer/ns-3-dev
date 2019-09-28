@@ -25,7 +25,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/pointer.h"
 #include "ns3/channel.h"
-#include "non-communicating-net-device.h"
+#include "ns3/non-communicating-net-device.h"
 
 
 namespace ns3 {

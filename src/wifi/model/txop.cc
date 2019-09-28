@@ -23,12 +23,12 @@
 #include "ns3/simulator.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/socket.h"
-#include "txop.h"
-#include "channel-access-manager.h"
-#include "wifi-mac-queue.h"
-#include "mac-tx-middle.h"
-#include "mac-low.h"
-#include "wifi-remote-station-manager.h"
+#include "ns3/txop.h"
+#include "ns3/channel-access-manager.h"
+#include "ns3/wifi-mac-queue.h"
+#include "ns3/mac-tx-middle.h"
+#include "ns3/mac-low.h"
+#include "ns3/wifi-remote-station-manager.h"
 
 #undef NS_LOG_APPEND_CONTEXT
 #define NS_LOG_APPEND_CONTEXT if (m_low != 0) { std::clog << "[mac=" << m_low->GetAddress () << "] "; }

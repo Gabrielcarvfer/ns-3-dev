@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "attribute.h"
-#include "object.h"
+#include "ns3/attribute.h"
+#include "ns3/object.h"
 
 /**
  * \file

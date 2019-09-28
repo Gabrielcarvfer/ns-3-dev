@@ -21,8 +21,8 @@
 #include "ns3/config.h"
 #include "ns3/log.h"
 #include "ns3/assert.h"
-#include "channel-list.h"
-#include "channel.h"
+#include "ns3/channel-list.h"
+#include "ns3/channel.h"
 
 namespace ns3 {
 

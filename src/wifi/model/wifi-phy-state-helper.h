@@ -24,8 +24,8 @@
 #include "ns3/callback.h"
 #include "ns3/traced-callback.h"
 #include "ns3/nstime.h"
-#include "wifi-phy-state.h"
-#include "wifi-preamble.h"
+#include "ns3/wifi-phy-state.h"
+#include "ns3/wifi-preamble.h"
 
 namespace ns3 {
 

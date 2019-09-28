@@ -20,8 +20,8 @@
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
-#include "onoe-wifi-manager.h"
-#include "wifi-tx-vector.h"
+#include "ns3/onoe-wifi-manager.h"
+#include "ns3/wifi-tx-vector.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 

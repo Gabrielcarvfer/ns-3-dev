@@ -26,10 +26,10 @@
 #include <map>
 #include <vector>
 
-#include "node-printer.h"
-#include "time-printer.h"
-#include "log-macros-enabled.h"
-#include "log-macros-disabled.h"
+#include "ns3/node-printer.h"
+#include "ns3/time-printer.h"
+#include "ns3/log-macros-enabled.h"
+#include "ns3/log-macros-disabled.h"
 
 /**
  * \file

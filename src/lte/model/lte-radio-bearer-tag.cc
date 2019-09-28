@@ -19,7 +19,7 @@
  */
 
 
-#include "lte-radio-bearer-tag.h"
+#include "ns3/lte-radio-bearer-tag.h"
 #include "ns3/tag.h"
 #include "ns3/uinteger.h"
 

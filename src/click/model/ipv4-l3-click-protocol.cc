@@ -21,7 +21,7 @@
 
 #ifdef NS3_CLICK
 
-#include "ipv4-l3-click-protocol.h"
+#include "ns3/ipv4-l3-click-protocol.h"
 #include "ns3/ipv4-click-routing.h"
 #include "ns3/node.h"
 #include "ns3/socket.h"

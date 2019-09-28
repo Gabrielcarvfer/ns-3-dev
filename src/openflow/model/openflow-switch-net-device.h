@@ -45,7 +45,7 @@
 #include <map>
 #include <set>
 
-#include "openflow-interface.h"
+#include "ns3/openflow-interface.h"
 
 namespace ns3 {
 

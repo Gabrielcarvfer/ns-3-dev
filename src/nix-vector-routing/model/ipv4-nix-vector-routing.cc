@@ -26,7 +26,7 @@
 #include "ns3/names.h"
 #include "ns3/ipv4-list-routing.h"
 
-#include "ipv4-nix-vector-routing.h"
+#include "ns3/ipv4-nix-vector-routing.h"
 
 namespace ns3 {
 

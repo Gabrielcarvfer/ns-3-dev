@@ -22,8 +22,8 @@
 
 #include "ns3/object.h"
 #include "ns3/nstime.h"
-#include "wifi-mode.h"
-#include "qos-utils.h"
+#include "ns3/wifi-mode.h"
+#include "ns3/qos-utils.h"
 
 namespace ns3 {
 

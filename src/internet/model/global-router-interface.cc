@@ -27,9 +27,9 @@
 #include "ns3/node-list.h"
 #include "ns3/ipv4.h"
 #include "ns3/bridge-net-device.h"
-#include "ipv4-global-routing.h"
-#include "global-router-interface.h"
-#include "loopback-net-device.h"
+#include "ns3/ipv4-global-routing.h"
+#include "ns3/global-router-interface.h"
+#include "ns3/loopback-net-device.h"
 #include <vector>
 
 namespace ns3 {

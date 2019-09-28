@@ -21,7 +21,7 @@
 #include "ns3/log.h"
 #include "ns3/boolean.h"
 #include "ns3/uinteger.h"
-#include "ht-configuration.h"
+#include "ns3/ht-configuration.h"
 
 namespace ns3 {
 

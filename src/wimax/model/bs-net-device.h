@@ -21,15 +21,15 @@
 
 #pragma once
 
-#include "wimax-net-device.h"
+#include "ns3/wimax-net-device.h"
 #include "ns3/event-id.h"
-#include "wimax-connection.h"
+#include "ns3/wimax-connection.h"
 #include "ns3/nstime.h"
 #include "ns3/mac48-address.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/bs-service-flow-manager.h"
-#include "dl-mac-messages.h"
-#include "ipcs-classifier.h"
+#include "ns3/dl-mac-messages.h"
+#include "ns3/ipcs-classifier.h"
 
 namespace ns3 {
 

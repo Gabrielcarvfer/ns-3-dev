@@ -24,7 +24,7 @@
 #include "null-message-mpi-interface.h"
 #include "remote-channel-bundle-manager.h"
 #include "remote-channel-bundle.h"
-#include "mpi-interface.h"
+#include "ns3/mpi-interface.h"
 
 #include <ns3/simulator.h>
 #include <ns3/scheduler.h>

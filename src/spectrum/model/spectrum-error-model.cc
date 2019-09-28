@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "spectrum-error-model.h"
+#include "ns3/spectrum-error-model.h"
 
 #include <ns3/nstime.h>
 #include <ns3/log.h>

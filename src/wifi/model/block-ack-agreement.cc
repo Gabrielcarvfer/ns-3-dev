@@ -19,7 +19,7 @@
  */
 
 #include "ns3/log.h"
-#include "block-ack-agreement.h"
+#include "ns3/block-ack-agreement.h"
 
 namespace ns3 {
 

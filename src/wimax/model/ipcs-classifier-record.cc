@@ -17,10 +17,10 @@
  *
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
-#include "ipcs-classifier-record.h"
+#include "ns3/ipcs-classifier-record.h"
 #include <stdint.h>
 #include "ns3/ipv4-address.h"
-#include "wimax-tlv.h"
+#include "ns3/wimax-tlv.h"
 
 namespace ns3 {
 

@@ -18,7 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "mac8-address.h"
+#include "ns3/mac8-address.h"
 #include "ns3/address.h"
 
 namespace ns3 {

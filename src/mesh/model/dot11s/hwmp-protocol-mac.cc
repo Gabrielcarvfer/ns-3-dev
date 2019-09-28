@@ -23,13 +23,13 @@
 #include "ns3/simulator.h"
 #include "ns3/nstime.h"
 #include "ns3/log.h"
-#include "dot11s-mac-header.h"
+#include "ns3/dot11s-mac-header.h"
 #include "hwmp-protocol-mac.h"
 #include "hwmp-tag.h"
-#include "ie-dot11s-preq.h"
-#include "ie-dot11s-prep.h"
-#include "ie-dot11s-rann.h"
-#include "ie-dot11s-perr.h"
+#include "ns3/ie-dot11s-preq.h"
+#include "ns3/ie-dot11s-prep.h"
+#include "ns3/ie-dot11s-rann.h"
+#include "ns3/ie-dot11s-perr.h"
 
 namespace ns3 {
 

@@ -22,7 +22,7 @@
 #include "ns3/log.h"
 #include "ns3/header.h"
 #include "ns3/simulator.h"
-#include "seq-ts-header.h"
+#include "ns3/seq-ts-header.h"
 
 namespace ns3 {
 

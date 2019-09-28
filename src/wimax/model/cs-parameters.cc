@@ -18,8 +18,8 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  *
  */
-#include "wimax-tlv.h"
-#include "cs-parameters.h"
+#include "ns3/wimax-tlv.h"
+#include "ns3/cs-parameters.h"
 
 namespace ns3 {
 CsParameters::CsParameters ()

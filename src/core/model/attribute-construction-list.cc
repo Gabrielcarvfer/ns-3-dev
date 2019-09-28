@@ -17,8 +17,8 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@gmail.com>
  */
-#include "attribute-construction-list.h"
-#include "log.h"
+#include "ns3/attribute-construction-list.h"
+#include "ns3/log.h"
 
 /**
  * \file

@@ -22,8 +22,8 @@
 #include "ns3/node.h"
 #include "ns3/ptr.h"
 #include "ns3/object-vector.h"
-#include "ipv6-extension-demux.h"
-#include "ipv6-extension.h"
+#include "ns3/ipv6-extension-demux.h"
+#include "ns3/ipv6-extension.h"
 
 namespace ns3
 {

@@ -32,18 +32,18 @@
 #include "ns3/mac64-address.h"
 #include "ns3/traffic-control-layer.h"
 
-#include "loopback-net-device.h"
-#include "ipv6-l3-protocol.h"
-#include "ipv6-interface.h"
+#include "ns3/loopback-net-device.h"
+#include "ns3/ipv6-l3-protocol.h"
+#include "ns3/ipv6-interface.h"
 #include "ipv6-raw-socket-impl.h"
 #include "ipv6-autoconfigured-prefix.h"
-#include "ipv6-extension-demux.h"
-#include "ipv6-extension.h"
-#include "ipv6-extension-header.h"
+#include "ns3/ipv6-extension-demux.h"
+#include "ns3/ipv6-extension.h"
+#include "ns3/ipv6-extension-header.h"
 #include "ipv6-option-demux.h"
-#include "ipv6-option.h"
-#include "icmpv6-l4-protocol.h"
-#include "ndisc-cache.h"
+#include "ns3/ipv6-option.h"
+#include "ns3/icmpv6-l4-protocol.h"
+#include "ns3/ndisc-cache.h"
 
 /// Minimum IPv6 MTU, as defined by \RFC{2460}
 #define IPV6_MIN_MTU 1280

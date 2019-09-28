@@ -19,7 +19,7 @@
  */
 
 
-#include "spectrum-propagation-loss-model.h"
+#include "ns3/spectrum-propagation-loss-model.h"
 #include <ns3/log.h>
 
 namespace ns3 {

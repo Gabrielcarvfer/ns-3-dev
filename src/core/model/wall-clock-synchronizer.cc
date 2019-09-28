@@ -21,10 +21,10 @@
 #include <sys/time.h>  // gettimeofday
                        // clock_getres: glibc < 2.17, link with librt
 
-#include "log.h"
-#include "system-condition.h"
+#include "ns3/log.h"
+#include "ns3/system-condition.h"
 
-#include "wall-clock-synchronizer.h"
+#include "ns3/wall-clock-synchronizer.h"
 
 /**
  * \file

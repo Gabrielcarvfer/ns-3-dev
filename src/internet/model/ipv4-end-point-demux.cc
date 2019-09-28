@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ipv4-end-point-demux.h"
-#include "ipv4-end-point.h"
-#include "ipv4-interface-address.h"
+#include "ns3/ipv4-end-point-demux.h"
+#include "ns3/ipv4-end-point.h"
+#include "ns3/ipv4-interface-address.h"
 #include "ns3/log.h"
 
 

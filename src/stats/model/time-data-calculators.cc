@@ -21,7 +21,7 @@
 #include "ns3/log.h"
 #include "ns3/nstime.h"
 
-#include "time-data-calculators.h"
+#include "ns3/time-data-calculators.h"
 
 using namespace ns3;
 

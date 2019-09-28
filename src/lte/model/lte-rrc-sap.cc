@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "lte-rrc-sap.h"
+#include "ns3/lte-rrc-sap.h"
 
 namespace ns3 {
 

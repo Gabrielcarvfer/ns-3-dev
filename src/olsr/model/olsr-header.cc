@@ -23,7 +23,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 
-#include "olsr-header.h"
+#include "ns3/olsr-header.h"
 
 #define IPV4_ADDRESS_SIZE 4
 #define OLSR_MSG_HEADER_SIZE 12

@@ -24,12 +24,12 @@
 #include <stdint.h>
 #include <ostream>
 #include "ns3/mac48-address.h"
-#include "wimax-connection.h"
-#include "wimax-phy.h"
-#include "wimax-net-device.h"
+#include "ns3/wimax-connection.h"
+#include "ns3/wimax-phy.h"
+#include "ns3/wimax-net-device.h"
 #include "ns3/ipv4-address.h"
 #include <stdint.h>
-#include "service-flow.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 

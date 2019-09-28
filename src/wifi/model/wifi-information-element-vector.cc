@@ -18,7 +18,7 @@
  * Author: Pavel Boyko <boyko@iitp.ru>
  */
 
-#include "wifi-information-element-vector.h"
+#include "ns3/wifi-information-element-vector.h"
 
 namespace ns3 {
 

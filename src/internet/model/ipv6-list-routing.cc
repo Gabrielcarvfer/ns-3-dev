@@ -22,7 +22,7 @@
 #include "ns3/ipv6-route.h"
 #include "ns3/node.h"
 #include "ns3/ipv6-static-routing.h"
-#include "ipv6-list-routing.h"
+#include "ns3/ipv6-list-routing.h"
 #include "ns3/simulator.h"
 
 namespace ns3 {

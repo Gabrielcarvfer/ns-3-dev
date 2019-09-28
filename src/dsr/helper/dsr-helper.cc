@@ -29,7 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "dsr-helper.h"
+#include "ns3/dsr-helper.h"
 #include "ns3/node-container.h"
 #include "ns3/node.h"
 #include "ns3/callback.h"

@@ -19,10 +19,10 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  * TimeStep support by Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
-#include "nstime.h"
-#include "abort.h"
-#include "system-mutex.h"
-#include "log.h"
+#include "ns3/nstime.h"
+#include "ns3/abort.h"
+#include "ns3/system-mutex.h"
+#include "ns3/log.h"
 #include <cmath>
 #include <iomanip>  // showpos
 #include <sstream>

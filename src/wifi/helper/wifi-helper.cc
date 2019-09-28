@@ -38,7 +38,7 @@
 #include "ns3/vht-configuration.h"
 #include "ns3/he-configuration.h"
 #include "ns3/obss-pd-algorithm.h"
-#include "wifi-helper.h"
+#include "ns3/wifi-helper.h"
 
 namespace ns3 {
 

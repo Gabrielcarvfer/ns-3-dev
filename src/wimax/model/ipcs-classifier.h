@@ -23,7 +23,7 @@
 
 #include <stdint.h>
 #include <vector>
-#include "ss-service-flow-manager.h"
+#include "ns3/ss-service-flow-manager.h"
 #include "ns3/ptr.h"
 #include "ns3/packet.h"
 

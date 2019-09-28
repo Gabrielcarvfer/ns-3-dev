@@ -23,8 +23,8 @@
 #include <ostream>
 #include "ns3/attribute.h"
 #include "ns3/attribute-helper.h"
-#include "ipv4-address.h"
-#include "ipv6-address.h"
+#include "ns3/ipv4-address.h"
+#include "ns3/ipv6-address.h"
 
 namespace ns3 {
 

@@ -29,7 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "dsr-errorbuff.h"
+#include "ns3/dsr-errorbuff.h"
 #include <algorithm>
 #include <functional>
 #include "ns3/ipv4-route.h"

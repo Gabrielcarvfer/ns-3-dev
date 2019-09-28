@@ -17,7 +17,7 @@
  */
 
 #include "ns3/log.h"
-#include "bridge-channel.h"
+#include "ns3/bridge-channel.h"
 
 namespace ns3 {
 

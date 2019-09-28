@@ -21,7 +21,7 @@
 // Implementation for ns3 Application base class.
 // George F. Riley, Georgia Tech, Fall 2006
 
-#include "application.h"
+#include "ns3/application.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/nstime.h"

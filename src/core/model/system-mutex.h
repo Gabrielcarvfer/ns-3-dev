@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ptr.h"
+#include "ns3/ptr.h"
 
 /**
  * @file

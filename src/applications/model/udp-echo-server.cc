@@ -30,7 +30,7 @@
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
 
-#include "udp-echo-server.h"
+#include "ns3/udp-echo-server.h"
 
 namespace ns3 {
 

@@ -27,9 +27,9 @@
 #include <ns3/callback.h>
 #include <ns3/antenna-model.h>
 
-#include "half-duplex-ideal-phy.h"
-#include "half-duplex-ideal-phy-signal-parameters.h"
-#include "spectrum-error-model.h"
+#include "ns3/half-duplex-ideal-phy.h"
+#include "ns3/half-duplex-ideal-phy-signal-parameters.h"
+#include "ns3/spectrum-error-model.h"
 
 
 namespace ns3 {

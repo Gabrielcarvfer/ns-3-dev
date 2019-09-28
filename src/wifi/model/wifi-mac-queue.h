@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include "wifi-mac-queue-item.h"
+#include "ns3/wifi-mac-queue-item.h"
 #include "ns3/queue.h"
 
 namespace ns3 {

@@ -19,7 +19,7 @@
  *          Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#include "wimax-helper.h"
+#include "ns3/wimax-helper.h"
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
 #include "ns3/log.h"

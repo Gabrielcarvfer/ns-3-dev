@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "loopback-net-device.h"
+#include "ns3/loopback-net-device.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/channel.h"

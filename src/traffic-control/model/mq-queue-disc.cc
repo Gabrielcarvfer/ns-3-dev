@@ -20,7 +20,7 @@
  */
 
 #include "ns3/log.h"
-#include "mq-queue-disc.h"
+#include "ns3/mq-queue-disc.h"
 
 namespace ns3 {
 

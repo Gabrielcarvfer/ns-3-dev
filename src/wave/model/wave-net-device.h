@@ -25,12 +25,12 @@
 #include "ns3/traced-callback.h"
 #include "ns3/mac48-address.h"
 #include "ns3/wifi-net-device.h"
-#include "ocb-wifi-mac.h"
-#include "vendor-specific-action.h"
-#include "channel-coordinator.h"
-#include "channel-manager.h"
-#include "channel-scheduler.h"
-#include "vsa-manager.h"
+#include "ns3/ocb-wifi-mac.h"
+#include "ns3/vendor-specific-action.h"
+#include "ns3/channel-coordinator.h"
+#include "ns3/channel-manager.h"
+#include "ns3/channel-scheduler.h"
+#include "ns3/vsa-manager.h"
 namespace ns3 {
 struct SchInfo;
 struct VsaInfo;

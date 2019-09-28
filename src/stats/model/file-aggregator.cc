@@ -22,7 +22,7 @@
 #include <fstream>
 #include <string>
 
-#include "file-aggregator.h"
+#include "ns3/file-aggregator.h"
 #include "ns3/abort.h"
 #include "ns3/log.h"
 

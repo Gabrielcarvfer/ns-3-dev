@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "inet-socket-address.h"
+#include "ns3/inet-socket-address.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"
 

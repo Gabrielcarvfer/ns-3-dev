@@ -19,7 +19,7 @@
  * Author: Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#include "basic-energy-harvester.h"
+#include "ns3/basic-energy-harvester.h"
 
 #include "ns3/log.h"
 #include "ns3/assert.h"

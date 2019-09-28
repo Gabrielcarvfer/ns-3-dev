@@ -29,7 +29,7 @@
 #include "ns3/object.h"
 #include "ns3/ptr.h"
 #include "ns3/ipv4-address.h"
-#include "global-router-interface.h"
+#include "ns3/global-router-interface.h"
 
 namespace ns3 {
 

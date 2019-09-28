@@ -18,7 +18,7 @@
  * Author: Jaume Nin <jaume.nin@cttc.es>
  */
 
-#include "lte-rlc-tag.h"
+#include "ns3/lte-rlc-tag.h"
 #include "ns3/tag.h"
 #include "ns3/uinteger.h"
 

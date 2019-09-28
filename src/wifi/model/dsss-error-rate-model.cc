@@ -19,7 +19,7 @@
  */
 
 #include "ns3/log.h"
-#include "dsss-error-rate-model.h"
+#include "ns3/dsss-error-rate-model.h"
 #include <cmath>
 
 namespace ns3 {

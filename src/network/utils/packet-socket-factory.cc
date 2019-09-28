@@ -17,10 +17,10 @@
  *
  * Author: Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
-#include "packet-socket-factory.h"
+#include "ns3/packet-socket-factory.h"
 #include "ns3/node.h"
 #include "ns3/log.h"
-#include "packet-socket.h"
+#include "ns3/packet-socket.h"
 
 namespace ns3 {
 

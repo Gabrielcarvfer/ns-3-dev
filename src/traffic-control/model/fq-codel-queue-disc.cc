@@ -22,8 +22,8 @@
 #include "ns3/log.h"
 #include "ns3/string.h"
 #include "ns3/queue.h"
-#include "fq-codel-queue-disc.h"
-#include "codel-queue-disc.h"
+#include "ns3/fq-codel-queue-disc.h"
+#include "ns3/codel-queue-disc.h"
 #include "ns3/net-device-queue-interface.h"
 
 namespace ns3 {

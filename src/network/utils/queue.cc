@@ -20,7 +20,7 @@
 #include "ns3/enum.h"
 #include "ns3/uinteger.h"
 #include "ns3/trace-source-accessor.h"
-#include "queue.h"
+#include "ns3/queue.h"
 
 namespace ns3 {
 

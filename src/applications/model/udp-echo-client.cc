@@ -27,7 +27,7 @@
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
 #include "ns3/trace-source-accessor.h"
-#include "udp-echo-client.h"
+#include "ns3/udp-echo-client.h"
 
 namespace ns3 {
 

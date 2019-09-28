@@ -18,7 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "uan-prop-model.h"
+#include "ns3/uan-prop-model.h"
 #include "ns3/nstime.h"
 #include <complex>
 #include <vector>

@@ -17,7 +17,7 @@
  *
  * Author: Raj Bhattacharjea <raj.b@gatech.edu>
  */
-#include "tcp-socket-factory.h"
+#include "ns3/tcp-socket-factory.h"
 #include "ns3/uinteger.h"
 #include "ns3/double.h"
 

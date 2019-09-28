@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "ptr.h"
-#include "object.h"
+#include "ns3/ptr.h"
+#include "ns3/object.h"
 
 /**
  * \file

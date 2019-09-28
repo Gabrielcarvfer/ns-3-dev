@@ -29,7 +29,7 @@
 #include <ns3/lte-spectrum-signal-parameters.h>
 #include <ns3/antenna-model.h>
 
-#include "rem-spectrum-phy.h"
+#include "ns3/rem-spectrum-phy.h"
 
 namespace ns3 {
 

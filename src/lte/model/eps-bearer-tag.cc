@@ -20,7 +20,7 @@
  */
 
 
-#include "eps-bearer-tag.h"
+#include "ns3/eps-bearer-tag.h"
 #include "ns3/tag.h"
 #include "ns3/uinteger.h"
 

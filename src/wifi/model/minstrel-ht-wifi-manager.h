@@ -25,9 +25,9 @@
 
 #pragma once
 
-#include "wifi-remote-station-manager.h"
-#include "minstrel-wifi-manager.h"
-#include "wifi-mpdu-type.h"
+#include "ns3/wifi-remote-station-manager.h"
+#include "ns3/minstrel-wifi-manager.h"
+#include "ns3/wifi-mpdu-type.h"
 
 namespace ns3 {
 

@@ -19,7 +19,7 @@
  */
 #ifdef NS3_OPENFLOW
 
-#include "openflow-switch-helper.h"
+#include "ns3/openflow-switch-helper.h"
 #include "ns3/log.h"
 #include "ns3/openflow-switch-net-device.h"
 #include "ns3/openflow-interface.h"

@@ -23,7 +23,7 @@
 
 #include <ns3/log.h>
 #include <ns3/spectrum-value.h>
-#include "lte-chunk-processor.h"
+#include "ns3/lte-chunk-processor.h"
 
 namespace ns3 {
 

@@ -28,7 +28,7 @@
 #include "ns3/traffic-control-helper.h"
 #include "ns3/traffic-control-layer.h"
 #include "ns3/net-device-queue-interface.h"
-#include "ipv4-address-helper.h"
+#include "ns3/ipv4-address-helper.h"
 
 namespace ns3 {
 

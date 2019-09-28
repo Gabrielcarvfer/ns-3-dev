@@ -21,7 +21,7 @@
  */
 #pragma once
 
-#include "lr-wpan-interference-helper.h"
+#include "ns3/lr-wpan-interference-helper.h"
 
 #include <ns3/spectrum-phy.h>
 #include <ns3/traced-callback.h>

@@ -19,7 +19,7 @@
 
 #include "distributed-simulator-impl.h"
 #include "granted-time-window-mpi-interface.h"
-#include "mpi-interface.h"
+#include "ns3/mpi-interface.h"
 
 #include "ns3/simulator.h"
 #include "ns3/scheduler.h"

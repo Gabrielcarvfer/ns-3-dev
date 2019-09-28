@@ -37,7 +37,7 @@
 
 #include "ns3/header.h"
 #include "ns3/ipv4-address.h"
-#include "dsr-option-header.h"
+#include "ns3/dsr-option-header.h"
 
 namespace ns3 {
 namespace dsr {

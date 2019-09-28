@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "wifi-phy-tag.h"
+#include "ns3/wifi-phy-tag.h"
 
 namespace ns3 {
 

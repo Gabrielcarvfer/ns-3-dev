@@ -19,7 +19,7 @@
  */
 
 #include "ns3/log.h"
-#include "supported-rates.h"
+#include "ns3/supported-rates.h"
 
 namespace ns3 {
 

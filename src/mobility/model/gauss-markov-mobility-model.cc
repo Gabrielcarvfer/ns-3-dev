@@ -22,8 +22,8 @@
 #include "ns3/double.h"
 #include "ns3/pointer.h"
 #include "ns3/string.h"
-#include "gauss-markov-mobility-model.h"
-#include "position-allocator.h"
+#include "ns3/gauss-markov-mobility-model.h"
+#include "ns3/position-allocator.h"
 
 namespace ns3 {
 

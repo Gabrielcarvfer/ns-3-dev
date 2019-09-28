@@ -28,14 +28,14 @@
 #include <ns3/double.h>
 
 
-#include "lte-enb-phy.h"
-#include "lte-ue-phy.h"
-#include "lte-net-device.h"
-#include "lte-spectrum-value-helper.h"
-#include "lte-control-messages.h"
-#include "lte-enb-net-device.h"
-#include "lte-ue-rrc.h"
-#include "lte-enb-mac.h"
+#include "ns3/lte-enb-phy.h"
+#include "ns3/lte-ue-phy.h"
+#include "ns3/lte-net-device.h"
+#include "ns3/lte-spectrum-value-helper.h"
+#include "ns3/lte-control-messages.h"
+#include "ns3/lte-enb-net-device.h"
+#include "ns3/lte-ue-rrc.h"
+#include "ns3/lte-enb-mac.h"
 #include <ns3/lte-common.h>
 #include <ns3/lte-vendor-specific-parameters.h>
 

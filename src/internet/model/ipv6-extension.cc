@@ -32,13 +32,13 @@
 #include "ns3/ipv6-list-routing.h"
 #include "ns3/ipv6-route.h"
 #include "ns3/trace-source-accessor.h"
-#include "icmpv6-l4-protocol.h"
-#include "ipv6-extension-demux.h"
-#include "ipv6-extension.h"
-#include "ipv6-extension-header.h"
+#include "ns3/icmpv6-l4-protocol.h"
+#include "ns3/ipv6-extension-demux.h"
+#include "ns3/ipv6-extension.h"
+#include "ns3/ipv6-extension-header.h"
 #include "ipv6-option-demux.h"
-#include "ipv6-option.h"
-#include "udp-header.h"
+#include "ns3/ipv6-option.h"
+#include "ns3/udp-header.h"
 
 namespace ns3 {
 

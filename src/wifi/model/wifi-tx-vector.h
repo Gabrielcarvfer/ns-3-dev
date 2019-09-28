@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "wifi-mode.h"
-#include "wifi-preamble.h"
+#include "ns3/wifi-mode.h"
+#include "ns3/wifi-preamble.h"
 
 namespace ns3 {
 

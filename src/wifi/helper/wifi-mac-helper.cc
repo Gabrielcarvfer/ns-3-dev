@@ -19,7 +19,7 @@
  */
 
 #include "ns3/net-device.h"
-#include "wifi-mac-helper.h"
+#include "ns3/wifi-mac-helper.h"
 #include "ns3/wifi-mac.h"
 #include "ns3/boolean.h"
 

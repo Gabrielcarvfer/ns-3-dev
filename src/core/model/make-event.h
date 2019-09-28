@@ -313,8 +313,8 @@ EventImpl * MakeEvent (void (*f)(U1,U2,U3,U4,U5,U6), T1 a1, T2 a2, T3 a3, T4 a4,
  *  Implementation of the templates declared above.
  ********************************************************************/
 
-#include "event-impl.h"
-#include "type-traits.h"
+#include "ns3/event-impl.h"
+#include "ns3/type-traits.h"
 
 namespace ns3 {
 

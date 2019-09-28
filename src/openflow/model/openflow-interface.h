@@ -34,9 +34,9 @@
 #include <limits>
 
 // Include main header and Vendor Extension files
-#include "openflow/openflow.h"
-#include "openflow/nicira-ext.h"
-#include "openflow/ericsson-ext.h"
+#include "ns3/openflow/openflow.h"
+#include "ns3/openflow/nicira-ext.h"
+#include "ns3/openflow/ericsson-ext.h"
 
 extern "C"
 {
@@ -46,21 +46,21 @@ extern "C"
 #define list List
 
 // Include OFSI Library files
-#include "openflow/private/csum.h"
-#include "openflow/private/poll-loop.h"
-#include "openflow/private/rconn.h"
-#include "openflow/private/stp.h"
-#include "openflow/private/vconn.h"
-#include "openflow/private/xtoxll.h"
+#include "ns3/openflow/private/csum.h"
+#include "ns3/openflow/private/poll-loop.h"
+#include "ns3/openflow/private/rconn.h"
+#include "ns3/openflow/private/stp.h"
+#include "ns3/openflow/private/vconn.h"
+#include "ns3/openflow/private/xtoxll.h"
 
 // Include OFSI Switch files
-#include "openflow/private/chain.h"
-#include "openflow/private/table.h"
-#include "openflow/private/datapath.h" // The functions below are defined in datapath.c
+#include "ns3/openflow/private/chain.h"
+#include "ns3/openflow/private/table.h"
+#include "ns3/openflow/private/datapath.h" // The functions below are defined in datapath.c
 uint32_t save_buffer (ofpbuf *);
 ofpbuf * retrieve_buffer (uint32_t id);
 void discard_buffer (uint32_t id);
-#include "openflow/private/dp_act.h" // The functions below are defined in dp_act.c
+#include "ns3/openflow/private/dp_act.h" // The functions below are defined in dp_act.c
 void set_vlan_vid (ofpbuf *buffer, sw_flow_key *key, const ofp_action_header *ah);
 void set_vlan_pcp (ofpbuf *buffer, sw_flow_key *key, const ofp_action_header *ah);
 void strip_vlan (ofpbuf *buffer, sw_flow_key *key, const ofp_action_header *ah);
@@ -69,7 +69,7 @@ void set_nw_addr (ofpbuf *buffer, sw_flow_key *key, const ofp_action_header *ah)
 void set_tp_port (ofpbuf *buffer, sw_flow_key *key, const ofp_action_header *ah);
 void set_mpls_label (ofpbuf *buffer, sw_flow_key *key, const ofp_action_header *ah);
 void set_mpls_exp (ofpbuf *buffer, sw_flow_key *key, const ofp_action_header *ah);
-#include "openflow/private/pt_act.h"
+#include "ns3/openflow/private/pt_act.h"
 
 #undef list
 #undef private

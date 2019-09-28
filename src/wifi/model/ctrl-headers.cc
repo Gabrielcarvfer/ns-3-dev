@@ -18,7 +18,7 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "ctrl-headers.h"
+#include "ns3/ctrl-headers.h"
 
 namespace ns3 {
 

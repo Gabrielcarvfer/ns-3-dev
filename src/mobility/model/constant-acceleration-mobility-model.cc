@@ -15,7 +15,7 @@
  *
  * Author: Gustavo Carneiro  <gjc@inescporto.pt>
  */
-#include "constant-acceleration-mobility-model.h"
+#include "ns3/constant-acceleration-mobility-model.h"
 #include "ns3/simulator.h"
 
 namespace ns3 {

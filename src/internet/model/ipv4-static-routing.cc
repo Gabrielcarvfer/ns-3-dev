@@ -31,8 +31,8 @@
 #include "ns3/simulator.h"
 #include "ns3/ipv4-route.h"
 #include "ns3/output-stream-wrapper.h"
-#include "ipv4-static-routing.h"
-#include "ipv4-routing-table-entry.h"
+#include "ns3/ipv4-static-routing.h"
+#include "ns3/ipv4-routing-table-entry.h"
 
 using std::make_pair;
 

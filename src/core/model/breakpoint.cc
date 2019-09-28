@@ -19,9 +19,9 @@
  * Author: Gustavo Carneiro <gjc@inescporto.pt>
  */
 
-#include "breakpoint.h"
+#include "ns3/breakpoint.h"
 #include "ns3/core-config.h"
-#include "log.h"
+#include "ns3/log.h"
 #ifdef HAVE_SIGNAL_H
 # include <signal.h>
 #endif

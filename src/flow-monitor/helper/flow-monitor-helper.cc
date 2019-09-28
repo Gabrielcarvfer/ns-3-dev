@@ -18,7 +18,7 @@
 // Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt> <gjcarneiro@gmail.com>
 //
 
-#include "flow-monitor-helper.h"
+#include "ns3/flow-monitor-helper.h"
 
 #include "ns3/flow-monitor.h"
 #include "ns3/ipv4-flow-classifier.h"

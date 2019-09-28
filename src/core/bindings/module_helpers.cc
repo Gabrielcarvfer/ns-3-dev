@@ -1,4 +1,4 @@
-#include "ns3module.h"
+#include "ns3/ns3module.h"
 #include "ns3/ref-count-base.h"
 #include <unistd.h>
 

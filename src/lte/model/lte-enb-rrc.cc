@@ -24,7 +24,7 @@
  *               Vignesh Babu <ns3-dev@esk.fraunhofer.de> (RLF extensions)
  */
 
-#include "lte-enb-rrc.h"
+#include "ns3/lte-enb-rrc.h"
 
 #include <ns3/fatal-error.h>
 #include <ns3/log.h>

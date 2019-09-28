@@ -24,7 +24,7 @@
 
 #include "ns3/trace-helper.h"
 #include "ns3/wifi-phy.h"
-#include "wifi-mac-helper.h"
+#include "ns3/wifi-mac-helper.h"
 #include <functional>
 
 namespace ns3 {

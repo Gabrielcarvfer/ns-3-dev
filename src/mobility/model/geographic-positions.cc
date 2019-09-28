@@ -20,7 +20,7 @@
 
 #include <ns3/log.h>
 #include <cmath>
-#include "geographic-positions.h"
+#include "ns3/geographic-positions.h"
 
 NS_LOG_COMPONENT_DEFINE ("GeographicPositions");
 

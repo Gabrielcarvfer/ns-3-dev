@@ -19,7 +19,7 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ampdu-tag.h"
+#include "ns3/ampdu-tag.h"
 
 namespace ns3 {
 

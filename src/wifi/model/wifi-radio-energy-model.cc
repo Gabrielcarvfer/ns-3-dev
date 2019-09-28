@@ -22,8 +22,8 @@
 #include "ns3/simulator.h"
 #include "ns3/pointer.h"
 #include "ns3/energy-source.h"
-#include "wifi-radio-energy-model.h"
-#include "wifi-tx-current-model.h"
+#include "ns3/wifi-radio-energy-model.h"
+#include "ns3/wifi-tx-current-model.h"
 
 namespace ns3 {
 

@@ -26,8 +26,8 @@
 #include "ns3/uinteger.h"
 #include "ns3/tcp-header.h"
 #include "ns3/udp-header.h"
-#include "ipv6-queue-disc-item.h"
-#include "ipv6-packet-filter.h"
+#include "ns3/ipv6-queue-disc-item.h"
+#include "ns3/ipv6-packet-filter.h"
 
 namespace ns3 {
 

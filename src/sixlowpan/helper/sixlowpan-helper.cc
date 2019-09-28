@@ -23,7 +23,7 @@
 #include "ns3/net-device.h"
 #include "ns3/node.h"
 #include "ns3/names.h"
-#include "sixlowpan-helper.h"
+#include "ns3/sixlowpan-helper.h"
 
 namespace ns3 {
 

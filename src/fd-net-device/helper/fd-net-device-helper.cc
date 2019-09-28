@@ -19,7 +19,7 @@
  *
  */
 
-#include "fd-net-device-helper.h"
+#include "ns3/fd-net-device-helper.h"
 
 #include "ns3/abort.h"
 #include "ns3/config.h"

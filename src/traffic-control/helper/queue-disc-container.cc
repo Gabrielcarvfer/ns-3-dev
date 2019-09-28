@@ -18,7 +18,7 @@
  * Author: Stefano Avallone <stavallo@unina.it>
  */
 
-#include "queue-disc-container.h"
+#include "ns3/queue-disc-container.h"
 
 namespace ns3 {
 

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "frame-capture-model.h"
+#include "ns3/frame-capture-model.h"
 
 namespace ns3 {
 /**

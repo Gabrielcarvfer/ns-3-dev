@@ -27,7 +27,7 @@
 #include "ns3/boolean.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/nstime.h"
-#include "tcp-socket.h"
+#include "ns3/tcp-socket.h"
 
 namespace ns3 {
 

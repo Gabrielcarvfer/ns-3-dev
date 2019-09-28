@@ -15,7 +15,7 @@
  *
  * Author: Gustavo Carneiro  <gjc@inescporto.pt>
  */
-#include "bridge-net-device.h"
+#include "ns3/bridge-net-device.h"
 #include "ns3/node.h"
 #include "ns3/channel.h"
 #include "ns3/packet.h"

@@ -18,7 +18,7 @@
 // Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt> <gjcarneiro@gmail.com>
 //
 
-#include "flow-classifier.h"
+#include "ns3/flow-classifier.h"
 
 namespace ns3 {
 

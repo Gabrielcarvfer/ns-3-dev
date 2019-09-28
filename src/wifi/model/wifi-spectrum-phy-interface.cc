@@ -22,8 +22,8 @@
 #include "ns3/spectrum-value.h"
 #include "ns3/mobility-model.h"
 #include "ns3/net-device.h"
-#include "wifi-spectrum-phy-interface.h"
-#include "spectrum-wifi-phy.h"
+#include "ns3/wifi-spectrum-phy-interface.h"
+#include "ns3/spectrum-wifi-phy.h"
 
 NS_LOG_COMPONENT_DEFINE ("WifiSpectrumPhyInterface");
 

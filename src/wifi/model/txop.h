@@ -21,8 +21,8 @@
 #pragma once
 
 #include "ns3/traced-value.h"
-#include "mac-low-transmission-parameters.h"
-#include "wifi-mac-header.h"
+#include "ns3/mac-low-transmission-parameters.h"
+#include "ns3/wifi-mac-header.h"
 
 namespace ns3 {
 

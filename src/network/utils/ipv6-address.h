@@ -29,7 +29,7 @@
 #include "ns3/address.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/deprecated.h"
-#include "mac8-address.h"
+#include "ns3/mac8-address.h"
 
 namespace ns3 { 
 

@@ -20,8 +20,8 @@
  *                              <amine.ismail@udcast.com>
  */
 
-#include "wimax-mac-header.h"
-#include "crc8.h"
+#include "ns3/wimax-mac-header.h"
+#include "ns3/crc8.h"
 
 namespace ns3 {
 

@@ -19,10 +19,10 @@
  */
 #pragma once
 
-#include "attribute.h"
-#include "attribute-accessor-helper.h"
+#include "ns3/attribute.h"
+#include "ns3/attribute-accessor-helper.h"
 #include <sstream>
-#include "abort.h"
+#include "ns3/abort.h"
 
 /**
  * \file

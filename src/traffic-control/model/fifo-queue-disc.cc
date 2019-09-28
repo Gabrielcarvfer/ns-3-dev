@@ -19,7 +19,7 @@
  */
 
 #include "ns3/log.h"
-#include "fifo-queue-disc.h"
+#include "ns3/fifo-queue-disc.h"
 #include "ns3/object-factory.h"
 #include "ns3/drop-tail-queue.h"
 

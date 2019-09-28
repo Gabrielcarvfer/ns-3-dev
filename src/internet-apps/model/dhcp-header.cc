@@ -26,7 +26,7 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/address-utils.h"
-#include "dhcp-header.h"
+#include "ns3/dhcp-header.h"
 
 namespace ns3 {
 

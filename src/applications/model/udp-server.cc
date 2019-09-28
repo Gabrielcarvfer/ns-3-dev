@@ -29,10 +29,10 @@
 #include "ns3/socket-factory.h"
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
-#include "packet-loss-counter.h"
+#include "ns3/packet-loss-counter.h"
 
-#include "seq-ts-header.h"
-#include "udp-server.h"
+#include "ns3/seq-ts-header.h"
+#include "ns3/udp-server.h"
 
 namespace ns3 {
 

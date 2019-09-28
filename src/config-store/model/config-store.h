@@ -21,7 +21,7 @@
 #pragma once
 
 #include "ns3/object-base.h"
-#include "file-config.h"
+#include "ns3/file-config.h"
 
 namespace ns3 {
 

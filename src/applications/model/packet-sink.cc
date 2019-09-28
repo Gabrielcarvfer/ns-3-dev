@@ -30,7 +30,7 @@
 #include "ns3/packet.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/udp-socket-factory.h"
-#include "packet-sink.h"
+#include "ns3/packet-sink.h"
 
 namespace ns3 {
 

@@ -27,9 +27,9 @@
 #include "ns3/propagation-loss-model.h"
 #include "ns3/propagation-delay-model.h"
 #include "ns3/mobility-model.h"
-#include "yans-wifi-channel.h"
-#include "yans-wifi-phy.h"
-#include "wifi-utils.h"
+#include "ns3/yans-wifi-channel.h"
+#include "ns3/yans-wifi-phy.h"
+#include "ns3/wifi-utils.h"
 
 namespace ns3 {
 

@@ -25,7 +25,7 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#include "aodv-id-cache.h"
+#include "ns3/aodv-id-cache.h"
 #include <algorithm>
 
 namespace ns3 {

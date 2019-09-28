@@ -20,7 +20,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "simple-ref-count.h"
+#include "ns3/simple-ref-count.h"
 
 /**
  * \file

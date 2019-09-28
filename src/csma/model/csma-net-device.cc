@@ -30,8 +30,8 @@
 #include "ns3/uinteger.h"
 #include "ns3/pointer.h"
 #include "ns3/trace-source-accessor.h"
-#include "csma-net-device.h"
-#include "csma-channel.h"
+#include "ns3/csma-net-device.h"
+#include "ns3/csma-channel.h"
 
 namespace ns3 {
 

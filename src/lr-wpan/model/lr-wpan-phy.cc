@@ -19,12 +19,12 @@
  *  Gary Pei <guangyu.pei@boeing.com>
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
-#include "lr-wpan-phy.h"
-#include "lr-wpan-lqi-tag.h"
-#include "lr-wpan-spectrum-signal-parameters.h"
-#include "lr-wpan-spectrum-value-helper.h"
-#include "lr-wpan-error-model.h"
-#include "lr-wpan-net-device.h"
+#include "ns3/lr-wpan-phy.h"
+#include "ns3/lr-wpan-lqi-tag.h"
+#include "ns3/lr-wpan-spectrum-signal-parameters.h"
+#include "ns3/lr-wpan-spectrum-value-helper.h"
+#include "ns3/lr-wpan-error-model.h"
+#include "ns3/lr-wpan-net-device.h"
 #include <ns3/log.h>
 #include <ns3/abort.h>
 #include <ns3/simulator.h>

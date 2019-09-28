@@ -20,8 +20,8 @@
 
 #include <stdint.h>
 #include <iostream>
-#include "tcp-header.h"
-#include "tcp-option.h"
+#include "ns3/tcp-header.h"
+#include "ns3/tcp-option.h"
 #include "ns3/buffer.h"
 #include "ns3/address-utils.h"
 #include "ns3/log.h"

@@ -25,7 +25,7 @@
  * - Budiarto Herman <budiarto.herman@magister.fi>
  */
 
-#include "a2-a4-rsrq-handover-algorithm.h"
+#include "ns3/a2-a4-rsrq-handover-algorithm.h"
 #include <ns3/log.h>
 #include <ns3/uinteger.h>
 

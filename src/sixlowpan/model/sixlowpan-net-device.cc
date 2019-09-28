@@ -34,8 +34,8 @@
 #include "ns3/udp-header.h"
 #include "ns3/udp-l4-protocol.h"
 #include "ns3/random-variable-stream.h"
-#include "sixlowpan-net-device.h"
-#include "sixlowpan-header.h"
+#include "ns3/sixlowpan-net-device.h"
+#include "ns3/sixlowpan-header.h"
 
 NS_LOG_COMPONENT_DEFINE ("SixLowPanNetDevice");
 

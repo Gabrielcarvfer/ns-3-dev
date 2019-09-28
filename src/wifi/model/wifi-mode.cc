@@ -21,8 +21,8 @@
 
 #include <cmath>
 #include "ns3/log.h"
-#include "wifi-mode.h"
-#include "wifi-tx-vector.h"
+#include "ns3/wifi-mode.h"
+#include "ns3/wifi-tx-vector.h"
 
 namespace ns3 {
 

@@ -50,12 +50,12 @@
 #include "ns3/output-stream-wrapper.h"
 #include "ns3/timer.h"
 
-#include "dsr-rsendbuff.h"
-#include "dsr-maintain-buff.h"
-#include "dsr-option-header.h"
-#include "dsr-rcache.h"
-#include "dsr-routing.h"
-#include "dsr-gratuitous-reply-table.h"
+#include "ns3/dsr-rsendbuff.h"
+#include "ns3/dsr-maintain-buff.h"
+#include "ns3/dsr-option-header.h"
+#include "ns3/dsr-rcache.h"
+#include "ns3/dsr-routing.h"
+#include "ns3/dsr-gratuitous-reply-table.h"
 
 namespace ns3 {
 

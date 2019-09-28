@@ -18,7 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#include "radvd-interface.h"
+#include "ns3/radvd-interface.h"
 #include <ns3/log.h>
 
 namespace ns3 

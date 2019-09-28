@@ -24,7 +24,7 @@
 #include <exception>
 #include <cstdlib>
 
-#include "fatal-impl.h"
+#include "ns3/fatal-impl.h"
 
 /**
  * \file

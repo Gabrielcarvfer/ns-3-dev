@@ -28,7 +28,7 @@
  * NSF grant CNS-1050226 (Multilayer Network Resilience Analysis and Experimentation on GENI),
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
-#include "dsdv-packet-queue.h"
+#include "ns3/dsdv-packet-queue.h"
 #include <algorithm>
 #include <functional>
 #include "ns3/ipv4-route.h"

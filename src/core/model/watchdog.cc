@@ -17,8 +17,8 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "watchdog.h"
-#include "log.h"
+#include "ns3/watchdog.h"
+#include "ns3/log.h"
 
 
 /**

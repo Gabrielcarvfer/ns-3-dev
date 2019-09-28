@@ -18,15 +18,15 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "simulator.h"
-#include "default-simulator-impl.h"
-#include "scheduler.h"
-#include "event-impl.h"
+#include "ns3/simulator.h"
+#include "ns3/default-simulator-impl.h"
+#include "ns3/scheduler.h"
+#include "ns3/event-impl.h"
 
-#include "ptr.h"
-#include "pointer.h"
-#include "assert.h"
-#include "log.h"
+#include "ns3/ptr.h"
+#include "ns3/pointer.h"
+#include "ns3/assert.h"
+#include "ns3/log.h"
 
 #include <cmath>
 

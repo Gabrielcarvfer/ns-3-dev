@@ -26,11 +26,11 @@
 // selection logic in wscript, so we generate docs from the
 // implementation actually chosen by the configuration.
 #if defined (INT64X64_USE_128) && !defined (PYTHON_SCAN)
-#include "int64x64-128.h"
+#include "ns3/int64x64-128.h"
 #elif defined (INT64X64_USE_CAIRO) && !defined (PYTHON_SCAN)
-#include "int64x64-cairo.h"
+#include "ns3/int64x64-cairo.h"
 #elif defined (INT64X64_USE_DOUBLE) || defined (PYTHON_SCAN)
-#include "int64x64-double.h"
+#include "ns3/int64x64-double.h"
 #endif
 
 #include <iostream>

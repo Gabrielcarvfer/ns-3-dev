@@ -62,7 +62,7 @@
 
 #include <cmath>
 
-#include "error-model.h"
+#include "ns3/error-model.h"
 
 #include "ns3/packet.h"
 #include "ns3/assert.h"

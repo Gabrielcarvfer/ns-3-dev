@@ -19,7 +19,7 @@
  *         Pavel Boyko <boyko@iitp.ru>
  */
  
-#include "mesh-helper.h"
+#include "ns3/mesh-helper.h"
 #include "ns3/simulator.h"
 #include "ns3/pointer.h"
 #include "ns3/mesh-point-device.h"

@@ -19,13 +19,13 @@
  */
 #pragma once
 
-#include "attribute.h"
-#include "attribute-accessor-helper.h"
-#include "trace-source-accessor.h"
-#include "attribute-helper.h"
-#include "callback.h"
-#include "deprecated.h"
-#include "hash.h"
+#include "ns3/attribute.h"
+#include "ns3/attribute-accessor-helper.h"
+#include "ns3/trace-source-accessor.h"
+#include "ns3/attribute-helper.h"
+#include "ns3/callback.h"
+#include "ns3/deprecated.h"
+#include "ns3/hash.h"
 #include <string>
 #include <stdint.h>
 

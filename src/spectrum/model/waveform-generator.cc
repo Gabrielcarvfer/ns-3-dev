@@ -26,7 +26,7 @@
 #include <ns3/packet-burst.h>
 #include <ns3/antenna-model.h>
 
-#include "waveform-generator.h"
+#include "ns3/waveform-generator.h"
 
 namespace ns3 {
 

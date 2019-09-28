@@ -18,7 +18,7 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  *
  */
-#include "wimax-mac-to-mac-header.h"
+#include "ns3/wimax-mac-to-mac-header.h"
 #include "ns3/address-utils.h"
 #include "ns3/uinteger.h"
 #include "ns3/log.h"

@@ -20,7 +20,7 @@
 
 #include "ns3/packet.h"
 #include "ns3/queue-item.h"
-#include "arp-header.h"
+#include "ns3/arp-header.h"
 
 namespace ns3 {
 

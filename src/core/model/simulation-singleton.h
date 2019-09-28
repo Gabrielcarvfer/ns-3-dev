@@ -97,7 +97,7 @@ private:
  *  Implementation of the templates declared above.
  ********************************************************************/
 
-#include "simulator.h"
+#include "ns3/simulator.h"
 
 namespace ns3 {
 

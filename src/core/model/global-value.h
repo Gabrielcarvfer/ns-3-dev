@@ -21,8 +21,8 @@
 
 #include <string>
 #include <vector>
-#include "ptr.h"
-#include "attribute.h"
+#include "ns3/ptr.h"
+#include "ns3/attribute.h"
 
 /**
  * \file

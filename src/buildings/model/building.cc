@@ -20,8 +20,8 @@
  * 
  */
 
-#include "building.h"
-#include "building-list.h"
+#include "ns3/building.h"
+#include "ns3/building-list.h"
 
 #include <ns3/enum.h>
 #include <ns3/uinteger.h>

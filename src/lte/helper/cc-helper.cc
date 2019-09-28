@@ -19,7 +19,7 @@
  */
 
 
-#include "cc-helper.h"
+#include "ns3/cc-helper.h"
 #include <ns3/component-carrier.h>
 #include <ns3/string.h>
 #include <ns3/log.h>

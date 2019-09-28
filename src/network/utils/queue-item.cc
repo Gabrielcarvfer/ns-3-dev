@@ -18,7 +18,7 @@
  * Author: Stefano Avallone <stefano.avallone@unina.it>
  */
 
-#include "queue-item.h"
+#include "ns3/queue-item.h"
 #include "ns3/packet.h"
 #include "ns3/log.h"
 

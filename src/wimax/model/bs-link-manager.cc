@@ -27,10 +27,10 @@
 #include "ns3/simulator.h"
 #include "ns3/log.h"
 #include "burst-profile-manager.h"
-#include "ss-record.h"
-#include "ss-manager.h"
-#include "bs-uplink-scheduler.h"
-#include "connection-manager.h"
+#include "ns3/ss-record.h"
+#include "ns3/ss-manager.h"
+#include "ns3/bs-uplink-scheduler.h"
+#include "ns3/connection-manager.h"
 
 namespace ns3 {
 

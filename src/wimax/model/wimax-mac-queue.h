@@ -22,7 +22,7 @@
 
 #include <queue>
 #include <stdint.h>
-#include "wimax-mac-header.h"
+#include "ns3/wimax-mac-header.h"
 #include "ns3/packet.h"
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"

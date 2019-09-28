@@ -22,7 +22,7 @@
 #include "ns3/test.h"
 #include "ns3/log.h"
 
-#include "flame-rtable.h"
+#include "ns3/flame-rtable.h"
 
 namespace ns3 {
 

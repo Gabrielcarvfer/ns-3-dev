@@ -18,7 +18,7 @@
  * Author: Mitch Watrous <watrous@u.washington.edu>
  */
 
-#include "uan-transducer.h"
+#include "ns3/uan-transducer.h"
 
 namespace ns3 {
 

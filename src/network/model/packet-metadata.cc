@@ -22,10 +22,10 @@
 #include "ns3/assert.h"
 #include "ns3/fatal-error.h"
 #include "ns3/log.h"
-#include "packet-metadata.h"
-#include "buffer.h"
-#include "header.h"
-#include "trailer.h"
+#include "ns3/packet-metadata.h"
+#include "ns3/buffer.h"
+#include "ns3/header.h"
+#include "ns3/trailer.h"
 
 namespace ns3 {
 

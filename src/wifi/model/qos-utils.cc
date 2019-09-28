@@ -21,10 +21,10 @@
 
 #include "ns3/socket.h"
 #include "ns3/queue-item.h"
-#include "qos-utils.h"
-#include "wifi-mac-header.h"
-#include "mgt-headers.h"
-#include "ctrl-headers.h"
+#include "ns3/qos-utils.h"
+#include "ns3/wifi-mac-header.h"
+#include "ns3/mgt-headers.h"
+#include "ns3/ctrl-headers.h"
 
 namespace ns3 {
 

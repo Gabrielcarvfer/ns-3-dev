@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "attribute.h"
-#include "attribute-helper.h"
+#include "ns3/attribute.h"
+#include "ns3/attribute-helper.h"
 #include <stdint.h>
 #include <limits>
 
@@ -76,7 +76,7 @@ Ptr<const AttributeChecker> MakeDoubleChecker (double min, double max);
  *  Implementation of the templates declared above.
  ***************************************************************/
 
-#include "type-name.h"
+#include "ns3/type-name.h"
 
 namespace ns3 {
 

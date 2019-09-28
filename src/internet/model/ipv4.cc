@@ -21,7 +21,7 @@
 #include "ns3/assert.h" 
 #include "ns3/node.h" 
 #include "ns3/boolean.h"
-#include "ipv4.h"
+#include "ns3/ipv4.h"
 #include "ns3/log.h"
 
 namespace ns3 {

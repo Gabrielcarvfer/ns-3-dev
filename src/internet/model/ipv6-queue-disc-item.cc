@@ -17,7 +17,7 @@
  */
 
 #include "ns3/log.h"
-#include "ipv6-queue-disc-item.h"
+#include "ns3/ipv6-queue-disc-item.h"
 #include "ns3/tcp-header.h"
 #include "ns3/udp-header.h"
 

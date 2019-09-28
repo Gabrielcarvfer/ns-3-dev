@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ipv4-list-routing-helper.h"
+#include "ns3/ipv4-list-routing-helper.h"
 #include "ns3/ipv4-list-routing.h"
 #include "ns3/node.h"
 

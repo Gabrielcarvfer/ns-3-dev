@@ -32,7 +32,7 @@
 #include "ns3/boolean.h"
 
 #include "ns3/trace-helper.h"
-#include "simple-net-device-helper.h"
+#include "ns3/simple-net-device-helper.h"
 
 #include <string>
 

@@ -26,7 +26,7 @@
 
 #include "ns3/header.h"
 #include "ns3/ipv6-address.h"
-#include "ipv6-option-header.h"
+#include "ns3/ipv6-option-header.h"
 
 namespace ns3
 {

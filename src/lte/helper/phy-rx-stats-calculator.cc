@@ -20,7 +20,7 @@
  *        Convert MacStatsCalculator in PhyRxStatsCalculator
  */
 
-#include "phy-rx-stats-calculator.h"
+#include "ns3/phy-rx-stats-calculator.h"
 #include "ns3/string.h"
 #include <ns3/simulator.h>
 #include <ns3/log.h>

@@ -33,9 +33,9 @@
 #include "ns3/integer.h"
 
 #include "ipv6-raw-socket-factory-impl.h"
-#include "ipv6-l3-protocol.h"
-#include "ipv6-interface.h"
-#include "icmpv6-l4-protocol.h"
+#include "ns3/ipv6-l3-protocol.h"
+#include "ns3/ipv6-interface.h"
+#include "ns3/icmpv6-l4-protocol.h"
 
 namespace ns3 {
 

@@ -23,7 +23,7 @@
 #include <sstream>
 #include <vector>
 
-#include "callback.h"
+#include "ns3/callback.h"
 
 /**
  * \file

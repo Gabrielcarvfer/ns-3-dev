@@ -23,7 +23,7 @@
 #include "ns3/ptr.h"
 #include "ns3/object-factory.h"
 #include "ns3/timer.h"
-#include "ip-l4-protocol.h"
+#include "ns3/ip-l4-protocol.h"
 
 struct INetStack;
 

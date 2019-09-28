@@ -20,8 +20,8 @@
 
 #include "ns3/log.h"
 #include "ns3/double.h"
-#include "threshold-preamble-detection-model.h"
-#include "wifi-utils.h"
+#include "ns3/threshold-preamble-detection-model.h"
+#include "ns3/wifi-utils.h"
 
 namespace ns3 {
 

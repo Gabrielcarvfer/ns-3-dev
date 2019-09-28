@@ -31,7 +31,7 @@
 #include "ns3/double.h"
 #include "ns3/simulator.h"
 #include "ns3/abort.h"
-#include "pie-queue-disc.h"
+#include "ns3/pie-queue-disc.h"
 #include "ns3/drop-tail-queue.h"
 
 namespace ns3 {

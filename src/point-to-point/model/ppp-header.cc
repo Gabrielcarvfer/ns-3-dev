@@ -21,7 +21,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "ns3/header.h"
-#include "ppp-header.h"
+#include "ns3/ppp-header.h"
 
 namespace ns3 {
 

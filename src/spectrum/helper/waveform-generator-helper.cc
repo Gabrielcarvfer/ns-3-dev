@@ -28,7 +28,7 @@
 #include "ns3/spectrum-channel.h"
 #include "ns3/waveform-generator.h"
 #include "ns3/non-communicating-net-device.h"
-#include "waveform-generator-helper.h"
+#include "ns3/waveform-generator-helper.h"
 
 
 

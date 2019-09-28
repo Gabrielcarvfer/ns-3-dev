@@ -21,8 +21,8 @@
 #include "ns3/object.h"
 #include "ns3/log.h"
 
-#include "data-collector.h"
-#include "data-calculator.h"
+#include "ns3/data-collector.h"
+#include "ns3/data-calculator.h"
 
 using namespace ns3;
 

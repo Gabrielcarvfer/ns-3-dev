@@ -29,7 +29,7 @@
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
 #include "ns3/abort.h"
-#include "packet-socket-client.h"
+#include "ns3/packet-socket-client.h"
 #include <cstdlib>
 #include <cstdio>
 

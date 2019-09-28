@@ -18,7 +18,7 @@
  * Author:
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
-#include "lr-wpan-interference-helper.h"
+#include "ns3/lr-wpan-interference-helper.h"
 #include <ns3/spectrum-value.h>
 #include <ns3/spectrum-model.h>
 #include <ns3/log.h>

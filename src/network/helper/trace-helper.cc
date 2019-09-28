@@ -29,7 +29,7 @@
 #include "ns3/net-device.h"
 #include "ns3/pcap-file-wrapper.h"
 
-#include "trace-helper.h"
+#include "ns3/trace-helper.h"
 
 namespace ns3 {
 

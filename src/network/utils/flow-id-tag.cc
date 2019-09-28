@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "flow-id-tag.h"
+#include "ns3/flow-id-tag.h"
 #include "ns3/log.h"
 
 namespace ns3 {

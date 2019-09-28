@@ -23,7 +23,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/log.h"
 #include "ns3/boolean.h"
-#include "waypoint-mobility-model.h"
+#include "ns3/waypoint-mobility-model.h"
 #include "ns3/config.h"
 #include "ns3/test.h"
 

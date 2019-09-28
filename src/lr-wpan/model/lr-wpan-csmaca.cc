@@ -20,7 +20,7 @@
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
 
-#include "lr-wpan-csmaca.h"
+#include "ns3/lr-wpan-csmaca.h"
 #include <ns3/random-variable-stream.h>
 #include <ns3/simulator.h>
 #include <ns3/log.h>

@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "olsr-helper.h"
+#include "ns3/olsr-helper.h"
 #include "ns3/olsr-routing-protocol.h"
 #include "ns3/node-list.h"
 #include "ns3/names.h"

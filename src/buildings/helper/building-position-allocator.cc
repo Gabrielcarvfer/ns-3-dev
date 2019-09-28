@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  *         Michele Polese <michele.polese@gmail.com> for the OutdoorPositionAllocator class
  */
-#include "building-position-allocator.h"
+#include "ns3/building-position-allocator.h"
 #include <ns3/mobility-building-info.h>
 #include "ns3/mobility-model.h"
 #include "ns3/buildings-helper.h"

@@ -25,14 +25,14 @@
 #include <map>
 #include "ns3/object.h"
 #include "ns3/nstime.h"
-#include "channel-access-manager.h"
-#include "block-ack-cache.h"
-#include "mac-low-transmission-parameters.h"
-#include "qos-utils.h"
-#include "wifi-mac-header.h"
-#include "wifi-tx-vector.h"
-#include "block-ack-type.h"
-#include "wifi-mpdu-type.h"
+#include "ns3/channel-access-manager.h"
+#include "ns3/block-ack-cache.h"
+#include "ns3/mac-low-transmission-parameters.h"
+#include "ns3/qos-utils.h"
+#include "ns3/wifi-mac-header.h"
+#include "ns3/wifi-tx-vector.h"
+#include "ns3/block-ack-type.h"
+#include "ns3/wifi-mpdu-type.h"
 
 namespace ns3 {
 

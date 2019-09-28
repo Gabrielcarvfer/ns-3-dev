@@ -19,10 +19,10 @@
  *
  */
 
-#include "ipcs-classifier.h"
+#include "ns3/ipcs-classifier.h"
 #include <stdint.h>
 #include "ns3/log.h"
-#include "service-flow.h"
+#include "ns3/service-flow.h"
 #include "ns3/packet.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/udp-header.h"

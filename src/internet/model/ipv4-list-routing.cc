@@ -22,7 +22,7 @@
 #include "ns3/ipv4-route.h"
 #include "ns3/node.h"
 #include "ns3/ipv4-static-routing.h"
-#include "ipv4-list-routing.h"
+#include "ns3/ipv4-list-routing.h"
 
 namespace ns3 {
 

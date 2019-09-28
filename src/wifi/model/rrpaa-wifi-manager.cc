@@ -25,9 +25,9 @@
 #include "ns3/uinteger.h"
 #include "ns3/simulator.h"
 #include "ns3/data-rate.h"
-#include "rrpaa-wifi-manager.h"
-#include "wifi-phy.h"
-#include "wifi-mac.h"
+#include "ns3/rrpaa-wifi-manager.h"
+#include "ns3/wifi-phy.h"
+#include "ns3/wifi-mac.h"
 
 NS_LOG_COMPONENT_DEFINE ("RrpaaWifiManager");
 

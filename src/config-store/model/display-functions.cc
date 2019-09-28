@@ -16,8 +16,8 @@
  * Authors: Faker Moatamri <faker.moatamri@sophia.inria.fr>
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "display-functions.h"
-#include "raw-text-config.h"
+#include "ns3/display-functions.h"
+#include "ns3/raw-text-config.h"
 #include "ns3/config.h"
 #include "ns3/string.h"
 #include "ns3/pointer.h"

@@ -21,7 +21,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "ns3/simulation-singleton.h"
-#include "global-route-manager.h"
+#include "ns3/global-route-manager.h"
 #include "global-route-manager-impl.h"
 
 namespace ns3 {

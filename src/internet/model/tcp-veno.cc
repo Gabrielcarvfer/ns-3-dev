@@ -24,7 +24,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#include "tcp-veno.h"
+#include "ns3/tcp-veno.h"
 #include "ns3/log.h"
 
 namespace ns3 {

@@ -22,7 +22,7 @@
 #include <fstream>
 #include <string>
 
-#include "gnuplot-aggregator.h"
+#include "ns3/gnuplot-aggregator.h"
 #include "ns3/abort.h"
 #include "ns3/log.h"
 

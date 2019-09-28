@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "packet-socket-helper.h"
+#include "ns3/packet-socket-helper.h"
 #include "ns3/packet-socket-factory.h"
 #include "ns3/names.h"
 

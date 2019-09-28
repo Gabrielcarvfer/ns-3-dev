@@ -22,7 +22,7 @@
 #include "ns3/pointer.h"
 #include "ns3/object-factory.h"
 #include "ns3/socket.h"
-#include "prio-queue-disc.h"
+#include "ns3/prio-queue-disc.h"
 #include <algorithm>
 #include <iterator>
 

@@ -18,8 +18,8 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "peer-link-frame.h"
-#include "ie-dot11s-peer-management.h"
+#include "ns3/peer-link-frame.h"
+#include "ns3/ie-dot11s-peer-management.h"
 #include "ns3/mesh-wifi-interface-mac.h"
 #include "ns3/test.h"
 #include "ns3/packet.h"

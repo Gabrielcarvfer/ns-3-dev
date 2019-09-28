@@ -18,8 +18,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 #include <algorithm>
-#include "simple-channel.h"
-#include "simple-net-device.h"
+#include "ns3/simple-channel.h"
+#include "ns3/simple-net-device.h"
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
 #include "ns3/node.h"

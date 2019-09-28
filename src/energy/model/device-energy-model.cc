@@ -18,7 +18,7 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "device-energy-model.h"
+#include "ns3/device-energy-model.h"
 #include "ns3/log.h"
 
 namespace ns3 {

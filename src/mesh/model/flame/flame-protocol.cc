@@ -18,10 +18,10 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "flame-protocol.h"
-#include "flame-protocol-mac.h"
-#include "flame-header.h"
-#include "flame-rtable.h"
+#include "ns3/flame-protocol.h"
+#include "ns3/flame-protocol-mac.h"
+#include "ns3/flame-header.h"
+#include "ns3/flame-rtable.h"
 #include "ns3/llc-snap-header.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"

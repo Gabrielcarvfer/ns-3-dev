@@ -18,7 +18,7 @@
  * Author: Ghada Badawy <gbadawy@gmail.com>
  */
 
-#include "ampdu-subframe-header.h"
+#include "ns3/ampdu-subframe-header.h"
 #include <iomanip>
 
 namespace ns3 {

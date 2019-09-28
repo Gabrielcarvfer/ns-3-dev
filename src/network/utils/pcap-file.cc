@@ -26,7 +26,7 @@
 #include "ns3/fatal-impl.h"
 #include "ns3/header.h"
 #include "ns3/buffer.h"
-#include "pcap-file.h"
+#include "ns3/pcap-file.h"
 #include "ns3/log.h"
 #include "ns3/build-profile.h"
 //

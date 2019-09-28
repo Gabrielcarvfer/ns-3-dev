@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "mac48-address.h"
+#include "ns3/mac48-address.h"
 #include "ns3/address.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"

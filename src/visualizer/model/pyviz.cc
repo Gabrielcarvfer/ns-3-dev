@@ -19,7 +19,7 @@
  */
 
 #include <cstdlib>
-#include "pyviz.h"
+#include "ns3/pyviz.h"
 #include "ns3/simulator.h"
 #include "ns3/config.h"
 #include "ns3/node-list.h"
@@ -30,7 +30,7 @@
 #include "ns3/log.h"
 #include "ns3/abort.h"
 
-#include "visual-simulator-impl.h"
+#include "ns3/visual-simulator-impl.h"
 
 #include <sstream>
 

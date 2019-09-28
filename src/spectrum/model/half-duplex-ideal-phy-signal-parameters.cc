@@ -20,7 +20,7 @@
 
 #include <ns3/log.h>
 #include <ns3/packet.h>
-#include "half-duplex-ideal-phy-signal-parameters.h"
+#include "ns3/half-duplex-ideal-phy-signal-parameters.h"
 
 
 namespace ns3 {

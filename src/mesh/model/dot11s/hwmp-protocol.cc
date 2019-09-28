@@ -18,10 +18,10 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "hwmp-protocol.h"
+#include "ns3/hwmp-protocol.h"
 #include "hwmp-protocol-mac.h"
 #include "hwmp-tag.h"
-#include "hwmp-rtable.h"
+#include "ns3/hwmp-rtable.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
@@ -30,10 +30,10 @@
 #include "ns3/mesh-wifi-interface-mac.h"
 #include "ns3/random-variable-stream.h"
 #include "airtime-metric.h"
-#include "ie-dot11s-preq.h"
-#include "ie-dot11s-prep.h"
+#include "ns3/ie-dot11s-preq.h"
+#include "ns3/ie-dot11s-prep.h"
 #include "ns3/trace-source-accessor.h"
-#include "ie-dot11s-perr.h"
+#include "ns3/ie-dot11s-perr.h"
 
 namespace ns3 {
 

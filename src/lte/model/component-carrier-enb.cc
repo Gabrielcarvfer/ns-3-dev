@@ -18,7 +18,7 @@
  * Author: Danilo Abrignani <danilo.abrignani@unibo.it>
  */
 
-#include "component-carrier-enb.h"
+#include "ns3/component-carrier-enb.h"
 #include <ns3/uinteger.h>
 #include <ns3/boolean.h>
 #include <ns3/simulator.h>

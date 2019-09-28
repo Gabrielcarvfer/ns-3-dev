@@ -22,7 +22,7 @@
 #include <ns3/double.h>
 #include <ns3/pointer.h>
 
-#include "spectrum-channel.h"
+#include "ns3/spectrum-channel.h"
 
 
 namespace ns3 {

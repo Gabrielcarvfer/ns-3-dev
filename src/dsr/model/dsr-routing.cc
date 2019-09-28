@@ -70,11 +70,11 @@
 #include "ns3/arp-header.h"
 #include "ns3/ipv6-interface.h"
 
-#include "dsr-rreq-table.h"
-#include "dsr-rcache.h"
-#include "dsr-routing.h"
-#include "dsr-fs-header.h"
-#include "dsr-options.h"
+#include "ns3/dsr-rreq-table.h"
+#include "ns3/dsr-rcache.h"
+#include "ns3/dsr-routing.h"
+#include "ns3/dsr-fs-header.h"
+#include "ns3/dsr-options.h"
 
 namespace ns3 {
 

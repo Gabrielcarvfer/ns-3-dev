@@ -18,7 +18,7 @@
 // Author: Rajib Bhattacharjea<raj.b@gatech.edu>
 //
 
-#include "data-rate.h"
+#include "ns3/data-rate.h"
 #include "ns3/nstime.h"
 #include "ns3/fatal-error.h"
 #include "ns3/log.h"

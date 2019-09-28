@@ -20,8 +20,8 @@
  */
 
 #include "ns3/log.h"
-#include "radio-bearer-stats-calculator.h"
-#include "radio-bearer-stats-connector.h"
+#include "ns3/radio-bearer-stats-calculator.h"
+#include "ns3/radio-bearer-stats-connector.h"
 
 namespace ns3 {
 

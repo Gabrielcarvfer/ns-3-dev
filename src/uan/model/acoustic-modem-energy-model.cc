@@ -25,7 +25,7 @@
 #include "ns3/energy-source.h"
 #include "ns3/uan-phy.h"
 #include "ns3/uan-net-device.h"
-#include "acoustic-modem-energy-model.h"
+#include "ns3/acoustic-modem-energy-model.h"
 
 namespace ns3 {
 

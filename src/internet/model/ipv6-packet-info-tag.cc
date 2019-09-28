@@ -21,7 +21,7 @@
 
 #include <stdint.h>
 #include "ns3/ipv6-address.h"
-#include "ipv6-packet-info-tag.h"
+#include "ns3/ipv6-packet-info-tag.h"
 
 namespace ns3 {
 

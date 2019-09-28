@@ -23,7 +23,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "ascii-file.h"
+#include "ns3/ascii-file.h"
 #include "ns3/test.h"
 
 /**

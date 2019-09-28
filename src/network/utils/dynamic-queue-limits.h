@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include "queue-limits.h"
+#include "ns3/queue-limits.h"
 #include "ns3/nstime.h"
 #include "ns3/traced-value.h"
 #include <limits.h>

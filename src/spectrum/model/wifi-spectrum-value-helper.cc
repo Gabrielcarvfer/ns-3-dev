@@ -24,7 +24,7 @@
 
 #include <map>
 #include <cmath>
-#include "wifi-spectrum-value-helper.h"
+#include "ns3/wifi-spectrum-value-helper.h"
 #include "ns3/log.h"
 #include "ns3/fatal-error.h"
 #include "ns3/assert.h"

@@ -26,7 +26,7 @@
 #include "ns3/ipv4-address.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/event-id.h"
-#include "pending-data.h"
+#include "ns3/pending-data.h"
 #include "ns3/sequence-number.h"
 
 struct INetStreamSocket;

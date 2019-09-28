@@ -18,7 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "buildings-helper.h"
+#include "ns3/buildings-helper.h"
 
 #include <ns3/node-list.h>
 #include <ns3/building.h>

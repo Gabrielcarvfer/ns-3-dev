@@ -21,7 +21,7 @@
  */
 
 #include <stdint.h>
-#include "ul-mac-messages.h"
+#include "ns3/ul-mac-messages.h"
 
 namespace ns3 {
 

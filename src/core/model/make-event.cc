@@ -17,8 +17,8 @@
  *
  */
 
-#include "make-event.h"
-#include "log.h"
+#include "ns3/make-event.h"
+#include "ns3/log.h"
 
 /**
  * \file

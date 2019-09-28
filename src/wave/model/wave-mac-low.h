@@ -24,7 +24,7 @@
 #include "ns3/msdu-aggregator.h"
 #include "ns3/mpdu-aggregator.h"
 #include "ns3/wifi-psdu.h"
-#include "wave-net-device.h"
+#include "ns3/wave-net-device.h"
 
 namespace ns3 {
 class WaveNetDevice;

@@ -22,7 +22,7 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/uinteger.h"
-#include "packet-loss-counter.h"
+#include "ns3/packet-loss-counter.h"
 
 namespace ns3 {
 

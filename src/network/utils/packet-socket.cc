@@ -19,8 +19,8 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "packet-socket.h"
-#include "packet-socket-address.h"
+#include "ns3/packet-socket.h"
+#include "ns3/packet-socket-address.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/packet.h"

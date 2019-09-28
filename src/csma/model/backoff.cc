@@ -18,7 +18,7 @@
  * Author: Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
 
-#include "backoff.h"
+#include "ns3/backoff.h"
 #include "ns3/log.h"
 
 namespace ns3 {

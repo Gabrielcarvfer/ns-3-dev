@@ -29,7 +29,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/tcp-socket-factory.h"
-#include "bulk-send-application.h"
+#include "ns3/bulk-send-application.h"
 
 namespace ns3 {
 

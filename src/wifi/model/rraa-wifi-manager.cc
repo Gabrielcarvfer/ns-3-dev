@@ -21,9 +21,9 @@
 #include "ns3/log.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
-#include "rraa-wifi-manager.h"
-#include "wifi-phy.h"
-#include "wifi-mac.h"
+#include "ns3/rraa-wifi-manager.h"
+#include "ns3/wifi-phy.h"
+#include "ns3/wifi-mac.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 

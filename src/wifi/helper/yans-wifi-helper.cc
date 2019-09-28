@@ -27,7 +27,7 @@
 #include "ns3/frame-capture-model.h"
 #include "ns3/preamble-detection-model.h"
 #include "ns3/yans-wifi-phy.h"
-#include "yans-wifi-helper.h"
+#include "ns3/yans-wifi-helper.h"
 
 namespace ns3 {
 

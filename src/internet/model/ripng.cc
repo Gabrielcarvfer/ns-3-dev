@@ -19,7 +19,7 @@
  */
 
 #include <iomanip>
-#include "ripng.h"
+#include "ns3/ripng.h"
 #include "ns3/log.h"
 #include "ns3/abort.h"
 #include "ns3/assert.h"

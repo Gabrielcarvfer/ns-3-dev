@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ip-l4-protocol.h"
-#include "icmpv4.h"
+#include "ns3/ip-l4-protocol.h"
+#include "ns3/icmpv4.h"
 #include "ns3/ipv4-address.h"
 
 namespace ns3 {

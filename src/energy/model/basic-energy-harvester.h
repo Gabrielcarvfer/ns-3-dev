@@ -27,7 +27,7 @@
 #include "ns3/traced-value.h"
 #include "ns3/nstime.h"
 #include "ns3/event-id.h"
-#include "energy-harvester.h"
+#include "ns3/energy-harvester.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/device-energy-model.h"
 

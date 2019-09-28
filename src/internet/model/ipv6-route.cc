@@ -21,7 +21,7 @@
 #include <iostream>
 
 #include "ns3/net-device.h"
-#include "ipv6-route.h"
+#include "ns3/ipv6-route.h"
 
 namespace ns3
 {

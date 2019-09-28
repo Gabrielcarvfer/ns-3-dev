@@ -26,7 +26,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/pointer.h"
 #include "ns3/traffic-control-layer.h"
-#include "traffic-control-helper.h"
+#include "ns3/traffic-control-helper.h"
 
 namespace ns3 {
 

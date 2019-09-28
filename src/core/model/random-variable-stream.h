@@ -25,9 +25,9 @@
  */
 #pragma once
 
-#include "type-id.h"
-#include "object.h"
-#include "attribute-helper.h"
+#include "ns3/type-id.h"
+#include "ns3/object.h"
+#include "ns3/attribute-helper.h"
 #include <stdint.h>
 
 /**

@@ -20,7 +20,7 @@
 
 #include "ns3/packet.h"
 #include "ns3/queue-item.h"
-#include "ipv6-header.h"
+#include "ns3/ipv6-header.h"
 
 namespace ns3 {
 

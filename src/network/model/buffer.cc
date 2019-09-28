@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "buffer.h"
+#include "ns3/buffer.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"
 

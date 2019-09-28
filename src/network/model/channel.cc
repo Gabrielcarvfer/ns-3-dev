@@ -16,9 +16,9 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "channel.h"
-#include "channel-list.h"
-#include "net-device.h"
+#include "ns3/channel.h"
+#include "ns3/channel-list.h"
+#include "ns3/net-device.h"
 
 #include "ns3/log.h"
 #include "ns3/uinteger.h"

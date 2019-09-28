@@ -28,7 +28,7 @@
 #include <map>
 #include <functional>
 #include <string>
-#include "packet-filter.h"
+#include "ns3/packet-filter.h"
 
 namespace ns3 {
 

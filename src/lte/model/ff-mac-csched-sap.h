@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <vector>
 
-#include "ff-mac-common.h"
+#include "ns3/ff-mac-common.h"
 
 namespace ns3 {
 

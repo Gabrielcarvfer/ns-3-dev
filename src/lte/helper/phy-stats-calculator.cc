@@ -19,7 +19,7 @@
  *         Danilo Abrignani <danilo.abrignani@unibo.it> (Modification due to new Architecture - Carrier Aggregation - GSoC 2015)
  */
 
-#include "phy-stats-calculator.h"
+#include "ns3/phy-stats-calculator.h"
 #include "ns3/string.h"
 #include <ns3/simulator.h>
 #include <ns3/log.h>

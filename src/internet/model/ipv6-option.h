@@ -25,7 +25,7 @@
 #include "ns3/object.h"
 #include "ns3/node.h"
 #include "ns3/ptr.h"
-#include "ipv6-interface.h"
+#include "ns3/ipv6-interface.h"
 #include "ns3/ipv6-header.h"
 #include "ns3/buffer.h"
 #include "ns3/packet.h"

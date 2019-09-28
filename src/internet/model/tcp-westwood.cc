@@ -31,11 +31,11 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "tcp-westwood.h"
+#include "ns3/tcp-westwood.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
-#include "rtt-estimator.h"
-#include "tcp-socket-base.h"
+#include "ns3/rtt-estimator.h"
+#include "ns3/tcp-socket-base.h"
 
 NS_LOG_COMPONENT_DEFINE ("TcpWestwood");
 

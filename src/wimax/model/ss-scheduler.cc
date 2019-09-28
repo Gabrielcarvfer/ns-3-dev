@@ -22,14 +22,14 @@
 #include "ns3/node.h"
 #include "ns3/log.h"
 #include "ss-scheduler.h"
-#include "ss-net-device.h"
-#include "wimax-phy.h"
-#include "wimax-mac-queue.h"
-#include "wimax-connection.h"
-#include "connection-manager.h"
-#include "service-flow.h"
-#include "service-flow-record.h"
-#include "service-flow-manager.h"
+#include "ns3/ss-net-device.h"
+#include "ns3/wimax-phy.h"
+#include "ns3/wimax-mac-queue.h"
+#include "ns3/wimax-connection.h"
+#include "ns3/connection-manager.h"
+#include "ns3/service-flow.h"
+#include "ns3/service-flow-record.h"
+#include "ns3/service-flow-manager.h"
 
 namespace ns3 {
 

@@ -20,16 +20,16 @@
  *                               <amine.ismail@UDcast.com>
  */
 
-#include "connection-manager.h"
+#include "ns3/connection-manager.h"
 #include "ns3/log.h"
-#include "cid-factory.h"
-#include "ss-record.h"
-#include "mac-messages.h"
+#include "ns3/cid-factory.h"
+#include "ns3/ss-record.h"
+#include "ns3/mac-messages.h"
 #include "ns3/pointer.h"
 #include "ns3/enum.h"
-#include "service-flow.h"
-#include "ss-net-device.h"
-#include "bs-net-device.h"
+#include "ns3/service-flow.h"
+#include "ns3/ss-net-device.h"
+#include "ns3/bs-net-device.h"
 
 namespace ns3 {
 

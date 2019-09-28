@@ -21,9 +21,9 @@
 #pragma once
 
 #include "ns3/net-device.h"
-#include "wifi-phy-standard.h"
-#include "wifi-remote-station-manager.h"
-#include "qos-utils.h"
+#include "ns3/wifi-phy-standard.h"
+#include "ns3/wifi-remote-station-manager.h"
+#include "ns3/qos-utils.h"
 
 namespace ns3 {
 

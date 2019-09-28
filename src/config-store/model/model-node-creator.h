@@ -17,7 +17,7 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "attribute-iterator.h"
+#include "ns3/attribute-iterator.h"
 #include <gtk/gtk.h>
 
 namespace ns3

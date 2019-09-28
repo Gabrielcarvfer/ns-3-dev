@@ -19,7 +19,7 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "lte-pdcp-tag.h"
+#include "ns3/lte-pdcp-tag.h"
 #include "ns3/tag.h"
 #include "ns3/uinteger.h"
 

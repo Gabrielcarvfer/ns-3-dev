@@ -25,18 +25,18 @@
 #include "ns3/callback.h"
 #include "ns3/node.h"
 #include "ns3/packet.h"
-#include "wimax-net-device.h"
-#include "wimax-channel.h"
+#include "ns3/wimax-net-device.h"
+#include "ns3/wimax-channel.h"
 #include "ns3/packet-burst.h"
 #include "burst-profile-manager.h"
 #include <list>
-#include "send-params.h"
+#include "ns3/send-params.h"
 #include "ns3/uinteger.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/pointer.h"
 #include "ns3/enum.h"
-#include "service-flow-manager.h"
-#include "connection-manager.h"
+#include "ns3/service-flow-manager.h"
+#include "ns3/connection-manager.h"
 #include "bandwidth-manager.h"
 
 namespace ns3 {

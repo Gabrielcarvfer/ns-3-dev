@@ -21,7 +21,7 @@
 #include "ns3/enum.h"
 #include "ns3/tap-bridge.h"
 #include "ns3/names.h"
-#include "tap-bridge-helper.h"
+#include "ns3/tap-bridge-helper.h"
 
 namespace ns3 {
 

@@ -20,7 +20,7 @@
  *                               <amine.ismail@UDcast.com>
  */
 
-#include "cid.h"
+#include "ns3/cid.h"
 
 // 0 will match IR CID, -1 will match broadcast CID 0xFFFF, hence 60000
 #define CID_UNINITIALIZED 60000

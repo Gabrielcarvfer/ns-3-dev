@@ -34,9 +34,9 @@
 #include "ns3/random-variable-stream.h"
 #include "ns3/simulator.h"
 #include "ns3/log.h"
-#include "minstrel-wifi-manager.h"
-#include "wifi-mac.h"
-#include "wifi-phy.h"
+#include "ns3/minstrel-wifi-manager.h"
+#include "ns3/wifi-mac.h"
+#include "ns3/wifi-phy.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 

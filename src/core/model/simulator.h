@@ -20,12 +20,12 @@
 
 #pragma once
 
-#include "event-id.h"
-#include "event-impl.h"
-#include "make-event.h"
-#include "nstime.h"
+#include "ns3/event-id.h"
+#include "ns3/event-impl.h"
+#include "ns3/make-event.h"
+#include "ns3/nstime.h"
 
-#include "object-factory.h"
+#include "ns3/object-factory.h"
 
 #include <stdint.h>
 #include <string>

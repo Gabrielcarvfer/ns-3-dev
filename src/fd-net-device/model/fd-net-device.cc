@@ -19,7 +19,7 @@
  *         Claudio Freire <klaussfreire@sourceforge.net>
  */
 
-#include "fd-net-device.h"
+#include "ns3/fd-net-device.h"
 
 #include "ns3/abort.h"
 #include "ns3/boolean.h"

@@ -19,7 +19,7 @@
  */
 
 #include <stdint.h>
-#include "ofdm-downlink-frame-prefix.h"
+#include "ns3/ofdm-downlink-frame-prefix.h"
 #include "ns3/address-utils.h"
 
 namespace ns3 {

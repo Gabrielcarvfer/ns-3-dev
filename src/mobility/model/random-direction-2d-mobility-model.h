@@ -25,8 +25,8 @@
 #include "ns3/event-id.h"
 #include "ns3/rectangle.h"
 #include "ns3/random-variable-stream.h"
-#include "mobility-model.h"
-#include "constant-velocity-helper.h"
+#include "ns3/mobility-model.h"
+#include "ns3/constant-velocity-helper.h"
 
 namespace ns3 {
 

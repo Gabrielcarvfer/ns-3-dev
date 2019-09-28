@@ -21,8 +21,8 @@
 #include "ns3/log.h"
 #include "ns3/sequence-number.h"
 #include "ns3/packet.h"
-#include "mac-rx-middle.h"
-#include "wifi-mac-header.h"
+#include "ns3/mac-rx-middle.h"
+#include "ns3/wifi-mac-header.h"
 
 namespace ns3 {
 

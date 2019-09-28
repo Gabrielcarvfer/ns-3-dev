@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "non-copyable.h"
+#include "ns3/non-copyable.h"
 
 
 /**

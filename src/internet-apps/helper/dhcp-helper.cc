@@ -22,7 +22,7 @@
  *
  */
 
-#include "dhcp-helper.h"
+#include "ns3/dhcp-helper.h"
 #include "ns3/dhcp-server.h"
 #include "ns3/dhcp-client.h"
 #include "ns3/uinteger.h"

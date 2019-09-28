@@ -24,8 +24,8 @@
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
 #include "ns3/log.h"
-#include "wifi-mac-queue-item.h"
-#include "wifi-mac-trailer.h"
+#include "ns3/wifi-mac-queue-item.h"
+#include "ns3/wifi-mac-trailer.h"
 
 namespace ns3 {
 

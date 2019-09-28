@@ -91,7 +91,7 @@ private:
 
 #include <stdint.h>
 #include "ns3/header.h"
-#include "cid.h"
+#include "ns3/cid.h"
 
 namespace ns3 {
 
@@ -232,7 +232,7 @@ private:
 
 #include <stdint.h>
 #include "ns3/header.h"
-#include "cid.h"
+#include "ns3/cid.h"
 
 namespace ns3 {
 /**

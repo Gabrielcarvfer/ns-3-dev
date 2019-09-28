@@ -35,10 +35,10 @@
 #include "ns3/ipv4-routing-protocol.h"
 #include "ns3/ipv4-list-routing.h"
 #include "ns3/mpi-interface.h"
-#include "global-router-interface.h"
-#include "global-route-manager-impl.h"
-#include "candidate-queue.h"
-#include "ipv4-global-routing.h"
+#include "ns3/global-router-interface.h"
+#include "ns3/global-route-manager-impl.h"
+#include "ns3/candidate-queue.h"
+#include "ns3/ipv4-global-routing.h"
 
 namespace ns3 {
 

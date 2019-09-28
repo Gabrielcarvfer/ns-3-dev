@@ -18,7 +18,7 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ie-dot11s-peering-protocol.h"
+#include "ns3/ie-dot11s-peering-protocol.h"
 namespace ns3 {
 namespace dot11s {
 uint8_t

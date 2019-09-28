@@ -23,7 +23,7 @@
  *
  */
 
-#include "uan-helper.h"
+#include "ns3/uan-helper.h"
 #include "ns3/uan-net-device.h"
 #include "ns3/uan-mac.h"
 #include "ns3/uan-phy.h"

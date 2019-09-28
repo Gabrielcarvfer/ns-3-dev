@@ -22,7 +22,7 @@
 
 #include <cmath>  // pow
 
-#include "cairo-wideint-private.h"
+#include "ns3/cairo-wideint-private.h"
 
 /**
  * \file

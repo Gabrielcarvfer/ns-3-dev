@@ -58,7 +58,7 @@
 #include "ns3/ipv6.h"
 #include "ns3/ipv4-routing-protocol.h"
 #include "ns3/energy-source-container.h"
-#include "animation-interface.h"
+#include "ns3/animation-interface.h"
 
 namespace ns3 {
 

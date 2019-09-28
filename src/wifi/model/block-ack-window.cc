@@ -19,8 +19,8 @@
  */
 
 #include "ns3/log.h"
-#include "block-ack-window.h"
-#include "wifi-utils.h"
+#include "ns3/block-ack-window.h"
+#include "ns3/wifi-utils.h"
 
 namespace ns3 {
 

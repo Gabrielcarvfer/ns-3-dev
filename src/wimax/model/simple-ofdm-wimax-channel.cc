@@ -26,12 +26,12 @@
 #include "ns3/assert.h"
 #include "ns3/net-device.h"
 #include "ns3/node.h"
-#include "wimax-phy.h"
-#include "simple-ofdm-wimax-phy.h"
-#include "simple-ofdm-wimax-channel.h"
+#include "ns3/wimax-phy.h"
+#include "ns3/simple-ofdm-wimax-phy.h"
+#include "ns3/simple-ofdm-wimax-channel.h"
 #include "ns3/mobility-model.h"
 #include "ns3/cost231-propagation-loss-model.h"
-#include "simple-ofdm-send-param.h"
+#include "ns3/simple-ofdm-send-param.h"
 
 namespace ns3 {
 

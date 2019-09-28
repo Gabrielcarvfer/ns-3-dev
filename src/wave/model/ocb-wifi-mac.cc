@@ -27,10 +27,10 @@
 #include "ns3/mac-rx-middle.h"
 #include "ns3/ht-capabilities.h"
 #include "ns3/vht-capabilities.h"
-#include "wave-mac-low.h"
-#include "ocb-wifi-mac.h"
-#include "vendor-specific-action.h"
-#include "higher-tx-tag.h"
+#include "ns3/wave-mac-low.h"
+#include "ns3/ocb-wifi-mac.h"
+#include "ns3/vendor-specific-action.h"
+#include "ns3/higher-tx-tag.h"
 
 namespace ns3 {
 

@@ -21,7 +21,7 @@
 #include <stdint.h>
 #include <list>
 #include "ns3/packet.h"
-#include "packet-burst.h"
+#include "ns3/packet-burst.h"
 #include "ns3/log.h"
 
 namespace ns3 {

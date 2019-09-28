@@ -21,7 +21,7 @@
 
 #include <ns3/log.h>
 #include <cmath>
-#include "angles.h"
+#include "ns3/angles.h"
 
 
 namespace ns3 {

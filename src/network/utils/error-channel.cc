@@ -23,7 +23,7 @@
 #include "ns3/packet.h"
 #include "ns3/node.h"
 #include "ns3/log.h"
-#include "error-channel.h"
+#include "ns3/error-channel.h"
 
 namespace ns3 {
 

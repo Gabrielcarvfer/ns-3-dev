@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "header.h"
+#include "ns3/header.h"
 #include "ns3/log.h"
 
 namespace ns3 {

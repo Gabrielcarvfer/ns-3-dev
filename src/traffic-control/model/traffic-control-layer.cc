@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "traffic-control-layer.h"
+#include "ns3/traffic-control-layer.h"
 #include "ns3/net-device-queue-interface.h"
 #include "ns3/log.h"
 #include "ns3/object-map.h"

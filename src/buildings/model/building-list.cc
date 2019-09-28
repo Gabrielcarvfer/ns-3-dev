@@ -19,14 +19,14 @@
  * Based on BuildingList implementation by Mathieu Lacage  <mathieu.lacage@sophia.inria.fr>
  *
  */
-#include "building-list.h"
+#include "ns3/building-list.h"
 #include "ns3/simulator.h"
 #include "ns3/object-vector.h"
 #include "ns3/config.h"
 #include "ns3/log.h"
 #include "ns3/assert.h"
-#include "building-list.h"
-#include "building.h"
+#include "ns3/building-list.h"
+#include "ns3/building.h"
 
 namespace ns3 {
 

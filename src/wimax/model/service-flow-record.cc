@@ -18,7 +18,7 @@
  * Author: Jahanzeb Farooq <jahanzeb.farooq@sophia.inria.fr>
  */
 
-#include "service-flow-record.h"
+#include "ns3/service-flow-record.h"
 
 namespace ns3 {
 

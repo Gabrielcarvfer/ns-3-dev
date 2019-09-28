@@ -17,7 +17,7 @@
  *
  * Author: Gary Pei <guangyu.pei@boeing.com>
  */
-#include "lr-wpan-spectrum-signal-parameters.h"
+#include "ns3/lr-wpan-spectrum-signal-parameters.h"
 #include <ns3/log.h>
 #include <ns3/packet-burst.h>
 

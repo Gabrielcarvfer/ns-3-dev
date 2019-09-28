@@ -24,10 +24,10 @@
 
 #include <list>
 #include "ns3/packet.h"
-#include "wimax-phy.h"
+#include "ns3/wimax-phy.h"
 #include "ns3/packet-burst.h"
-#include "dl-mac-messages.h"
-#include "bs-scheduler.h"
+#include "ns3/dl-mac-messages.h"
+#include "ns3/bs-scheduler.h"
 
 namespace ns3 {
 

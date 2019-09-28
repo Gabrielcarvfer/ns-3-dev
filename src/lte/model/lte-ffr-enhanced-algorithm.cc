@@ -19,7 +19,7 @@
  *
  */
 
-#include "lte-ffr-enhanced-algorithm.h"
+#include "ns3/lte-ffr-enhanced-algorithm.h"
 #include "ns3/ff-mac-common.h"
 #include "ns3/lte-common.h"
 #include "ns3/lte-vendor-specific-parameters.h"

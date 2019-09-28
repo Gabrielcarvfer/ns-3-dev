@@ -18,12 +18,12 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "uan-mac-rc-gw.h"
-#include "uan-mac-rc.h"
-#include "uan-header-common.h"
-#include "uan-header-rc.h"
-#include "uan-phy.h"
-#include "uan-tx-mode.h"
+#include "ns3/uan-mac-rc-gw.h"
+#include "ns3/uan-mac-rc.h"
+#include "ns3/uan-header-common.h"
+#include "ns3/uan-header-rc.h"
+#include "ns3/uan-phy.h"
+#include "ns3/uan-tx-mode.h"
 
 #include "ns3/assert.h"
 #include "ns3/log.h"

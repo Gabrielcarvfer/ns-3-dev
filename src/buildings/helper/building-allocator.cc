@@ -19,7 +19,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  * Author: Nicola Baldo <nbaldo@cttc.es> (took position-allocator and turned it into building-allocator)
  */
-#include "building-allocator.h"
+#include "ns3/building-allocator.h"
 #include "ns3/building.h"
 #include "ns3/double.h"
 #include "ns3/uinteger.h"

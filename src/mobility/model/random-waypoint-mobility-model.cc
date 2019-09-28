@@ -22,8 +22,8 @@
 #include "ns3/random-variable-stream.h"
 #include "ns3/pointer.h"
 #include "ns3/string.h"
-#include "random-waypoint-mobility-model.h"
-#include "position-allocator.h"
+#include "ns3/random-waypoint-mobility-model.h"
+#include "ns3/position-allocator.h"
 
 namespace ns3 {
 

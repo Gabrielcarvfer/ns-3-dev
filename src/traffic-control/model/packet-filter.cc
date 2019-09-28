@@ -18,8 +18,8 @@
 
 #include "ns3/log.h"
 #include "ns3/integer.h"
-#include "queue-disc.h"
-#include "packet-filter.h"
+#include "ns3/queue-disc.h"
+#include "ns3/packet-filter.h"
 
 namespace ns3 {
 

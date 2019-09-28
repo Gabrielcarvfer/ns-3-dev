@@ -22,7 +22,7 @@
 
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"
-#include "he-configuration.h"
+#include "ns3/he-configuration.h"
 
 namespace ns3 {
 

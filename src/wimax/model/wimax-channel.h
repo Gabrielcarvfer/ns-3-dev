@@ -22,7 +22,7 @@
 
 #include <list>
 #include "ns3/channel.h"
-#include "wimax-connection.h"
+#include "ns3/wimax-connection.h"
 #include "ns3/log.h"
 
 namespace ns3 {

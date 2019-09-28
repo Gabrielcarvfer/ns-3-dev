@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "file-config.h"
+#include "ns3/file-config.h"
 
 namespace ns3 {
 

@@ -25,7 +25,7 @@
 #include "ns3/mobility-model.h"
 #include <cmath>
 
-#include "itu-r-1411-los-propagation-loss-model.h"
+#include "ns3/itu-r-1411-los-propagation-loss-model.h"
 
 namespace ns3 {
 

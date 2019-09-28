@@ -17,7 +17,7 @@
  *
  */
 
-#include "ipv4-route.h"
+#include "ns3/ipv4-route.h"
 #include "ns3/net-device.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"

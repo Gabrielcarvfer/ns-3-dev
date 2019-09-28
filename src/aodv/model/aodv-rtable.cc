@@ -26,7 +26,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#include "aodv-rtable.h"
+#include "ns3/aodv-rtable.h"
 #include <algorithm>
 #include <iomanip>
 #include "ns3/simulator.h"

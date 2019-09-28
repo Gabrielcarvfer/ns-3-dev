@@ -26,7 +26,7 @@
 #include "ns3/socket.h"
 #include "ns3/unused.h"
 #include "ns3/simulator.h"
-#include "queue-disc.h"
+#include "ns3/queue-disc.h"
 #include "ns3/net-device-queue-interface.h"
 #include "ns3/queue.h"
 

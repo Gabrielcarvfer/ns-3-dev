@@ -16,7 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "tap-bridge.h"
+#include "ns3/tap-bridge.h"
 #include "tap-encode-decode.h"
 
 #include "ns3/node.h"

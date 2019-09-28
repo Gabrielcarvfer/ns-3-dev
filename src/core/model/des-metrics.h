@@ -26,9 +26,9 @@
  * ns3::DesMetrics declaration.
  */
 
-#include "nstime.h"
-#include "singleton.h"
-#include "system-mutex.h"
+#include "ns3/nstime.h"
+#include "ns3/singleton.h"
+#include "ns3/system-mutex.h"
 
 #include <stdint.h>    // uint32_t
 #include <fstream>

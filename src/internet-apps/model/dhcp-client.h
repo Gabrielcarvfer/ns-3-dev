@@ -26,7 +26,7 @@
 
 #include "ns3/application.h"
 #include "ns3/traced-value.h"
-#include "dhcp-header.h"
+#include "ns3/dhcp-header.h"
 #include <list>
 
 namespace ns3 {

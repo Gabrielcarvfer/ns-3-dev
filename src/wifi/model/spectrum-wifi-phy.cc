@@ -28,10 +28,10 @@
 #include "ns3/boolean.h"
 #include "ns3/net-device.h"
 #include "ns3/node.h"
-#include "spectrum-wifi-phy.h"
-#include "wifi-spectrum-signal-parameters.h"
-#include "wifi-spectrum-phy-interface.h"
-#include "wifi-utils.h"
+#include "ns3/spectrum-wifi-phy.h"
+#include "ns3/wifi-spectrum-signal-parameters.h"
+#include "ns3/wifi-spectrum-phy-interface.h"
+#include "ns3/wifi-utils.h"
 
 namespace ns3 {
 

@@ -27,7 +27,7 @@
 #include "ns3/tag.h"
 #include "ns3/object.h"
 #include "ns3/net-device.h"
-#include "address.h"
+#include "ns3/address.h"
 #include <stdint.h>
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"

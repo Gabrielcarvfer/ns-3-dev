@@ -23,11 +23,11 @@
 #pragma once
 
 #include <stdint.h>
-#include "wimax-net-device.h"
-#include "bs-net-device.h"
+#include "ns3/wimax-net-device.h"
+#include "ns3/bs-net-device.h"
 #include "ns3/event-id.h"
-#include "cid.h"
-#include "mac-messages.h"
+#include "ns3/cid.h"
+#include "ns3/mac-messages.h"
 
 namespace ns3 {
 

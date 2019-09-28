@@ -19,12 +19,12 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "object.h"
-#include "object-factory.h"
-#include "assert.h"
-#include "attribute.h"
-#include "log.h"
-#include "string.h"
+#include "ns3/object.h"
+#include "ns3/object-factory.h"
+#include "ns3/assert.h"
+#include "ns3/attribute.h"
+#include "ns3/log.h"
+#include "ns3/string.h"
 #include <vector>
 #include <sstream>
 #include <cstdlib>

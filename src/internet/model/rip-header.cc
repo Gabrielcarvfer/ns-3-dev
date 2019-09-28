@@ -18,7 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#include "rip-header.h"
+#include "ns3/rip-header.h"
 #include "ns3/log.h"
 
 namespace ns3 {

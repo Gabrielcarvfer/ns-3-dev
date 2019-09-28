@@ -23,9 +23,9 @@
 
 #include <stdint.h>
 #include "ns3/header.h"
-#include "ss-record.h"
-#include "service-flow.h"
-#include "service-flow-record.h"
+#include "ns3/ss-record.h"
+#include "ns3/service-flow.h"
+#include "ns3/service-flow-record.h"
 
 namespace ns3 {
 

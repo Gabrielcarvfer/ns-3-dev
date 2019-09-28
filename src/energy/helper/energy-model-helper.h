@@ -29,7 +29,7 @@
 #include "ns3/energy-source.h"
 #include "ns3/device-energy-model.h"
 #include "ns3/device-energy-model-container.h"
-#include "energy-source-container.h"
+#include "ns3/energy-source-container.h"
 
 namespace ns3 {
 

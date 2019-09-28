@@ -34,12 +34,12 @@
 #include "ns3/ipv4-routing-table-entry.h"
 #include "ns3/traffic-control-layer.h"
 
-#include "loopback-net-device.h"
-#include "arp-l3-protocol.h"
-#include "arp-cache.h"
-#include "ipv4-l3-protocol.h"
-#include "icmpv4-l4-protocol.h"
-#include "ipv4-interface.h"
+#include "ns3/loopback-net-device.h"
+#include "ns3/arp-l3-protocol.h"
+#include "ns3/arp-cache.h"
+#include "ns3/ipv4-l3-protocol.h"
+#include "ns3/icmpv4-l4-protocol.h"
+#include "ns3/ipv4-interface.h"
 #include "ipv4-raw-socket-impl.h"
 
 namespace ns3 {

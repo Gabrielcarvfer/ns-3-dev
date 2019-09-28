@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ipv4-raw-socket-factory.h"
+#include "ns3/ipv4-raw-socket-factory.h"
 #include "ns3/uinteger.h"
 #include "ns3/log.h"
 

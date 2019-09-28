@@ -17,7 +17,7 @@
  *
  */
 
-#include "type-name.h"
+#include "ns3/type-name.h"
 
 /**
  * \file

@@ -19,7 +19,7 @@
  */
 
 
-#include "lte-ue-phy-sap.h"
+#include "ns3/lte-ue-phy-sap.h"
 
 
 namespace ns3 {

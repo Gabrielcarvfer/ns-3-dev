@@ -21,8 +21,8 @@
 #include "ns3/log.h"
 #include "ns3/uinteger.h"
 #include "ns3/data-rate.h"
-#include "parf-wifi-manager.h"
-#include "wifi-phy.h"
+#include "ns3/parf-wifi-manager.h"
+#include "ns3/wifi-phy.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 

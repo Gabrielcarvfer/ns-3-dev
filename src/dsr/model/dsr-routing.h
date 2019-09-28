@@ -62,16 +62,16 @@
 #include "ns3/event-garbage-collector.h"
 #include "ns3/test.h"
 
-#include "dsr-network-queue.h"
-#include "dsr-rcache.h"
-#include "dsr-rreq-table.h"
-#include "dsr-maintain-buff.h"
-#include "dsr-passive-buff.h"
-#include "dsr-option-header.h"
-#include "dsr-fs-header.h"
-#include "dsr-rsendbuff.h"
-#include "dsr-errorbuff.h"
-#include "dsr-gratuitous-reply-table.h"
+#include "ns3/dsr-network-queue.h"
+#include "ns3/dsr-rcache.h"
+#include "ns3/dsr-rreq-table.h"
+#include "ns3/dsr-maintain-buff.h"
+#include "ns3/dsr-passive-buff.h"
+#include "ns3/dsr-option-header.h"
+#include "ns3/dsr-fs-header.h"
+#include "ns3/dsr-rsendbuff.h"
+#include "ns3/dsr-errorbuff.h"
+#include "ns3/dsr-gratuitous-reply-table.h"
 
 namespace ns3 {
 

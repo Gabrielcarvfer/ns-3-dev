@@ -24,7 +24,7 @@
 #include "ns3/address-utils.h"
 #include "ns3/log.h"
 
-#include "icmpv6-header.h"
+#include "ns3/icmpv6-header.h"
 
 namespace ns3
 {

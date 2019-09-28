@@ -28,7 +28,7 @@
 #include "ns3/ipv4-address.h"
 #include "ns3/udp-socket.h"
 #include "ns3/ipv4-interface.h"
-#include "icmpv4.h"
+#include "ns3/icmpv4.h"
 
 namespace ns3 {
 

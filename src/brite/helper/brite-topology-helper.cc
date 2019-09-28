@@ -25,7 +25,7 @@
 #include "ns3/data-rate.h"
 #include "ns3/rng-seed-manager.h"
 
-#include "brite-topology-helper.h"
+#include "ns3/brite-topology-helper.h"
 
 #include <iostream>
 #include <fstream>

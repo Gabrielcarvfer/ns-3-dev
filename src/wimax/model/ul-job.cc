@@ -20,7 +20,7 @@
  */
 
 #include <stdint.h>
-#include "ul-job.h"
+#include "ns3/ul-job.h"
 
 namespace ns3 {
 

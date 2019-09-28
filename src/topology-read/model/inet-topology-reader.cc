@@ -25,7 +25,7 @@
 #include "ns3/node-container.h"
 #include "ns3/log.h"
 
-#include "inet-topology-reader.h"
+#include "ns3/inet-topology-reader.h"
 
 
 namespace ns3 {

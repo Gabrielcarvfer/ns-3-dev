@@ -25,7 +25,7 @@
 #include <ns3/log.h>
 #include <ns3/fatal-error.h>
 
-#include "lte-spectrum-value-helper.h"
+#include "ns3/lte-spectrum-value-helper.h"
 
 // just needed to log a std::vector<int> properly...
 namespace std {

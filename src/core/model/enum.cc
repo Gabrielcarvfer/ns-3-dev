@@ -17,9 +17,9 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "enum.h"
-#include "fatal-error.h"
-#include "log.h"
+#include "ns3/enum.h"
+#include "ns3/fatal-error.h"
+#include "ns3/log.h"
 #include <sstream>
 
 /**

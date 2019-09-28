@@ -17,8 +17,8 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "object-factory.h"
-#include "log.h"
+#include "ns3/object-factory.h"
+#include "ns3/log.h"
 #include <sstream>
 
 /**

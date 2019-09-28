@@ -19,7 +19,7 @@
  */
 
 #include "ipv4-raw-socket-factory-impl.h"
-#include "ipv4-l3-protocol.h"
+#include "ns3/ipv4-l3-protocol.h"
 #include "ns3/socket.h"
 #include "ns3/log.h"
 

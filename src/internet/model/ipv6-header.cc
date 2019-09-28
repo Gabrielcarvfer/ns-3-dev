@@ -23,7 +23,7 @@
 #include "ns3/header.h"
 
 #include "ns3/address-utils.h"
-#include "ipv6-header.h"
+#include "ns3/ipv6-header.h"
 
 namespace ns3 {
 

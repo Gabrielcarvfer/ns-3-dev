@@ -22,7 +22,7 @@
 
 #include "ns3/nstime.h"
 #include "ns3/address-utils.h"
-#include "wifi-mac-header.h"
+#include "ns3/wifi-mac-header.h"
 
 namespace ns3 {
 

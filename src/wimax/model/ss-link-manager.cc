@@ -29,7 +29,7 @@
 #include "ns3/pointer.h"
 #include "ns3/enum.h"
 #include "burst-profile-manager.h"
-#include "service-flow-manager.h"
+#include "ns3/service-flow-manager.h"
 
 namespace ns3 {
 

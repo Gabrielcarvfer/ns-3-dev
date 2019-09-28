@@ -17,8 +17,8 @@
  */
 
 #include "ns3/assert.h"
-#include "ipv4-route.h"
-#include "ipv4-routing-protocol.h"
+#include "ns3/ipv4-route.h"
+#include "ns3/ipv4-routing-protocol.h"
 #include "ns3/log.h"
 
 namespace ns3 {

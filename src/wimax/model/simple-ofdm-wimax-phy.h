@@ -27,10 +27,10 @@
 #include "ns3/nstime.h"
 #include "ns3/event-id.h"
 #include "ns3/random-variable-stream.h"
-#include "wimax-phy.h"
-#include "bvec.h"
+#include "ns3/wimax-phy.h"
+#include "ns3/bvec.h"
 #include "ns3/snr-to-block-error-rate-manager.h"
-#include "wimax-connection.h"
+#include "ns3/wimax-connection.h"
 namespace ns3 {
 
 class WimaxChannel;

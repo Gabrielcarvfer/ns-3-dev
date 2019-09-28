@@ -18,7 +18,7 @@
  * Author: Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#include "li-ion-energy-source.h"
+#include "ns3/li-ion-energy-source.h"
 #include "ns3/log.h"
 #include "ns3/assert.h"
 #include "ns3/double.h"

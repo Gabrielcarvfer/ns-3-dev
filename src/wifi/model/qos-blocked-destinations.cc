@@ -20,7 +20,7 @@
  */
 
 #include "ns3/mac48-address.h"
-#include "qos-blocked-destinations.h"
+#include "ns3/qos-blocked-destinations.h"
 
 namespace ns3 {
 

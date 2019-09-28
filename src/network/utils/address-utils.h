@@ -20,12 +20,12 @@
 #pragma once
 
 #include "ns3/buffer.h"
-#include "ipv4-address.h"
-#include "ipv6-address.h"
+#include "ns3/ipv4-address.h"
+#include "ns3/ipv6-address.h"
 #include "ns3/address.h"
-#include "mac64-address.h"
-#include "mac48-address.h"
-#include "mac16-address.h"
+#include "ns3/mac64-address.h"
+#include "ns3/mac48-address.h"
+#include "ns3/mac16-address.h"
 
 namespace ns3 {
 

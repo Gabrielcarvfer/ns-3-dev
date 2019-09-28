@@ -23,9 +23,9 @@
 \brief  Implements a linked list of Packet tags, including copy-on-write semantics.
 */
 
-#include "packet-tag-list.h"
-#include "tag-buffer.h"
-#include "tag.h"
+#include "ns3/packet-tag-list.h"
+#include "ns3/tag-buffer.h"
+#include "ns3/tag.h"
 #include "ns3/fatal-error.h"
 #include "ns3/log.h"
 #include <cstring>

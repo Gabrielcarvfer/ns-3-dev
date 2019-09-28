@@ -17,10 +17,10 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "event-id.h"
-#include "simulator.h"
-#include "event-impl.h"
-#include "log.h"
+#include "ns3/event-id.h"
+#include "ns3/simulator.h"
+#include "ns3/event-impl.h"
+#include "ns3/log.h"
 
 /**
  * \file

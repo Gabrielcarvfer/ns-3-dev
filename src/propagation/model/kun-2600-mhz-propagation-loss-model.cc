@@ -25,7 +25,7 @@
 #include "ns3/mobility-model.h"
 #include <cmath>
 
-#include "kun-2600-mhz-propagation-loss-model.h"
+#include "ns3/kun-2600-mhz-propagation-loss-model.h"
 
 namespace ns3 {
 

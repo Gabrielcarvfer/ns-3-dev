@@ -18,7 +18,7 @@
  * Author: Kirill Andreev <andreev@telum.ru>
  */
 
-#include "jakes-propagation-loss-model.h"
+#include "ns3/jakes-propagation-loss-model.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
 

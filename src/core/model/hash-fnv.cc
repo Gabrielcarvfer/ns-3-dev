@@ -33,8 +33,8 @@
 #include <sys/types.h>
 #include <stdlib.h>
 
-#include "log.h"
-#include "hash-fnv.h"
+#include "ns3/log.h"
+#include "ns3/hash-fnv.h"
 
 /**
  * \file
@@ -193,7 +193,7 @@ typedef uint32_t Fnv32_t;  //PDB
 /**
  * Determine how 64 bit unsigned values are represented
  */
-//#include "longlong.h"  //PDB - assume `unsigned long long' is 64 bit
+//#include "ns3/longlong.h"  //PDB - assume `unsigned long long' is 64 bit
 #define HAVE_64BIT_LONG_LONG  
   
 
@@ -353,7 +353,7 @@ enum fnv_type {
  */
 
 //#include <stdlib.h>    //PDB
-//#include "fnv.h"       //PDB
+//#include "ns3/fnv.h"       //PDB
 
 
 /**
@@ -501,7 +501,7 @@ fnv_32a_str(char *str, Fnv32_t hval)
  */
 
 //#include <stdlib.h>    //PDB
-//#include "fnv.h"       //PDB
+//#include "ns3/fnv.h"       //PDB
 
 
 /**

@@ -19,7 +19,7 @@
  *
  */
 
-#include "no-op-handover-algorithm.h"
+#include "ns3/no-op-handover-algorithm.h"
 #include <ns3/log.h>
 
 namespace ns3 {

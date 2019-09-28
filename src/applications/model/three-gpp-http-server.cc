@@ -19,7 +19,7 @@
  *
  */
 
-#include "three-gpp-http-server.h"
+#include "ns3/three-gpp-http-server.h"
 
 #include <ns3/log.h>
 #include <ns3/simulator.h>

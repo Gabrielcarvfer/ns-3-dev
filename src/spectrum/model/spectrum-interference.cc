@@ -19,8 +19,8 @@
  */
 
 
-#include "spectrum-interference.h"
-#include "spectrum-error-model.h"
+#include "ns3/spectrum-interference.h"
+#include "ns3/spectrum-error-model.h"
 
 #include <ns3/simulator.h>
 #include <ns3/log.h>

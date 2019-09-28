@@ -18,7 +18,7 @@
  * Author: Gustavo Carneiro <gjcarneiro@gmail.com> <gjc@inescporto.pt>
  */
 #include <Python.h>
-#include "visual-simulator-impl.h"
+#include "ns3/visual-simulator-impl.h"
 #include "ns3/default-simulator-impl.h"
 #include "ns3/log.h"
 

@@ -23,7 +23,7 @@
 
 #include <stdint.h>
 #include "ns3/event-id.h"
-#include "mac-messages.h"
+#include "ns3/mac-messages.h"
 #include "ns3/buffer.h"
 
 namespace ns3 {

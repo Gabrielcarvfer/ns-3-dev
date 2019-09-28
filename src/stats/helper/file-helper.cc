@@ -22,7 +22,7 @@
 #include <fstream>
 #include <string>
 
-#include "file-helper.h"
+#include "ns3/file-helper.h"
 #include "ns3/abort.h"
 #include "ns3/log.h"
 #include "ns3/config.h"

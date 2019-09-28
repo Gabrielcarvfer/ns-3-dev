@@ -19,7 +19,7 @@
  */
 
 #include "ns3/assert.h"
-#include "inet6-socket-address.h"
+#include "ns3/inet6-socket-address.h"
 #include "ns3/log.h"
 
 namespace ns3

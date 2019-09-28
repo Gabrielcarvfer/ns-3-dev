@@ -20,7 +20,7 @@
  *          Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#include "li-ion-energy-source-helper.h"
+#include "ns3/li-ion-energy-source-helper.h"
 #include "ns3/energy-source.h"
 
 namespace ns3 {

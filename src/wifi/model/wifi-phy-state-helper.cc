@@ -22,9 +22,9 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
-#include "wifi-phy-state-helper.h"
-#include "wifi-tx-vector.h"
-#include "wifi-phy-listener.h"
+#include "ns3/wifi-phy-state-helper.h"
+#include "ns3/wifi-tx-vector.h"
+#include "ns3/wifi-phy-listener.h"
 
 namespace ns3 {
 

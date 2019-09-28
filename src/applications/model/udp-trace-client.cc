@@ -30,8 +30,8 @@
 #include "ns3/uinteger.h"
 #include "ns3/boolean.h"
 #include "ns3/string.h"
-#include "seq-ts-header.h"
-#include "udp-trace-client.h"
+#include "ns3/seq-ts-header.h"
+#include "ns3/udp-trace-client.h"
 #include <cstdlib>
 #include <cstdio>
 #include <fstream>

@@ -30,7 +30,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "dsdv-routing-protocol.h"
+#include "ns3/dsdv-routing-protocol.h"
 #include "ns3/log.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/trace-source-accessor.h"

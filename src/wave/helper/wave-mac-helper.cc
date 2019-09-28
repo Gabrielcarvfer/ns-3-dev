@@ -22,7 +22,7 @@
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
 #include "ns3/boolean.h"
-#include "wave-mac-helper.h"
+#include "ns3/wave-mac-helper.h"
 
 namespace ns3 {
 

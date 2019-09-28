@@ -17,7 +17,7 @@
  *
  * Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt>
  */
-#include "event-garbage-collector.h"
+#include "ns3/event-garbage-collector.h"
 
 /**
  * \file

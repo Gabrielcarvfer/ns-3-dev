@@ -33,7 +33,7 @@
 #include "ns3/traffic-control-layer.h"
 #include "ns3/net-device-queue-interface.h"
 
-#include "ipv6-address-helper.h"
+#include "ns3/ipv6-address-helper.h"
 
 namespace ns3 
 {

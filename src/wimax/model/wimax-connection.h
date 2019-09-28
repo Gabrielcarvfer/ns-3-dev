@@ -23,11 +23,11 @@
 
 #include <stdint.h>
 #include <ostream>
-#include "cid.h"
-#include "wimax-mac-header.h"
-#include "wimax-mac-queue.h"
+#include "ns3/cid.h"
+#include "ns3/wimax-mac-header.h"
+#include "ns3/wimax-mac-queue.h"
 #include "ns3/object.h"
-#include "service-flow.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 

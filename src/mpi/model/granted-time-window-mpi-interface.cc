@@ -25,8 +25,8 @@
 #include <list>
 
 #include "granted-time-window-mpi-interface.h"
-#include "mpi-receiver.h"
-#include "mpi-interface.h"
+#include "ns3/mpi-receiver.h"
+#include "ns3/mpi-interface.h"
 
 #include "ns3/node.h"
 #include "ns3/node-list.h"

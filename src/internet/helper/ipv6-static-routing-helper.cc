@@ -29,7 +29,7 @@
 #include "ns3/ipv6-address.h"
 #include "ns3/ipv6-routing-protocol.h"
 
-#include "ipv6-static-routing-helper.h"
+#include "ns3/ipv6-static-routing-helper.h"
 
 namespace ns3 {
 

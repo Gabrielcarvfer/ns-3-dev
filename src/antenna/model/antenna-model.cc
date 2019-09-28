@@ -21,7 +21,7 @@
 
 #include <ns3/log.h>
 #include <cmath>
-#include "antenna-model.h"
+#include "ns3/antenna-model.h"
 
 
 namespace ns3 {

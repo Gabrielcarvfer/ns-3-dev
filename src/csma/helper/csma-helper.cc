@@ -31,7 +31,7 @@
 #include "ns3/names.h"
 
 #include "ns3/trace-helper.h"
-#include "csma-helper.h"
+#include "ns3/csma-helper.h"
 
 #include <string>
 

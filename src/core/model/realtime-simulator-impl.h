@@ -18,17 +18,17 @@
 
 #pragma once
 
-#include "simulator-impl.h"
-#include "system-thread.h"
+#include "ns3/simulator-impl.h"
+#include "ns3/system-thread.h"
 
-#include "scheduler.h"
-#include "synchronizer.h"
-#include "event-impl.h"
+#include "ns3/scheduler.h"
+#include "ns3/synchronizer.h"
+#include "ns3/event-impl.h"
 
-#include "ptr.h"
-#include "assert.h"
-#include "log.h"
-#include "system-mutex.h"
+#include "ns3/ptr.h"
+#include "ns3/assert.h"
+#include "ns3/log.h"
+#include "ns3/system-mutex.h"
 
 #include <list>
 

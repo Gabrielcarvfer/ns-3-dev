@@ -23,14 +23,14 @@
 #pragma once
 
 #include <stdint.h>
-#include "ul-mac-messages.h"
+#include "ns3/ul-mac-messages.h"
 #include "ns3/nstime.h"
-#include "wimax-phy.h"
-#include "ul-job.h"
-#include "service-flow-record.h"
+#include "ns3/wimax-phy.h"
+#include "ns3/ul-job.h"
+#include "ns3/service-flow-record.h"
 #include "ns3/object.h"
-#include "bs-uplink-scheduler.h"
-#include "service-flow.h"
+#include "ns3/bs-uplink-scheduler.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 

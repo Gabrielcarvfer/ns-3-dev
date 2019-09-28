@@ -53,9 +53,9 @@
 #include "ns3/ipv4-route.h"
 #include "ns3/icmpv4-l4-protocol.h"
 #include "ns3/ip-l4-protocol.h"
-#include "dsr-option-header.h"
-#include "dsr-options.h"
-#include "dsr-rcache.h"
+#include "ns3/dsr-option-header.h"
+#include "ns3/dsr-options.h"
+#include "ns3/dsr-rcache.h"
 
 namespace ns3 {
 

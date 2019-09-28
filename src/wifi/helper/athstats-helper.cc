@@ -26,7 +26,7 @@
 #include "ns3/wifi-phy-state.h"
 #include "ns3/net-device-container.h"
 #include "ns3/node-container.h"
-#include "athstats-helper.h"
+#include "ns3/athstats-helper.h"
 #include <iomanip>
 #include <fstream>
 

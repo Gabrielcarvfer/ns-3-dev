@@ -31,8 +31,8 @@
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
 #include "ns3/ipv4.h"
-#include "dhcp-server.h"
-#include "dhcp-header.h"
+#include "ns3/dhcp-server.h"
+#include "ns3/dhcp-header.h"
 
 namespace ns3 {
 

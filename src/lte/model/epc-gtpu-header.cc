@@ -18,7 +18,7 @@
  * Author: Jaume Nin <jnin@cttc.cat>
  */
 
-#include "epc-gtpu-header.h"
+#include "ns3/epc-gtpu-header.h"
 #include "ns3/log.h"
 #include "ns3/packet.h"
 

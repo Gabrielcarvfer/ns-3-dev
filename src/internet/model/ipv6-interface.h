@@ -23,7 +23,7 @@
 #include <list>
 #include "ns3/ptr.h"
 #include "ns3/object.h"
-#include "ipv6-interface-address.h"
+#include "ns3/ipv6-interface-address.h"
 
 namespace ns3
 {

@@ -23,7 +23,7 @@
 #include "ns3/log.h"
 #include "ns3/string.h"
 #include "ns3/pointer.h"
-#include "random-direction-2d-mobility-model.h"
+#include "ns3/random-direction-2d-mobility-model.h"
 
 namespace ns3 {
 

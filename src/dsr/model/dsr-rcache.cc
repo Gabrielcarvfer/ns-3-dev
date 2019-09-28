@@ -45,7 +45,7 @@
 #include "ns3/address-utils.h"
 #include "ns3/packet.h"
 #include "ns3/wifi-mac-header.h"
-#include "dsr-rcache.h"
+#include "ns3/dsr-rcache.h"
 
 namespace ns3 {
 

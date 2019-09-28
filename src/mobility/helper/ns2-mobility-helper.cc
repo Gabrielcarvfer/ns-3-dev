@@ -47,7 +47,7 @@
 #include "ns3/node-list.h"
 #include "ns3/node.h"
 #include "ns3/constant-velocity-mobility-model.h"
-#include "ns2-mobility-helper.h"
+#include "ns3/ns2-mobility-helper.h"
 
 namespace ns3 {
 

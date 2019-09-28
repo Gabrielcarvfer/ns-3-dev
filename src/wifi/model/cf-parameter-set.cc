@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "cf-parameter-set.h"
+#include "ns3/cf-parameter-set.h"
 
 namespace ns3 {
 

@@ -18,7 +18,7 @@
  * Original Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  * Enhancements: Timo Bingmann <timo.bingmann@student.kit.edu>
  */
-#include "gnuplot.h"
+#include "ns3/gnuplot.h"
 #include "ns3/assert.h"
 #include <ostream>
 #include <stdexcept>

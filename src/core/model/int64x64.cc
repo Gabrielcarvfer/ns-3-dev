@@ -17,13 +17,13 @@
  *
  */
 
-#include "int64x64.h"
+#include "ns3/int64x64.h"
 #include <stdint.h>
 #include <iostream>
 #include <iomanip>  // showpos
 #include <sstream>
-#include "assert.h"
-#include "log.h"
+#include "ns3/assert.h"
+#include "ns3/log.h"
 
 /**
  * \file

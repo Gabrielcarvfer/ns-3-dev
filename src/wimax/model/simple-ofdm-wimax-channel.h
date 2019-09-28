@@ -22,11 +22,11 @@
 #pragma once
 
 #include <list>
-#include "wimax-channel.h"
-#include "bvec.h"
-#include "wimax-phy.h"
+#include "ns3/wimax-channel.h"
+#include "ns3/bvec.h"
+#include "ns3/wimax-phy.h"
 #include "ns3/propagation-loss-model.h"
-#include "simple-ofdm-send-param.h"
+#include "ns3/simple-ofdm-send-param.h"
 
 namespace ns3 {
 

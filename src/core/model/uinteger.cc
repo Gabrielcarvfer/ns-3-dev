@@ -17,9 +17,9 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "uinteger.h"
-#include "fatal-error.h"
-#include "log.h"
+#include "ns3/uinteger.h"
+#include "ns3/fatal-error.h"
+#include "ns3/log.h"
 #include <sstream>
 
 /**

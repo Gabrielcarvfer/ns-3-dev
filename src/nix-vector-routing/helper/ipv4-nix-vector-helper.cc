@@ -18,7 +18,7 @@
  * Authors: Josh Pelkey <jpelkey@gatech.edu>
  */
 
-#include "ipv4-nix-vector-helper.h"
+#include "ns3/ipv4-nix-vector-helper.h"
 #include "ns3/ipv4-nix-vector-routing.h"
 
 namespace ns3 {

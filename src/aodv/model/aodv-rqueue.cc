@@ -25,7 +25,7 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#include "aodv-rqueue.h"
+#include "ns3/aodv-rqueue.h"
 #include <algorithm>
 #include <functional>
 #include "ns3/ipv4-route.h"

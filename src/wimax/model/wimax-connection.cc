@@ -19,11 +19,11 @@
  *          Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#include "wimax-connection.h"
+#include "ns3/wimax-connection.h"
 #include "ns3/pointer.h"
 #include "ns3/enum.h"
 #include "ns3/uinteger.h"
-#include "service-flow.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 

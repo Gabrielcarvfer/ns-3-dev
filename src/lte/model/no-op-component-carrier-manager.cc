@@ -21,7 +21,7 @@
  *
  */
 
-#include "no-op-component-carrier-manager.h"
+#include "ns3/no-op-component-carrier-manager.h"
 #include <ns3/log.h>
 #include <ns3/random-variable-stream.h>
 

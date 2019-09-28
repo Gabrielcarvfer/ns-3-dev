@@ -25,8 +25,8 @@
 
 #include "ns3/object.h"
 #include "ns3/callback.h"
-#include "ipv4-header.h"
-#include "ipv6-header.h"
+#include "ns3/ipv4-header.h"
+#include "ns3/ipv6-header.h"
 
 namespace ns3 {
 

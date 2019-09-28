@@ -52,7 +52,7 @@
 
 #include <iostream>
 
-#include "fatal-error.h"
+#include "ns3/fatal-error.h"
 
 /**
  * \ingroup assert

@@ -26,7 +26,7 @@
 #include <ns3/trace-source-accessor.h>
 #include <ns3/antenna-model.h>
 
-#include "spectrum-analyzer.h"
+#include "ns3/spectrum-analyzer.h"
 
 namespace ns3 {
 

@@ -18,7 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#include "radvd-helper.h"
+#include "ns3/radvd-helper.h"
 #include "ns3/log.h"
 #include "ns3/assert.h"
 #include "ns3/radvd.h"

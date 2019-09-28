@@ -18,7 +18,7 @@
  * Author: Adrian Sai-wah Tam <adrian.sw.tam@gmail.com>
  */
 
-#include "tcp-option-ts.h"
+#include "ns3/tcp-option-ts.h"
 #include "ns3/log.h"
 
 namespace ns3 {

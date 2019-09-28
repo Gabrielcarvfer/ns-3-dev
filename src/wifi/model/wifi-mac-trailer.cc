@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "wifi-mac-trailer.h"
+#include "ns3/wifi-mac-trailer.h"
 
 namespace ns3 {
 

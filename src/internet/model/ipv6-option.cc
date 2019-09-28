@@ -21,8 +21,8 @@
 #include "ns3/log.h"
 #include "ns3/assert.h"
 #include "ns3/uinteger.h"
-#include "ipv6-option.h"
-#include "ipv6-option-header.h"
+#include "ns3/ipv6-option.h"
+#include "ns3/ipv6-option-header.h"
 
 namespace ns3
 {

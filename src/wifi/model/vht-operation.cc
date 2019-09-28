@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "vht-operation.h"
+#include "ns3/vht-operation.h"
 
 namespace ns3 {
 

@@ -103,8 +103,8 @@ private:
 #include <stdint.h>
 #include "ns3/header.h"
 #include "ns3/mac48-address.h"
-#include "service-flow.h"
-#include "cid.h"
+#include "ns3/service-flow.h"
+#include "ns3/cid.h"
 
 namespace ns3 {
 
@@ -351,8 +351,8 @@ private:
 #include <stdint.h>
 #include "ns3/header.h"
 #include "ns3/buffer.h"
-#include "cid.h"
-#include "service-flow.h"
+#include "ns3/cid.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 class serviceFlow;
@@ -442,7 +442,7 @@ private:
 #include <stdint.h>
 #include "ns3/header.h"
 #include "ns3/buffer.h"
-#include "cid.h"
+#include "ns3/cid.h"
 
 namespace ns3 {
 
@@ -614,7 +614,7 @@ private:
 #include <stdint.h>
 #include "ns3/header.h"
 #include "ns3/mac48-address.h"
-#include "service-flow.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 

@@ -23,7 +23,7 @@
 #include <string>
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlreader.h>
-#include "file-config.h"
+#include "ns3/file-config.h"
 
 namespace ns3 {
 

@@ -22,7 +22,7 @@
 #include "ns3/string.h"
 #include "ns3/boolean.h"
 
-#include "data-collection-object.h"
+#include "ns3/data-collection-object.h"
 
 namespace ns3 {
 

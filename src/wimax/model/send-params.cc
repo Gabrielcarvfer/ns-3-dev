@@ -19,7 +19,7 @@
  */
 
 #include "ns3/packet.h"
-#include "send-params.h"
+#include "ns3/send-params.h"
 
 namespace ns3 {
 

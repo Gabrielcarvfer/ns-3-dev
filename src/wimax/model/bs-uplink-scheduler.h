@@ -21,11 +21,11 @@
 #pragma once
 
 #include <stdint.h>
-#include "ul-mac-messages.h"
+#include "ns3/ul-mac-messages.h"
 #include "ns3/nstime.h"
-#include "wimax-phy.h"
-#include "service-flow-record.h"
-#include "service-flow.h"
+#include "ns3/wimax-phy.h"
+#include "ns3/service-flow-record.h"
+#include "ns3/service-flow.h"
 
 namespace ns3 {
 

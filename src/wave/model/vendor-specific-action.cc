@@ -21,7 +21,7 @@
 #include <cstring>
 #include "ns3/log.h"
 #include "ns3/assert.h"
-#include "vendor-specific-action.h"
+#include "ns3/vendor-specific-action.h"
 
 namespace ns3 {
 

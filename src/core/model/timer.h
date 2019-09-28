@@ -19,10 +19,10 @@
  */
 #pragma once
 
-#include "fatal-error.h"
-#include "nstime.h"
-#include "event-id.h"
-#include "int-to-type.h"
+#include "ns3/fatal-error.h"
+#include "ns3/nstime.h"
+#include "ns3/event-id.h"
+#include "ns3/int-to-type.h"
 
 /**
  * \file
@@ -298,7 +298,7 @@ private:
  *  Implementation of the templates declared above.
  ********************************************************************/
 
-#include "timer-impl.h"
+#include "ns3/timer-impl.h"
 
 namespace ns3 {
 

@@ -23,7 +23,7 @@
 #include "ns3/mac48-address.h"
 #include "ns3/llc-snap-header.h"
 #include "ns3/error-model.h"
-#include "virtual-net-device.h"
+#include "ns3/virtual-net-device.h"
 #include "ns3/channel.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/uinteger.h"

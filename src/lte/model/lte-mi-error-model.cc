@@ -35,7 +35,7 @@
 #include <ns3/pointer.h>
 #include <stdint.h>
 #include <cmath>
-#include "stdlib.h"
+#include <cstdlib>
 #include <ns3/lte-mi-error-model.h>
 
 namespace ns3 {

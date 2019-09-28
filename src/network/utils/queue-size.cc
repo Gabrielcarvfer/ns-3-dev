@@ -18,7 +18,7 @@
 // Author: Stefano Avallone <stavallo@unina.it>
 //
 
-#include "queue-size.h"
+#include "ns3/queue-size.h"
 #include "ns3/log.h"
 #include "ns3/unused.h"
 

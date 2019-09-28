@@ -29,7 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "dsr-passive-buff.h"
+#include "ns3/dsr-passive-buff.h"
 #include <algorithm>
 #include <functional>
 #include "ns3/ipv4-route.h"

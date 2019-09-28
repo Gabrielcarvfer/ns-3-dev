@@ -20,10 +20,10 @@
  *  Tommaso Pecorella <tommaso.pecorella@unifi.it>
  *  Margherita Filippetti <morag87@gmail.com>
  */
-#include "lr-wpan-net-device.h"
-#include "lr-wpan-phy.h"
-#include "lr-wpan-csmaca.h"
-#include "lr-wpan-error-model.h"
+#include "ns3/lr-wpan-net-device.h"
+#include "ns3/lr-wpan-phy.h"
+#include "ns3/lr-wpan-csmaca.h"
+#include "ns3/lr-wpan-error-model.h"
 #include <ns3/abort.h>
 #include <ns3/node.h>
 #include <ns3/log.h>

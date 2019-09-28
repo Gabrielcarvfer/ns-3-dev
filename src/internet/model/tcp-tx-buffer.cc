@@ -27,7 +27,7 @@
 #include "ns3/abort.h"
 #include "ns3/tcp-option-ts.h"
 
-#include "tcp-tx-buffer.h"
+#include "ns3/tcp-tx-buffer.h"
 
 namespace ns3 {
 

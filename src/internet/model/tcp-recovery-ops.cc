@@ -20,8 +20,8 @@
  *         Mohit P. Tahiliani <tahiliani@nitk.edu.in>
  *
  */
-#include "tcp-recovery-ops.h"
-#include "tcp-socket-state.h"
+#include "ns3/tcp-recovery-ops.h"
+#include "ns3/tcp-socket-state.h"
 #include "ns3/log.h"
 
 namespace ns3 {

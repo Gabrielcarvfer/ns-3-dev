@@ -29,7 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "dsr-network-queue.h"
+#include "ns3/dsr-network-queue.h"
 #include "ns3/test.h"
 #include <map>
 #include <algorithm>
