@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef CONSTANT_SPECTRUM_PROPAGATION_LOSS_H
-#define CONSTANT_SPECTRUM_PROPAGATION_LOSS_H
+#pragma once
 
 #include "ns3/spectrum-propagation-loss-model.h"
 
@@ -65,4 +64,4 @@ private:
 
 } // namespace ns3
 
-#endif /* CONSTANT_SPECTRUM_PROPAGATION_LOSS_MODEL_H */
+

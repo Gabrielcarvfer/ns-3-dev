@@ -18,8 +18,7 @@
  * Authors: Hajime Tazaki <tazaki@sfc.wide.ad.jp>
  */
 
-#ifndef IPV6_PACKET_INFO_TAG_H
-#define IPV6_PACKET_INFO_TAG_H
+#pragma once
 
 #include "ns3/tag.h"
 #include "ns3/ipv6-address.h"
@@ -140,5 +139,5 @@ private:
 };
 } // namespace ns3
 
-#endif /* IPV6_PACKET_INFO_TAG_H */
+
 

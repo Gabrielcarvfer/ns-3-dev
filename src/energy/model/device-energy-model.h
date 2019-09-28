@@ -18,8 +18,7 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#ifndef DEVICE_ENERGY_MODEL_H
-#define DEVICE_ENERGY_MODEL_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/ptr.h"
@@ -121,4 +120,4 @@ private:
 
 }
 
-#endif /* DEVICE_ENERGY_MODEL_H */
+

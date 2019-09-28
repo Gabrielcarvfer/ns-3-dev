@@ -19,8 +19,7 @@
  *          Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#ifndef WIMAX_BS_NET_DEVICE_H
-#define WIMAX_BS_NET_DEVICE_H
+#pragma once
 
 #include "wimax-net-device.h"
 #include "ns3/event-id.h"
@@ -501,4 +500,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WIMAX_BS_NET_DEVICE_H */
+

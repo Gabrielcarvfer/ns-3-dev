@@ -22,8 +22,7 @@
  *          Konstantinos Katsaros <dinos.katsaros@gmail.com>
  */
 
-#ifndef SNR_TAG_H
-#define SNR_TAG_H
+#pragma once
 
 #include "ns3/tag.h"
 
@@ -71,4 +70,4 @@ private:
 
 }
 
-#endif /* SNR_TAG_H */
+

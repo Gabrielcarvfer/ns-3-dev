@@ -18,9 +18,9 @@
  */
 
 #include "ns3/core-config.h"
-#if !defined(INT64X64_DOUBLE_H) && (defined (INT64X64_USE_DOUBLE) || defined(PYTHON_SCAN))
-#define INT64X64_DOUBLE_H
+#if (defined (INT64X64_USE_DOUBLE) || defined(PYTHON_SCAN))
 
+#pragma once
 #include <stdint.h>
 #include <cmath>  // pow
 #include <utility>  // pair
@@ -346,5 +346,5 @@ inline int64x64_t operator ! (const int64x64_t & lhs)
 
 
 } // namespace ns3
+#endif
 
-#endif /* INT64X64_DOUBLE_H */

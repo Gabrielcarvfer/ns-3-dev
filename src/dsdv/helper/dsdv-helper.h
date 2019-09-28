@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSDV_HELPER_H
-#define DSDV_HELPER_H
+#pragma once
 
 #include "ns3/object-factory.h"
 #include "ns3/node.h"
@@ -77,4 +76,4 @@ private:
 
 }
 
-#endif /* DSDV_HELPER_H */
+

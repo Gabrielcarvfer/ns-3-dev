@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSDV_PACKET_H
-#define DSDV_PACKET_H
+#pragma once
 
 #include <iostream>
 #include "ns3/header.h"
@@ -145,4 +144,4 @@ static inline std::ostream & operator<< (std::ostream& os, const DsdvHeader & pa
 }
 }
 
-#endif /* DSDV_PACKET_H */
+

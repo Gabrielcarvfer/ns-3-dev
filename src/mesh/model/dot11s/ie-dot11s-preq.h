@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef WIFI_PREQ_INFORMATION_ELEMENT_H
-#define WIFI_PREQ_INFORMATION_ELEMENT_H
+#pragma once
 
 #include <vector>
 
@@ -294,5 +293,5 @@ std::ostream &operator << (std::ostream &os, const IePreq &preq);
 
 } // namespace dot11s
 } // namespace ns3
-#endif
+
 

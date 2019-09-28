@@ -19,8 +19,7 @@
  *         Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#ifndef UAN_PHY_GEN_H
-#define UAN_PHY_GEN_H
+#pragma once
 
 
 #include "uan-phy.h"
@@ -450,4 +449,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* UAN_PHY_GEN_H */
+

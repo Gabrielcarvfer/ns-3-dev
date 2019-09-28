@@ -19,8 +19,7 @@
  */
 
 
-#ifndef LTE_GLOBAL_PATHLOSS_DATABASE_H
-#define LTE_GLOBAL_PATHLOSS_DATABASE_H
+#pragma once
 
 #include <ns3/log.h>
 #include <ns3/ptr.h>
@@ -107,4 +106,4 @@ public:
 
 
 
-#endif // LTE_GLOBAL_PATHLOSS_DATABASE_H
+

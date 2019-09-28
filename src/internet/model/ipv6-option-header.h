@@ -18,8 +18,7 @@
  * Author: David Gross <gdavid.devel@gmail.com>
  */
 
-#ifndef IPV6_OPTION_HEADER_H
-#define IPV6_OPTION_HEADER_H
+#pragma once
 
 #include <ostream>
 
@@ -427,5 +426,5 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV6_OPTION_HEADER_H */
+
 

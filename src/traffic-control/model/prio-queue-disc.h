@@ -18,8 +18,7 @@
  * Authors:  Stefano Avallone <stavallo@unina.it>
  */
 
-#ifndef PRIO_QUEUE_DISC_H
-#define PRIO_QUEUE_DISC_H
+#pragma once
 
 #include "ns3/queue-disc.h"
 #include <array>
@@ -110,4 +109,4 @@ ATTRIBUTE_HELPER_HEADER (Priomap);
 
 } // namespace ns3
 
-#endif /* PRIO_QUEUE_DISC_H */
+

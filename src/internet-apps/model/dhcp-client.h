@@ -22,8 +22,7 @@
  *
  */
 
-#ifndef DHCP_CLIENT_H
-#define DHCP_CLIENT_H
+#pragma once
 
 #include "ns3/application.h"
 #include "ns3/traced-value.h"
@@ -190,4 +189,4 @@ private:
 
 } // namespace ns3
 
-#endif /* DHCP_CLIENT_H */
+

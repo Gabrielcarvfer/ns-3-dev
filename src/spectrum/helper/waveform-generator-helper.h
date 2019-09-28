@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef WAVEFORM_GENERATOR_HELPER_H
-#define WAVEFORM_GENERATOR_HELPER_H
+#pragma once
 
 
 #include <string>
@@ -146,4 +145,4 @@ protected:
 } // namespace ns3
 
 
-#endif /* WAVEFORM_GENERATOR_HELPER_H */
+

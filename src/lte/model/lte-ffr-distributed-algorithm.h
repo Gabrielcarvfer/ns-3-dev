@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_FFR_DISTRIBUTED_ALGORITHM_H
-#define LTE_FFR_DISTRIBUTED_ALGORITHM_H
+#pragma once
 
 #include <ns3/lte-ffr-algorithm.h>
 #include <ns3/lte-ffr-sap.h>
@@ -192,4 +191,4 @@ private:
 
 } // end of namespace ns3
 
-#endif /* LTE_FR_DISTRIBUTED_ALGORITHM_H */
+

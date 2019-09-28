@@ -22,8 +22,7 @@
  *          Biljana Bojovic <biljana.bojovic@cttc.es> (Carrier Aggregation)
  */
 
-#ifndef LTE_ENB_MAC_H
-#define LTE_ENB_MAC_H
+#pragma once
 
 
 #include <map>
@@ -471,4 +470,4 @@ private:
 
 } // end namespace ns3
 
-#endif /* LTE_ENB_MAC_ENTITY_H */
+

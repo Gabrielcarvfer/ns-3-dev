@@ -22,8 +22,7 @@
 // George F. Riley, Georgia Tech, Spring 2007
 // Adapted from ApplicationOnOff in GTNetS.
 
-#ifndef ONOFF_APPLICATION_H
-#define ONOFF_APPLICATION_H
+#pragma once
 
 #include "ns3/address.h"
 #include "ns3/application.h"
@@ -197,4 +196,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ONOFF_APPLICATION_H */
+

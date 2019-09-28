@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef METRIC_REPORT_H
-#define METRIC_REPORT_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/buffer.h"
@@ -93,4 +92,4 @@ bool operator<  (const IeLinkMetricReport & a, const IeLinkMetricReport & b);
 std::ostream &operator << (std::ostream &os, const IeLinkMetricReport &linkMetricReport);
 } // namespace dot11s
 } // namespace ns3
-#endif /* METRIC_REPORT_H */
+

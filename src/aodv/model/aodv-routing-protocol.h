@@ -25,8 +25,7 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#ifndef AODVROUTINGPROTOCOL_H
-#define AODVROUTINGPROTOCOL_H
+#pragma once
 
 #include "aodv-rtable.h"
 #include "aodv-rqueue.h"
@@ -413,4 +412,4 @@ private:
 } //namespace aodv
 } //namespace ns3
 
-#endif /* AODVROUTINGPROTOCOL_H */
+

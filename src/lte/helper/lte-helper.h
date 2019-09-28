@@ -20,8 +20,7 @@
  *              Biljana Bojovic <biljana.bojovic@cttc.es> (Carrier Aggregation) 
  */
 
-#ifndef LTE_HELPER_H
-#define LTE_HELPER_H
+#pragma once
 
 #include <ns3/config.h>
 #include <ns3/simulator.h>
@@ -854,4 +853,4 @@ private:
 
 
 
-#endif // LTE_HELPER_H
+

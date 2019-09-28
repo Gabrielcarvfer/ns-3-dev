@@ -25,8 +25,7 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#ifndef AODV_RQUEUE_H
-#define AODV_RQUEUE_H
+#pragma once
 
 #include <vector>
 #include "ns3/ipv4-routing-protocol.h"
@@ -277,4 +276,4 @@ private:
 }  // namespace aodv
 }  // namespace ns3
 
-#endif /* AODV_RQUEUE_H */
+

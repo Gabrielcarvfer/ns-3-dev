@@ -18,8 +18,7 @@
  * Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt>
  */
 
-#ifndef OLSR_HEADER_H
-#define OLSR_HEADER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -714,5 +713,5 @@ static inline std::ostream& operator<< (std::ostream& os, const MessageList & me
 }
 }  // namespace olsr, ns3
 
-#endif /* OLSR_HEADER_H */
+
 

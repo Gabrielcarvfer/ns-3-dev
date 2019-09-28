@@ -19,8 +19,7 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#ifndef MAC_HEADER_TYPE_H
-#define MAC_HEADER_TYPE_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -86,12 +85,9 @@ private:
 
 } // namespace ns3
 
-#endif /* MAC_HEADER_TYPE_H */
+
 
 // ----------------------------------------------------------------------------------------------------------
-
-#ifndef GENERIC_MAC_HEADER_H
-#define GENERIC_MAC_HEADER_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -230,12 +226,9 @@ private:
 
 } // namespace ns3
 
-#endif /* GENERIC_MAC_HEADER */
+
 
 // ----------------------------------------------------------------------------------------------------------
-
-#ifndef BANDWIDTH_REQUEST_HEADER_H
-#define BANDWIDTH_REQUEST_HEADER_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -355,12 +348,9 @@ private:
 
 } // namespace ns3
 
-#endif /* BANDWIDTH_REQUEST_HEADER_H */
+
 
 // ----------------------------------------------------------------------------------------------------------
-
-#ifndef GRANT_MANAGEMENT_SUBHEADER_H
-#define GRANT_MANAGEMENT_SUBHEADER_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -437,12 +427,9 @@ private:
 
 } // namespace ns3
 
-#endif /* GRANT_MANAGEMENT_SUBHEADER_H */
+
 
 // ----------------------------------------------------------------------------------------------------------
-
-#ifndef FRAGMENTATION_SUBHEADER_H
-#define FRAGMENTATION_SUBHEADER_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -504,4 +491,4 @@ private:
 };
 } // namespace ns3
 
-#endif /* FRAGMENTATION_SUBHEADER_H */
+

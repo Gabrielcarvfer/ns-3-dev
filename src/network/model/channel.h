@@ -14,8 +14,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef NS3_CHANNEL_H
-#define NS3_CHANNEL_H
+#pragma once
 
 #include <string>
 #include <stdint.h>
@@ -80,4 +79,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NS3_CHANNEL_H */
+

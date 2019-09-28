@@ -20,8 +20,7 @@
  *           Tom Henderson <tomhend@u.washington.edu>
  */
 
-#ifndef PFIFO_FAST_H
-#define PFIFO_FAST_H
+#pragma once
 
 #include "ns3/queue-disc.h"
 
@@ -81,4 +80,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PFIFO_FAST_H */
+

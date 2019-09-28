@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_FFR_SAP_H
-#define LTE_FFR_SAP_H
+#pragma once
 
 #include <ns3/lte-rrc-sap.h>
 #include <ns3/ff-mac-sched-sap.h>
@@ -278,4 +277,4 @@ MemberLteFfrSapUser<C>::MemberLteFfrSapUser (C* owner)
 } // end of namespace ns3
 
 
-#endif /* LTE_FFR_SAP_H */
+

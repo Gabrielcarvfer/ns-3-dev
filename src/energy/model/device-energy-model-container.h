@@ -20,8 +20,7 @@
  *          Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#ifndef DEVICE_ENERGY_MODEL_CONTAINER_H
-#define DEVICE_ENERGY_MODEL_CONTAINER_H
+#pragma once
 
 #include "ns3/device-energy-model.h"
 #include <vector>
@@ -174,4 +173,4 @@ private:
 
 } // namespace ns3
 
-#endif /* DEVICE_ENERGY_MODEL_CONTAINER_H */
+

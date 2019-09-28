@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef SPECTRUM_ANALYZER_H
-#define SPECTRUM_ANALYZER_H
+#pragma once
 
 
 #include <ns3/spectrum-value.h>
@@ -149,4 +148,4 @@ private:
 
 
 
-#endif /* SPECTRUM_ANALYZER_H */
+

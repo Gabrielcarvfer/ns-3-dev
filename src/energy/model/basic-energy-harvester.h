@@ -19,8 +19,7 @@
  * Author: Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#ifndef BASIC_ENERGY_HARVESTER
-#define BASIC_ENERGY_HARVESTER
+#pragma once
 
 #include <iostream>
 
@@ -128,4 +127,4 @@ private:
 
 } // namespace ns3
 
-#endif /* defined(BASIC_ENERGY_HARVESTER) */
+

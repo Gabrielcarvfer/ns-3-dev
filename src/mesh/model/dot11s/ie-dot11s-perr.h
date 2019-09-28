@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef PERR_INFORMATION_ELEMENT_H
-#define PERR_INFORMATION_ELEMENT_H
+#pragma once
 
 #include "ns3/mac48-address.h"
 #include "ns3/mesh-information-element-vector.h"
@@ -86,4 +85,4 @@ bool operator== (const IePerr & a, const IePerr & b);
 std::ostream &operator << (std::ostream &os, const IePerr &perr);
 } // namespace dot11s
 } // namespace ns3
-#endif
+

@@ -20,8 +20,7 @@
  * 
  */
 
-#ifndef HYBRID_BUILDINGS_PROPAGATION_LOSS_MODEL_H_
-#define HYBRID_BUILDINGS_PROPAGATION_LOSS_MODEL_H_
+#pragma once
 
 #include <ns3/buildings-propagation-loss-model.h>
 #include <ns3/propagation-environment.h>
@@ -118,4 +117,4 @@ private:
 
 }
 
-#endif /* HYBRID_BUILDINGS_PROPAGATION_LOSS_MODEL_H_ */
+

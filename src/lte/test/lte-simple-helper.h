@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es> (Based on lte-helper.h)
  */
 
-#ifndef LTE_SIMPLE_HELPER_H
-#define LTE_SIMPLE_HELPER_H
+#pragma once
 
 #include "ns3/net-device-container.h"
 #include "ns3/simple-channel.h"
@@ -172,4 +171,4 @@ private:
 } // namespace ns3
 
 
-#endif // LTE_SIMPLE_HELPER_H
+

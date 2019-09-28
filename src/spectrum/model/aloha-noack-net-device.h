@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef ALOHA_NOACK_NET_DEVICE_H
-#define ALOHA_NOACK_NET_DEVICE_H
+#pragma once
 
 #include <cstring>
 #include <ns3/node.h>
@@ -231,4 +230,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ALOHA_NOACK_NET_DEVICE_H */
+

@@ -20,8 +20,7 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef LTE_PHY_H
-#define LTE_PHY_H
+#pragma once
 
 
 #include <ns3/spectrum-value.h>
@@ -315,4 +314,4 @@ protected:
 
 }
 
-#endif /* LTE_PHY_H */
+

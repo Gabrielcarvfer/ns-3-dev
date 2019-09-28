@@ -18,8 +18,7 @@
  * Author:  Craig Dowell (craigdo@ee.washington.edu)
  */
 
-#ifndef PCAP_FILE_H
-#define PCAP_FILE_H
+#pragma once
 
 #include <string>
 #include <fstream>
@@ -375,4 +374,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PCAP_FILE_H */
+

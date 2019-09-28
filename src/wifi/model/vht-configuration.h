@@ -18,8 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#ifndef VHT_CONFIGURATION_H
-#define VHT_CONFIGURATION_H
+#pragma once
 
 #include "ns3/object.h"
 
@@ -45,4 +44,4 @@ public:
 
 } //namespace ns3
 
-#endif /* VHT_CONFIGURATION_H */
+

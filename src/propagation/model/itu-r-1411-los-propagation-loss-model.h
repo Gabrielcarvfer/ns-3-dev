@@ -20,8 +20,7 @@
  * 
  */
 
-#ifndef ITU_R_1411_LOS_PROPAGATION_LOSS_MODEL_H
-#define ITU_R_1411_LOS_PROPAGATION_LOSS_MODEL_H
+#pragma once
 
 #include "ns3/propagation-loss-model.h"
 
@@ -97,5 +96,5 @@ private:
 } // namespace ns3
 
 
-#endif // ITU_R_1411_LOS_PROPAGATION_LOSS_MODEL_H
+
 

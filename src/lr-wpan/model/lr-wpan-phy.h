@@ -19,8 +19,7 @@
  *  Gary Pei <guangyu.pei@boeing.com>
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
-#ifndef LR_WPAN_PHY_H
-#define LR_WPAN_PHY_H
+#pragma once
 
 #include "lr-wpan-interference-helper.h"
 
@@ -845,4 +844,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LR_WPAN_PHY_H */
+

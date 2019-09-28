@@ -16,8 +16,7 @@
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
 
-#ifndef WAVE_HELPER_H
-#define WAVE_HELPER_H
+#pragma once
 
 #include <string>
 #include "ns3/attribute.h"
@@ -250,4 +249,4 @@ protected:
   uint32_t m_physNumber; ///< Phy number
 };
 }
-#endif /* WAVE_HELPER_H */
+

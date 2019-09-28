@@ -21,8 +21,7 @@
  *  Tom Henderson <thomas.r.henderson@boeing.com>
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
-#ifndef LR_WPAN_MAC_H
-#define LR_WPAN_MAC_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/traced-callback.h>
@@ -825,4 +824,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LR_WPAN_MAC_H */
+

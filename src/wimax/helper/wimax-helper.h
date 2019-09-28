@@ -19,8 +19,7 @@
  *          Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#ifndef WIMAX_HELPER_H
-#define WIMAX_HELPER_H
+#pragma once
 
 #include <string>
 #include "ns3/object-factory.h"
@@ -328,4 +327,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WIMAX_HELPER_H */
+

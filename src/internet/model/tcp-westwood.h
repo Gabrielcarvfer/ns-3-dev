@@ -30,8 +30,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef TCP_WESTWOOD_H
-#define TCP_WESTWOOD_H
+#pragma once
 
 #include "tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -138,4 +137,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* TCP_WESTWOOD_H */
+

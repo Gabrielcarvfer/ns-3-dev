@@ -18,8 +18,7 @@
  * Author: Mehdi Benamor <benamor.mehdi@ensi.rnu.tn>
  */
 
-#ifndef IPV6_AUTOCONFIGURED_PREFIX_H
-#define IPV6_AUTOCONFIGURED_PREFIX_H
+#pragma once
 
 #include <stdint.h>
 
@@ -277,5 +276,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_AUTOCONFIGURED_PREFIX_H */
+
 

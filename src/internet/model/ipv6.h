@@ -20,8 +20,7 @@
 
 /* taken from src/node/ipv4.h and adapted to IPv6 */
 
-#ifndef IPV6_H
-#define IPV6_H
+#pragma once
 
 #include <stdint.h>
 
@@ -418,5 +417,5 @@ private:
 
 } // namespace ns3 
 
-#endif /* IPV6_H */
+
 

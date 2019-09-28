@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef FD_NET_DEVICE_HELPER_H
-#define FD_NET_DEVICE_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -135,4 +134,4 @@ private:
 
 } // namespace ns3
 
-#endif /* FD_NET_DEVICE_HELPER_H */
+

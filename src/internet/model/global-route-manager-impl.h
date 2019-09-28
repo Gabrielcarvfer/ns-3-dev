@@ -19,8 +19,7 @@
  *           Tom Henderson (tomhend@u.washington.edu)
  */
 
-#ifndef GLOBAL_ROUTE_MANAGER_IMPL_H
-#define GLOBAL_ROUTE_MANAGER_IMPL_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -950,4 +949,4 @@ private:
 
 } // namespace ns3
 
-#endif /* GLOBAL_ROUTE_MANAGER_IMPL_H */
+

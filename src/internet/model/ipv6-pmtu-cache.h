@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef IPV6_PMTU_CACHE_H
-#define IPV6_PMTU_CACHE_H
+#pragma once
 
 #include <map>
 
@@ -127,4 +126,4 @@ private:
 
 }
 
-#endif /* IPV6_PMTU_CACHE_H */
+

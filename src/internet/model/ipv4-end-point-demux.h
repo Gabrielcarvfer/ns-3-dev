@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef IPV4_END_POINT_DEMUX_H
-#define IPV4_END_POINT_DEMUX_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -196,4 +195,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV4_END_POINTS_H */
+

@@ -21,8 +21,7 @@
  *  Erwan Livolant <erwan.livolant@inria.fr>
  */
 
-#ifndef LR_WPAN_MAC_TRAILER_H
-#define LR_WPAN_MAC_TRAILER_H
+#pragma once
 
 #include <ns3/trailer.h>
 
@@ -128,4 +127,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LR_WPAN_MAC_TRAILER_H */
+

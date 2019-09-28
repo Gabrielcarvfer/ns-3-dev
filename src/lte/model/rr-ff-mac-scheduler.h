@@ -19,8 +19,7 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef RR_FF_MAC_SCHEDULER_H
-#define RR_FF_MAC_SCHEDULER_H
+#pragma once
 
 #include <ns3/ff-mac-csched-sap.h>
 #include <ns3/ff-mac-sched-sap.h>
@@ -355,4 +354,4 @@ private:
 
 } // namespace ns3
 
-#endif /* RR_FF_MAC_SCHEDULER_H */
+

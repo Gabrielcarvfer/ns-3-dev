@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *         Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef WAVE_MAC_LOW_H
-#define WAVE_MAC_LOW_H
+#pragma once
 
 #include "ns3/mac-low.h"
 #include "ns3/msdu-aggregator.h"
@@ -90,4 +89,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WAVE_MAC_LOW_H*/
+

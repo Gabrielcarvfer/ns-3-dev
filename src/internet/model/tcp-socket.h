@@ -20,8 +20,7 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef TCP_SOCKET_H
-#define TCP_SOCKET_H
+#pragma once
 
 #include "ns3/socket.h"
 #include "ns3/traced-callback.h"
@@ -264,6 +263,6 @@ typedef void (* TcpStatesTracedValueCallback)(const TcpSocket::TcpStates_t oldVa
 
 } // namespace ns3
 
-#endif /* TCP_SOCKET_H */
+
 
 

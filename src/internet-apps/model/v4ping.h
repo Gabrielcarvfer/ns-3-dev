@@ -14,8 +14,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef V4PING_H
-#define V4PING_H
+#pragma once
 
 #include "ns3/application.h"
 #include "ns3/traced-callback.h"
@@ -123,4 +122,4 @@ private:
 
 } // namespace ns3
 
-#endif /* V4PING_H */
+

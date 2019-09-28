@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef LOOPBACK_NET_DEVICE_H
-#define LOOPBACK_NET_DEVICE_H
+#pragma once
 
 #include "ns3/net-device.h"
 #include "ns3/mac48-address.h"
@@ -108,4 +107,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LOOPBACK_NET_DEVICE_H */
+

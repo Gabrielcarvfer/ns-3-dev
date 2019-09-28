@@ -20,8 +20,7 @@
  * 
  */
 
-#ifndef OKUMURA_HATA_PROPAGATION_LOSS_MODEL_H
-#define OKUMURA_HATA_PROPAGATION_LOSS_MODEL_H
+#pragma once
 
 #include <ns3/propagation-loss-model.h>
 #include <ns3/propagation-environment.h>
@@ -91,5 +90,5 @@ private:
 } // namespace ns3
 
 
-#endif // OKUMURA_HATA_PROPAGATION_LOSS_MODEL_H
+
 

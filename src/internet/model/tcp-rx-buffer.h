@@ -18,8 +18,7 @@
  * Author: Adrian Sai-wah Tam <adrian.sw.tam@gmail.com>
  */
 
-#ifndef TCP_RX_BUFFER_H
-#define TCP_RX_BUFFER_H
+#pragma once
 
 #include <map>
 #include "ns3/traced-value.h"
@@ -230,4 +229,4 @@ private:
 
 } //namespace ns3
 
-#endif /* TCP_RX_BUFFER_H */
+

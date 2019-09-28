@@ -18,8 +18,7 @@
  * Author: Marco Miozzo  <marco.miozzo@cttc.es>
  * 
  */
-#ifndef MOBILITY_BUILDING_INFO_H
-#define MOBILITY_BUILDING_INFO_H
+#pragma once
 
 
 
@@ -124,4 +123,4 @@ private:
 } // namespace ns3
 
 
-#endif // MOBILITY_BUILDING_INFO_H
+

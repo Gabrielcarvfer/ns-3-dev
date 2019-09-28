@@ -17,8 +17,7 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef DELAY_JITTER_ESTIMATION_H
-#define DELAY_JITTER_ESTIMATION_H
+#pragma once
 
 #include "ns3/nstime.h"
 #include "ns3/packet.h"
@@ -77,4 +76,4 @@ private:
 
 } // namespace ns3
 
-#endif /* DELAY_JITTER_ESTIMATION_H */
+

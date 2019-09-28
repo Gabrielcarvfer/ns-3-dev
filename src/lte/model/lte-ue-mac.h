@@ -19,8 +19,7 @@
  * Author: Marco Miozzo <mmiozzo@cttc.es>
  */
 
-#ifndef LTE_UE_MAC_ENTITY_H
-#define LTE_UE_MAC_ENTITY_H
+#pragma once
 
 
 
@@ -298,4 +297,4 @@ private:
 
 } // namespace ns3
 
-#endif // LTE_UE_MAC_ENTITY
+

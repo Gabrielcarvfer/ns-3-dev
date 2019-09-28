@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef NON_COMMUNICATING_NET_DEVICE_H
-#define NON_COMMUNICATING_NET_DEVICE_H
+#pragma once
 
 #include <cstring>
 #include <ns3/node.h>
@@ -135,4 +134,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NON_COMMUNICATING_NET_DEVICE_H */
+

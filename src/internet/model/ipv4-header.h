@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef IPV4_HEADER_H
-#define IPV4_HEADER_H
+#pragma once
 
 #include "ns3/header.h"
 #include "ns3/ipv4-address.h"
@@ -262,4 +261,4 @@ private:
 } // namespace ns3
 
 
-#endif /* IPV4_HEADER_H */
+

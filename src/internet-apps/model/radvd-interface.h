@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef RADVD_INTERFACE_H
-#define RADVD_INTERFACE_H
+#pragma once
 
 #include "radvd-prefix.h"
 #include <list>
@@ -451,5 +450,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* RADVD_INTERFACE_H */
+
 

@@ -19,8 +19,7 @@
  *          Tiago G. Rodrigues (tgr002@bucknell.edu)
  */
 
-#ifndef PROBE_H
-#define PROBE_H
+#pragma once
 
 #include "ns3/data-collection-object.h"
 #include "ns3/nstime.h"
@@ -82,4 +81,4 @@ protected:
 
 } // namespace ns3
 
-#endif // PROBE_H
+

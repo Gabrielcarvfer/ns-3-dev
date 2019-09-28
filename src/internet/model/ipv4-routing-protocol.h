@@ -15,8 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#ifndef IPV4_ROUTING_PROTOCOL_H
-#define IPV4_ROUTING_PROTOCOL_H
+#pragma once
 
 #include "ns3/packet.h"
 #include "ns3/callback.h"
@@ -175,4 +174,4 @@ public:
 
 } // namespace ns3
 
-#endif /* IPV4_ROUTING_PROTOCOL_H */
+

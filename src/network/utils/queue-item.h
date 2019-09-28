@@ -17,8 +17,7 @@
  *
  * Author: Stefano Avallone <stefano.avallone@unina.it>
  */
-#ifndef QUEUE_ITEM_H
-#define QUEUE_ITEM_H
+#pragma once
 
 #include "ns3/ptr.h"
 #include "ns3/simple-ref-count.h"
@@ -255,4 +254,4 @@ private:
 
 } // namespace ns3
 
-#endif /* QUEUE_ITEM_H */
+

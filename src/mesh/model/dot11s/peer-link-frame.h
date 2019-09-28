@@ -18,8 +18,7 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef PEER_LINK_FRAME_START_H
-#define PEER_LINK_FRAME_START_H
+#pragma once
 #include "ns3/header.h"
 #include "ns3/supported-rates.h"
 #include "dot11s-mac-header.h"
@@ -251,4 +250,4 @@ private:
 bool operator== (const PeerLinkConfirmStart & a, const PeerLinkConfirmStart & b);
 } // namespace dot11s
 } // namespace ns3
-#endif
+

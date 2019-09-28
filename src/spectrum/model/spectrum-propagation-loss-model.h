@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef SPECTRUM_PROPAGATION_LOSS_MODEL_H
-#define SPECTRUM_PROPAGATION_LOSS_MODEL_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -107,4 +106,4 @@ private:
 
 } // namespace ns3
 
-#endif /* SPECTRUM_PROPAGATION_LOSS_MODEL_H */
+

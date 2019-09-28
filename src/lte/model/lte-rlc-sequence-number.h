@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef LTE_RLC_SEQUENCE_NUMBER_H
-#define LTE_RLC_SEQUENCE_NUMBER_H
+#pragma once
 
 #include <ns3/assert.h>
 
@@ -222,4 +221,4 @@ private:
 
 } // namespace ns3
 
-#endif // LTE_RLC_SEQUENCE_NUMBER_H
+

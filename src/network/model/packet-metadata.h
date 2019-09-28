@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef PACKET_METADATA_H
-#define PACKET_METADATA_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -750,4 +749,4 @@ PacketMetadata::~PacketMetadata ()
 } // namespace ns3
 
 
-#endif /* PACKET_METADATA_H */
+

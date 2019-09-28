@@ -18,8 +18,7 @@
  * Authors: Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef AODV_REGRESSION_H
-#define AODV_REGRESSION_H
+#pragma once
 
 #include "ns3/test.h"
 #include "ns3/nstime.h"
@@ -195,4 +194,4 @@ private:
   void SendPing ();
 };
 
-#endif /* AODV_REGRESSION_H */
+

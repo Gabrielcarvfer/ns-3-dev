@@ -30,8 +30,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSDV_ROUTING_PROTOCOL_H
-#define DSDV_ROUTING_PROTOCOL_H
+#pragma once
 
 #include "dsdv-rtable.h"
 #include "dsdv-packet-queue.h"
@@ -260,4 +259,4 @@ private:
 }
 }
 
-#endif /* DSDV_ROUTING_PROTOCOL_H */
+

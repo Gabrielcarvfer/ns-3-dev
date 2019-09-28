@@ -19,8 +19,7 @@
 // Author: Lalith Suresh <suresh.lalith@gmail.com>
 //
 
-#ifndef IPV4_L3_CLICK_PROTOCOL_H
-#define IPV4_L3_CLICK_PROTOCOL_H
+#pragma once
 
 #include "ns3/ipv4.h"
 #include "ns3/net-device.h"
@@ -281,4 +280,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV4_L3_CLICK_ROUTING_H */
+

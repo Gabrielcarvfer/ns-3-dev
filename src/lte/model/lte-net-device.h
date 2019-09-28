@@ -19,8 +19,7 @@
  *         Nicola Baldo  <nbaldo@cttc.es>
  */
 
-#ifndef LTE_NET_DEVICE_H
-#define LTE_NET_DEVICE_H
+#pragma once
 
 #include <ns3/net-device.h>
 #include <ns3/event-id.h>
@@ -118,4 +117,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LTE_NET_DEVICE_H */
+

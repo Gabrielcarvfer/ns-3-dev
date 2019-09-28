@@ -20,8 +20,7 @@
  */
 
 
-#ifndef LTE_RRC_SAP_H
-#define LTE_RRC_SAP_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -1747,7 +1746,7 @@ void MemberLteEnbRrcSapProvider<C>::RecvIdealUeContextRemoveRequest (uint16_t rn
 } // namespace ns3
 
 
-#endif // LTE_RRC_SAP_H
+
 
 
 

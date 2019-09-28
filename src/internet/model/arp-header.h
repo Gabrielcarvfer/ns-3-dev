@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef ARP_HEADER_H
-#define ARP_HEADER_H
+#pragma once
 
 #include "ns3/header.h"
 #include "ns3/address.h"
@@ -120,4 +119,4 @@ public:
 
 } // namespace ns3
 
-#endif /* ARP_HEADER_H */
+

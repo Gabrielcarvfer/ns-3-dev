@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *         Quincy Tse <quincy.tse@nicta.com.au>
  */
-#ifndef NS_ASSERT_H
-#define NS_ASSERT_H
+#pragma once
 
 /**
  * \file
@@ -117,4 +116,3 @@
 
 #endif /* NS3_ASSERT_ENABLE */
 
-#endif /* ASSERT_H */

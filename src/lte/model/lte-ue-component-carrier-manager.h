@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_UE_COMPONENT_CARRIER_MANAGER_H
-#define LTE_UE_COMPONENT_CARRIER_MANAGER_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/lte-rrc-sap.h>
@@ -115,4 +114,4 @@ protected:
 } // end of namespace ns3
 
 
-#endif /* LTE_UE_COMPONENT_CARRIER_MANAGER_H */
+

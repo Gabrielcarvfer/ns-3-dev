@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_TEST_SECONDARY_CELL_SELECTION_H
-#define LTE_TEST_SECONDARY_CELL_SELECTION_H
+#pragma once
 
 #include <ns3/test.h>
 #include <ns3/nstime.h>
@@ -112,4 +111,4 @@ private:
 
 }; // end of class LteSecondaryCellSelectionTestCase
 
-#endif /* LTE_TEST_SECONDARY_CELL_SELECTION_H */
+

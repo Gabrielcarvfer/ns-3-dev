@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef EPC_UE_NAS_H
-#define EPC_UE_NAS_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -261,4 +260,4 @@ private:
 
 } // namespace ns3
 
-#endif // EPC_UE_NAS_H
+

@@ -22,8 +22,7 @@
 // George F. Riley.  Georgia Tech, Spring 2002
 
 
-#ifndef RTT_ESTIMATOR_H
-#define RTT_ESTIMATOR_H
+#pragma once
 
 #include "ns3/nstime.h"
 #include "ns3/object.h"
@@ -188,4 +187,4 @@ private:
 
 } // namespace ns3
 
-#endif /* RTT_ESTIMATOR_H */
+

@@ -18,8 +18,7 @@
  * Author: Joe Kopena (tjkopena@cs.drexel.edu)
  */
 
-#ifndef BASIC_DATA_CALCULATORS_H
-#define BASIC_DATA_CALCULATORS_H
+#pragma once
 
 #include "data-calculator.h"
 #include "data-output-interface.h"
@@ -381,4 +380,4 @@ CounterCalculator<T>::Output (DataOutputCallback &callback) const
 };
 
 
-#endif /* BASIC_DATA_CALCULATORS_H */
+

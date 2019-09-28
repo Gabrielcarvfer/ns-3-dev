@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef NS3_NULLMESSAGE_MPI_INTERFACE_H
-#define NS3_NULLMESSAGE_MPI_INTERFACE_H
+#pragma once
 
 #include "parallel-communication-interface.h"
 
@@ -223,4 +222,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NS3_NULL_MESSAGE_MPI_INTERFACE_H */
+

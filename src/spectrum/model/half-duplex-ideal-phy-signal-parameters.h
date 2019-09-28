@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef HALF_DUPLEX_IDEAL_PHY_SPECTRUM_PARAMETERS_H
-#define HALF_DUPLEX_IDEAL_PHY_SPECTRUM_PARAMETERS_H
+#pragma once
 
 
 #include <ns3/spectrum-signal-parameters.h>
@@ -58,4 +57,4 @@ struct HalfDuplexIdealPhySignalParameters : public SpectrumSignalParameters
 }  // namespace ns3
 
 
-#endif /* HALF_DUPLEX_IDEAL_PHY_SPECTRUM_PARAMETERS_H */
+

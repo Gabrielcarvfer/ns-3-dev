@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_FR_HARD_ALGORITHM_H
-#define LTE_FR_HARD_ALGORITHM_H
+#pragma once
 
 #include <ns3/lte-ffr-algorithm.h>
 #include <ns3/lte-ffr-sap.h>
@@ -130,4 +129,4 @@ private:
 } // end of namespace ns3
 
 
-#endif /* LTE_FR_HARD_ALGORITHM_H */
+

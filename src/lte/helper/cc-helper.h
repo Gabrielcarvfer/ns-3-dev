@@ -18,8 +18,7 @@
  * Author: Danilo Abrignani <danilo.abrignani@unibo.it> 
  */
 
-#ifndef CC_HELPER_H
-#define CC_HELPER_H
+#pragma once
 
 #include <ns3/config.h>
 #include <ns3/simulator.h>
@@ -198,4 +197,4 @@ private:
 
 
 
-#endif // LTE_HELPER_H
+

@@ -20,8 +20,7 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef NS3_SOCKET_H
-#define NS3_SOCKET_H
+#pragma once
 
 #include "ns3/callback.h"
 #include "ns3/ptr.h"
@@ -1396,4 +1395,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NS3_SOCKET_H */
+

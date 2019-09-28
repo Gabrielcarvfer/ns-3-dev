@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSR_FS_HEADER_H
-#define DSR_FS_HEADER_H
+#pragma once
 
 #include <vector>
 #include <list>
@@ -329,5 +328,5 @@ static inline std::ostream & operator<< (std::ostream& os, const DsrRoutingHeade
 }  // namespace dsr
 }  // namespace ns3
 
-#endif /* DSR_FS_HEADER_H */
+
 

@@ -21,8 +21,7 @@
  *
  */
 
-#ifndef GNUPLOT_AGGREGATOR_H
-#define GNUPLOT_AGGREGATOR_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -298,4 +297,4 @@ private:
 
 } // namespace ns3
 
-#endif // GNUPLOT_AGGREGATOR_H
+

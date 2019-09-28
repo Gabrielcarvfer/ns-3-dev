@@ -27,8 +27,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#ifndef TCPSCALABLE_H
-#define TCPSCALABLE_H
+#pragma once
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -114,4 +113,4 @@ private:
 
 } // namespace ns3
 
-#endif // TCPSCALABLE_H
+

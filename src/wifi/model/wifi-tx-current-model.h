@@ -18,8 +18,7 @@
  * Author: Stefano Avallone <stefano.avallone@unina.it>
  */
 
-#ifndef WIFI_TX_CURRENT_MODEL_H
-#define WIFI_TX_CURRENT_MODEL_H
+#pragma once
 
 #include "ns3/object.h"
 
@@ -104,4 +103,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WIFI_TX_CURRENT_MODEL_H */
+

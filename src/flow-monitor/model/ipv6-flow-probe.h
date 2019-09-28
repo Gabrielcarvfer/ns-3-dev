@@ -19,8 +19,7 @@
 // Modifications: Tommaso Pecorella <tommaso.pecorella@unifi.it>
 //
 
-#ifndef IPV6_FLOW_PROBE_H
-#define IPV6_FLOW_PROBE_H
+#pragma once
 
 #include "ns3/flow-probe.h"
 #include "ns3/ipv6-flow-classifier.h"
@@ -128,4 +127,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV6_FLOW_PROBE_H */
+

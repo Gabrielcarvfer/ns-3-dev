@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSR_RREQ_TABLE_H
-#define DSR_RREQ_TABLE_H
+#pragma once
 
 #include "ns3/simulator.h"
 #include "ns3/timer.h"
@@ -394,4 +393,4 @@ private:
 }  // namespace dsr
 }  // namespace ns3
 
-#endif /* DSR_RREQ_TABLE_H */
+

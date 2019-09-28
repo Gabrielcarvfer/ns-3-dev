@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef WAVEFORM_GENERATOR_H
-#define WAVEFORM_GENERATOR_H
+#pragma once
 
 
 #include <ns3/spectrum-value.h>
@@ -164,4 +163,4 @@ private:
 
 
 
-#endif /* WAVEFORM_GENERATOR_H */
+

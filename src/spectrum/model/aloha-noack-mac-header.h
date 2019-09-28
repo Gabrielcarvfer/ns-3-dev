@@ -19,8 +19,7 @@
  */
 
 
-#ifndef ALOHA_NOACK_MAC_HEADER_H
-#define ALOHA_NOACK_MAC_HEADER_H
+#pragma once
 
 #include <ns3/header.h>
 #include <ns3/mac48-address.h>
@@ -78,4 +77,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ALOHA_NOACK_MAC_HEADER_H */
+

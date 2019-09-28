@@ -21,8 +21,7 @@
 #include <ns3/vector.h>
 #include <ns3/random-variable-stream.h>
 
-#ifndef GEOGRAPHIC_POSITIONS_H
-#define GEOGRAPHIC_POSITIONS_H
+#pragma once
 
 namespace ns3
 {
@@ -109,5 +108,5 @@ public:
 
 } // namespace ns3
 
-#endif /* GEOGRAPHIC_POSITIONS_H */
+
 

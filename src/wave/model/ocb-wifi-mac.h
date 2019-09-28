@@ -19,8 +19,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *         Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef OCB_WIFI_MAC_H
-#define OCB_WIFI_MAC_H
+#pragma once
 
 #include "ns3/object-factory.h"
 #include "ns3/regular-wifi-mac.h"
@@ -182,4 +181,4 @@ private:
 };
 
 }
-#endif /* OCB_WIFI_MAC_H */
+

@@ -22,8 +22,7 @@
  *
  */
 
-#ifndef DHCP_SERVER_H
-#define DHCP_SERVER_H
+#pragma once
 
 #include "ns3/application.h"
 #include "ns3/ipv4-address.h"
@@ -140,4 +139,4 @@ private:
 
 } // namespace ns3
 
-#endif /* DHCP_SERVER_H */
+

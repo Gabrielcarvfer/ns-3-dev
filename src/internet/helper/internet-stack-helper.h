@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef INTERNET_STACK_HELPER_H
-#define INTERNET_STACK_HELPER_H
+#pragma once
 
 #include "ns3/node-container.h"
 #include "ns3/net-device-container.h"
@@ -373,4 +372,4 @@ private:
 
 } // namespace ns3
 
-#endif /* INTERNET_STACK_HELPER_H */
+

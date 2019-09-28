@@ -20,8 +20,7 @@
 // This object contains static methods that provide an easy interface
 // to the necessary MPI information.
 
-#ifndef NS3_GRANTED_TIME_WINDOW_MPI_INTERFACE_H
-#define NS3_GRANTED_TIME_WINDOW_MPI_INTERFACE_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -172,4 +171,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NS3_GRANTED_TIME_WINDOW_MPI_INTERFACE_H */
+

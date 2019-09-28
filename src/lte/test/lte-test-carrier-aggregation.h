@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef TEST_CARRIER_AGGREGATION_H
-#define TEST_CARRIER_AGGREGATION_H
+#pragma once
 
 #include "ns3/simulator.h"
 #include "ns3/test.h"
@@ -119,4 +118,4 @@ public:
   TestCarrierAggregationSuite ();
 };
 
-#endif /* TEST_CARRIER_AGGREGATION_H */
+

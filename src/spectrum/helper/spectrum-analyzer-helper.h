@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef SPECTRUM_ANALYZER_HELPER_H
-#define SPECTRUM_ANALYZER_HELPER_H
+#pragma once
 
 
 #include <string>
@@ -154,4 +153,4 @@ private:
 } // namespace ns3
 
 
-#endif /* SPECTRUM_ANALYZER_HELPER_H */
+

@@ -18,8 +18,7 @@
  * Author: Lluis Parcerisa <lparcerisa@cttc.cat>
  */
 
-#ifndef ASN1_HEADER_H
-#define ASN1_HEADER_H
+#pragma once
 
 #include "ns3/header.h"
 
@@ -545,5 +544,5 @@ protected:
 
 } // namespace ns3
 
-#endif // ASN1_HEADER_H
+
 

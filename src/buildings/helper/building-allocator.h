@@ -19,8 +19,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  * Author: Nicola Baldo <nbaldo@cttc.es> (took position-allocator and turned it into building-allocator)
  */
-#ifndef BUILDING_ALLOCATOR_H
-#define BUILDING_ALLOCATOR_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/object-factory.h"
@@ -89,4 +88,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BUILDING_ALLOCATOR_H */
+

@@ -25,8 +25,7 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#ifndef AODV_RTABLE_H
-#define AODV_RTABLE_H
+#pragma once
 
 #include <stdint.h>
 #include <cassert>
@@ -498,4 +497,4 @@ private:
 }  // namespace aodv
 }  // namespace ns3
 
-#endif /* AODV_RTABLE_H */
+

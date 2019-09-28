@@ -18,8 +18,7 @@
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#ifndef LENA_TEST_HARQ_H
-#define LENA_TEST_HARQ_H
+#pragma once
 
 #include "ns3/simulator.h"
 #include "ns3/test.h"
@@ -87,4 +86,4 @@ public:
   LenaTestHarqSuite ();
 };
 
-#endif /* LENA_TEST_HARQ_H */
+

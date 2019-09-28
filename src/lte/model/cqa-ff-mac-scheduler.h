@@ -21,8 +21,7 @@
  * schedulers. *
  */
 
-#ifndef CQA_FF_MAC_SCHEDULER_H
-#define CQA_FF_MAC_SCHEDULER_H
+#pragma once
 
 #include <ns3/lte-common.h>
 #include <ns3/ff-mac-csched-sap.h>
@@ -411,4 +410,4 @@ private:
 
 } // namespace ns3
 
-#endif /* QOS_FF_MAC_SCHEDULER_H */
+

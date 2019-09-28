@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef NODE_CONTAINER_H
-#define NODE_CONTAINER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -302,4 +301,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NODE_CONTAINER_H */
+

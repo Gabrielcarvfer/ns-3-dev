@@ -18,8 +18,7 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef DOT11S_STACK_INSTALLER_H
-#define DOT11S_STACK_INSTALLER_H
+#pragma once
 
 #include "ns3/mesh-stack-installer.h"
 
@@ -81,5 +80,4 @@ private:
 
 } // namespace ns3
 
-#endif
 

@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef LTE_MAC_SAP_H
-#define LTE_MAC_SAP_H
+#pragma once
 
 #include <ns3/packet.h>
 
@@ -228,4 +227,4 @@ void EnbMacMemberLteMacSapProvider<C>::ReportBufferStatus (ReportBufferStatusPar
 } // namespace ns3
 
 
-#endif // LTE_MAC_SAP_H
+

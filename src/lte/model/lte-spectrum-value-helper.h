@@ -18,8 +18,7 @@
  * Author: Giuseppe Piro  <g.piro@poliba.it>
  */
 
-#ifndef LTE_SPECTRUM_VALUE_HELPER_H
-#define LTE_SPECTRUM_VALUE_HELPER_H
+#pragma once
 
 
 #include <ns3/spectrum-value.h>
@@ -201,4 +200,4 @@ public:
 
 
 
-#endif /*  LTE_SPECTRUM_VALUE_HELPER_H */
+

@@ -18,8 +18,7 @@
  * Author: Federico Maguolo <maguolof@dei.unipd.it>
  */
 
-#ifndef AARFCD_WIFI_MANAGER_H
-#define AARFCD_WIFI_MANAGER_H
+#pragma once
 
 #include "ns3/traced-value.h"
 #include "wifi-remote-station-manager.h"
@@ -134,4 +133,4 @@ private:
 
 } //namespace ns3
 
-#endif /* AARFCD_WIFI_MANAGER_H */
+

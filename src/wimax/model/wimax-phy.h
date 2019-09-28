@@ -18,8 +18,7 @@
  * Author: Jahanzeb Farooq <jahanzeb.farooq@sophia.inria.fr>
  */
 
-#ifndef WIMAX_PHY_H
-#define WIMAX_PHY_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -489,4 +488,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WIMAX_PHY_H */
+

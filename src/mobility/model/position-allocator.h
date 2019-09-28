@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef POSITION_ALLOCATOR_H
-#define POSITION_ALLOCATOR_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/random-variable-stream.h"
@@ -387,4 +386,4 @@ private:
 
 } // namespace ns3
 
-#endif /* RANDOM_POSITION_H */
+

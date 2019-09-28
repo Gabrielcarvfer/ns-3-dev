@@ -19,8 +19,7 @@
  *                              <amine.ismail@udcast.com>
  */
 
-#ifndef SIMPLE_OFDM_WIMAX_PHY_H
-#define SIMPLE_OFDM_WIMAX_PHY_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -536,4 +535,4 @@ private:
 
 } // namespace ns3
 
-#endif /* OFDM_WIMAX_PHY_H */
+

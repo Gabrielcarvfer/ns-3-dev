@@ -17,8 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef IPV6_ADDRESS_GENERATOR_H
-#define IPV6_ADDRESS_GENERATOR_H
+#pragma once
 
 #include "ns3/ipv6-address.h"
 
@@ -171,4 +170,4 @@ public:
 
 }; // namespace ns3
 
-#endif /* IPV6_ADDRESS_GENERATOR_H */
+

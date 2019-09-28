@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef LTE_SIMPLE_NET_DEVICE_H
-#define LTE_SIMPLE_NET_DEVICE_H
+#pragma once
 
 #include "ns3/event-id.h"
 #include "ns3/node.h"
@@ -72,4 +71,4 @@ protected:
 } // namespace ns3
 
 
-#endif // LTE_SIMPLE_NET_DEVICE_H
+

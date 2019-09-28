@@ -20,8 +20,7 @@
  *          Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#ifndef ENERGY_SOURCE_CONTAINER_H
-#define ENERGY_SOURCE_CONTAINER_H
+#pragma once
 
 #include "ns3/energy-source.h"
 #include "ns3/object.h"
@@ -179,4 +178,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ENERGY_SOURCE_CONTAINER_H */
+

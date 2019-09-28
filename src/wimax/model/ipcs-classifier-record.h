@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef IPCS_CLASSIFIER_RECORD_H
-#define IPCS_CLASSIFIER_RECORD_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/ipv4-address.h"
@@ -196,4 +195,4 @@ private:
 };
 } // namespace ns3
 
-#endif /* IPCS_CLASSIFIER_RECORD_H */
+

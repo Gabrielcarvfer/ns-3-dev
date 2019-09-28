@@ -18,8 +18,7 @@
 // Author: Rajib Bhattacharjea<raj.b@gatech.edu>
 //
 
-#ifndef DATA_RATE_H
-#define DATA_RATE_H
+#pragma once
 
 #include <string>
 #include <iostream>
@@ -264,4 +263,4 @@ double operator* (const Time& lhs, const DataRate& rhs);
 
 } // namespace ns3
 
-#endif /* DATA_RATE_H */
+

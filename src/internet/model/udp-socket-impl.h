@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef UDP_SOCKET_IMPL_H
-#define UDP_SOCKET_IMPL_H
+#pragma once
 
 #include <stdint.h>
 #include <queue>
@@ -263,4 +262,4 @@ private:
 
 } // namespace ns3
 
-#endif /* UDP_SOCKET_IMPL_H */
+

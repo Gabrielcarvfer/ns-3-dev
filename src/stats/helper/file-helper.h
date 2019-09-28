@@ -18,8 +18,7 @@
  * Author: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef FILE_HELPER_H
-#define FILE_HELPER_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -326,4 +325,4 @@ private:
 
 } // namespace ns3
 
-#endif // FILE_HELPER_H
+

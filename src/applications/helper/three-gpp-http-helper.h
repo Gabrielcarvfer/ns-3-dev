@@ -24,8 +24,7 @@
  *
  */
 
-#ifndef THREE_GPP_HTTP_HELPER_H
-#define THREE_GPP_HTTP_HELPER_H
+#pragma once
 
 #include <ns3/object-factory.h>
 #include <ns3/node-container.h>
@@ -169,4 +168,4 @@ private:
 } // end of `namespace ns3`
 
 
-#endif /* THREE_GPP_HTTP_HELPER_H */
+

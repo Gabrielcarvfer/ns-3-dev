@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef CSMA_HELPER_H
-#define CSMA_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -254,4 +253,4 @@ private:
 
 } // namespace ns3
 
-#endif /* CSMA_HELPER_H */
+

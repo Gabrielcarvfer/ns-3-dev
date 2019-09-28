@@ -18,8 +18,7 @@
  * Author: Emmanuelle Laprise<emmanuelle.laprise@bluekazoo.ca>
  */
 
-#ifndef CSMA_CHANNEL_H
-#define CSMA_CHANNEL_H
+#pragma once
 
 #include "ns3/channel.h"
 #include "ns3/ptr.h"
@@ -353,4 +352,4 @@ private:
 
 } // namespace ns3
 
-#endif /* CSMA_CHANNEL_H */
+

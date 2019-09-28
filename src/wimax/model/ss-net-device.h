@@ -20,8 +20,7 @@
  *                               <amine.ismail@UDcast.com>
  */
 
-#ifndef WIMAX_SS_NET_DEVICE_H
-#define WIMAX_SS_NET_DEVICE_H
+#pragma once
 
 #include "ns3/event-id.h"
 #include "wimax-net-device.h"
@@ -487,4 +486,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WIMAX_SS_NET_DEVICE_H */
+

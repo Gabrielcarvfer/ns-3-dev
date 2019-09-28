@@ -21,8 +21,7 @@
  * Modified by: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef APPLICATION_PACKET_PROBE_H
-#define APPLICATION_PACKET_PROBE_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/callback.h"
@@ -124,4 +123,4 @@ private:
 
 } // namespace ns3
 
-#endif // APPLICATION_PACKET_PROBE_H
+

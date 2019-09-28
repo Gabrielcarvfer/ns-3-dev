@@ -18,8 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#ifndef UAN_MAC_CW_H
-#define UAN_MAC_CW_H
+#pragma once
 
 #include "ns3/uan-mac.h"
 #include "ns3/nstime.h"
@@ -183,4 +182,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* UAN_MAC_CW_H */
+

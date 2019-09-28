@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  *         Michele Polese <michele.polese@gmail.com> for the OutdoorPositionAllocator class
  */
-#ifndef BUILDING_POSITION_ALLOCATOR_H
-#define BUILDING_POSITION_ALLOCATOR_H
+#pragma once
 
 #include <ns3/ptr.h>
 #include <ns3/position-allocator.h>
@@ -257,4 +256,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BUILDING_POSITION_ALLOCATOR_H */
+

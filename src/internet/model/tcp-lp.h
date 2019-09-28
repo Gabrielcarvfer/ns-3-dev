@@ -21,8 +21,7 @@
  *
  */
 
-#ifndef TCPLP_H
-#define TCPLP_H
+#pragma once
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -120,4 +119,4 @@ private:
 
 } // namespace ns3
 
-#endif // TCPLP_H
+

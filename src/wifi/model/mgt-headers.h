@@ -20,8 +20,7 @@
  *          Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#ifndef MGT_HEADERS_H
-#define MGT_HEADERS_H
+#pragma once
 
 #include "ns3/mac48-address.h"
 #include "status-code.h"
@@ -1314,4 +1313,4 @@ private:
 
 } //namespace ns3
 
-#endif /* MGT_HEADERS_H */
+

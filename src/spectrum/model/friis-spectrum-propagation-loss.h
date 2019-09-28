@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef FRIIS_SPECTRUM_PROPAGATION_LOSS_H
-#define FRIIS_SPECTRUM_PROPAGATION_LOSS_H
+#pragma once
 
 
 #include <ns3/spectrum-propagation-loss-model.h>
@@ -80,4 +79,4 @@ public:
 
 } // namespace ns3
 
-#endif /* FRIIS_SPECTRUM_PROPAGATION_LOSS_MODEL_H */
+

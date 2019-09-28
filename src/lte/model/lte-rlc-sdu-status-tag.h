@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef LTE_RLC_SDU_STATUS_TAG_H
-#define LTE_RLC_SDU_STATUS_TAG_H
+#pragma once
 
 #include "ns3/tag.h"
 
@@ -74,4 +73,4 @@ private:
 
 }; // namespace ns3
 
-#endif // LTE_RLC_SDU_STATUS_TAG_H
+

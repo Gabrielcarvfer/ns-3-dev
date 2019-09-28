@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef SIXLOWPAN_HELPER_H
-#define SIXLOWPAN_HELPER_H
+#pragma once
 
 #include "ns3/net-device-container.h"
 #include "ns3/object-factory.h"
@@ -99,4 +98,4 @@ private:
 } // namespace ns3
 
 
-#endif /* SIXLOWPAN_HELPER_H */
+

@@ -21,8 +21,7 @@
  *          Biljana Bojovic <biljana.bojovic@cttc.es> (Carrier Aggregation)
  */
 
-#ifndef RRC_HEADER_H
-#define RRC_HEADER_H
+#pragma once
 
 #include "ns3/header.h"
 
@@ -1110,5 +1109,5 @@ private:
 
 } // namespace ns3
 
-#endif // RRC_HEADER_H
+
 

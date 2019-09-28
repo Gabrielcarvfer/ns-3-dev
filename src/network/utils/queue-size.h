@@ -18,8 +18,7 @@
 // Author: Stefano Avallone <stavallo@unina.it>
 //
 
-#ifndef QUEUE_SIZE_H
-#define QUEUE_SIZE_H
+#pragma once
 
 #include <string>
 #include <iostream>
@@ -277,4 +276,4 @@ QueueSize operator+ (const Ptr<Item>& lhs, const QueueSize& rhs)
 
 } // namespace ns3
 
-#endif /* QUEUE_SIZE_H */
+

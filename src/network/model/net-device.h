@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  * Modified by Emmanuelle Laprise to remove dependence on LLC headers
  */
-#ifndef NET_DEVICE_H
-#define NET_DEVICE_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/callback.h"
@@ -363,4 +362,4 @@ public:
 
 } // namespace ns3
 
-#endif /* NET_DEVICE_H */
+

@@ -17,8 +17,7 @@
  *
  * Author: Stefano Avallone <stavallo@unina.it>
  */
-#ifndef TRAFFIC_CONTROL_HELPER_H
-#define TRAFFIC_CONTROL_HELPER_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -502,4 +501,4 @@ private:
 
 } // namespace ns3
 
-#endif /* TRAFFIC_CONTROL_HELPER_H */
+

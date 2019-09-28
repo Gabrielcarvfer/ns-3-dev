@@ -18,8 +18,7 @@
  * Author: Joe Kopena (tjkopena@cs.drexel.edu)
  */
 
-#ifndef TIME_DATA_CALCULATORS_H
-#define TIME_DATA_CALCULATORS_H
+#pragma once
 
 #include "ns3/nstime.h"
 
@@ -77,4 +76,4 @@ protected:
 };
 
 
-#endif /* TIME_DATA_CALCULATORS_H */
+

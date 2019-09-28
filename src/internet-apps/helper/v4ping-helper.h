@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef V4PING_HELPER_H
-#define V4PING_HELPER_H
+#pragma once
 
 #include "ns3/node-container.h"
 #include "ns3/application-container.h"
@@ -95,4 +94,4 @@ private:
 
 } // namespace ns3
 
-#endif /* V4PING_HELPER_H */
+

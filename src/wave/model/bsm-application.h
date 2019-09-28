@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef BSM_APPLICATION_H
-#define BSM_APPLICATION_H
+#pragma once
 
 #include "ns3/application.h"
 #include "ns3/wave-bsm-stats.h"
@@ -180,4 +179,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BSM_APPLICATION_H*/
+

@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef IPV6_LIST_ROUTING_HELPER_H
-#define IPV6_LIST_ROUTING_HELPER_H
+#pragma once
 
 #include <stdint.h>
 
@@ -99,5 +98,5 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV6_LIST_ROUTING_HELPER_H */
+
 

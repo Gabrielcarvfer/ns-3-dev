@@ -20,8 +20,7 @@
  *
  */
 
-#ifndef BUILDING_LIST_H_
-#define BUILDING_LIST_H_
+#pragma once
 
 #include <vector>
 #include "ns3/ptr.h"
@@ -66,6 +65,6 @@ public:
 
 } // namespace ns3
 
-#endif /* BUILDING_LIST_H_ */
+
 
 

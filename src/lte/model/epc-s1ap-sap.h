@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.cat>
  */
 
-#ifndef EPC_S1AP_SAP_H
-#define EPC_S1AP_SAP_H
+#pragma once
 
 #include <ns3/address.h>
 #include <ns3/ptr.h>
@@ -358,5 +357,5 @@ void MemberEpcS1apSapEnb<C>::PathSwitchRequestAcknowledge (uint64_t enbUeS1Id, u
 
 } //namespace ns3
 
-#endif /* EPC_S1AP_SAP_H */
+
 

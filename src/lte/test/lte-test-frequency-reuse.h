@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_TEST_DOWNLINK_FR_H
-#define LTE_TEST_DOWNLINK_FR_H
+#pragma once
 
 #include "ns3/test.h"
 #include "ns3/spectrum-value.h"
@@ -395,4 +394,4 @@ private:
 
 };
 
-#endif /* LTE_TEST_DOWNLINK_FR_H */
+

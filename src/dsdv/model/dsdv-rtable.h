@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSDV_RTABLE_H
-#define DSDV_RTABLE_H
+#pragma once
 
 #include <cassert>
 #include <map>
@@ -471,4 +470,4 @@ private:
 };
 }
 }
-#endif /* DSDV_RTABLE_H */
+

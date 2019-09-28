@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef SINGLE_MODEL_SPECTRUM_CHANNEL_H
-#define SINGLE_MODEL_SPECTRUM_CHANNEL_H
+#pragma once
 
 
 #include <ns3/spectrum-channel.h>
@@ -86,4 +85,4 @@ private:
 
 }
 
-#endif /* SINGLE_MODEL_SPECTRUM_CHANNEL_H */
+

@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef TAP_BRIDGE_HELPER_H
-#define TAP_BRIDGE_HELPER_H
+#pragma once
 
 #include "ns3/net-device-container.h"
 #include "ns3/object-factory.h"
@@ -132,4 +131,4 @@ private:
 } // namespace ns3
 
 
-#endif /* TAP_BRIDGE_HELPER_H */
+

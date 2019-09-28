@@ -18,8 +18,7 @@
  * Author: Vignesh Babu <ns3-dev@esk.fraunhofer.de>
  */
 
-#ifndef LTE_TEST_RADIO_LINK_FAILURE_H
-#define LTE_TEST_RADIO_LINK_FAILURE_H
+#pragma once
 
 
 #include <ns3/test.h>
@@ -205,4 +204,4 @@ private:
 
 }; // end of class LteRadioLinkFailureTestCase
 
-#endif /* LTE_TEST_RADIO_LINK_FAILURE_H */
+

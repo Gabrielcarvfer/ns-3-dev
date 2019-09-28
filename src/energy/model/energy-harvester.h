@@ -19,8 +19,7 @@
  * Author: Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#ifndef ENERGY_HARVESTER_H
-#define ENERGY_HARVESTER_H
+#pragma once
 
 #include <iostream>
 
@@ -134,4 +133,4 @@ protected:
     
 } // namespace ns3
 
-#endif /* defined(ENERGY_HARVESTER_H) */
+

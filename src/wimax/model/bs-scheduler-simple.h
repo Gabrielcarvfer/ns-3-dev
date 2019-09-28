@@ -20,8 +20,7 @@
 
 /* BS outbound scheduler as per in Section 6.3.5.1 */
 
-#ifndef BS_SCHEDULER_SIMPLE_H
-#define BS_SCHEDULER_SIMPLE_H
+#pragma once
 
 #include <list>
 #include "ns3/packet.h"
@@ -102,4 +101,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BS_SCHEDULER_SIMPLE_H */
+

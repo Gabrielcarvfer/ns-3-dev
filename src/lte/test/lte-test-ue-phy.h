@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es> : Based on lte-ue-phy code
  */
 
-#ifndef LTE_TEST_UE_PHY_H
-#define LTE_TEST_UE_PHY_H
+#pragma once
 
 #include "ns3/lte-phy.h"
 
@@ -97,4 +96,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LTE_TEST_UE_PHY_H */
+

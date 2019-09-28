@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef PCAP_FILE_WRAPPER_H
-#define PCAP_FILE_WRAPPER_H
+#pragma once
 
 #include <cstring>
 #include <limits>
@@ -228,4 +227,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PCAP_FILE_WRAPPER_H */
+

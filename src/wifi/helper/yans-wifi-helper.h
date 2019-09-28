@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef YANS_WIFI_HELPER_H
-#define YANS_WIFI_HELPER_H
+#pragma once
 
 #include "wifi-helper.h"
 #include "ns3/yans-wifi-channel.h"
@@ -200,4 +199,4 @@ private:
 
 } //namespace ns3
 
-#endif /* YANS_WIFI_HELPER_H */
+

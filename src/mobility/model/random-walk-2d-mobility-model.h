@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef RANDOM_WALK_2D_MOBILITY_MODEL_H
-#define RANDOM_WALK_2D_MOBILITY_MODEL_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/nstime.h"
@@ -92,4 +91,4 @@ private:
 
 } // namespace ns3
 
-#endif /* RANDOM_WALK_2D_MOBILITY_MODEL_H */
+

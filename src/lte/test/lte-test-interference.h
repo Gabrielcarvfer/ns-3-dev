@@ -19,8 +19,7 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef LTE_TEST_INTERFERENCE_H
-#define LTE_TEST_INTERFERENCE_H
+#pragma once
 
 #include "ns3/test.h"
 
@@ -96,4 +95,4 @@ private:
   uint16_t m_ulMcs; ///< the UL MCS
 };
 
-#endif /* LTE_TEST_INTERFERENCE_H */
+

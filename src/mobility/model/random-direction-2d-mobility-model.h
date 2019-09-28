@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef RANDOM_DIRECTION_MOBILITY_MODEL_H
-#define RANDOM_DIRECTION_MOBILITY_MODEL_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/ptr.h"
@@ -86,4 +85,4 @@ private:
 
 } // namespace ns3
 
-#endif /* RANDOM_DIRECTION_MOBILITY_MODEL_H */
+

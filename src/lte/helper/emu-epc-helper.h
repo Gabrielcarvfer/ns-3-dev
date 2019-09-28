@@ -20,8 +20,7 @@
  *         Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef EMU_EPC_HELPER_H
-#define EMU_EPC_HELPER_H
+#pragma once
 
 #include "ns3/no-backhaul-epc-helper.h"
 
@@ -99,4 +98,4 @@ private:
 
 } // namespace ns3
 
-#endif // EMU_EPC_HELPER_H
+

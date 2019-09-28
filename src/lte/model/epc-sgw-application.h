@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef EPC_SGW_APPLICATION_H
-#define EPC_SGW_APPLICATION_H
+#pragma once
 
 #include "ns3/application.h"
 #include "ns3/address.h"
@@ -274,4 +273,4 @@ private:
 
 } // namespace ns3
 
-#endif // EPC_SGW_APPLICATION_H
+

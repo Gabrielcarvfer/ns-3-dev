@@ -18,8 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#ifndef FRAME_CAPTURE_MODEL_H
-#define FRAME_CAPTURE_MODEL_H
+#pragma once
 
 #include "ns3/object.h"
 
@@ -73,4 +72,4 @@ private:
 
 } //namespace ns3
 
-#endif /* FRAME_CAPTURE_MODEL_H */
+

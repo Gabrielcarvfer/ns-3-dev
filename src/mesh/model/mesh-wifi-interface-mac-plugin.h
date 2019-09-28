@@ -18,8 +18,7 @@
  * Author: Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef MESH_WIFI_INTERFACE_MAC_PLUGIN_H
-#define MESH_WIFI_INTERFACE_MAC_PLUGIN_H
+#pragma once
 
 #include "ns3/packet.h"
 #include "ns3/mac48-address.h"
@@ -88,4 +87,4 @@ public:
 
 } // namespace ns3
 
-#endif /* MESH_WIFI_INTERFACE_MAC_PLUGIN_H */
+

@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef RIPNG_HEADER_H
-#define RIPNG_HEADER_H
+#pragma once
 
 #include <list>
 #include "ns3/header.h"
@@ -241,5 +240,5 @@ std::ostream & operator << (std::ostream & os, const RipNgHeader & h);
 
 }
 
-#endif /* RIPNG_HEADER_H */
+
 

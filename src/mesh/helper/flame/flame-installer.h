@@ -18,8 +18,7 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef FLAME_INSTALLER_H
-#define FLAME_INSTALLER_H
+#pragma once
 
 #include "ns3/mesh-stack-installer.h"
 
@@ -80,5 +79,5 @@ public:
 
 } // namespace ns3
 
-#endif /* FLAME_INSTALLER_H */
+
 

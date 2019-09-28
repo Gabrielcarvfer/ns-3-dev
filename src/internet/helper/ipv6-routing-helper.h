@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef IPV6_ROUTING_HELPER_H
-#define IPV6_ROUTING_HELPER_H
+#pragma once
 
 #include "ns3/ptr.h"
 #include "ns3/nstime.h"
@@ -283,5 +282,5 @@ Ptr<T> Ipv6RoutingHelper::GetRouting (Ptr<Ipv6RoutingProtocol> protocol)
 } // namespace ns3
 
 
-#endif /* IPV6_ROUTING_HELPER_H */
+
 

@@ -19,8 +19,7 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#ifndef SS_RECORD_H
-#define SS_RECORD_H
+#pragma once
 
 #include <stdint.h>
 #include <ostream>
@@ -281,4 +280,4 @@ private:
 
 } // namespace ns3
 
-#endif /* SS_RECORD_H */
+

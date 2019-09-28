@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef STATUS_CODE_H
-#define STATUS_CODE_H
+#pragma once
 
 #include "ns3/buffer.h"
 
@@ -86,4 +85,4 @@ std::ostream &operator << (std::ostream &os, const StatusCode &code);
 
 } //namespace ns3
 
-#endif /* STATUS_CODE_H */
+

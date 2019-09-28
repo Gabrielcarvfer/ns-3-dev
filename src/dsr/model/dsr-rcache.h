@@ -30,8 +30,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSR_RCACHE_H
-#define DSR_RCACHE_H
+#pragma once
 
 #include <map>
 #include <stdint.h>
@@ -871,4 +870,4 @@ public:
 };
 } // namespace dsr
 } // namespace ns3
-#endif /* DSR_RCACHE_H */
+

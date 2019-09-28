@@ -18,8 +18,7 @@
  * Author: Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
 
-#ifndef ETHERNET_HEADER_H
-#define ETHERNET_HEADER_H
+#pragma once
 
 #include "ns3/header.h"
 #include <string>
@@ -133,4 +132,4 @@ private:
 } // namespace ns3
 
 
-#endif /* ETHERNET_HEADER_H */
+

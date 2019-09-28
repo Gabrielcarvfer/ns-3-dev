@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef PACKET_SOCKET_CLIENT_H
-#define PACKET_SOCKET_CLIENT_H
+#pragma once
 
 #include "ns3/application.h"
 #include "ns3/event-id.h"
@@ -110,4 +109,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PACKET_SOCKET_CLIENT_H */
+

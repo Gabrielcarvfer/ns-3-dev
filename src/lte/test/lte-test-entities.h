@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef LTE_TEST_ENTITIES_H
-#define LTE_TEST_ENTITIES_H
+#pragma once
 
 #include "ns3/simulator.h"
 #include "ns3/test.h"
@@ -471,4 +470,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LTE_TEST_MAC_H */
+

@@ -20,8 +20,7 @@
  *        Convert MacStatsCalculator in PhyTxStatsCalculator
  */
 
-#ifndef PHY_TX_STATS_CALCULATOR_H_
-#define PHY_TX_STATS_CALCULATOR_H_
+#pragma once
 
 #include "ns3/lte-stats-calculator.h"
 #include "ns3/nstime.h"
@@ -147,4 +146,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PHY_TX_STATS_CALCULATOR_H_ */
+

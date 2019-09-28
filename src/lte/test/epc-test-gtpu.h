@@ -18,8 +18,7 @@
  * Author: Jaume Nin <jaume.nin@cttc.cat>
  */
 
-#ifndef EPC_TEST_GTPU_H
-#define EPC_TEST_GTPU_H
+#pragma once
 
 #include "ns3/epc-gtpu-header.h"
 
@@ -61,4 +60,4 @@ private:
 };
 
 
-#endif /* EPC_TEST_GTPU_H */
+

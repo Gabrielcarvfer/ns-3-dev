@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSR_OPTION_HEADER_H
-#define DSR_OPTION_HEADER_H
+#pragma once
 
 #include <ostream>
 #include <algorithm>
@@ -1353,4 +1352,4 @@ static inline std::ostream & operator<< (std::ostream& os, const DsrOptionSRHead
 } // namespace dsr
 } // namespace ns3
 
-#endif /* DSR_OPTION_HEADER_H */
+

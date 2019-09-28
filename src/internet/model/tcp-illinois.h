@@ -25,8 +25,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#ifndef TCPILLINOIS_H
-#define TCPILLINOIS_H
+#pragma once
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -249,4 +248,4 @@ private:
 
 } // namespace ns3
 
-#endif // TCPILLINOIS_H
+

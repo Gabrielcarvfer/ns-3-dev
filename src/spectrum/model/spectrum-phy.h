@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef SPECTRUM_PHY_H
-#define SPECTRUM_PHY_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -142,4 +141,4 @@ private:
 
 
 
-#endif /* SPECTRUM_PHY_H */
+

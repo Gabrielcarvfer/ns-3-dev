@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef NET_DEVICE_CONTAINER_H
-#define NET_DEVICE_CONTAINER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -201,4 +200,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NET_DEVICE_CONTAINER_H */
+

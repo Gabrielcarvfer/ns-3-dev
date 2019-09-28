@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef RIPNG_H
-#define RIPNG_H
+#pragma once
 
 #include <list>
 
@@ -413,5 +412,5 @@ private:
 };
 
 } // namespace ns3
-#endif /* RIPNG_H */
+
 

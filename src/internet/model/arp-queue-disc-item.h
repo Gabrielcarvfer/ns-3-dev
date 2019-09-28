@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef ARP_QUEUE_DISC_ITEM_H
-#define ARP_QUEUE_DISC_ITEM_H
+#pragma once
 
 #include "ns3/packet.h"
 #include "ns3/queue-item.h"
@@ -108,4 +107,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ARP_QUEUE_DISC_ITEM_H */
+

@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef AMRR_WIFI_MANAGER_H
-#define AMRR_WIFI_MANAGER_H
+#pragma once
 
 #include "ns3/traced-value.h"
 #include "wifi-remote-station-manager.h"
@@ -160,4 +159,4 @@ private:
 
 } //namespace ns3
 
-#endif /* AMRR_WIFI_MANAGER_H */
+

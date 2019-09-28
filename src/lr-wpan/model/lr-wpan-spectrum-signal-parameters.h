@@ -18,8 +18,7 @@
  * Author: Gary Pei <guangyu.pei@boeing.com>
  */
 
-#ifndef LR_WPAN_SPECTRUM_SIGNAL_PARAMETERS_H
-#define LR_WPAN_SPECTRUM_SIGNAL_PARAMETERS_H
+#pragma once
 
 
 #include <ns3/spectrum-signal-parameters.h>
@@ -59,4 +58,4 @@ struct LrWpanSpectrumSignalParameters : public SpectrumSignalParameters
 }  // namespace ns3
 
 
-#endif /* LR_WPAN_SPECTRUM_SIGNAL_PARAMETERS_H */
+

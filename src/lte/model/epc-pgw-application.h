@@ -19,8 +19,7 @@
  *         (based on epc-sgw-pgw-application.h)
  */
 
-#ifndef EPC_PGW_APPLICATION_H
-#define EPC_PGW_APPLICATION_H
+#pragma once
 
 #include "ns3/virtual-net-device.h"
 #include "ns3/socket.h"
@@ -340,4 +339,4 @@ private:
 
 } // namespace ns3
 
-#endif // EPC_PGW_APPLICATION_H
+

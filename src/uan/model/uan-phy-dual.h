@@ -19,8 +19,7 @@
  *         Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#ifndef UAN_PHY_DUAL_H
-#define UAN_PHY_DUAL_H
+#pragma once
 
 #include "ns3/uan-phy.h"
 
@@ -279,4 +278,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* UAN_PHY_DUAL_H */
+

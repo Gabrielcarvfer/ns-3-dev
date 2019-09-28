@@ -18,8 +18,7 @@
  * Author: George F. Riley <riley@ece.gatech.edu>
  */
 
-#ifndef BULK_SEND_APPLICATION_H
-#define BULK_SEND_APPLICATION_H
+#pragma once
 
 #include "ns3/address.h"
 #include "ns3/application.h"
@@ -141,4 +140,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BULK_SEND_APPLICATION_H */
+

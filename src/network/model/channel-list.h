@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef CHANNEL_LIST_H
-#define CHANNEL_LIST_H
+#pragma once
 
 #include <vector>
 #include "ns3/ptr.h"
@@ -72,4 +71,4 @@ public:
 
 } // namespace ns3
 
-#endif /* CHANNEL_LIST_H */
+

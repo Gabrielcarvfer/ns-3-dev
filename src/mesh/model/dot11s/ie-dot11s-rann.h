@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef RANN_INFORMATION_ELEMENT_H
-#define RANN_INFORMATION_ELEMENT_H
+#pragma once
 
 #include "ns3/mac48-address.h"
 #include "ns3/mesh-information-element-vector.h"
@@ -135,4 +134,4 @@ std::ostream &operator << (std::ostream &os, const IeRann &rann);
 } // namespace dot11s
 } // namespace ns3
 
-#endif
+

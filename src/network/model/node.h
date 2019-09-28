@@ -18,8 +18,7 @@
  * Authors: George F. Riley<riley@ece.gatech.edu>
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef NODE_H
-#define NODE_H
+#pragma once
 
 #include <vector>
 
@@ -292,4 +291,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NODE_H */
+

@@ -25,8 +25,7 @@
  * - Budiarto Herman <budiarto.herman@magister.fi>
  */
 
-#ifndef LTE_ANR_H
-#define LTE_ANR_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/lte-rrc-sap.h>
@@ -239,4 +238,4 @@ private:
 } // end of namespace ns3
 
 
-#endif /* LTE_ANR_H */
+

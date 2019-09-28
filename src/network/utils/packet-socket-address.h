@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef PACKET_SOCKET_ADDRESS_H
-#define PACKET_SOCKET_ADDRESS_H
+#pragma once
 
 #include "ns3/ptr.h"
 #include "ns3/address.h"
@@ -130,4 +129,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PACKET_SOCKET_ADDRESS_H */
+

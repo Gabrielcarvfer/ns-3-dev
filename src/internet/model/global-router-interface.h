@@ -19,8 +19,7 @@
  *           Tom Henderson (tomhend@u.washington.edu)
  */
 
-#ifndef GLOBAL_ROUTER_INTERFACE_H
-#define GLOBAL_ROUTER_INTERFACE_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -911,4 +910,4 @@ private:
 
 } // namespace ns3
 
-#endif /* GLOBAL_ROUTER_INTERFACE_H */
+

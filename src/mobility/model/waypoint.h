@@ -17,8 +17,7 @@
  *
  * Author: Phillip Sitbon <phillip@sitbon.net>
  */
-#ifndef WAYPOINT_H
-#define WAYPOINT_H
+#pragma once
 
 #include "ns3/attribute.h"
 #include "ns3/attribute-helper.h"
@@ -66,5 +65,5 @@ operator >> (std::istream &is, Waypoint &waypoint);
 
 } // namespace ns3
 
-#endif /* WAYPOINT_H */
+
 

@@ -23,8 +23,7 @@
  * Author: Tom Herbert <therbert@google.com>
  */
 
-#ifndef DYNAMIC_QUEUE_LIMITS_H
-#define DYNAMIC_QUEUE_LIMITS_H
+#pragma once
 
 #include "queue-limits.h"
 #include "ns3/nstime.h"
@@ -110,4 +109,4 @@ private:
 
 } // namespace ns3
 
-#endif /* DYNAMIC_QUEUE_LIMITS_H */
+

@@ -21,8 +21,7 @@
  * Modified by: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef DOUBLE_PROBE_H
-#define DOUBLE_PROBE_H
+#pragma once
 
 #include "ns3/probe.h"
 #include "ns3/object.h"
@@ -106,4 +105,4 @@ private:
 
 } // namespace ns3
 
-#endif // DOUBLE_PROBE_H
+

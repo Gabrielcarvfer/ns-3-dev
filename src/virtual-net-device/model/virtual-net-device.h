@@ -18,8 +18,7 @@
  * Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt>
  */
 
-#ifndef VIRTUAL_NET_DEVICE_H
-#define VIRTUAL_NET_DEVICE_H
+#pragma once
 
 #include "ns3/address.h"
 #include "ns3/node.h"
@@ -172,5 +171,4 @@ private:
 
 } // namespace ns3
 
-#endif
 

@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef MOBILITY_HELPER_H
-#define MOBILITY_HELPER_H
+#pragma once
 
 #include <vector>
 #include "ns3/object-factory.h"
@@ -282,4 +281,4 @@ private:
 
 } // namespace ns3
 
-#endif /* MOBILITY_HELPER_H */
+

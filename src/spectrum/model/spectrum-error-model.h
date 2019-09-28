@@ -19,8 +19,7 @@
  */
 
 
-#ifndef SPECTRUM_ERROR_MODEL_H
-#define SPECTRUM_ERROR_MODEL_H
+#pragma once
 
 #include <ns3/spectrum-value.h>
 #include <ns3/ptr.h>
@@ -103,4 +102,4 @@ private:
 
 
 
-#endif /* SPECTRUM_ERROR_MODEL_H */
+

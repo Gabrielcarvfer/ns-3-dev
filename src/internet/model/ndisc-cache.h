@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef NDISC_CACHE_H
-#define NDISC_CACHE_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -460,5 +459,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* NDISC_CACHE_H */
+
 

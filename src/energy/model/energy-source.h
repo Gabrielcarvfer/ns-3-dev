@@ -24,8 +24,7 @@
  */
 
 
-#ifndef ENERGY_SOURCE_H
-#define ENERGY_SOURCE_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/ptr.h"
@@ -249,4 +248,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* ENERGY_SOURCE_H */
+

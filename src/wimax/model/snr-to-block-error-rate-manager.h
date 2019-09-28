@@ -20,8 +20,7 @@
  */
 
 
-#ifndef SNR_TO_BLOCK_ERROR_RATE_MANAGER_H
-#define SNR_TO_BLOCK_ERROR_RATE_MANAGER_H
+#pragma once
 
 #include "ns3/snr-to-block-error-rate-record.h"
 #include <vector>
@@ -111,4 +110,4 @@ private:
 };
 }
 
-#endif /* SNR_TO_BLOCK_ERROR_RATE_MANAGER_H */
+

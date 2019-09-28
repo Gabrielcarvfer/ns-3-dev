@@ -16,8 +16,7 @@
  * Authors: Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef BUG780_TEST_H
-#define BUG780_TEST_H
+#pragma once
 
 #include "ns3/test.h"
 #include "ns3/nstime.h"
@@ -61,4 +60,4 @@ private:
 }
 }
 
-#endif /* BUG780_TEST_H */
+

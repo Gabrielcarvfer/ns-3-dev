@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef PACKET_H
-#define PACKET_H
+#pragma once
 
 #include <stdint.h>
 #include "buffer.h"
@@ -856,4 +855,4 @@ Packet::GetSize (void) const
 
 } // namespace ns3
 
-#endif /* PACKET_H */
+

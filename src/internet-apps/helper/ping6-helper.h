@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef PING6_HELPER_H
-#define PING6_HELPER_H
+#pragma once
 
 #include <stdint.h>
 
@@ -113,5 +112,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* PING6_HELPER_H */
+
 

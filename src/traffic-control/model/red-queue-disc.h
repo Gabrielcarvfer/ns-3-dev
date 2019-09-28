@@ -58,8 +58,7 @@
  * [0] S.Floyd, K.Fall http://icir.org/floyd/papers/redsims.ps
  */
 
-#ifndef RED_QUEUE_DISC_H
-#define RED_QUEUE_DISC_H
+#pragma once
 
 #include "ns3/queue-disc.h"
 #include "ns3/nstime.h"
@@ -316,4 +315,4 @@ private:
 
 }; // namespace ns3
 
-#endif // RED_QUEUE_DISC_H
+

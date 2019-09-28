@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef ON_OFF_HELPER_H
-#define ON_OFF_HELPER_H
+#pragma once
 
 #include <stdint.h>
 #include <string>
@@ -128,5 +127,5 @@ private:
 
 } // namespace ns3
 
-#endif /* ON_OFF_HELPER_H */
+
 

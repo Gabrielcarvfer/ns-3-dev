@@ -18,8 +18,7 @@
  * Author: George F. Riley<riley@ece.gatech.edu>
  */
 
-#ifndef APPLICATION_H
-#define APPLICATION_H
+#pragma once
 
 #include "ns3/event-id.h"
 #include "ns3/nstime.h"
@@ -154,4 +153,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* APPLICATION_H */
+

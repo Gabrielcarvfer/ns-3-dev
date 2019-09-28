@@ -19,8 +19,7 @@
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#ifndef LTE_CONTROL_MESSAGES_H
-#define LTE_CONTROL_MESSAGES_H
+#pragma once
 
 #include <ns3/ptr.h>
 #include <ns3/simple-ref-count.h>
@@ -405,4 +404,4 @@ private:
 
 } // namespace ns3
 
-#endif  // LTE_CONTROL_MESSAGES_H
+

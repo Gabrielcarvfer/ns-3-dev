@@ -19,8 +19,7 @@
  * Author: Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#ifndef ENERGY_HARVESTER_HELPER_H
-#define ENERGY_HARVESTER_HELPER_H
+#pragma once
 
 #include "ns3/attribute.h"
 #include "ns3/object-factory.h"
@@ -95,4 +94,4 @@ private:
 
 } // namespace ns3
 
-#endif /* defined(ENERGY_HARVESTER_HELPER_H) */
+

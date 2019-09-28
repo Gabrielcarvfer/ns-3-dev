@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef FLAME_RTABLE_H
-#define FLAME_RTABLE_H
+#pragma once
 
 #include <map>
 #include "ns3/nstime.h"
@@ -138,4 +137,4 @@ private:
 
 } // namespace flame
 } // namespace ns3
-#endif /* FLAME_PROTOCOL_H */
+

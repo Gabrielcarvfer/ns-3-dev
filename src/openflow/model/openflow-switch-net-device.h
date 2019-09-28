@@ -21,8 +21,7 @@
  * This section documents the API of the ns-3 OpenFlow module. For a generic functional description, please refer to the ns-3 manual.
  */
 
-#ifndef OPENFLOW_SWITCH_NET_DEVICE_H
-#define OPENFLOW_SWITCH_NET_DEVICE_H
+#pragma once
 
 #include "ns3/simulator.h"
 #include "ns3/log.h"
@@ -515,4 +514,4 @@ private:
 
 } // namespace ns3
 
-#endif /* OPENFLOW_SWITCH_NET_DEVICE_H */
+

@@ -18,8 +18,7 @@
  * Author: Ghada Badawy <gbadawy@gmail.com>
  */
 
-#ifndef MPDU_AGGREGATOR_H
-#define MPDU_AGGREGATOR_H
+#pragma once
 
 #include "ns3/object.h"
 #include "wifi-mode.h"
@@ -190,4 +189,4 @@ private:
 
 }  //namespace ns3
 
-#endif /* MPDU_AGGREGATOR_H */
+

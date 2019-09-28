@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef MAC64_ADDRESS_H
-#define MAC64_ADDRESS_H
+#pragma once
 
 #include <stdint.h>
 #include <ostream>
@@ -175,4 +174,4 @@ std::istream& operator>> (std::istream& is, Mac64Address & address);
 
 } // namespace ns3
 
-#endif /* MAC64_ADDRESS_H */
+

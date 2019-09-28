@@ -18,8 +18,7 @@
  * Author: Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#ifndef ACOUSTIC_MODEM_ENERGY_MODEL_H
-#define ACOUSTIC_MODEM_ENERGY_MODEL_H
+#pragma once
 
 #include "ns3/device-energy-model.h"
 #include "ns3/nstime.h"
@@ -243,4 +242,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ACOUSTIC_MODEM_ENERGY_MODEL_H */
+

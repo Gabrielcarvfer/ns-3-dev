@@ -22,8 +22,7 @@
  *         Budiarto Herman <budiarto.herman@magister.fi>
  */
 
-#ifndef LTE_TEST_UE_MEASUREMENTS_H
-#define LTE_TEST_UE_MEASUREMENTS_H
+#pragma once
 
 #include <ns3/test.h>
 #include <ns3/lte-rrc-sap.h>
@@ -543,4 +542,4 @@ private:
 
 }; // end of class LteUeMeasurementsHandoverTestCase
 
-#endif /* LTE_TEST_UE_MEASUREMENTS_H */
+

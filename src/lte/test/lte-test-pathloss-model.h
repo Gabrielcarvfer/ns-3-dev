@@ -18,8 +18,7 @@
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#ifndef LTE_TEST_PATHLOSS_MODEL_H
-#define LTE_TEST_PATHLOSS_MODEL_H
+#pragma once
 
 #include "ns3/spectrum-value.h"
 
@@ -81,5 +80,5 @@ class LtePathlossModelSystemTestCase : public TestCase
     uint16_t m_mcsIndex; ///< the MCS index
 };
 
-#endif /* LTE_TEST_PATHLOSS_MODEL_H */
+
 

@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#ifndef PCAP_TEST_H
-#define PCAP_TEST_H
+#pragma once
 
 #include <sstream>
 #include <string>
@@ -53,4 +52,4 @@
   } while (false)
 
 
-#endif /* PCAP_TEST_H */
+

@@ -18,8 +18,7 @@
  * Author: Raj Bhattacharjea <raj.b@gatech.edu>
  */
 
-#ifndef TCP_HEADER_H
-#define TCP_HEADER_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -355,4 +354,4 @@ private:
 
 } // namespace ns3
 
-#endif /* TCP_HEADER */
+

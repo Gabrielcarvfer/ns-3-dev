@@ -17,8 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#ifndef MAC16_ADDRESS_H
-#define MAC16_ADDRESS_H
+#pragma once
 
 #include <stdint.h>
 #include <ostream>
@@ -168,4 +167,4 @@ std::istream& operator>> (std::istream& is, Mac16Address & address);
 
 } // namespace ns3
 
-#endif /* MAC16_ADDRESS_H */
+

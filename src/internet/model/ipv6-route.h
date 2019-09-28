@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_ROUTE_H
-#define IPV6_ROUTE_H
+#pragma once
 
 #include <list>
 #include <map>
@@ -240,5 +239,5 @@ std::ostream& operator<< (std::ostream& os, Ipv6MulticastRoute const& route);
 
 } /* namespace ns3 */
 
-#endif /* IPV6_ROUTE_H */
+
 

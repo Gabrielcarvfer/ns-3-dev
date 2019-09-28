@@ -21,8 +21,7 @@
 
 #ifdef NS3_CLICK
 
-#ifndef CLICK_INTERNET_STACK_HELPER_H
-#define CLICK_INTERNET_STACK_HELPER_H
+#pragma once
 
 #include "ns3/node-container.h"
 #include "ns3/net-device-container.h"
@@ -231,6 +230,6 @@ private:
 
 } // namespace ns3
 
-#endif /* CLICK_INTERNET_STACK_HELPER_H */
 
-#endif /* NS3_CLICK */
+
+

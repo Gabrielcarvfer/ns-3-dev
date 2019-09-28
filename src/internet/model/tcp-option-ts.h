@@ -18,8 +18,7 @@
  * Author: Adrian Sai-wah Tam <adrian.sw.tam@gmail.com>
  */
 
-#ifndef TCP_OPTION_TS_H
-#define TCP_OPTION_TS_H
+#pragma once
 
 #include "ns3/tcp-option.h"
 #include "ns3/timer.h"
@@ -107,4 +106,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* TCP_OPTION_TS */
+

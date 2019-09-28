@@ -17,8 +17,7 @@
  *
  * Author: Adrian Sai-wah Tam <adrian.sw.tam@gmail.com>
  */
-#ifndef TCPOPTIONRFC793_H
-#define TCPOPTIONRFC793_H
+#pragma once
 
 #include "ns3/tcp-option.h"
 
@@ -115,4 +114,4 @@ protected:
 
 } // namespace ns3
 
-#endif // TCPOPTIONRFC793_H
+

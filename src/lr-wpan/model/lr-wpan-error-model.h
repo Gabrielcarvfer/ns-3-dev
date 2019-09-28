@@ -17,8 +17,7 @@
  *
  * Author: Gary Pei <guangyu.pei@boeing.com>
  */
-#ifndef LR_WPAN_ERROR_MODEL_H
-#define LR_WPAN_ERROR_MODEL_H
+#pragma once
 
 #include <ns3/object.h>
 
@@ -63,4 +62,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LR_WPAN_ERROR_MODEL_H */
+

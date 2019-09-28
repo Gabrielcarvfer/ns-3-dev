@@ -24,8 +24,7 @@
  */
 
 
-#ifndef LTE_CHUNK_PROCESSOR_H
-#define LTE_CHUNK_PROCESSOR_H
+#pragma once
 
 #include <ns3/ptr.h>
 #include <ns3/nstime.h>
@@ -126,4 +125,4 @@ private:
 
 
 
-#endif /* LTE_CHUNK_PROCESSOR_H */
+

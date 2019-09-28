@@ -17,8 +17,7 @@
  *
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
-#ifndef SIMPLE_NETDEVICE_HELPER_H
-#define SIMPLE_NETDEVICE_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -187,4 +186,4 @@ private:
 
 } // namespace ns3
 
-#endif /* SIMPLE_NETDEVICE_HELPER_H */
+

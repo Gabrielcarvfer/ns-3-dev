@@ -20,8 +20,7 @@
  *         Mehdi Benamor <benamor.mehdi@ensi.rnu.tn>
  */
 
-#ifndef ICMPV6_L4_PROTOCOL_H
-#define ICMPV6_L4_PROTOCOL_H
+#pragma once
 
 #include <list>
 
@@ -560,5 +559,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* ICMPV6_L4_PROTOCOL_H */
+
 

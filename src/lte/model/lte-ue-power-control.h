@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_UE_POWER_CONTROL_H
-#define LTE_UE_POWER_CONTROL_H
+#pragma once
 
 #include <ns3/ptr.h>
 #include <ns3/traced-callback.h>
@@ -253,4 +252,4 @@ private:
 
 }
 
-#endif /* LTE_UE_POWER_CONTROL_H */
+

@@ -1,6 +1,5 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
-#ifndef IPV4_RAW_SOCKET_IMPL_H
-#define IPV4_RAW_SOCKET_IMPL_H
+#pragma once
 
 #include "ns3/socket.h"
 #include "ns3/ipv4-header.h"
@@ -114,4 +113,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV4_RAW_SOCKET_IMPL_H */
+

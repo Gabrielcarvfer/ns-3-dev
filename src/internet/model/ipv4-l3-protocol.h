@@ -18,8 +18,7 @@
 // Author: George F. Riley<riley@ece.gatech.edu>
 //
 
-#ifndef IPV4_L3_PROTOCOL_H
-#define IPV4_L3_PROTOCOL_H
+#pragma once
 
 #include <list>
 #include <map>
@@ -560,4 +559,4 @@ private:
 
 } // Namespace ns3
 
-#endif /* IPV4_L3_PROTOCOL_H */
+

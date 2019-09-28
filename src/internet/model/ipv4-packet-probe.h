@@ -21,8 +21,7 @@
  * Modified by: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef IPV4_PACKET_PROBE_H
-#define IPV4_PACKET_PROBE_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/callback.h"
@@ -127,4 +126,4 @@ private:
 
 } // namespace ns3
 
-#endif // IPV4_PACKET_PROBE_H
+

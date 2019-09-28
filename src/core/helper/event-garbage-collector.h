@@ -17,8 +17,7 @@
  *
  * Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt>
  */
-#ifndef EVENT_GARBAGE_COLLECTOR_H
-#define EVENT_GARBAGE_COLLECTOR_H
+#pragma once
 
 #include <set>
 #include "ns3/event-id.h"
@@ -95,4 +94,4 @@ private:
 
 } // namespace ns3
 
-#endif /* EVENT_GARBAGE_COLLECTOR_H */
+

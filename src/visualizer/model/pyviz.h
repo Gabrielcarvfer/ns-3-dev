@@ -20,8 +20,7 @@
  *
  * Author: Gustavo Carneiro  <gjc@inescporto.pt>
  */
-#ifndef NS3_PYVIZ_H
-#define NS3_PYVIZ_H
+#pragma once
 
 #include "ns3/nstime.h"
 #include "ns3/event-id.h"
@@ -414,4 +413,4 @@ private:
 
 }
 
-#endif /* NS3_PYVIZ_H */
+

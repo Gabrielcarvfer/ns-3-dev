@@ -19,8 +19,7 @@
  * modified by Tom Henderson for ns-3.14 release
  */
 
-#ifndef IPV6_ADDRESS_HELPER_H
-#define IPV6_ADDRESS_HELPER_H
+#pragma once
 
 #include <vector>
 
@@ -176,5 +175,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_ADDRESS_STATIC_H */
+
 

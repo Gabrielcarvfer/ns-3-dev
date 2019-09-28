@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.cat>
  */
 
-#ifndef EPC_S11_SAP_H
-#define EPC_S11_SAP_H
+#pragma once
 
 #include <ns3/address.h>
 #include <ns3/ptr.h>
@@ -393,5 +392,5 @@ void MemberEpcS11SapSgw<C>::DeleteBearerResponse (DeleteBearerResponseMessage ms
 
 } //namespace ns3
 
-#endif /* EPC_S11_SAP_H */
+
 

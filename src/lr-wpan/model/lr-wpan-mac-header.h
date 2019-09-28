@@ -35,8 +35,7 @@
  *    ++ - These fields are optional and of variable size
  */
 
-#ifndef LR_WPAN_MAC_HEADER_H
-#define LR_WPAN_MAC_HEADER_H
+#pragma once
 
 #include <ns3/header.h>
 #include <ns3/mac16-address.h>
@@ -478,4 +477,4 @@ private:
 
 }; // namespace ns-3
 
-#endif /* LR_WPAN_MAC_HEADER_H */
+

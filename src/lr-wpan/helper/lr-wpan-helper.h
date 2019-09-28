@@ -19,8 +19,7 @@
  *  Gary Pei <guangyu.pei@boeing.com>
  *  Tom Henderson <thomas.r.henderson@boeing.com>
  */
-#ifndef LR_WPAN_HELPER_H
-#define LR_WPAN_HELPER_H
+#pragma once
 
 #include <ns3/node-container.h>
 #include <ns3/lr-wpan-phy.h>
@@ -191,4 +190,4 @@ private:
 
 }
 
-#endif /* LR_WPAN_HELPER_H */
+

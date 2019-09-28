@@ -18,8 +18,7 @@
 
 /* taken from src/node/ipv4-routing-protocol.h and adapted to IPv6 */
 
-#ifndef IPV6_ROUTING_PROTOCOL_H
-#define IPV6_ROUTING_PROTOCOL_H
+#pragma once
 
 #include "ns3/packet.h"
 #include "ns3/callback.h"
@@ -201,5 +200,5 @@ public:
 
 } // namespace ns3
 
-#endif /* IPV6_ROUTING_PROTOCOL_H */
+
 

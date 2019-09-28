@@ -26,8 +26,7 @@
  *
  */
 
-#ifndef COBALT_H
-#define COBALT_H
+#pragma once
 
 #include "ns3/queue-disc.h"
 #include "ns3/nstime.h"
@@ -244,4 +243,4 @@ private:
 
 } // namespace ns3
 
-#endif /* COBALT_H */
+

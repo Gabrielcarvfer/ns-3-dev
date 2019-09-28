@@ -21,8 +21,7 @@
  * Modified by: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef TIME_PROBE_H
-#define TIME_PROBE_H
+#pragma once
 
 #include "ns3/probe.h"
 #include "ns3/object.h"
@@ -107,4 +106,4 @@ private:
 
 } // namespace ns3
 
-#endif // TIME_PROBE_H
+

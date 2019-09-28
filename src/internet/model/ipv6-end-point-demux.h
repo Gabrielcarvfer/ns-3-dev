@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_END_POINT_DEMUX_H
-#define IPV6_END_POINT_DEMUX_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -182,5 +181,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_END_POINT_DEMUX_H */
+
 

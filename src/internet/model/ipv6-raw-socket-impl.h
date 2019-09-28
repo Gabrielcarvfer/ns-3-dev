@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_RAW_SOCKET_IMPL_H
-#define IPV6_RAW_SOCKET_IMPL_H
+#pragma once
 
 #include <list>
 
@@ -238,5 +237,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_RAW_SOCKET_IMPL_H */
+
 

@@ -23,8 +23,7 @@
  *                            James P.G. Sterbenz <jpgs@ittc.ku.edu>, director
  */
 
-#ifndef TCP_OPTION_SACK_H
-#define TCP_OPTION_SACK_H
+#pragma once
 
 #include "ns3/tcp-option.h"
 #include "ns3/sequence-number.h"
@@ -118,4 +117,4 @@ std::ostream & operator<< (std::ostream & os,
 
 } // namespace ns3
 
-#endif /* TCP_OPTION_SACK */
+

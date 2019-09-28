@@ -19,8 +19,7 @@
  *         Claudio Freire <klaussfreire@sourceforge.net>
  */
 
-#ifndef PLANETLAB_FD_NET_DEVICE_HELPER_H
-#define PLANETLAB_FD_NET_DEVICE_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -102,4 +101,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* PLANETLAB_FD_NET_DEVICE_HELPER_H */
+

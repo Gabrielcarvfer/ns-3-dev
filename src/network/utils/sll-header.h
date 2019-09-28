@@ -17,8 +17,7 @@
  *
  * Author: Matthieu Coudron <matthieu.coudron@lip6.fr>
  */
-#ifndef SLL_HEADER_H
-#define SLL_HEADER_H
+#pragma once
 
 #include "ns3/buffer.h"
 #include "ns3/header.h"
@@ -126,4 +125,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* SLL_HEADER_H */
+

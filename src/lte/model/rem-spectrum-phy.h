@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef REM_SPECTRUM_PHY_H
-#define REM_SPECTRUM_PHY_H
+#pragma once
 
 
 #include <ns3/spectrum-value.h>
@@ -144,4 +143,4 @@ private:
 
 
 
-#endif /* REM_SPECTRUM_PHY_H */
+

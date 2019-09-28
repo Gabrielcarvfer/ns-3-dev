@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#ifndef TCPHYBLA_H
-#define TCPHYBLA_H
+#pragma once
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -89,4 +88,4 @@ private:
 
 } // namespace ns3
 
-#endif // TCPHYBLA_H
+

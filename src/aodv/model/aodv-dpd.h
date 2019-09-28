@@ -20,8 +20,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef AODV_DPD_H
-#define AODV_DPD_H
+#pragma once
 
 #include "aodv-id-cache.h"
 #include "ns3/nstime.h"
@@ -73,4 +72,4 @@ private:
 }
 }
 
-#endif /* AODV_DPD_H */
+

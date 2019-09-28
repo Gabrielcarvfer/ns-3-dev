@@ -19,8 +19,7 @@
  *         Claudio Freire <klaussfreire@sourceforge.net>
  */
 
-#ifndef FD_NET_DEVICE_H
-#define FD_NET_DEVICE_H
+#pragma once
 
 #include "ns3/address.h"
 #include "ns3/callback.h"
@@ -444,5 +443,5 @@ private:
 
 } // namespace ns3
 
-#endif /* FD_NET_DEVICE_H */
+
 

@@ -15,8 +15,7 @@
  *
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef CHANNEL_COORDINATOR_H
-#define CHANNEL_COORDINATOR_H
+#pragma once
 #include "ns3/nstime.h"
 #include "ns3/object.h"
 #include "ns3/event-id.h"
@@ -251,4 +250,4 @@ private:
 };
 
 }
-#endif /* CHANNEL_COORDINATOR_H */
+

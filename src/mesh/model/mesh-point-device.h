@@ -19,8 +19,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef L2ROUTING_NET_DEVICE_H
-#define L2ROUTING_NET_DEVICE_H
+#pragma once
 
 #include "ns3/node.h"
 #include "ns3/net-device.h"
@@ -203,4 +202,3 @@ private:
   Statistics m_fwdStats; ///< forward statistics
 };
 } // namespace ns3
-#endif

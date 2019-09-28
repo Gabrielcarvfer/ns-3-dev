@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef WIMAX_TLV_H
-#define WIMAX_TLV_H
+#pragma once
 
 #define WIMAX_TLV_EXTENDED_LENGTH_MASK 0x80
 
@@ -592,4 +591,4 @@ private:
 
 }
 
-#endif /* WIMAX_TLV_H */
+

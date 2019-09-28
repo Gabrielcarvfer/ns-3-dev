@@ -15,8 +15,7 @@
  *
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef CHANNEL_MANAGER_H
-#define CHANNEL_MANAGER_H
+#pragma once
 #include <map>
 #include <vector>
 #include "ns3/object.h"
@@ -164,4 +163,4 @@ private:
 };
 
 }
-#endif /* CHANNEL_MANAGER_H */
+

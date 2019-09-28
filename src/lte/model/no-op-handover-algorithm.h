@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef NO_OP_HANDOVER_ALGORITHM_H
-#define NO_OP_HANDOVER_ALGORITHM_H
+#pragma once
 
 #include <ns3/lte-handover-algorithm.h>
 #include <ns3/lte-handover-management-sap.h>
@@ -79,4 +78,4 @@ private:
 } // end of namespace ns3
 
 
-#endif /* NO_OP_HANDOVER_ALGORITHM_H */
+

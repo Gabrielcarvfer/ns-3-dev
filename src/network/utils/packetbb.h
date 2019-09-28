@@ -22,8 +22,7 @@
  * (MANET) Packet/PbbMessage Format
  * See: http://tools.ietf.org/html/rfc5444 for details */
 
-#ifndef PACKETBB_H
-#define PACKETBB_H
+#pragma once
 
 #include <list>
 
@@ -1924,4 +1923,4 @@ public:
 
 } /* namespace ns3 */
 
-#endif /* PACKETBB_H */
+

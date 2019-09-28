@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef OUTPUT_STREAM_WRAPPER_H
-#define OUTPUT_STREAM_WRAPPER_H
+#pragma once
 
 #include <fstream>
 #include "ns3/object.h"
@@ -99,4 +98,4 @@ private:
 
 } // namespace ns3
 
-#endif /* OUTPUT_STREAM_WRAPPER_H */
+

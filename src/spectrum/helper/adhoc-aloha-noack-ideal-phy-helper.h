@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef ADHOC_ALOHA_NOACK_IDEAL_PHY_HELPER_H
-#define ADHOC_ALOHA_NOACK_IDEAL_PHY_HELPER_H
+#pragma once
 
 #include <string>
 #include <ns3/attribute.h>
@@ -151,4 +150,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* ADHOC_ALOHA_NOACK_IDEAL_PHY_HELPER_H */
+

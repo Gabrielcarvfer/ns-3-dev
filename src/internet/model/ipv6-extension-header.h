@@ -18,8 +18,7 @@
  * Author: David Gross <gdavid.devel@gmail.com>
  */
 
-#ifndef IPV6_EXTENSION_HEADER_H
-#define IPV6_EXTENSION_HEADER_H
+#pragma once
 
 #include <vector>
 #include <list>
@@ -741,5 +740,5 @@ public:
 
 } // namespace ns3
 
-#endif /* IPV6_EXTENSION_HEADER_H */
+
 

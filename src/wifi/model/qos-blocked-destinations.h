@@ -19,8 +19,7 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#ifndef QOS_BLOCKED_DESTINATIONS_H
-#define QOS_BLOCKED_DESTINATIONS_H
+#pragma once
 
 #include <set>
 #include "ns3/simple-ref-count.h"
@@ -74,4 +73,4 @@ private:
 
 } //namespace ns3
 
-#endif /* QOS_BLOCKED_DESTINATIONS_H */
+

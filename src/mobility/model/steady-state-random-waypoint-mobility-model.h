@@ -17,8 +17,7 @@
  * 
  * Author: Denis Fakhriev <fakhriev@iitp.ru>
  */
-#ifndef STEADY_STATE_RANDOM_WAYPOINT_MOBILITY_MODEL_H
-#define STEADY_STATE_RANDOM_WAYPOINT_MOBILITY_MODEL_H
+#pragma once
 
 #include "constant-velocity-helper.h"
 #include "mobility-model.h"
@@ -115,4 +114,4 @@ private:
 
 } // namespace ns3
 
-#endif /* STEADY_STATE_RANDOM_WAYPOINT_MOBILITY_MODEL_H */
+

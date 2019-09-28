@@ -18,8 +18,7 @@
  * Authors: Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef PMP_REGRESSION_H
-#define PMP_REGRESSION_H
+#pragma once
 #include "ns3/test.h"
 #include "ns3/node-container.h"
 #include "ns3/nstime.h"
@@ -63,5 +62,5 @@ private:
   void CheckResults ();
   void DoRun ();
 };
-#endif /* PMP_REGRESSION_H */
+
 

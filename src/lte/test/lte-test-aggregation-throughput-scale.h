@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_AGGREGATION_THROUGHPUT_SCALE_H
-#define LTE_AGGREGATION_THROUGHPUT_SCALE_H
+#pragma once
 
 #include <ns3/test.h>
 
@@ -73,4 +72,4 @@ private:
   uint16_t m_actualCellId; ///< Cell ID UE has attached to
 };
 
-#endif /* LTE_AGGREGATION_THROUGHPUT_SCALE_H */
+

@@ -18,8 +18,7 @@
 // Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt> <gjcarneiro@gmail.com>
 //
 
-#ifndef IPV4_FLOW_PROBE_H
-#define IPV4_FLOW_PROBE_H
+#pragma once
 
 #include "ns3/flow-probe.h"
 #include "ns3/ipv4-flow-classifier.h"
@@ -123,4 +122,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV4_FLOW_PROBE_H */
+

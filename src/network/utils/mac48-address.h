@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef MAC48_ADDRESS_H
-#define MAC48_ADDRESS_H
+#pragma once
 
 #include <stdint.h>
 #include <ostream>
@@ -218,4 +217,4 @@ std::istream& operator>> (std::istream& is, Mac48Address & address);
 
 } // namespace ns3
 
-#endif /* MAC48_ADDRESS_H */
+

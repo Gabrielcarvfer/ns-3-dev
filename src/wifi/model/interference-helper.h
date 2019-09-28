@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef INTERFERENCE_HELPER_H
-#define INTERFERENCE_HELPER_H
+#pragma once
 
 #include "ns3/nstime.h"
 #include "wifi-tx-vector.h"
@@ -382,4 +381,4 @@ private:
 
 } //namespace ns3
 
-#endif /* INTERFERENCE_HELPER_H */
+

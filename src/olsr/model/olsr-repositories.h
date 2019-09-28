@@ -21,8 +21,7 @@
  */
 
 
-#ifndef OLSR_REPOSITORIES_H
-#define OLSR_REPOSITORIES_H
+#pragma once
 
 #include <set>
 #include <vector>
@@ -308,4 +307,4 @@ typedef std::vector<Association>                Associations; //!< Association S
 }
 }  // namespace ns3, olsr
 
-#endif /* OLSR_REPOSITORIES_H */
+

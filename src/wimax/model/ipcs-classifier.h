@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef IPCS_CLASSIFIER_H
-#define IPCS_CLASSIFIER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -55,4 +54,4 @@ public:
 };
 } // namespace ns3
 
-#endif /* IPCS_CLASSIFIER_H */
+

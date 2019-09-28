@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef RADVD_PREFIX_H
-#define RADVD_PREFIX_H 
+#pragma once
 
 #include <stdint.h>
 
@@ -177,5 +176,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* RADVD_PREFIX_H */
+
 

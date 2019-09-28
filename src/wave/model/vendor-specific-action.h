@@ -16,8 +16,7 @@
  *
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef Vendor_Specific_Action_H
-#define Vendor_Specific_Action_H
+#pragma once
 
 #include <ostream>
 #include <map>
@@ -243,4 +242,4 @@ private:
 static std::vector<OrganizationIdentifier> OrganizationIdentifiers; ///< the OIs
 }
 
-#endif /* Vendor_Specific_Action_H */
+

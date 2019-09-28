@@ -18,8 +18,7 @@
 
 // Define an object to create a grid topology.
 
-#ifndef POINT_TO_POINT_GRID_HELPER_H
-#define POINT_TO_POINT_GRID_HELPER_H
+#pragma once
 
 #include <vector>
 
@@ -157,4 +156,4 @@ private:
 
 } // namespace ns3
 
-#endif /* POINT_TO_POINT_GRID_HELPER_H */
+

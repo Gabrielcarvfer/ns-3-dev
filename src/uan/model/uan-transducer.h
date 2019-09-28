@@ -18,8 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#ifndef UAN_TRANSDUCER_H
-#define UAN_TRANSDUCER_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/packet.h"
@@ -254,4 +253,4 @@ public:
 
 } // namespace ns3
 
-#endif /* UAN_TRANSDUCER_H */
+

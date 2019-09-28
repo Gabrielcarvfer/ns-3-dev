@@ -19,8 +19,7 @@
  *          Pavel Boyko <boyko.iitp.ru>
  */
 
-#ifndef MESH_INFORMATION_ELEMENT_VECTOR_H
-#define MESH_INFORMATION_ELEMENT_VECTOR_H
+#pragma once
 
 #include "ns3/wifi-information-element-vector.h"
 
@@ -45,4 +44,3 @@ public:
 
 }
 
-#endif

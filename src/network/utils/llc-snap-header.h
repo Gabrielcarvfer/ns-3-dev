@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef LLC_SNAP_HEADER_H
-#define LLC_SNAP_HEADER_H
+#pragma once
 
 #include <stdint.h>
 #include <string>
@@ -71,4 +70,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LLC_SNAP_HEADER_H */
+

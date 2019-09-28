@@ -20,8 +20,7 @@
  * 
  */
 
-#ifndef BUILDINGS_PROPAGATION_LOSS_MODEL_H_
-#define BUILDINGS_PROPAGATION_LOSS_MODEL_H_
+#pragma once
 
 #include "ns3/nstime.h"
 #include "ns3/propagation-loss-model.h"
@@ -107,4 +106,4 @@ protected:
 
 }
 
-#endif /* BUILDINGS_PROPAGATION_LOSS_MODEL_H_ */
+

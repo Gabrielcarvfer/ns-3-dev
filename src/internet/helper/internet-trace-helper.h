@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef INTERNET_TRACE_HELPER_H
-#define INTERNET_TRACE_HELPER_H
+#pragma once
 
 #include "ns3/assert.h"
 #include "ns3/ipv4-interface-container.h"
@@ -748,4 +747,4 @@ private:
 
 } // namespace ns3
 
-#endif /* INTERNET_TRACE_HELPER_H */
+

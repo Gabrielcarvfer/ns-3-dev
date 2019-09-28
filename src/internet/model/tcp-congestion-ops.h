@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#ifndef TCPCONGESTIONOPS_H
-#define TCPCONGESTIONOPS_H
+#pragma once
 
 #include "ns3/tcp-socket-state.h"
 
@@ -219,4 +218,4 @@ protected:
 
 } // namespace ns3
 
-#endif // TCPCONGESTIONOPS_H
+

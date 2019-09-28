@@ -18,8 +18,7 @@
 
 // Define an object to create a dumbbell topology.
 
-#ifndef POINT_TO_POINT_DUMBBELL_HELPER_H
-#define POINT_TO_POINT_DUMBBELL_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -189,4 +188,4 @@ private:
 
 } // namespace ns3
 
-#endif /* POINT_TO_POINT_DUMBBELL_HELPER_H */
+

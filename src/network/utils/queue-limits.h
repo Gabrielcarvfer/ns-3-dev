@@ -19,8 +19,7 @@
  *          Stefano Avallone <stefano.avallone@unina.it>
  */
 
-#ifndef QUEUE_LIMITS_H
-#define QUEUE_LIMITS_H
+#pragma once
 
 #include "ns3/object.h"
 
@@ -80,4 +79,4 @@ public:
 
 } // namespace ns3
 
-#endif /* QUEUE_LIMITS_H */
+

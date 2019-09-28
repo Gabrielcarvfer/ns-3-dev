@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef WIFI_PHY_STATE_HELPER_H
-#define WIFI_PHY_STATE_HELPER_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/callback.h"
@@ -362,4 +361,4 @@ private:
 
 } //namespace ns3
 
-#endif /* WIFI_PHY_STATE_HELPER_H */
+

@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef FREQS_ISM2400MHZ_RES1MHZ_H
-#define FREQS_ISM2400MHZ_RES1MHZ_H
+#pragma once
 
 
 #include <ns3/spectrum-value.h>
@@ -36,4 +35,4 @@ extern Ptr<SpectrumModel> SpectrumModelIsm2400MhzRes1Mhz;
 
 
 
-#endif /* FREQS_ISM2400MHZ_RES1MHZ_H */
+

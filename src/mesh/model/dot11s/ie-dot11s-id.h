@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef MESH_ID_H
-#define MESH_ID_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/buffer.h"
@@ -87,4 +86,4 @@ ATTRIBUTE_HELPER_HEADER (IeMeshId);
   
 } // namespace dot11s
 } // namespace ns3
-#endif /* MESH_ID_H */
+

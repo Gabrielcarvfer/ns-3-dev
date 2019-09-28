@@ -19,8 +19,7 @@
  *         Michele Muccio <michelemuccio@virgilio.it>
  */
 
-#ifndef SIXLOWPANHEADER_H_
-#define SIXLOWPANHEADER_H_
+#pragma once
 
 #include "ns3/header.h"
 #include "ns3/ipv6-address.h"
@@ -1238,4 +1237,4 @@ std::ostream & operator<< (std::ostream & os, SixLowPanUdpNhcExtension const &he
 
 }
 
-#endif /* SIXLOWPANHEADER_H_ */
+

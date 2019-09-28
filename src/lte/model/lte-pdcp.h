@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef LTE_PDCP_H
-#define LTE_PDCP_H
+#pragma once
 
 #include "ns3/traced-value.h"
 #include "ns3/trace-source-accessor.h"
@@ -196,4 +195,4 @@ private:
 
 } // namespace ns3
 
-#endif // LTE_PDCP_H
+

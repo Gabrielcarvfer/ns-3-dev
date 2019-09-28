@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef RECTANGLE_H
-#define RECTANGLE_H
+#pragma once
 
 #include "ns3/attribute.h"
 #include "ns3/attribute-helper.h"
@@ -98,4 +97,4 @@ ATTRIBUTE_HELPER_HEADER (Rectangle);
 
 } // namespace ns3
 
-#endif /* RECTANGLE_H */
+

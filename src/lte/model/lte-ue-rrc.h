@@ -24,8 +24,7 @@
  *          Vignesh Babu <ns3-dev@esk.fraunhofer.de> (RLF extensions)
  */
 
-#ifndef LTE_UE_RRC_H
-#define LTE_UE_RRC_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/packet.h>
@@ -1331,4 +1330,4 @@ public:
 
 } // namespace ns3
 
-#endif // LTE_UE_RRC_H
+

@@ -18,8 +18,7 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef MESH_PEERING_PROTOCOL_H
-#define MESH_PEERING_PROTOCOL_H
+#pragma once
 
 #include "ns3/mesh-information-element-vector.h"
 
@@ -52,4 +51,4 @@ private:
 };
 } // namespace dot11s
 } // namespace ns3
-#endif
+

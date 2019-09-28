@@ -18,8 +18,7 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#ifndef BLOCK_ACK_MANAGER_H
-#define BLOCK_ACK_MANAGER_H
+#pragma once
 
 #include <map>
 #include "ns3/nstime.h"
@@ -534,4 +533,4 @@ private:
 
 } //namespace ns3
 
-#endif /* BLOCK_ACK_MANAGER_H */
+

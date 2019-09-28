@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef ISOTROPIC_ANTENNA_MODEL_H
-#define ISOTROPIC_ANTENNA_MODEL_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -57,4 +56,4 @@ protected:
 } // namespace ns3
 
 
-#endif // ISOTROPIC_ANTENNA_MODEL_H
+

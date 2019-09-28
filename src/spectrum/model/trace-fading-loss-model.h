@@ -20,8 +20,7 @@
  */
 
 
-#ifndef TRACE_FADING_LOSS_MODEL_H
-#define TRACE_FADING_LOSS_MODEL_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -145,4 +144,4 @@ private:
 
 } // namespace ns3
 
-#endif /* TRACE_FADING_LOSS_MODEL_H */
+

@@ -25,8 +25,7 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#ifndef AODVPACKET_H
-#define AODVPACKET_H
+#pragma once
 
 #include <iostream>
 #include "ns3/header.h"
@@ -630,4 +629,4 @@ std::ostream & operator<< (std::ostream & os, RerrHeader const &);
 }  // namespace aodv
 }  // namespace ns3
 
-#endif /* AODVPACKET_H */
+

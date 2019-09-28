@@ -18,8 +18,7 @@
  * Author: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef GNUPLOT_HELPER_H
-#define GNUPLOT_HELPER_H
+#pragma once
 
 #include <map>
 #include <utility>
@@ -217,4 +216,4 @@ private:
 
 } // namespace ns3
 
-#endif // GNUPLOT_HELPER_H
+

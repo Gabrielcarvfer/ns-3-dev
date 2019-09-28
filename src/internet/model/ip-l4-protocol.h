@@ -21,8 +21,7 @@
 // NS3 - Layer 4 Protocol base class
 // George F. Riley, Georgia Tech, Spring 2007
 
-#ifndef IP_L4_PROTOCOL_H
-#define IP_L4_PROTOCOL_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/callback.h"
@@ -181,4 +180,4 @@ public:
 
 } // Namespace ns3
 
-#endif
+

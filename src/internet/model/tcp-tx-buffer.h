@@ -19,8 +19,7 @@
  * Original author: Adrian Sai-wah Tam <adrian.sw.tam@gmail.com>
  */
 
-#ifndef TCP_TX_BUFFER_H
-#define TCP_TX_BUFFER_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/traced-value.h"
@@ -636,4 +635,4 @@ std::ostream & operator<< (std::ostream & os, TcpTxItem const & item);
 
 } // namespace ns3
 
-#endif /* TCP_TX_BUFFER_H */
+

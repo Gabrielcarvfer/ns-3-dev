@@ -18,8 +18,7 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#ifndef ENERGY_MODEL_HELPER_H
-#define ENERGY_MODEL_HELPER_H
+#pragma once
 
 #include "ns3/attribute.h"
 #include "ns3/object-factory.h"
@@ -169,4 +168,4 @@ private:
 
 } // namespace ns3
 
-#endif  /* ENERGY_MODEL_HELPER_H */
+

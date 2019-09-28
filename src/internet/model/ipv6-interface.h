@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_INTERFACE_H
-#define IPV6_INTERFACE_H
+#pragma once
 
 #include <list>
 #include "ns3/ptr.h"
@@ -386,5 +385,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_INTERFACE_H */
+
 

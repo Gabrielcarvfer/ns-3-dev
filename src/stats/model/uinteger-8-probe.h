@@ -21,8 +21,7 @@
  * Modified by: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef UINTEGER_8_PROBE_H
-#define UINTEGER_8_PROBE_H
+#pragma once
 
 #include "ns3/callback.h"
 #include "ns3/probe.h"
@@ -102,4 +101,4 @@ private:
 
 } // namespace ns3
 
-#endif // UINTEGER_8_PROBE_H
+

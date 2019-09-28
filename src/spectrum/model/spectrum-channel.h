@@ -19,8 +19,7 @@
  */
 
 
-#ifndef SPECTRUM_CHANNEL_H
-#define SPECTRUM_CHANNEL_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/nstime.h>
@@ -201,4 +200,4 @@ protected:
 }
 
 
-#endif /* SPECTRUM_CHANNEL_H */
+

@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_ADDRESS_H
-#define IPV6_ADDRESS_H
+#pragma once
 
 #include <stdint.h>
 #include <cstring>
@@ -628,5 +627,5 @@ public:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_ADDRESS_H */
+
 

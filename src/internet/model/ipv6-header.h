@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_HEADER_H
-#define IPV6_HEADER_H
+#pragma once
 
 #include "ns3/header.h"
 #include "ns3/ipv6-address.h"
@@ -312,5 +311,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_HEADER_H */
+
 

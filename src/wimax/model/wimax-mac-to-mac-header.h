@@ -18,8 +18,7 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  *
  */
-#ifndef WIMAX_MAC_TO_MAC_HEADER_H
-#define WIMAX_MAC_TO_MAC_HEADER_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -63,5 +62,4 @@ private:
   uint32_t m_len; ///< length
 };
 };
-#endif
 

@@ -17,8 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef QUEUE_DISC_H
-#define QUEUE_DISC_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/traced-value.h"
@@ -743,4 +742,3 @@ std::ostream& operator<< (std::ostream& os, const QueueDisc::Stats &stats);
 
 } // namespace ns3
 
-#endif /* QueueDisc */

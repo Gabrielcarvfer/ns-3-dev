@@ -19,8 +19,7 @@
  *                              <amine.ismail@udcast.com>
  */
 
-#ifndef SIMPLE_OFDM_SEND_PARAM_H
-#define SIMPLE_OFDM_SEND_PARAM_H
+#pragma once
 
 #include <list>
 #include "wimax-channel.h"
@@ -145,4 +144,4 @@ private:
 };
 } // namespace ns3
 
-#endif /* SIMPLE_OFDM_SEND_PARAM_H */
+

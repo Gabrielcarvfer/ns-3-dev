@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef ADDRESS_H
-#define ADDRESS_H
+#pragma once
 
 #include <stdint.h>
 #include <ostream>
@@ -286,4 +285,4 @@ std::istream& operator>> (std::istream& is, Address & address);
 
 } // namespace ns3
 
-#endif /* ADDRESS_H */
+

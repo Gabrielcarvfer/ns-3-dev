@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef THREE_GPP_HTTP_CLIENT_H
-#define THREE_GPP_HTTP_CLIENT_H
+#pragma once
 
 #include <ns3/application.h>
 #include <ns3/address.h>
@@ -423,4 +422,4 @@ private:
 }  // end of `namespace ns3`
 
 
-#endif /* THREE_GPP_HTTP_CLIENT_H */
+

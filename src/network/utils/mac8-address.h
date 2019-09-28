@@ -18,8 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#ifndef MAC8_ADDRESS_H
-#define MAC8_ADDRESS_H
+#pragma once
 
 #include "ns3/address.h"
 #include <iostream>
@@ -180,4 +179,4 @@ std::istream& operator>> (std::istream& is, Mac8Address & address);
 
 } // namespace ns3
 
-#endif /* MAC8_ADDRESS_H */
+

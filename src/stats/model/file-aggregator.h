@@ -21,8 +21,7 @@
  *
  */
 
-#ifndef FILE_AGGREGATOR_H
-#define FILE_AGGREGATOR_H
+#pragma once
 
 #include <fstream>
 #include <map>
@@ -386,4 +385,4 @@ private:
 
 } // namespace ns3
 
-#endif // FILE_AGGREGATOR_H
+

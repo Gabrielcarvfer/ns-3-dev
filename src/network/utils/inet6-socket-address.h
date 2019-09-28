@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef INET6_SOCKET_ADDRESS_H
-#define INET6_SOCKET_ADDRESS_H
+#pragma once
 
 #include <stdint.h>
 
@@ -138,4 +137,4 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* INET6_SOCKET_ADDRESS_H */
+

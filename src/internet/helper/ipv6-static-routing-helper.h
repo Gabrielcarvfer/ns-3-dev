@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef IPV6_STATIC_ROUTING_HELPER_H
-#define IPV6_STATIC_ROUTING_HELPER_H
+#pragma once
 
 #include "ns3/ipv6.h"
 #include "ns3/ipv6-static-routing.h"
@@ -153,5 +152,5 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV6_STATIC_ROUTING_HELPER_H */
+
 

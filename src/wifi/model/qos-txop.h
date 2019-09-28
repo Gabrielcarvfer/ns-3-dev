@@ -20,8 +20,7 @@
  *          Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#ifndef QOS_TXOP_H
-#define QOS_TXOP_H
+#pragma once
 
 #include "ns3/traced-value.h"
 #include "block-ack-manager.h"
@@ -620,4 +619,4 @@ private:
 
 } //namespace ns3
 
-#endif /* QOS_TXOP_H */
+

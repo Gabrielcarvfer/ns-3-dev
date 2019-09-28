@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef EPC_ENB_S1_SAP_H
-#define EPC_ENB_S1_SAP_H
+#pragma once
 
 #include <list>
 #include <ns3/eps-bearer.h>
@@ -280,4 +279,4 @@ void MemberEpcEnbS1SapUser<C>::PathSwitchRequestAcknowledge (PathSwitchRequestAc
 
 } // namespace ns3
 
-#endif // EPC_ENB_S1_SAP_H
+

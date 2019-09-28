@@ -19,8 +19,7 @@
  */
 
 
-#ifndef LTE_AS_SAP_H
-#define LTE_AS_SAP_H
+#pragma once
 
 #include <stdint.h>
 #include <ns3/ptr.h>
@@ -290,4 +289,4 @@ MemberLteAsSapUser<C>::NotifyConnectionReleased ()
 
 } // namespace ns3
 
-#endif // LTE_AS_SAP_H
+

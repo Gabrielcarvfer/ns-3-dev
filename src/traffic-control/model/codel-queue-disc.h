@@ -25,8 +25,7 @@
  * Ported to ns-3 by: Andrew McGregor <andrewmcgr@gmail.com>
  */
 
-#ifndef CODEL_H
-#define CODEL_H
+#pragma once
 
 #include "ns3/queue-disc.h"
 #include "ns3/nstime.h"
@@ -210,4 +209,4 @@ private:
 
 } // namespace ns3
 
-#endif /* CODEL_H */
+

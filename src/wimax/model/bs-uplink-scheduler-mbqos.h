@@ -20,8 +20,7 @@
  *
  */
 
-#ifndef UPLINK_SCHEDULER_MBQOS_H
-#define UPLINK_SCHEDULER_MBQOS_H
+#pragma once
 
 #include <stdint.h>
 #include "ul-mac-messages.h"
@@ -312,4 +311,4 @@ private:
 
 } // namespace ns3
 
-#endif /* UPLINK_SCHEDULER_MBQOS_H */
+

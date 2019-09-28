@@ -17,8 +17,7 @@
  *
  */
 
-#ifndef NS3_DISTRIBUTED_SIMULATOR_IMPL_H
-#define NS3_DISTRIBUTED_SIMULATOR_IMPL_H
+#pragma once
 
 #include "ns3/simulator-impl.h"
 #include "ns3/scheduler.h"
@@ -162,4 +161,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NS3_DISTRIBUTED_SIMULATOR_IMPL_H */
+

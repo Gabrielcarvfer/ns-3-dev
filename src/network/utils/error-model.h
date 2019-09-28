@@ -60,8 +60,7 @@
  *         James P.G. Sterbenz <jpgs@ittc.ku.edu>, director 
  */
 
-#ifndef ERROR_MODEL_H
-#define ERROR_MODEL_H
+#pragma once
 
 #include <list>
 #include "ns3/object.h"
@@ -483,4 +482,4 @@ private:
 };
 
 } // namespace ns3
-#endif
+

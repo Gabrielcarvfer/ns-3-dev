@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef HALF_DUPLEX_IDEAL_PHY_H
-#define HALF_DUPLEX_IDEAL_PHY_H
+#pragma once
 
 
 #include <ns3/spectrum-value.h>
@@ -244,4 +243,4 @@ private:
 }
 
 
-#endif /* HALF_DUPLEX_IDEAL_PHY_H */
+

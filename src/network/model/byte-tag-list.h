@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef BYTE_TAG_LIST_H
-#define BYTE_TAG_LIST_H
+#pragma once
 
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
@@ -267,4 +266,4 @@ ByteTagList::Adjust (int32_t adjustment)
 
 } // namespace ns3
 
-#endif /* BYTE_TAG_LIST_H */
+

@@ -18,8 +18,7 @@
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#ifndef LENA_TEST_PHY_ERROR_MODEL_H
-#define LENA_TEST_PHY_ERROR_MODEL_H
+#pragma once
 
 #include <ns3/simulator.h>
 #include <ns3/test.h>
@@ -135,4 +134,4 @@ public:
   LenaTestPhyErrorModelSuite ();
 };
 
-#endif /* LENA_TEST_PHY_ERROR_MODEL_H */
+

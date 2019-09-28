@@ -20,8 +20,7 @@
  */
 
 
-#ifndef LTE_RRC_PROTOCOL_REAL_H
-#define LTE_RRC_PROTOCOL_REAL_H
+#pragma once
 
 #include <stdint.h>
 #include <map>
@@ -389,4 +388,4 @@ private:
 }
 
 
-#endif // LTE_RRC_PROTOCOL_REAL_H
+

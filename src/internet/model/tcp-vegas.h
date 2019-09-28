@@ -24,8 +24,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#ifndef TCPVEGAS_H
-#define TCPVEGAS_H
+#pragma once
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -167,4 +166,4 @@ private:
 
 } // namespace ns3
 
-#endif // TCPVEGAS_H
+

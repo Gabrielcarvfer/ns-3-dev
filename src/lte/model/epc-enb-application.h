@@ -19,8 +19,7 @@
  *         Nicola Baldo <nbaldo@cttc.cat>
  */
 
-#ifndef EPC_ENB_APPLICATION_H
-#define EPC_ENB_APPLICATION_H
+#pragma once
 
 #include <ns3/address.h>
 #include <ns3/socket.h>
@@ -340,5 +339,5 @@ private:
 
 } //namespace ns3
 
-#endif /* EPC_ENB_APPLICATION_H */
+
 

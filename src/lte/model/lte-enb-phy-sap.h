@@ -20,8 +20,7 @@
 
 
 
-#ifndef LTE_ENB_PHY_SAP_H
-#define LTE_ENB_PHY_SAP_H
+#pragma once
 
 #include <ns3/packet.h>
 #include <ns3/ff-mac-common.h>
@@ -132,4 +131,4 @@ public:
 } // namespace ns3
 
 
-#endif // LTE_ENB_PHY_SAP_H
+

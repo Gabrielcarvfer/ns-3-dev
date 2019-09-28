@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#ifndef IPV4_INTERFACE_CONTAINER_H
-#define IPV4_INTERFACE_CONTAINER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -220,4 +219,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV4_INTERFACE_CONTAINER_H */
+

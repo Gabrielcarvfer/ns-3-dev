@@ -21,8 +21,7 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef WAVE_MAC_HELPER_H
-#define WAVE_MAC_HELPER_H
+#pragma once
 #include "ns3/wifi-mac-helper.h"
 
 namespace ns3 {
@@ -165,4 +164,4 @@ public:
 
 }
 
-#endif /* WAVE_MAC_HELPER_H */
+

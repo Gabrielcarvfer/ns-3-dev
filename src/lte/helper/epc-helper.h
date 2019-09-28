@@ -20,8 +20,7 @@
  *         Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef EPC_HELPER_H
-#define EPC_HELPER_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/ipv4-address-helper.h>
@@ -179,4 +178,4 @@ public:
 
 } // namespace ns3
 
-#endif // EPC_HELPER_H
+

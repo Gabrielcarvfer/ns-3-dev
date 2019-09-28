@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_TEST_UPLINK_POWER_CONTROL_H
-#define LTE_TEST_UPLINK_POWER_CONTROL_H
+#pragma once
 
 #include "ns3/spectrum-value.h"
 #include "ns3/spectrum-test.h"
@@ -186,4 +185,4 @@ private:
   virtual void DoRun (void);
 };
 
-#endif /* LTE_TEST_UPLINK_POWER_CONTROL_H */
+

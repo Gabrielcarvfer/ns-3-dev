@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_TEST_CQI_GENERATION_H
-#define LTE_TEST_CQI_GENERATION_H
+#pragma once
 
 #include "ns3/test.h"
 
@@ -143,4 +142,4 @@ private:
 
 };
 
-#endif /* LTE_TEST_CQI_GENERATION_H */
+

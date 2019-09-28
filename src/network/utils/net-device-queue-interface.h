@@ -17,8 +17,7 @@
  *
  * Author: Stefano Avallone <stefano.avallone@.unina.it>
  */
-#ifndef NET_DEVICE_QUEUE_INTERFACE_H
-#define NET_DEVICE_QUEUE_INTERFACE_H
+#pragma once
 
 #include <vector>
 #include <functional>
@@ -383,4 +382,4 @@ NetDeviceQueue::PacketDiscarded (QueueType* queue, Ptr<const typename QueueType:
 
 } // namespace ns3
 
-#endif /* NET_DEVICE_QUEUE_INTERFACE_H */
+

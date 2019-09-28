@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef WIFI_TIMING_ELEMENT_H
-#define WIFI_TIMING_ELEMENT_H
+#pragma once
 
 #include <vector>
 #include "ns3/nstime.h"
@@ -174,4 +173,4 @@ bool operator== (const IeBeaconTimingUnit & a, const IeBeaconTimingUnit & b);
 std::ostream &operator << (std::ostream &os, const IeBeaconTiming &beaconTiming);
 } // namespace dot11s
 } // namespace ns3
-#endif
+

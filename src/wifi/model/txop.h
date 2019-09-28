@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef TXOP_H
-#define TXOP_H
+#pragma once
 
 #include "ns3/traced-value.h"
 #include "mac-low-transmission-parameters.h"
@@ -533,4 +532,4 @@ protected:
 
 } //namespace ns3
 
-#endif /* TXOP_H */
+

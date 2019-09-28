@@ -19,8 +19,7 @@
  */
 
 
-#ifndef SPECTRUM_SIGNAL_PARAMETERS_H
-#define SPECTRUM_SIGNAL_PARAMETERS_H
+#pragma once
 
 
 #include <ns3/simple-ref-count.h>
@@ -118,4 +117,4 @@ struct SpectrumSignalParameters : public SimpleRefCount<SpectrumSignalParameters
 
 
 
-#endif /* SPECTRUM_SIGNAL_PARAMETERS_H */
+

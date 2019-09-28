@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef THREE_GPP_HTTP_HEADER_H
-#define THREE_GPP_HTTP_HEADER_H
+#pragma once
 
 #include <ns3/header.h>
 #include <ns3/nstime.h>
@@ -138,4 +137,4 @@ private:
 } // end of `namespace ns3`
 
 
-#endif /* THREE_GPP_HTTP_HEADER_H */
+

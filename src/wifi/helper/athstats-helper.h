@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef ATHSTATS_HELPER_H
-#define ATHSTATS_HELPER_H
+#pragma once
 
 #include "ns3/wifi-phy-state.h"
 
@@ -232,4 +231,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ATHSTATS_HELPER_H */
+

@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef IPV4_ROUTING_TABLE_ENTRY_H
-#define IPV4_ROUTING_TABLE_ENTRY_H
+#pragma once
 
 #include <list>
 #include <vector>
@@ -291,4 +290,4 @@ bool operator== (const Ipv4MulticastRoutingTableEntry a, const Ipv4MulticastRout
 
 } // namespace ns3
 
-#endif /* IPV4_ROUTING_TABLE_ENTRY_H */
+

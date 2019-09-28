@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef IPV4_RAW_SOCKET_FACTORY_IMPL_H
-#define IPV4_RAW_SOCKET_FACTORY_IMPL_H
+#pragma once
 
 #include "ns3/ipv4-raw-socket-factory.h"
 
@@ -40,4 +39,4 @@ public:
 
 } // namespace ns3
 
-#endif /* IPV4_RAW_SOCKET_FACTORY_IMPL_H */
+

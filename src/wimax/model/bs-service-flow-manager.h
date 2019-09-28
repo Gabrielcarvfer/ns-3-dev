@@ -18,8 +18,7 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#ifndef BS_SERVICE_FLOW_MANAGER_H
-#define BS_SERVICE_FLOW_MANAGER_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/event-id.h"
@@ -148,4 +147,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BS_SERVICE_FLOW_MANAGER_H */
+

@@ -21,8 +21,7 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef WIFI_802_11P_HELPER_H
-#define WIFI_802_11P_HELPER_H
+#pragma once
 #include "ns3/wifi-helper.h"
 
 namespace ns3 {
@@ -77,4 +76,4 @@ public:
 
 }
 
-#endif /* WIFI_802_11P_HELPER_H */
+

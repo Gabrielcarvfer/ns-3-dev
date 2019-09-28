@@ -26,8 +26,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef AODVNEIGHBOR_H
-#define AODVNEIGHBOR_H
+#pragma once
 
 #include <vector>
 #include "ns3/simulator.h"
@@ -173,4 +172,4 @@ private:
 }  // namespace aodv
 }  // namespace ns3
 
-#endif /* AODVNEIGHBOR_H */
+

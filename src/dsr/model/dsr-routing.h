@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSR_ROUTING_H
-#define DSR_ROUTING_H
+#pragma once
 
 #include <map>
 #include <list>
@@ -840,4 +839,4 @@ private:
 }  /* namespace dsr */
 }  /* namespace ns3 */
 
-#endif /* DSR_ROUTING_H */
+

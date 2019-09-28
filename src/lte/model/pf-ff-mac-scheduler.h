@@ -18,8 +18,7 @@
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#ifndef PF_FF_MAC_SCHEDULER_H
-#define PF_FF_MAC_SCHEDULER_H
+#pragma once
 
 #include <ns3/lte-common.h>
 #include <ns3/ff-mac-csched-sap.h>
@@ -417,4 +416,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PF_FF_MAC_SCHEDULER_H */
+

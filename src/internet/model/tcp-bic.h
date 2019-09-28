@@ -17,8 +17,7 @@
  *
  */
 
-#ifndef TCPBIC_H
-#define TCPBIC_H
+#pragma once
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -142,4 +141,4 @@ private:
 };
 
 } // namespace ns3
-#endif // TCPBIC_H
+

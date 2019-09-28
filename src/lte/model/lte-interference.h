@@ -19,8 +19,7 @@
  */
 
 
-#ifndef LTE_INTERFERENCE_H
-#define LTE_INTERFERENCE_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/packet.h>
@@ -181,4 +180,4 @@ private:
 
 
 
-#endif /* LTE_INTERFERENCE_H */
+

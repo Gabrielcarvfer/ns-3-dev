@@ -18,8 +18,7 @@
  * Author: Jahanzeb Farooq <jahanzeb.farooq@sophia.inria.fr>
  */
 
-#ifndef PACKET_BURST_H
-#define PACKET_BURST_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -89,4 +88,4 @@ private:
 };
 } // namespace ns3
 
-#endif /* PACKET_BURST */
+

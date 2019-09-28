@@ -18,8 +18,7 @@
  * Author: Mitch Watrous (watrous@u.washington.edu)
  */
 
-#ifndef TIME_SERIES_ADAPTOR_H
-#define TIME_SERIES_ADAPTOR_H
+#pragma once
 
 #include "ns3/data-collection-object.h"
 #include "ns3/object.h"
@@ -126,4 +125,4 @@ private:
 
 } // namespace ns3
 
-#endif // TIME_SERIES_ADAPTOR_H
+

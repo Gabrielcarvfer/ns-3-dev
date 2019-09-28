@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef NS3_REMOTE_CHANNEL_BUNDLE
-#define NS3_REMOTE_CHANNEL_BUNDLE
+#pragma once
 
 #include "null-message-simulator-impl.h"
 
@@ -148,4 +147,3 @@ private:
 
 }
 
-#endif

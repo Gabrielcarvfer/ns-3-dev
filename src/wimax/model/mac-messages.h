@@ -27,8 +27,7 @@
  *This dl-mac-messages.h and ul-mac-messages.h files.
  */
 
-#ifndef MANAGEMENT_MESSAGE_TYPE_H
-#define MANAGEMENT_MESSAGE_TYPE_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -96,13 +95,10 @@ private:
 
 } // namespace ns3
 
-#endif /* MANAGEMENT_MESSAGE_TYPE_H */
+
 
 
 // ---------------------------------------------------------------------
-
-#ifndef RNG_RSP_H
-#define RNG_RSP_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -348,12 +344,9 @@ private:
 
 } // namespace ns3
 
-#endif /* RNG_RSP_H */
+
 
 // ---------------------------------------------------------------------
-
-#ifndef DSA_REQ_H
-#define DSA_REQ_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -442,12 +435,9 @@ private:
 
 } // namespace ns3
 
-#endif /* DSA_REQ_H */
+
 
 // ---------------------------------------------------------------------
-
-#ifndef DSA_RSP_H
-#define DSA_RSP_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -550,12 +540,9 @@ private:
 
 } // namespace ns3
 
-#endif /* DSA_RSP_H */
+
 
 // ---------------------------------------------------------------------
-
-#ifndef DSA_ACK_H
-#define DSA_ACK_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -620,12 +607,9 @@ private:
 
 } // namespace ns3
 
-#endif /* DSA_ACK_H */
+
 
 // ---------------------------------------------------------------------
-
-#ifndef RNG_REQ_H
-#define RNG_REQ_H
 
 #include <stdint.h>
 #include "ns3/header.h"
@@ -705,5 +689,5 @@ private:
 
 } // namespace ns3
 
-#endif /* RNG_REQ_H */
+
 

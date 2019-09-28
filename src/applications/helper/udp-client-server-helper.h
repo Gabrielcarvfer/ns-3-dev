@@ -17,8 +17,7 @@
  *
  * Author: Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
-#ifndef UDP_CLIENT_SERVER_HELPER_H
-#define UDP_CLIENT_SERVER_HELPER_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/application-container.h"
@@ -210,4 +209,4 @@ private:
 
 } // namespace ns3
 
-#endif /* UDP_CLIENT_SERVER_H */
+

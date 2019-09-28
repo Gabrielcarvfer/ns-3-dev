@@ -18,8 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#ifndef UAN_HEADER_COMMON_H
-#define UAN_HEADER_COMMON_H
+#pragma once
 
 #include "ns3/header.h"
 #include "ns3/nstime.h"
@@ -147,4 +146,4 @@ private:
 
 } // namespace ns3
 
-#endif /* UAN_HEADER_COMMON_H */
+

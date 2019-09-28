@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#ifndef IPV4_ROUTE_H
-#define IPV4_ROUTE_H
+#pragma once
 
 #include <list>
 #include <map>
@@ -166,4 +165,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV4_ROUTE_H */
+

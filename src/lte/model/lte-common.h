@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
-#ifndef LTE_COMMON_H
-#define LTE_COMMON_H
+#pragma once
 
 #include "ns3/uinteger.h"
 #include <cmath>
@@ -391,4 +390,4 @@ public:
 }; // namespace ns3
 
 
-#endif /* LTE_COMMON_H_ */
+

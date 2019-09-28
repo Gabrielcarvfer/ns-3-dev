@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef WIFI_PREP_INFORMATION_ELEMENT_H
-#define WIFI_PREP_INFORMATION_ELEMENT_H
+#pragma once
 
 #include "ns3/mac48-address.h"
 #include "ns3/mesh-information-element-vector.h"
@@ -165,5 +164,5 @@ bool operator== (const IePrep & a, const IePrep & b);
 std::ostream &operator << (std::ostream &os, const IePrep &prep);
 } // namespace dot11s
 } // namespace ns3
-#endif
+
 

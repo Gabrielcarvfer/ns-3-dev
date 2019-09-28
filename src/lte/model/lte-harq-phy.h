@@ -19,8 +19,7 @@
  */
 
 
-#ifndef LTE_HARQ_PHY_MODULE_H
-#define LTE_HARQ_PHY_MODULE_H
+#pragma once
 
 
 
@@ -159,4 +158,4 @@ private:
 
 }
 
-#endif /* LTE_HARQ_PHY_MODULE_H */
+

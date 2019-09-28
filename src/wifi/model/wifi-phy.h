@@ -19,8 +19,7 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#ifndef WIFI_PHY_H
-#define WIFI_PHY_H
+#pragma once
 
 #include "ns3/event-id.h"
 #include "ns3/deprecated.h"
@@ -1935,4 +1934,4 @@ std::ostream& operator<< (std::ostream& os, WifiPhyState state);
 
 } //namespace ns3
 
-#endif /* WIFI_PHY_H */
+

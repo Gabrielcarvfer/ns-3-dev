@@ -17,8 +17,7 @@
 //
 //
 
-#ifndef IPV4_GLOBAL_ROUTING_H
-#define IPV4_GLOBAL_ROUTING_H
+#pragma once
 
 #include <list>
 #include <stdint.h>
@@ -277,4 +276,4 @@ private:
 
 } // Namespace ns3
 
-#endif /* IPV4_GLOBAL_ROUTING_H */
+

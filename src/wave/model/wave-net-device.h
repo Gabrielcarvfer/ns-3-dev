@@ -17,8 +17,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *         Junling Bu <linlinjavaer@gmail.com>
  */
-#ifndef WAVE_NET_DEVICE_H
-#define WAVE_NET_DEVICE_H
+#pragma once
 
 #include <map>
 #include <vector>
@@ -410,4 +409,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WAVE_NET_DEVICE_H */
+

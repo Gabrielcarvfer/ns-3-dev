@@ -19,8 +19,7 @@
  */
 
 
-#ifndef COMPONENT_CARRIER_H
-#define COMPONENT_CARRIER_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/packet.h>
@@ -210,4 +209,4 @@ protected:
 
 
 
-#endif /* COMPONENT_CARRIER_H */
+

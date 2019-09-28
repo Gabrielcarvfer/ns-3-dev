@@ -18,8 +18,7 @@
  * Author:
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
-#ifndef LR_WPAN_LQI_TAG_H
-#define LR_WPAN_LQI_TAG_H
+#pragma once
 
 #include <ns3/tag.h>
 
@@ -75,4 +74,4 @@ private:
 
 
 }
-#endif /* LR_WPAN_LQI_TAG_H */
+

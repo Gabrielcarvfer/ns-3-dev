@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef RADVD_HELPER_H
-#define RADVD_HELPER_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -111,5 +110,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* RADVD_HELPER_H */
+
 

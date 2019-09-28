@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef THREE_GPP_HTTP_SERVER_H
-#define THREE_GPP_HTTP_SERVER_H
+#pragma once
 
 #include <ns3/ptr.h>
 #include <ns3/simple-ref-count.h>
@@ -561,4 +560,4 @@ private:
 }  // end of `namespace ns3`
 
 
-#endif /* THREE_GPP_HTTP_SERVER_H */
+

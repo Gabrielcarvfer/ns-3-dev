@@ -18,8 +18,7 @@
  * Authors: Josh Pelkey <jpelkey@gatech.edu>
  */
 
-#ifndef IPV4_NIX_VECTOR_ROUTING_H
-#define IPV4_NIX_VECTOR_ROUTING_H
+#pragma once
 
 #include <map>
 
@@ -247,4 +246,4 @@ private:
 };
 } // namespace ns3
 
-#endif /* IPV4_NIX_VECTOR_ROUTING_H */
+

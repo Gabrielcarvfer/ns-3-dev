@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef NS3_PARALLEL_COMMUNICATION_INTERFACE_H
-#define NS3_PARALLEL_COMMUNICATION_INTERFACE_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -96,4 +95,4 @@ private:
 
 } // namespace ns3
 
-#endif /* NS3_PARALLEL_COMMUNICATION_INTERFACE_H */
+

@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef ANTENNA_MODEL_H
-#define ANTENNA_MODEL_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -72,4 +71,4 @@ public:
 
 } // namespace ns3
 
-#endif // ANTENNA_MODEL_H
+

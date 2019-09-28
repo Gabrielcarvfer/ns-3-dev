@@ -18,8 +18,7 @@
  * Authors: Pavel Boyko <boyko@iitp.ru>, written after OlsrHelper by Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef AODV_HELPER_H
-#define AODV_HELPER_H
+#pragma once
 
 #include "ns3/object-factory.h"
 #include "ns3/node.h"
@@ -81,4 +80,4 @@ private:
 
 }
 
-#endif /* AODV_HELPER_H */
+

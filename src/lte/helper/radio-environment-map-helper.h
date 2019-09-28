@@ -19,8 +19,7 @@
  */
 
 
-#ifndef RADIO_ENVIRONMENT_MAP_HELPER_H
-#define RADIO_ENVIRONMENT_MAP_HELPER_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -157,4 +156,4 @@ private:
 
 } // end of `namespace ns3`
 
-#endif /* RADIO_ENVIRONMENT_MAP_HELPER_H */
+

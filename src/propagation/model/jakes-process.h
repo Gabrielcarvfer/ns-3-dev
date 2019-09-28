@@ -17,8 +17,7 @@
  *
  * Author: Kirill Andreev <andreev@telum.ru>, Alexander Sofronov <sofronov@telum.ru>
  */
-#ifndef DOPPLER_PROCESS_H
-#define DOPPLER_PROCESS_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/nstime.h"
@@ -130,4 +129,4 @@ private:
   Ptr<const JakesPropagationLossModel> m_jakes; //!< pointer to the propagation loss model
 };
 } // namespace ns3
-#endif // DOPPLER_PROCESS_H
+

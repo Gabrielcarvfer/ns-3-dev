@@ -18,8 +18,7 @@
  * Author: Jahanzeb Farooq <jahanzeb.farooq@sophia.inria.fr>
  */
 
-#ifndef WIMAX_MAC_QUEUE_H
-#define WIMAX_MAC_QUEUE_H
+#pragma once
 
 #include <queue>
 #include <stdint.h>
@@ -275,4 +274,4 @@ public:
 
 } // namespace ns3
 
-#endif /* WIMAX_MAC_QUEUE_H */
+

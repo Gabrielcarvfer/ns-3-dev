@@ -18,8 +18,7 @@
  * Author: Raj Bhattacharjea <raj.b@gatech.edu>
  */
 
-#ifndef TCP_L4_PROTOCOL_H
-#define TCP_L4_PROTOCOL_H
+#pragma once
 
 #include <stdint.h>
 
@@ -367,4 +366,4 @@ private:
 
 } // namespace ns3
 
-#endif /* TCP_L4_PROTOCOL_H */
+

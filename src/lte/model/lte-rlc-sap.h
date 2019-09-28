@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef LTE_RLC_SAP_H
-#define LTE_RLC_SAP_H
+#pragma once
 
 #include "ns3/packet.h"
 
@@ -159,4 +158,4 @@ void LteRlcSpecificLteRlcSapUser<C>::ReceivePdcpPdu (Ptr<Packet> p)
 
 } // namespace ns3
 
-#endif // LTE_RLC_SAP_H
+

@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef BUFFER_H
-#define BUFFER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -1082,4 +1081,4 @@ Buffer::End (void) const
 
 } // namespace ns3
 
-#endif /* BUFFER_H */
+

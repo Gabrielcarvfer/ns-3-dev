@@ -20,8 +20,7 @@
  * Modified by: Marco Miozzo <mmiozzo@cttc.es> (introduce physical error model)
  */
 
-#ifndef LTE_SPECTRUM_PHY_H
-#define LTE_SPECTRUM_PHY_H
+#pragma once
 
 #include <ns3/event-id.h>
 #include <ns3/spectrum-value.h>
@@ -559,4 +558,4 @@ private:
 
 }
 
-#endif /* LTE_SPECTRUM_PHY_H */
+

@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef RIP_H
-#define RIP_H
+#pragma once
 
 #include <list>
 
@@ -407,5 +406,5 @@ private:
 };
 
 } // namespace ns3
-#endif /* RIP_H */
+
 

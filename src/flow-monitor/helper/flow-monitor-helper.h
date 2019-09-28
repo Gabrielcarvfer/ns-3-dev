@@ -17,8 +17,7 @@
 //
 // Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt> <gjcarneiro@gmail.com>
 //
-#ifndef FLOW_MONITOR_HELPER_H
-#define FLOW_MONITOR_HELPER_H
+#pragma once
 
 #include "ns3/node-container.h"
 #include "ns3/object-factory.h"
@@ -136,4 +135,4 @@ private:
 } // namespace ns3
 
 
-#endif /* FLOW_MONITOR_HELPER_H */
+

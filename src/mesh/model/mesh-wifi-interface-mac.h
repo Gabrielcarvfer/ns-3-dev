@@ -19,8 +19,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef MESH_WIFI_INTERFACE_MAC_H
-#define MESH_WIFI_INTERFACE_MAC_H
+#pragma once
 
 #include <stdint.h>
 #include <map>
@@ -258,4 +257,4 @@ private:
 
 } // namespace ns3
 
-#endif /* MESH_WIFI_INTERFACE_MAC_H */
+

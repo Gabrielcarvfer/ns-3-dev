@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef LTE_RLC_AM_H
-#define LTE_RLC_AM_H
+#pragma once
 
 #include <ns3/event-id.h>
 #include <ns3/lte-rlc-sequence-number.h>
@@ -236,4 +235,4 @@ private:
 
 } // namespace ns3
 
-#endif // LTE_RLC_AM_H
+

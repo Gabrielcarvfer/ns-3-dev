@@ -18,8 +18,7 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#ifndef BLOCK_ACK_AGREEMENT_H
-#define BLOCK_ACK_AGREEMENT_H
+#pragma once
 
 #include "ns3/mac48-address.h"
 #include "ns3/event-id.h"
@@ -174,4 +173,4 @@ protected:
 
 } //namespace ns3
 
-#endif /* BLOCK_ACK_AGREEMENT_H */
+

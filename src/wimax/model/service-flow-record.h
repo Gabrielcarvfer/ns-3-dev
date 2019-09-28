@@ -18,8 +18,7 @@
  * Author: Jahanzeb Farooq <jahanzeb.farooq@sophia.inria.fr>
  */
 
-#ifndef SERVICE_FLOW_RECORD_H
-#define SERVICE_FLOW_RECORD_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/nstime.h"
@@ -251,4 +250,4 @@ private:
 
 } // namespace ns3
 
-#endif /* SERVICE_FLOW_RECORD_H */
+

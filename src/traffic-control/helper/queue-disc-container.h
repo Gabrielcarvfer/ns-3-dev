@@ -18,8 +18,7 @@
  * Author: Stefano Avallone <stavallo@unina.it>
  */
 
-#ifndef QUEUE_DISC_CONTAINER_H
-#define QUEUE_DISC_CONTAINER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -168,4 +167,4 @@ private:
 
 } // namespace ns3
 
-#endif /* QUEUE_DISC_CONTAINER_H */
+

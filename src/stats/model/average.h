@@ -19,8 +19,7 @@
  * Corrections and extensions: Timo Bingmann <tbns@idlebox.net>
  */
 
-#ifndef AVERAGE_H
-#define AVERAGE_H
+#pragma once
 #include <cmath>
 #include <ostream>
 #include <limits>
@@ -140,4 +139,4 @@ std::ostream & operator<< (std::ostream & os, Average<T> const & x)
   return os;
 }
 }
-#endif /* AVERAGE_H */
+

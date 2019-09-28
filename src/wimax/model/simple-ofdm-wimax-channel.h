@@ -19,8 +19,7 @@
  *                              <amine.ismail@udcast.com>
  */
 
-#ifndef SIMPLE_OFDM_WIMAX_CHANNEL_H
-#define SIMPLE_OFDM_WIMAX_CHANNEL_H
+#pragma once
 
 #include <list>
 #include "wimax-channel.h"
@@ -129,4 +128,4 @@ private:
 
 } // namespace ns3
 
-#endif /* SIMPLE_OFDM_WIMAX_CHANNEL_H */
+

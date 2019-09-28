@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef APPLICATION_CONTAINER_H
-#define APPLICATION_CONTAINER_H
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -229,4 +228,4 @@ private:
 
 } // namespace ns3
 
-#endif /* APPLICATION_CONTAINER_H */
+

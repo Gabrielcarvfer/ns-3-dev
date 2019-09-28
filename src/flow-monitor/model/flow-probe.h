@@ -18,8 +18,7 @@
 // Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt> <gjcarneiro@gmail.com>
 //
 
-#ifndef FLOW_PROBE_H
-#define FLOW_PROBE_H
+#pragma once
 
 #include <map>
 #include <vector>
@@ -111,4 +110,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* FLOW_PROBE_H */
+

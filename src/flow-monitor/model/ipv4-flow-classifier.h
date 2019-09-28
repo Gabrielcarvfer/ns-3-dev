@@ -18,8 +18,7 @@
 // Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt> <gjcarneiro@gmail.com>
 //
 
-#ifndef IPV4_FLOW_CLASSIFIER_H
-#define IPV4_FLOW_CLASSIFIER_H
+#pragma once
 
 #include <stdint.h>
 #include <map>
@@ -122,4 +121,4 @@ bool operator == (const Ipv4FlowClassifier::FiveTuple &t1, const Ipv4FlowClassif
 
 } // namespace ns3
 
-#endif /* IPV4_FLOW_CLASSIFIER_H */
+

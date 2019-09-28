@@ -20,8 +20,7 @@
  *                               <amine.ismail@UDcast.com>
  */
 
-#ifndef CONNECTION_MANAGER_H
-#define CONNECTION_MANAGER_H
+#pragma once
 
 #include <stdint.h>
 #include "cid.h"
@@ -107,5 +106,5 @@ private:
 
 } // namespace ns3
 
-#endif /* CONNECTION_MANAGER_H */
+
 

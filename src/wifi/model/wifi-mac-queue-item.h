@@ -21,8 +21,7 @@
  *          Stefano Avallone <stavallo@unina.it>
  */
 
-#ifndef WIFI_MAC_QUEUE_ITEM_H
-#define WIFI_MAC_QUEUE_ITEM_H
+#pragma once
 
 #include "ns3/nstime.h"
 #include "wifi-mac-header.h"
@@ -119,4 +118,4 @@ std::ostream& operator<< (std::ostream& os, const WifiMacQueueItem &item);
 
 } //namespace ns3
 
-#endif /* WIFI_MAC_QUEUE_ITEM_H */
+

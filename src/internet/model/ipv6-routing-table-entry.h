@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_ROUTING_TABLE_ENTRY_H
-#define IPV6_ROUTING_TABLE_ENTRY_H
+#pragma once
 
 #include <list>
 #include <vector>
@@ -384,5 +383,5 @@ std::ostream& operator<< (std::ostream& os, Ipv6MulticastRoutingTableEntry const
 
 } /* namespace ns3 */
 
-#endif /* IPV6_ROUTING_TABLE_ENTRY_H */
+
 

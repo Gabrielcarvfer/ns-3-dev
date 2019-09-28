@@ -18,8 +18,7 @@
  * Author: Manuel Requena <manuel.requena@cttc.es>
  */
 
-#ifndef EPC_MME_APPLICATION_H
-#define EPC_MME_APPLICATION_H
+#pragma once
 
 #include "ns3/application.h"
 #include "ns3/socket.h"
@@ -237,4 +236,4 @@ private:
 
 } // namespace ns3
 
-#endif // EPC_MME_APPLICATION_H
+

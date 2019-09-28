@@ -22,8 +22,7 @@
  *          Vignesh Babu <ns3-dev@esk.fraunhofer.de> (RLF extensions)
  */
 
-#ifndef LTE_UE_PHY_H
-#define LTE_UE_PHY_H
+#pragma once
 
 
 #include <ns3/lte-phy.h>
@@ -815,4 +814,4 @@ private:
 
 }
 
-#endif /* LTE_UE_PHY_H */
+

@@ -19,8 +19,7 @@
  *         Gustavo Carneiro <gjc@inescporto.pt>
  */
 
-#ifndef IPV4_STATIC_ROUTING_H
-#define IPV4_STATIC_ROUTING_H
+#pragma once
 
 #include <list>
 #include <utility>
@@ -431,4 +430,4 @@ private:
 
 } // Namespace ns3
 
-#endif /* IPV4_STATIC_ROUTING_H */
+

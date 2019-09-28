@@ -19,8 +19,7 @@
  *         Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#ifndef WIMAX_CONNECTION_H
-#define WIMAX_CONNECTION_H
+#pragma once
 
 #include <stdint.h>
 #include <ostream>
@@ -159,4 +158,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WIMAX_CONNECTION_H */
+

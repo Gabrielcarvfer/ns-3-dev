@@ -20,8 +20,7 @@
  *         Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef IPV6_INTERFACE_CONTAINER_H
-#define IPV6_INTERFACE_CONTAINER_H
+#pragma once
 
 #include <stdint.h>
 
@@ -216,5 +215,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_INTERFACE_CONTAINER_H */
+
 

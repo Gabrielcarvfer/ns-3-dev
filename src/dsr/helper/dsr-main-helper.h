@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSR_MAIN_HELPER_H
-#define DSR_MAIN_HELPER_H
+#pragma once
 
 #include "ns3/object-factory.h"
 #include "ns3/node.h"
@@ -89,4 +88,4 @@ private:
 
 } // namespace ns3
 
-#endif /* DSR_MAIN_HELPER_H */
+

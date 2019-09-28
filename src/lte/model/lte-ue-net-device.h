@@ -22,8 +22,7 @@
  *          Biljana Bojovic <biljana.bojovic@cttc.es> (Carrier Aggregation)
  */
 
-#ifndef LTE_UE_NET_DEVICE_H
-#define LTE_UE_NET_DEVICE_H
+#pragma once
 
 #include "ns3/lte-net-device.h"
 #include "ns3/event-id.h"
@@ -205,4 +204,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LTE_UE_NET_DEVICE_H */
+

@@ -20,8 +20,7 @@
  *         David Gross <gdavid.devel@gmail.com>
  */
 
-#ifndef ICMPV6_HEADER_H
-#define ICMPV6_HEADER_H
+#pragma once
 
 #include "ns3/header.h"
 #include "ns3/ipv6-address.h"
@@ -1792,5 +1791,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* ICMPV6_HEADER_H */
+
 

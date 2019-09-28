@@ -19,8 +19,7 @@
  * 
  */
 
-#ifndef OH_BUILDINGS_PROPAGATION_LOSS_MODEL_H_
-#define OH_BUILDINGS_PROPAGATION_LOSS_MODEL_H_
+#pragma once
 
 #include <ns3/buildings-propagation-loss-model.h>
 
@@ -59,4 +58,4 @@ private:
 
 }
 
-#endif /* OH_BUILDINGS_PROPAGATION_LOSS_MODEL_H_ */
+

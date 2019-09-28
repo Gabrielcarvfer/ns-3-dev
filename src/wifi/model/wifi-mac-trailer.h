@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef WIFI_MAC_TRAILER_H
-#define WIFI_MAC_TRAILER_H
+#pragma once
 
 #include "ns3/trailer.h"
 
@@ -55,4 +54,4 @@ public:
 
 } //namespace ns3
 
-#endif /* WIFI_MAC_TRAILER_H */
+

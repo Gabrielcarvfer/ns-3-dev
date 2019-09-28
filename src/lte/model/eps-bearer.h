@@ -19,8 +19,7 @@
  */
 
 
-#ifndef EPS_BEARER
-#define EPS_BEARER
+#pragma once
 
 #include <ns3/uinteger.h>
 #include <ns3/object-base.h>
@@ -329,4 +328,4 @@ private:
 } // namespace ns3
 
 
-#endif // EPS_BEARER
+

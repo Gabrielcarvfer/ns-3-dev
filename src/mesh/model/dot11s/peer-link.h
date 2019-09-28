@@ -19,8 +19,7 @@
  *          Aleksey Kovalenko <kovalenko@iitp.ru>
  */
 
-#ifndef PEER_LINK_H
-#define PEER_LINK_H
+#pragma once
 
 #include "ns3/nstime.h"
 #include "ns3/object.h"
@@ -337,4 +336,4 @@ private:
 } // namespace dot11s
 } // namespace ns3
 
-#endif /* PEER_LINK_H */
+

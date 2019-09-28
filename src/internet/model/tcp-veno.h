@@ -24,8 +24,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
-#ifndef TCPVENO_H
-#define TCPVENO_H
+#pragma once
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
@@ -172,4 +171,4 @@ private:
 
 } // namespace ns3
 
-#endif // TCPVENO_H
+

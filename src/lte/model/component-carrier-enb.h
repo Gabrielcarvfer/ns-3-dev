@@ -19,8 +19,7 @@
  */
 
 
-#ifndef COMPONENT_CARRIER_ENB_H
-#define COMPONENT_CARRIER_ENB_H
+#pragma once
 
 #include "component-carrier.h"
 #include <ns3/object.h>
@@ -115,4 +114,4 @@ private:
 
 } // namespace ns3
 
-#endif /* COMPONENT_CARRIER_H */
+

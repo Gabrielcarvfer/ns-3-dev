@@ -18,8 +18,7 @@
  *
  * Author: Adrian Sai-wah Tam <adrian.sw.tam@gmail.com>
  */
-#ifndef TCP_SOCKET_BASE_H
-#define TCP_SOCKET_BASE_H
+#pragma once
 
 #include <stdint.h>
 #include <queue>
@@ -1296,4 +1295,4 @@ typedef void (* EcnStatesTracedValueCallback)(const TcpSocketState::EcnState_t o
 
 } // namespace ns3
 
-#endif /* TCP_SOCKET_BASE_H */
+

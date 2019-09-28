@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef LTE_SIMPLE_SPECTRUM_PHY_H
-#define LTE_SIMPLE_SPECTRUM_PHY_H
+#pragma once
 
 #include <ns3/event-id.h>
 #include <ns3/spectrum-value.h>
@@ -100,4 +99,4 @@ private:
 
 }
 
-#endif /* LTE_SIMPLE_SPECTRUM_PHY_H */
+

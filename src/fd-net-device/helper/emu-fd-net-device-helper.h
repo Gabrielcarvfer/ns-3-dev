@@ -17,8 +17,7 @@
  *
  */
 
-#ifndef EMU_FD_NET_DEVICE_HELPER_H
-#define EMU_FD_NET_DEVICE_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -93,4 +92,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* EMU_FD_NET_DEVICE_HELPER_H */
+

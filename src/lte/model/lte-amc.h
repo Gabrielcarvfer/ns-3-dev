@@ -20,8 +20,7 @@
  * Modified by:     Marco Miozzo   <mmiozzo@cttc.es>
  */
 
-#ifndef AMCMODULE_H
-#define AMCMODULE_H
+#pragma once
 
 #include <vector>
 #include <ns3/ptr.h>
@@ -138,4 +137,4 @@ private:
 
 }
 
-#endif /* AMCMODULE_H */
+

@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef ANGLES_H
-#define ANGLES_H
+#pragma once
 
 
 #include <ns3/vector.h>
@@ -141,4 +140,4 @@ std::istream &operator >> (std::istream &is, Angles &a);
 
 } // namespace ns3
 
-#endif // ANGLES_H
+

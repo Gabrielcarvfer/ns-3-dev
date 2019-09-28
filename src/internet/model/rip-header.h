@@ -18,8 +18,7 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#ifndef RIP_HEADER_H
-#define RIP_HEADER_H
+#pragma once
 
 #include <list>
 #include "ns3/header.h"
@@ -252,5 +251,5 @@ std::ostream & operator << (std::ostream & os, const RipHeader & h);
 
 }
 
-#endif /* Rip_HEADER_H */
+
 

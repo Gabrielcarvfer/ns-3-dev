@@ -18,8 +18,7 @@
  * Authors:  Stefano Avallone <stavallo@unina.it>
  */
 
-#ifndef FIFO_QUEUE_DISC_H
-#define FIFO_QUEUE_DISC_H
+#pragma once
 
 #include "ns3/queue-disc.h"
 
@@ -60,4 +59,4 @@ private:
 
 } // namespace ns3
 
-#endif /* FIFO_QUEUE_DISC_H */
+

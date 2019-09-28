@@ -20,8 +20,7 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef UDP_SOCKET_H
-#define UDP_SOCKET_H
+#pragma once
 
 #include "ns3/socket.h"
 #include "ns3/traced-callback.h"
@@ -171,6 +170,6 @@ private:
 
 } // namespace ns3
 
-#endif /* UDP_SOCKET_H */
+
 
 

@@ -17,8 +17,7 @@
  *
  * Author: Phillip Sitbon <phillip@sitbon.net>
  */
-#ifndef WAYPOINT_MOBILITY_MODEL_H
-#define WAYPOINT_MOBILITY_MODEL_H
+#pragma once
 
 #include <stdint.h>
 #include <deque>
@@ -191,5 +190,5 @@ protected:
 
 } // namespace ns3
 
-#endif /* WAYPOINT_MOBILITY_MODEL_H */
+
 

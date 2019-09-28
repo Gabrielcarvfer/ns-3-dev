@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef IPV4_LIST_ROUTING_H
-#define IPV4_LIST_ROUTING_H
+#pragma once
 
 #include <list>
 #include "ns3/ipv4-routing-protocol.h"
@@ -119,4 +118,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV4_LIST_ROUTING_H */
+

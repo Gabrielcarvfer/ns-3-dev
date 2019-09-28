@@ -20,8 +20,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef HWMP_TAG_H
-#define HWMP_TAG_H
+#pragma once
 
 #include "ns3/tag.h"
 #include "ns3/object.h"
@@ -111,4 +110,4 @@ private:
 };
 } // namespace dot11s
 } // namespace ns3
-#endif
+

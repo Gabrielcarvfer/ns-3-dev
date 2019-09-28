@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef POINT_TO_POINT_NET_DEVICE_H
-#define POINT_TO_POINT_NET_DEVICE_H
+#pragma once
 
 #include <cstring>
 #include "ns3/address.h"
@@ -474,4 +473,4 @@ private:
 
 } // namespace ns3
 
-#endif /* POINT_TO_POINT_NET_DEVICE_H */
+

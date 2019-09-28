@@ -20,8 +20,7 @@
 
 // Interface between ns3 and the network animator
 
-#ifndef ANIMATION_INTERFACE__H
-#define ANIMATION_INTERFACE__H
+#pragma once
 
 #include <string>
 #include <cstdio>
@@ -1561,5 +1560,4 @@ private:
 
 
 }
-#endif
 

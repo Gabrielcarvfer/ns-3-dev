@@ -19,8 +19,7 @@
  * Author: Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#ifndef ENB_LTE_PHY_H
-#define ENB_LTE_PHY_H
+#pragma once
 
 
 #include <ns3/lte-control-messages.h>
@@ -522,4 +521,4 @@ private:
 
 }
 
-#endif /* LTE_ENB_PHY_H */
+

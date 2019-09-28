@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef RANDOM_WAYPOINT_MOBILITY_MODEL_H
-#define RANDOM_WAYPOINT_MOBILITY_MODEL_H
+#pragma once
 
 #include "constant-velocity-helper.h"
 #include "mobility-model.h"
@@ -82,4 +81,4 @@ private:
 
 } // namespace ns3
 
-#endif /* RANDOM_WAYPOINT_MOBILITY_MODEL_H */
+

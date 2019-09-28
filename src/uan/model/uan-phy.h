@@ -20,8 +20,7 @@
  */
 
 
-#ifndef UAN_PHY_H
-#define UAN_PHY_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/uan-mac.h"
@@ -556,4 +555,4 @@ private:
 
 } // namespace ns3
 
-#endif /* UAN_PHY_H */
+

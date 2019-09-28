@@ -19,8 +19,7 @@
  */
 
 
-#ifndef SPECTRUM_INTERFERENCE_H
-#define SPECTRUM_INTERFERENCE_H
+#pragma once
 
 #include <ns3/object.h>
 #include <ns3/packet.h>
@@ -159,4 +158,4 @@ private:
 
 
 
-#endif /* SPECTRUM_INTERFERENCE_H */
+

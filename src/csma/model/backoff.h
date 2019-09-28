@@ -19,8 +19,7 @@
  * Derived from the p2p net device file
 Transmi */
 
-#ifndef BACKOFF_H
-#define BACKOFF_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/nstime.h"
@@ -120,4 +119,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BACKOFF_H */
+

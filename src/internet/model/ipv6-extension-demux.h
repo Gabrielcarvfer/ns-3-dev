@@ -18,8 +18,7 @@
  * Author: David Gross <gdavid.devel@gmail.com>
  */
 
-#ifndef IPV6_EXTENSION_DEMUX_H
-#define IPV6_EXTENSION_DEMUX_H
+#pragma once
 
 #include <list>
 #include "ns3/object.h"
@@ -106,5 +105,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_EXTENSION_DEMUX_H */
+
 

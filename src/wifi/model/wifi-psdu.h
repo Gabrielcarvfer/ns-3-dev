@@ -18,8 +18,7 @@
  * Author: Stefano Avallone <stavallo@unina.it>
  */
 
-#ifndef WIFI_PSDU_H
-#define WIFI_PSDU_H
+#pragma once
 
 #include "ns3/nstime.h"
 #include "wifi-mac-header.h"
@@ -223,4 +222,4 @@ private:
 
 } //namespace ns3
 
-#endif /* WIFI_PSDU_H */
+

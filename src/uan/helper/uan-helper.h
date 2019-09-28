@@ -18,8 +18,7 @@
  * Author: Leonard Tracy <lentracy@u.washington.edu>
  */
 
-#ifndef UAN_HELPER_H
-#define UAN_HELPER_H
+#pragma once
 
 #include <string>
 #include "ns3/attribute.h"
@@ -256,4 +255,4 @@ private:
 
 } // end namespace ns3
 
-#endif /* UAN_HELPER_H */
+

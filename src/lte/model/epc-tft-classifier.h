@@ -19,8 +19,7 @@
  */
 
 
-#ifndef EPC_TFT_CLASSIFIER_H
-#define EPC_TFT_CLASSIFIER_H
+#pragma once
 
 
 #include "ns3/ptr.h"
@@ -104,4 +103,4 @@ protected:
 
 } // namespace ns3
   
-#endif /* TFT_CLASSIFIER_H */ 
+

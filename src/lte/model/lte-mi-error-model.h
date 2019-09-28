@@ -29,8 +29,7 @@
  *      Marco Miozzo <marco.miozzo@cttc.es>
  */ 
 
-#ifndef LTE_MI_ERROR_MODEL_H
-#define LTE_MI_ERROR_MODEL_H
+#pragma once
 
 
 #include <list>
@@ -128,4 +127,4 @@ public:
 
 } // namespace ns3
 
-#endif /* LTE_MI_ERROR_MODEL_H */
+

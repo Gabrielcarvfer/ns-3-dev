@@ -21,8 +21,7 @@
  *          Stefano Avallone <stavallo@unina.it>
  */
 
-#ifndef WIFI_MAC_QUEUE_H
-#define WIFI_MAC_QUEUE_H
+#pragma once
 
 #include "wifi-mac-queue-item.h"
 #include "ns3/queue.h"
@@ -337,4 +336,4 @@ private:
 
 } //namespace ns3
 
-#endif /* WIFI_MAC_QUEUE_H */
+

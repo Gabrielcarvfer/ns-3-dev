@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef COSINE_ANTENNA_MODEL_H
-#define COSINE_ANTENNA_MODEL_H
+#pragma once
 
 
 #include <ns3/object.h>
@@ -77,4 +76,4 @@ private:
 } // namespace ns3
 
 
-#endif // COSINE_ANTENNA_MODEL_H
+

@@ -18,8 +18,7 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#ifndef RV_BATTERY_MODEL_HELPER_H
-#define RV_BATTERY_MODEL_HELPER_H
+#pragma once
 
 #include "energy-model-helper.h"
 #include "ns3/node.h"
@@ -49,4 +48,4 @@ private:
 
 } // namespace ns3
 
-#endif  /* RV_BATTERY_MODEL_HELPER_H */
+

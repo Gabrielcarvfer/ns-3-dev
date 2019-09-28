@@ -19,8 +19,7 @@
  *         Marco Miozzo <mmiozzo@cttc.es>
  */
 
-#ifndef LTE_ENB_CPHY_SAP_H
-#define LTE_ENB_CPHY_SAP_H
+#pragma once
 
 #include <stdint.h>
 #include <ns3/ptr.h>
@@ -302,4 +301,4 @@ MemberLteEnbCphySapUser<C>::MemberLteEnbCphySapUser ()
 } // namespace ns3
 
 
-#endif // LTE_ENB_CPHY_SAP_H
+

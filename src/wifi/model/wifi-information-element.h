@@ -18,8 +18,7 @@
  * Author: Dean Armstrong <deanarm@gmail.com>
  */
 
-#ifndef WIFI_INFORMATION_ELEMENT_H
-#define WIFI_INFORMATION_ELEMENT_H
+#pragma once
 
 #include "ns3/header.h"
 
@@ -331,4 +330,4 @@ public:
 
 } //namespace ns3
 
-#endif /* WIFI_INFORMATION_ELEMENT_H */
+

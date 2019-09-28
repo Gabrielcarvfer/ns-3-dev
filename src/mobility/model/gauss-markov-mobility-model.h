@@ -19,8 +19,7 @@
  * Thanks to Kevin Peters, faculty advisor James P.G. Sterbenz, and the ResiliNets 
  * initiative at The University of Kansas, https://wiki.ittc.ku.edu/resilinets
  */
-#ifndef GAUSS_MARKOV_MOBILITY_MODEL_H
-#define GAUSS_MARKOV_MOBILITY_MODEL_H
+#pragma once
 
 #include "constant-velocity-helper.h"
 #include "mobility-model.h"
@@ -122,4 +121,4 @@ private:
 
 } // namespace ns3
 
-#endif /* GAUSS_MARKOV_MOBILITY_MODEL_H */
+

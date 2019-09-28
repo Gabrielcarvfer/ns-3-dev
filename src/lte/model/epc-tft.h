@@ -19,8 +19,7 @@
  */
 
 
-#ifndef EPC_TFT_H
-#define EPC_TFT_H
+#pragma once
 
 
 #include <ns3/simple-ref-count.h>
@@ -210,6 +209,6 @@ std::ostream& operator<< (std::ostream& os, EpcTft::Direction& d);
 
 } // namespace ns3
   
-#endif /* EPC_TFT_H */ 
+
 
 

@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef ADDRESS_UTILS_H
-#define ADDRESS_UTILS_H
+#pragma once
 
 #include "ns3/buffer.h"
 #include "ipv4-address.h"
@@ -126,4 +125,4 @@ bool IsMulticast (const Address &ad);
 
 };
 
-#endif /* ADDRESS_UTILS_H */
+

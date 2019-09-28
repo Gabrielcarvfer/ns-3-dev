@@ -18,8 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef MAC_RX_MIDDLE_H
-#define MAC_RX_MIDDLE_H
+#pragma once
 
 #include <map>
 #include "ns3/simple-ref-count.h"
@@ -139,4 +138,4 @@ private:
 
 } //namespace ns3
 
-#endif /* MAC_RX_MIDDLE_H */
+

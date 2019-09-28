@@ -20,8 +20,7 @@
 // packets or number of bytes depending on the operating mode.
 // The base class implements tracing and basic statistics calculations.
 
-#ifndef QUEUE_H
-#define QUEUE_H
+#pragma once
 
 #include "ns3/packet.h"
 #include "ns3/object.h"
@@ -659,4 +658,4 @@ extern template class Queue<QueueDiscItem>;
 
 } // namespace ns3
 
-#endif /* QUEUE_H */
+

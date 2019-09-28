@@ -23,8 +23,7 @@
  *                            James P.G. Sterbenz <jpgs@ittc.ku.edu>, director
  */
 
-#ifndef TCP_OPTION_SACK_PERMITTED_H
-#define TCP_OPTION_SACK_PERMITTED_H
+#pragma once
 
 #include "ns3/tcp-option.h"
 
@@ -62,4 +61,4 @@ public:
 
 } // namespace ns3
 
-#endif /* TCP_OPTION_SACK_PERMITTED */
+

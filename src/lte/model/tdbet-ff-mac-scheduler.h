@@ -19,8 +19,7 @@
  * Modification: Dizhi Zhou <dizhi.zhou@gmail.com>    // modify codes related to downlink scheduler
  */
 
-#ifndef TDBET_FF_MAC_SCHEDULER_H
-#define TDBET_FF_MAC_SCHEDULER_H
+#pragma once
 
 #include <ns3/lte-common.h>
 #include <ns3/ff-mac-csched-sap.h>
@@ -396,4 +395,4 @@ private:
 
 } // namespace ns3
 
-#endif /* TDBET_FF_MAC_SCHEDULER_H */
+

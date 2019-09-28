@@ -25,8 +25,7 @@
  * Most of the comments are also ported from the same.
  */
 
-#ifndef PIE_QUEUE_DISC_H
-#define PIE_QUEUE_DISC_H
+#pragma once
 
 #include "ns3/queue-disc.h"
 #include "ns3/nstime.h"
@@ -158,5 +157,4 @@ private:
 
 };   // namespace ns3
 
-#endif
 

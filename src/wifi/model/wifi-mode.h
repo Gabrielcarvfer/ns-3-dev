@@ -19,8 +19,7 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#ifndef WIFI_MODE_H
-#define WIFI_MODE_H
+#pragma once
 
 #include <vector>
 #include "ns3/attribute-helper.h"
@@ -363,4 +362,4 @@ private:
 
 } //namespace ns3
 
-#endif /* WIFI_MODE_H */
+

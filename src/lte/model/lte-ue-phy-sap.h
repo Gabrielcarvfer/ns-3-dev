@@ -20,8 +20,7 @@
 
 
 
-#ifndef LTE_UE_PHY_SAP_H
-#define LTE_UE_PHY_SAP_H
+#pragma once
 
 #include <ns3/packet.h>
 
@@ -115,4 +114,4 @@ public:
 } // namespace ns3
 
 
-#endif // LTE_UE_PHY_SAP_H
+

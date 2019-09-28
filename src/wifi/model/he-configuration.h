@@ -17,8 +17,7 @@
  *
  */
 
-#ifndef HE_CONFIGURATION_H
-#define HE_CONFIGURATION_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/nstime.h"
@@ -65,4 +64,4 @@ private:
 
 } //namespace ns3
 
-#endif /* HE_CONFIGURATION_H */
+

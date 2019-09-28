@@ -18,8 +18,7 @@
  * Author: Marco Miozzo  <marco.miozzo@cttc.es>
  * 
  */
-#ifndef BUILDING_H
-#define BUILDING_H
+#pragma once
 
 #include <ns3/attribute.h>
 #include <ns3/attribute-helper.h>
@@ -224,4 +223,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BUILDING_H */
+

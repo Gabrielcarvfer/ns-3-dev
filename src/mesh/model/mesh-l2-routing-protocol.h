@@ -19,8 +19,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#ifndef MESH_L2_ROUTING_PROTOCOL_H
-#define MESH_L2_ROUTING_PROTOCOL_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/mac48-address.h"
@@ -134,4 +133,4 @@ protected:
   Ptr<MeshPointDevice> m_mp;
 };
 } // namespace ns3
-#endif
+

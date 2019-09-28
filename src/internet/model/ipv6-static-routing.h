@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_STATIC_ROUTING_H
-#define IPV6_STATIC_ROUTING_H
+#pragma once
 
 #include <stdint.h>
 
@@ -299,5 +298,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_STATIC_ROUTING_H */
+
 

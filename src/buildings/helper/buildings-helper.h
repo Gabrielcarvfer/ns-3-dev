@@ -18,8 +18,7 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef BUILDINGS_HELPER_H
-#define BUILDINGS_HELPER_H
+#pragma once
 
 #include <string>
 #include <ns3/attribute.h>
@@ -69,4 +68,4 @@ public:
 
 }
 
-#endif /* BUILDINGS_HELPER_H */
+

@@ -18,8 +18,7 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#ifndef HWMP_RTABLE_H
-#define HWMP_RTABLE_H
+#pragma once
 
 #include <map>
 #include "ns3/nstime.h"
@@ -167,4 +166,4 @@ private:
 };
 } // namespace dot11s
 } // namespace ns3
-#endif
+

@@ -17,8 +17,7 @@
  *
  */
 
-#ifndef TAP_FD_NET_DEVICE_HELPER_H
-#define TAP_FD_NET_DEVICE_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -148,4 +147,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* TAP_FD_NET_DEVICE_HELPER_H */
+

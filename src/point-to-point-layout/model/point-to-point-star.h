@@ -16,8 +16,7 @@
 
 // Define an object to create a star topology.
 
-#ifndef POINT_TO_POINT_STAR_HELPER_H
-#define POINT_TO_POINT_STAR_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -151,4 +150,4 @@ private:
 
 } // namespace ns3
 
-#endif /* POINT_TO_POINT_STAR_HELPER_H */
+

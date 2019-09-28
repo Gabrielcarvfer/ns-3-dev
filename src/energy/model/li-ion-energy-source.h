@@ -18,8 +18,7 @@
  * Author: Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#ifndef LI_ION_ENERGY_SOURCE_H
-#define LI_ION_ENERGY_SOURCE_H
+#pragma once
 
 #include "ns3/traced-value.h"
 #include "ns3/energy-source.h"
@@ -202,4 +201,4 @@ private:
 
 } // namespace ns3
 
-#endif /* LI_ION_ENERGY_SOURCE_H */
+

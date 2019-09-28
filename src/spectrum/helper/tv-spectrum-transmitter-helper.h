@@ -18,8 +18,7 @@
  * Author: Benjamin Cizdziel <ben.cizdziel@gmail.com>
  */
 
-#ifndef TV_SPECTRUM_TRANSMITTER_HELPER_H
-#define TV_SPECTRUM_TRANSMITTER_HELPER_H
+#pragma once
 
 #include <ns3/spectrum-value.h>
 #include <ns3/spectrum-phy.h>
@@ -327,4 +326,4 @@ private:
 
 } // namespace ns3
 
-#endif /* TV_SPECTRUM_TRANSMITTER_HELPER_H */
+

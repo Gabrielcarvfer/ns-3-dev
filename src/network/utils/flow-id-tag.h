@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef FLOW_ID_TAG_H
-#define FLOW_ID_TAG_H
+#pragma once
 
 #include "ns3/tag.h"
 
@@ -66,4 +65,4 @@ private:
 
 } // namespace ns3
 
-#endif /* FLOW_ID_TAG_H */
+

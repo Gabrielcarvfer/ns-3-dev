@@ -19,8 +19,7 @@
  *         Michele Muccio <michelemuccio@virgilio.it>
  */
 
-#ifndef SIXLOWPAN_NET_DEVICE_H
-#define SIXLOWPAN_NET_DEVICE_H
+#pragma once
 
 #include <stdint.h>
 #include <string>
@@ -521,4 +520,4 @@ private:
 
 } // namespace ns3
 
-#endif /* SIXLOWPAN_NET_DEVICE_H */
+

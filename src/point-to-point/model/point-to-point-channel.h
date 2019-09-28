@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef POINT_TO_POINT_CHANNEL_H
-#define POINT_TO_POINT_CHANNEL_H
+#pragma once
 
 #include <list>
 #include "ns3/channel.h"
@@ -206,4 +205,4 @@ public:
 
 } // namespace ns3
 
-#endif /* POINT_TO_POINT_CHANNEL_H */
+

@@ -15,8 +15,7 @@
  *
  * Author: Blake Hurd  <naimorai@gmail.com>
  */
-#ifndef OPENFLOW_INTERFACE_H
-#define OPENFLOW_INTERFACE_H
+#pragma once
 
 #include <assert.h>
 #include <errno.h>
@@ -558,4 +557,4 @@ uint16_t ValidateVendor (const sw_flow_key *key, const ofp_action_header *ah, ui
 
 }
 
-#endif /* OPENFLOW_INTERFACE_H */
+

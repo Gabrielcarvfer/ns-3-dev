@@ -21,8 +21,7 @@
  *           Pasquale Imputato <p.imputato@gmail.com>
  */
 
-#ifndef IPV6_PACKET_FILTER_H
-#define IPV6_PACKET_FILTER_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/packet-filter.h"
@@ -53,4 +52,4 @@ private:
 
 } // namespace ns3
 
-#endif /* IPV6_PACKET_FILTER */
+

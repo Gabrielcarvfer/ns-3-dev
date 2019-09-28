@@ -19,8 +19,7 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef PDCP_TAG_H
-#define PDCP_TAG_H
+#pragma once
 
 #include "ns3/packet.h"
 #include "ns3/nstime.h"
@@ -78,4 +77,4 @@ private:
 
 } //namespace ns3
 
-#endif /* PDCP_TAG_H */
+

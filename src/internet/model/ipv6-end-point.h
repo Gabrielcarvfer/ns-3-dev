@@ -18,8 +18,7 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#ifndef IPV6_END_POINT_H
-#define IPV6_END_POINT_H
+#pragma once
 
 #include <stdint.h>
 
@@ -240,5 +239,5 @@ private:
 
 } /* namespace ns3 */
 
-#endif /* IPV6_END_POINT_H */
+
 

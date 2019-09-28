@@ -22,8 +22,7 @@
  *
  */
 
-#ifndef DHCP_HELPER_H
-#define DHCP_HELPER_H
+#pragma once
 
 #include <stdint.h>
 #include "ns3/application-container.h"
@@ -116,4 +115,4 @@ private:
 
 } // namespace ns3
 
-#endif /* DHCP_HELPER_H */
+

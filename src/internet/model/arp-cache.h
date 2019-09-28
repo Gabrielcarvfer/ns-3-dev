@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef ARP_CACHE_H
-#define ARP_CACHE_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -344,4 +343,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ARP_CACHE_H */
+

@@ -19,8 +19,7 @@
  */
 
 
-#ifndef MULTI_MODEL_SPECTRUM_CHANNEL_H
-#define MULTI_MODEL_SPECTRUM_CHANNEL_H
+#pragma once
 
 #include <ns3/spectrum-value.h>
 #include <ns3/spectrum-converter.h>
@@ -177,4 +176,4 @@ private:
 
 
 
-#endif /* MULTI_MODEL_SPECTRUM_CHANNEL_H */
+

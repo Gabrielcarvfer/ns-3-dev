@@ -17,8 +17,7 @@
  *
  * Author: Raj Bhattacharjea <raj.b@gatech.edu>
  */
-#ifndef TCP_SOCKET_FACTORY_IMPL_H
-#define TCP_SOCKET_FACTORY_IMPL_H
+#pragma once
 
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/ptr.h"
@@ -58,4 +57,4 @@ private:
 
 } // namespace ns3
 
-#endif /* TCP_SOCKET_FACTORY_IMPL_H */
+

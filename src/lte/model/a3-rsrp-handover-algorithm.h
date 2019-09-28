@@ -19,8 +19,7 @@
  *
  */
 
-#ifndef A3_RSRP_HANDOVER_ALGORITHM_H
-#define A3_RSRP_HANDOVER_ALGORITHM_H
+#pragma once
 
 #include <ns3/lte-handover-algorithm.h>
 #include <ns3/lte-handover-management-sap.h>
@@ -126,4 +125,4 @@ private:
 } // end of namespace ns3
 
 
-#endif /* A3_RSRP_HANDOVER_ALGORITHM_H */
+

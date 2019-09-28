@@ -17,8 +17,7 @@
  *
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
-#ifndef ERROR_CHANNEL_H
-#define ERROR_CHANNEL_H
+#pragma once
 
 #include "ns3/channel.h"
 #include "ns3/simple-channel.h"
@@ -92,4 +91,4 @@ private:
 
 } // namespace ns3
 
-#endif /* ERROR_CHANNEL_H */
+

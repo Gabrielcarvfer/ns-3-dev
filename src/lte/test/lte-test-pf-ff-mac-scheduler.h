@@ -19,8 +19,7 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef LENA_TEST_PF_FF_MAC_SCHEDULER_H
-#define LENA_TEST_PF_FF_MAC_SCHEDULER_H
+#pragma once
 
 #include "ns3/simulator.h"
 #include "ns3/test.h"
@@ -124,4 +123,4 @@ public:
   LenaTestPfFfMacSchedulerSuite ();
 };
 
-#endif /* LENA_TEST_PF_FF_MAC_SCHEDULER_H */
+

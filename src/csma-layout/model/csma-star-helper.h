@@ -16,8 +16,7 @@
 
 // Define an object to create a star topology.
 
-#ifndef CSMA_STAR_HELPER_H
-#define CSMA_STAR_HELPER_H
+#pragma once
 
 #include <string>
 
@@ -153,4 +152,4 @@ private:
 
 } // namespace ns3
 
-#endif /* CSMA_STAR_HELPER_H */
+

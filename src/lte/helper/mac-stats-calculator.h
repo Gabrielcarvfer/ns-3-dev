@@ -20,8 +20,7 @@
  *              Biljana Bojovic <biljana.bojovic@cttc.es> (Carrier Aggregation) 
  */
 
-#ifndef MAC_STATS_CALCULATOR_H_
-#define MAC_STATS_CALCULATOR_H_
+#pragma once
 
 #include "ns3/lte-stats-calculator.h"
 #include "ns3/nstime.h"
@@ -170,4 +169,4 @@ private:
 
 } // namespace ns3
 
-#endif /* MAC_STATS_CALCULATOR_H_ */
+

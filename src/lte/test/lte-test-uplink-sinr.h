@@ -20,8 +20,7 @@
  *     Extend to Data and SRS frames
  */
 
-#ifndef LTE_TEST_UPLINK_SINR_H
-#define LTE_TEST_UPLINK_SINR_H
+#pragma once
 
 #include "ns3/spectrum-value.h"
 
@@ -120,4 +119,4 @@ private:
 };
 
 
-#endif /* LTE_TEST_UPLINK_SINR_H */
+

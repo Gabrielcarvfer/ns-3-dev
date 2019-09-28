@@ -16,8 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#ifndef TCPGENERALTEST_H
-#define TCPGENERALTEST_H
+#pragma once
 
 #include "ns3/simple-net-device.h"
 #include "ns3/error-model.h"
@@ -1136,5 +1135,5 @@ GetCongStateFrom (Ptr<const TcpSocketState> tcb)
 
 } // namespace ns3
 
-#endif // TCPGENERALTEST_H
+
 

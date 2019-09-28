@@ -15,8 +15,7 @@
  *
  */
 
-#ifndef BRITE_TOPOLOGY_HELPER_H
-#define BRITE_TOPOLOGY_HELPER_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -291,4 +290,4 @@ private:
 
 } // namespace ns3
 
-#endif /* BRITE_TOPOLOGY_HELPER_H */
+

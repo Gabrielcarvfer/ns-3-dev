@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef SIMPLE_NET_DEVICE_H
-#define SIMPLE_NET_DEVICE_H
+#pragma once
 
 #include <stdint.h>
 #include <string>
@@ -184,4 +183,4 @@ private:
 
 } // namespace ns3
 
-#endif /* SIMPLE_NET_DEVICE_H */
+

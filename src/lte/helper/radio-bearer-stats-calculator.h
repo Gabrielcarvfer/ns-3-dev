@@ -19,8 +19,7 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#ifndef RADIO_BEARER_STATS_CALCULATOR_H_
-#define RADIO_BEARER_STATS_CALCULATOR_H_
+#pragma once
 
 #include "ns3/lte-stats-calculator.h"
 #include "ns3/lte-common.h"
@@ -452,4 +451,4 @@ private:
 
 } // namespace ns3
 
-#endif /* RADIO_BEARER_STATS_CALCULATOR_H_ */
+

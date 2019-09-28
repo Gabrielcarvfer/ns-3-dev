@@ -18,8 +18,7 @@
  * Author: Joe Kopena (tjkopena@cs.drexel.edu)
  */
 
-#ifndef DATA_CALCULATOR_H
-#define DATA_CALCULATOR_H
+#pragma once
 
 #include "ns3/object.h"
 #include "ns3/nstime.h"
@@ -191,4 +190,4 @@ private:
 };
 
 
-#endif /* DATA_CALCULATOR_H */
+

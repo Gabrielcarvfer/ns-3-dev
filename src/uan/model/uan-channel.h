@@ -18,8 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#ifndef UAN_CHANNEL_H
-#define UAN_CHANNEL_H
+#pragma once
 
 #include "ns3/net-device.h"
 #include "ns3/channel.h"
@@ -135,4 +134,4 @@ protected:
 
 } // namespace ns3
 
-#endif /* UAN_CHANNEL_H */
+

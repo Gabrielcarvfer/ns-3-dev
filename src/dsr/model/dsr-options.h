@@ -29,8 +29,7 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#ifndef DSR_OPTION_H
-#define DSR_OPTION_H
+#pragma once
 
 #include <map>
 #include <list>
@@ -575,4 +574,3 @@ private:
 } // namespace dsr
 } // Namespace ns3
 
-#endif

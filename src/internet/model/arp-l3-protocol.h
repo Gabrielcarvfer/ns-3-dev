@@ -17,8 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#ifndef ARP_L3_PROTOCOL_H
-#define ARP_L3_PROTOCOL_H
+#pragma once
 
 #include <list>
 #include "ns3/ipv4-header.h"
@@ -177,4 +176,4 @@ private:
 } // namespace ns3
 
 
-#endif /* ARP_L3_PROTOCOL_H */
+

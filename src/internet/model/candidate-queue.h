@@ -18,8 +18,7 @@
  * Author:  Craig Dowell (craigdo@ee.washington.edu)
  */
 
-#ifndef CANDIDATE_QUEUE_H
-#define CANDIDATE_QUEUE_H
+#pragma once
 
 #include <stdint.h>
 #include <list>
@@ -199,4 +198,4 @@ private:
 
 } // namespace ns3
 
-#endif /* CANDIDATE_QUEUE_H */
+

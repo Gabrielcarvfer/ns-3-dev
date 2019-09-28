@@ -19,8 +19,7 @@
  *          Aleksey Kovalenko <kovalenko@iitp.ru>
  */
 
-#ifndef DOT11S_PEER_MAN_H
-#define DOT11S_PEER_MAN_H
+#pragma once
 
 #include "ns3/mac48-address.h"
 #include "ns3/net-device.h"
@@ -349,4 +348,3 @@ private:
 
 } // namespace dot11s
 } // namespace ns3
-#endif

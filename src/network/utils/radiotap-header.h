@@ -19,8 +19,7 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#ifndef RADIOTAP_HEADER_H
-#define RADIOTAP_HEADER_H
+#pragma once
 
 
 #include <ns3/header.h>
@@ -440,4 +439,4 @@ private:
 
 } // namespace ns3
 
-#endif /*  RADIOTAP_HEADER_H */
+

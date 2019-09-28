@@ -19,8 +19,7 @@
  */
 
 
-#ifndef LTE_RRC_PROTOCOL_IDEAL_H
-#define LTE_RRC_PROTOCOL_IDEAL_H
+#pragma once
 
 #include <stdint.h>
 #include <map>
@@ -326,4 +325,4 @@ private:
 }
 
 
-#endif // LTE_RRC_PROTOCOL_IDEAL_H
+
