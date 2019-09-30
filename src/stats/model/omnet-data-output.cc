@@ -21,12 +21,12 @@
 #include <fstream>
 #include <cstdlib>
 
-#include "ns3/log.h"
-#include "ns3/nstime.h"
+#include "../../core/model/log.h"
+#include "../../core/model/nstime.h"
 
-#include "ns3/data-collector.h"
-#include "ns3/data-calculator.h"
-#include "ns3/omnet-data-output.h"
+#include "data-collector.h"
+#include "data-calculator.h"
+#include "omnet-data-output.h"
 
 using namespace ns3;
 

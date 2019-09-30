@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/packet.h"
-#include "ns3/uan-tx-mode.h"
-#include "ns3/uan-prop-model.h"
+#include "../../core/model/object.h"
+#include "../../network/model/packet.h"
+#include "uan-tx-mode.h"
+#include "uan-prop-model.h"
 
 #include <list>
 

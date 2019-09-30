@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "ns3/node-container.h"
-#include "ns3/ipv4-routing-helper.h"
+#include "../../network/helper/node-container.h"
+#include "ipv4-routing-helper.h"
 
 namespace ns3 {
 

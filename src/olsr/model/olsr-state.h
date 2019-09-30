@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include "ns3/olsr-repositories.h"
+#include "olsr-repositories.h"
 
 namespace ns3 {
 namespace olsr {

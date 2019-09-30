@@ -18,14 +18,14 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "ns3/xml-config.h"
-#include "ns3/attribute-default-iterator.h"
-#include "ns3/attribute-iterator.h"
-#include "ns3/fatal-error.h"
-#include "ns3/log.h"
-#include "ns3/global-value.h"
-#include "ns3/string.h"
-#include "ns3/config.h"
+#include "xml-config.h"
+#include "attribute-default-iterator.h"
+#include "attribute-iterator.h"
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/log.h"
+#include "../../core/model/global-value.h"
+#include "../../core/model/string.h"
+#include "../../core/model/config.h"
 #include <libxml/encoding.h>
 #include <libxml/xmlwriter.h>
 

@@ -17,12 +17,12 @@
  *
  */
 
-#include "ns3/rng-seed-manager.h"
-#include "ns3/global-value.h"
-#include "ns3/attribute-helper.h"
-#include "ns3/uinteger.h"
-#include "ns3/config.h"
-#include "ns3/log.h"
+#include "rng-seed-manager.h"
+#include "global-value.h"
+#include "attribute-helper.h"
+#include "uinteger.h"
+#include "config.h"
+#include "log.h"
 
 /**
  * \file

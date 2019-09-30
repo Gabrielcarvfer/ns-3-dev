@@ -23,14 +23,14 @@
 
 #include <stdint.h>
 #include <list>
-#include "ns3/callback.h"
-#include "ns3/nstime.h"
-#include "ns3/event-id.h"
-#include "ns3/random-variable-stream.h"
-#include "ns3/wimax-phy.h"
-#include "ns3/bvec.h"
-#include "ns3/snr-to-block-error-rate-manager.h"
-#include "ns3/wimax-connection.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/event-id.h"
+#include "../../core/model/random-variable-stream.h"
+#include "wimax-phy.h"
+#include "bvec.h"
+#include "snr-to-block-error-rate-manager.h"
+#include "wimax-connection.h"
 namespace ns3 {
 
 class WimaxChannel;

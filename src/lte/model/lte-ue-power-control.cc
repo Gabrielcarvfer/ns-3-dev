@@ -19,12 +19,12 @@
  *
  */
 
-#include "ns3/lte-ue-power-control.h"
-#include <ns3/log.h>
-#include <ns3/boolean.h>
-#include <ns3/double.h>
-#include <ns3/integer.h>
-#include <ns3/math.h>
+#include "lte-ue-power-control.h"
+#include "../../core/model/log.h"
+#include "../../core/model/boolean.h"
+#include "../../core/model/double.h"
+#include "../../core/model/integer.h"
+#include "../../core/model/math.h"
 
 namespace ns3 {
 

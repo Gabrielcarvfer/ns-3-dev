@@ -19,12 +19,12 @@
  */
 #pragma once
 
-#include "ns3/traced-callback.h"
-#include "ns3/integer.h"
-#include "ns3/uinteger.h"
-#include "ns3/boolean.h"
-#include "ns3/double.h"
-#include "ns3/enum.h"
+#include "traced-callback.h"
+#include "integer.h"
+#include "uinteger.h"
+#include "boolean.h"
+#include "double.h"
+#include "enum.h"
 
 /**
  * \file

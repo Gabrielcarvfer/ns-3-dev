@@ -19,7 +19,7 @@
 #pragma once
 
 #include <list>
-#include "ns3/ipv6-routing-protocol.h"
+#include "ipv6-routing-protocol.h"
 
 namespace ns3 {
 

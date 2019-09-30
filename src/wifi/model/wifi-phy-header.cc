@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/wifi-phy-header.h"
+#include "wifi-phy-header.h"
 
 namespace ns3 {
 

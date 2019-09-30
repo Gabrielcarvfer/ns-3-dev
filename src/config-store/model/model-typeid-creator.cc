@@ -16,7 +16,7 @@
  * Author: Faker Moatamri <faker.moatamri@sophia.inria.fr>
  */
 
-#include "ns3/model-typeid-creator.h"
+#include "model-typeid-creator.h"
 
 namespace ns3 {
 

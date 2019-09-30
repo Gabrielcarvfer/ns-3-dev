@@ -20,9 +20,9 @@
 #pragma once
 
 #include <map>
-#include "ns3/object.h"
-#include "ns3/ptr.h"
-#include "ns3/attribute.h"
+#include "object.h"
+#include "ptr.h"
+#include "attribute.h"
 
 /**
  * \file

@@ -22,9 +22,9 @@
 #pragma once
 
 
-#include <ns3/simple-ref-count.h>
-#include <ns3/ipv4-address.h>
-#include <ns3/ipv6-address.h>
+#include "../../core/model/simple-ref-count.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../network/utils/ipv6-address.h"
 
 #include <list>
 

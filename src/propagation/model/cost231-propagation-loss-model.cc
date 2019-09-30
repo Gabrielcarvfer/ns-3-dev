@@ -19,13 +19,13 @@
  *                              <amine.ismail@udcast.com>
  */
 
-#include "ns3/propagation-loss-model.h"
-#include "ns3/log.h"
-#include "ns3/mobility-model.h"
-#include "ns3/double.h"
-#include "ns3/pointer.h"
+#include "propagation-loss-model.h"
+#include "../../core/model/log.h"
+#include "../../mobility/model/mobility-model.h"
+#include "../../core/model/double.h"
+#include "../../core/model/pointer.h"
 #include <cmath>
-#include "ns3/cost231-propagation-loss-model.h"
+#include "cost231-propagation-loss-model.h"
 
 namespace ns3 {
 

@@ -37,9 +37,9 @@
 
 #pragma once
 
-#include <ns3/header.h>
-#include <ns3/mac16-address.h>
-#include <ns3/mac64-address.h>
+#include "../../network/model/header.h"
+#include "../../network/utils/mac16-address.h"
+#include "../../network/utils/mac64-address.h"
 
 
 namespace ns3 {

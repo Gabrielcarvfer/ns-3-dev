@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/dsss-parameter-set.h"
+#include "dsss-parameter-set.h"
 
 namespace ns3 {
 

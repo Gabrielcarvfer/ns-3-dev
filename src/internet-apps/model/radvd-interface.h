@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/radvd-prefix.h"
+#include "radvd-prefix.h"
 #include <list>
-#include "ns3/simple-ref-count.h"
-#include "ns3/nstime.h"
+#include "../../core/model/simple-ref-count.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3
 {

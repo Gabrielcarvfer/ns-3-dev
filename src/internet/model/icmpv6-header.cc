@@ -20,11 +20,11 @@
  *         David Gross <gdavid.devel@gmail.com>
  */
 
-#include "ns3/assert.h"
-#include "ns3/address-utils.h"
-#include "ns3/log.h"
+#include "../../core/model/assert.h"
+#include "../../network/utils/address-utils.h"
+#include "../../core/model/log.h"
 
-#include "ns3/icmpv6-header.h"
+#include "icmpv6-header.h"
 
 namespace ns3
 {

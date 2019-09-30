@@ -23,12 +23,12 @@
 
 #pragma once
 
-#include "ns3/probe.h"
-#include "ns3/object.h"
-#include "ns3/callback.h"
-#include "ns3/boolean.h"
-#include "ns3/traced-value.h"
-#include "ns3/simulator.h"
+#include "probe.h"
+#include "../../core/model/object.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/boolean.h"
+#include "../../core/model/traced-value.h"
+#include "../../core/model/simulator.h"
 
 namespace ns3 {
 

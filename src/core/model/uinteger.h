@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "ns3/attribute.h"
-#include "ns3/attribute-helper.h"
+#include "attribute.h"
+#include "attribute-helper.h"
 #include <stdint.h>
 #include <limits>
 
@@ -78,7 +78,7 @@ Ptr<const AttributeChecker> MakeUintegerChecker (uint64_t min, uint64_t max);
  *  Implementation of the templates declared above.
  ***************************************************************/
 
-#include "ns3/type-name.h"
+#include "type-name.h"
 
 namespace ns3 {
 

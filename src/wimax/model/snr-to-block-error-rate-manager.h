@@ -22,9 +22,9 @@
 
 #pragma once
 
-#include "ns3/snr-to-block-error-rate-record.h"
+#include "snr-to-block-error-rate-record.h"
 #include <vector>
-#include "ns3/ptr.h"
+#include "../../core/model/ptr.h"
 
 namespace ns3 {
 

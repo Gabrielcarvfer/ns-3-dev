@@ -18,12 +18,12 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "ns3/rv-battery-model.h"
-#include "ns3/log.h"
-#include "ns3/assert.h"
-#include "ns3/double.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/simulator.h"
+#include "rv-battery-model.h"
+#include "../../core/model/log.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/double.h"
+#include "../../core/model/trace-source-accessor.h"
+#include "../../core/model/simulator.h"
 #include <cmath>
 
 namespace ns3 {

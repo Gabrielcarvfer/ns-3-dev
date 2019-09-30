@@ -21,16 +21,16 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/nstime.h>
-#include <ns3/channel.h>
-#include <ns3/spectrum-signal-parameters.h>
-#include <ns3/spectrum-propagation-loss-model.h>
-#include <ns3/propagation-delay-model.h>
-#include <ns3/propagation-loss-model.h>
-#include <ns3/spectrum-phy.h>
-#include <ns3/traced-callback.h>
-#include <ns3/mobility-model.h>
+#include "../../core/model/object.h"
+#include "../../core/model/nstime.h"
+#include "../../network/model/channel.h"
+#include "spectrum-signal-parameters.h"
+#include "spectrum-propagation-loss-model.h"
+#include "../../propagation/model/propagation-delay-model.h"
+#include "../../propagation/model/propagation-loss-model.h"
+#include "spectrum-phy.h"
+#include "../../core/model/traced-callback.h"
+#include "../../mobility/model/mobility-model.h"
 
 namespace ns3 {
 

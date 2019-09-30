@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "ns3/ipv6-address.h"
+#include "../../network/utils/ipv6-address.h"
 
 namespace ns3 {
 

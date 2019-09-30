@@ -18,8 +18,8 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "ns3/uan-header-common.h"
-#include "ns3/mac8-address.h"
+#include "uan-header-common.h"
+#include "../../network/utils/mac8-address.h"
 
 static const uint16_t ARP_PROT_NUMBER = 0x0806;
 static const uint16_t IPV4_PROT_NUMBER = 0x0800;

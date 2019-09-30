@@ -17,9 +17,9 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/node-container.h"
-#include "ns3/node-list.h"
-#include "ns3/names.h"
+#include "node-container.h"
+#include "../model/node-list.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

@@ -23,8 +23,8 @@
 #include <sstream>
 #include <string>
 #include <stdint.h>
-#include "ns3/pcap-file.h"
-#include "ns3/test.h"
+#include "pcap-file.h"
+#include "../../core/model/test.h"
 
 /**
  * \brief Test that a pair of reference/new pcap files are equal

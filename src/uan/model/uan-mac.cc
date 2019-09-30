@@ -18,7 +18,7 @@
  * Author: Mitch Watrous <watrous@u.washington.edu>
  */
 
-#include "ns3/uan-mac.h"
+#include "uan-mac.h"
 
 namespace ns3 {
 

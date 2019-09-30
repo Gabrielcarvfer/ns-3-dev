@@ -18,12 +18,12 @@
  * Author: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/pointer.h"
-#include "ns3/energy-source.h"
-#include "ns3/wifi-radio-energy-model.h"
-#include "ns3/wifi-tx-current-model.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/pointer.h"
+#include "../../energy/model/energy-source.h"
+#include "wifi-radio-energy-model.h"
+#include "wifi-tx-current-model.h"
 
 namespace ns3 {
 

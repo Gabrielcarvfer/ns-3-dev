@@ -21,8 +21,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/buffer.h"
-#include "ns3/mesh-information-element-vector.h"
+#include "../../../network/model/buffer.h"
+#include "../mesh-information-element-vector.h"
 
 namespace ns3 {
 namespace dot11s {

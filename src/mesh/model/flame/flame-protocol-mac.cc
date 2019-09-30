@@ -18,10 +18,10 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ns3/flame-protocol-mac.h"
-#include "ns3/flame-protocol.h"
-#include "ns3/flame-header.h"
-#include "ns3/log.h"
+#include "flame-protocol-mac.h"
+#include "flame-protocol.h"
+#include "flame-header.h"
+#include "../../../core/model/log.h"
 
 namespace ns3 {
   

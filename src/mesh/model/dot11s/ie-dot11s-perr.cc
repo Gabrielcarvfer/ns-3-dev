@@ -18,9 +18,9 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ns3/ie-dot11s-perr.h"
-#include "ns3/address-utils.h"
-#include "ns3/packet.h"
+#include "ie-dot11s-perr.h"
+#include "../../../network/utils/address-utils.h"
+#include "../../../network/model/packet.h"
 namespace ns3 {
 namespace dot11s {
 IePerr::IePerr ()

@@ -19,9 +19,9 @@
  *
  */
 
-#include "ns3/tcp-ledbat.h"
-#include "ns3/log.h"
-#include "ns3/simulator.h"
+#include "tcp-ledbat.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
 
 namespace ns3 {
 

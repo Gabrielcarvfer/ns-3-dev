@@ -18,8 +18,8 @@
  * Author:
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
-#include "ns3/lr-wpan-lqi-tag.h"
-#include <ns3/integer.h>
+#include "lr-wpan-lqi-tag.h"
+#include "../../core/model/integer.h"
 
 namespace ns3 {
 

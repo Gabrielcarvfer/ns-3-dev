@@ -20,10 +20,10 @@
  *  Sascha Alexander Jopen <jopen@cs.uni-bonn.de>
  */
 
-#include "ns3/lr-wpan-csmaca.h"
-#include <ns3/random-variable-stream.h>
-#include <ns3/simulator.h>
-#include <ns3/log.h>
+#include "lr-wpan-csmaca.h"
+#include "../../core/model/random-variable-stream.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/log.h"
 #include <algorithm>
 
 namespace ns3 {

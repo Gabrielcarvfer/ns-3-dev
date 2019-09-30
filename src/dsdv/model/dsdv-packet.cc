@@ -28,9 +28,9 @@
  * NSF grant CNS-1050226 (Multilayer Network Resilience Analysis and Experimentation on GENI),
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
-#include "ns3/dsdv-packet.h"
-#include "ns3/address-utils.h"
-#include "ns3/packet.h"
+#include "dsdv-packet.h"
+#include "../../network/utils/address-utils.h"
+#include "../../network/model/packet.h"
 
 namespace ns3 {
 namespace dsdv {

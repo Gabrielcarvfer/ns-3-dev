@@ -17,12 +17,12 @@
  */
 
 #include <map>
-#include "ns3/object.h"
-#include "ns3/log.h"
-#include "ns3/assert.h"
-#include "ns3/abort.h"
-#include "ns3/names.h"
-#include "ns3/singleton.h"
+#include "object.h"
+#include "log.h"
+#include "assert.h"
+#include "abort.h"
+#include "names.h"
+#include "singleton.h"
 
 /**
  * \file

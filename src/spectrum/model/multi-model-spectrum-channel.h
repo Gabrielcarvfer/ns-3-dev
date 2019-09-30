@@ -21,11 +21,11 @@
 
 #pragma once
 
-#include <ns3/spectrum-value.h>
-#include <ns3/spectrum-converter.h>
-#include <ns3/spectrum-channel.h>
-#include <ns3/spectrum-propagation-loss-model.h>
-#include <ns3/propagation-delay-model.h>
+#include "spectrum-value.h"
+#include "spectrum-converter.h"
+#include "spectrum-channel.h"
+#include "spectrum-propagation-loss-model.h"
+#include "../../propagation/model/propagation-delay-model.h"
 #include <map>
 #include <set>
 

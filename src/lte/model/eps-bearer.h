@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <ns3/uinteger.h>
-#include <ns3/object-base.h>
+#include "../../core/model/uinteger.h"
+#include "../../core/model/object-base.h"
 #include <unordered_map>
 
 namespace ns3 {

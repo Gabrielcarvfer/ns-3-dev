@@ -20,9 +20,9 @@
 
 // TCP options that are specified in RFC 793 (kinds 0, 1, and 2)
 
-#include "ns3/tcp-option-rfc793.h"
+#include "tcp-option-rfc793.h"
 
-#include "ns3/log.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

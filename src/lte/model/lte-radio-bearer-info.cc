@@ -18,12 +18,12 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "ns3/lte-radio-bearer-info.h"
-#include "ns3/lte-ue-rrc.h"
-#include "ns3/lte-rlc.h"
-#include "ns3/lte-pdcp.h"
+#include "lte-radio-bearer-info.h"
+#include "lte-ue-rrc.h"
+#include "lte-rlc.h"
+#include "lte-pdcp.h"
 
-#include <ns3/log.h>
+#include "../../core/model/log.h"
 
 
 

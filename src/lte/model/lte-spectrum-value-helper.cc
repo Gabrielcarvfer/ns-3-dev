@@ -22,10 +22,10 @@
 #include <map>
 #include <cmath>
 
-#include <ns3/log.h>
-#include <ns3/fatal-error.h>
+#include "../../core/model/log.h"
+#include "../../core/model/fatal-error.h"
 
-#include "ns3/lte-spectrum-value-helper.h"
+#include "lte-spectrum-value-helper.h"
 
 // just needed to log a std::vector<int> properly...
 namespace std {

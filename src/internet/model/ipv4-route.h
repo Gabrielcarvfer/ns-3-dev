@@ -22,8 +22,8 @@
 #include <map>
 #include <ostream>
 
-#include "ns3/simple-ref-count.h"
-#include "ns3/ipv4-address.h"
+#include "../../core/model/simple-ref-count.h"
+#include "../../network/utils/ipv4-address.h"
 
 namespace ns3 {
 

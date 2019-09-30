@@ -21,8 +21,8 @@
  */
 #pragma once
 
-#include "ns3/tag.h"
-#include "ns3/wifi-tx-vector.h"
+#include "../../network/model/tag.h"
+#include "../../wifi/model/wifi-tx-vector.h"
 
 namespace ns3 {
 

@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include "ns3/energy-harvester-helper.h"
-#include "ns3/energy-source.h"
-#include "ns3/node.h"
+#include "energy-harvester-helper.h"
+#include "../model/energy-source.h"
+#include "../../network/model/node.h"
 
 namespace ns3 {
   

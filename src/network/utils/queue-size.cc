@@ -18,9 +18,9 @@
 // Author: Stefano Avallone <stavallo@unina.it>
 //
 
-#include "ns3/queue-size.h"
-#include "ns3/log.h"
-#include "ns3/unused.h"
+#include "queue-size.h"
+#include "../../core/model/log.h"
+#include "../../core/model/unused.h"
 
 namespace ns3 {
 

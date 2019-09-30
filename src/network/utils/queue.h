@@ -22,14 +22,14 @@
 
 #pragma once
 
-#include "ns3/packet.h"
-#include "ns3/object.h"
-#include "ns3/traced-callback.h"
-#include "ns3/traced-value.h"
-#include "ns3/unused.h"
-#include "ns3/log.h"
-#include "ns3/queue-size.h"
-#include "ns3/queue-item.h"
+#include "../model/packet.h"
+#include "../../core/model/object.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/traced-value.h"
+#include "../../core/model/unused.h"
+#include "../../core/model/log.h"
+#include "queue-size.h"
+#include "queue-item.h"
 #include <string>
 #include <sstream>
 #include <list>

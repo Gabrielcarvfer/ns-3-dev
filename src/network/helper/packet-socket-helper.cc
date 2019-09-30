@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/packet-socket-helper.h"
-#include "ns3/packet-socket-factory.h"
-#include "ns3/names.h"
+#include "packet-socket-helper.h"
+#include "../utils/packet-socket-factory.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

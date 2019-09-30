@@ -20,15 +20,15 @@
  */
 
 
-#include "ns3/epc-enb-application.h"
-#include "ns3/log.h"
-#include "ns3/mac48-address.h"
-#include "ns3/ipv4.h"
-#include "ns3/inet-socket-address.h"
-#include "ns3/uinteger.h"
+#include "epc-enb-application.h"
+#include "../../core/model/log.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../internet/model/ipv4.h"
+#include "../../network/utils/inet-socket-address.h"
+#include "../../core/model/uinteger.h"
 
-#include "ns3/epc-gtpu-header.h"
-#include "ns3/eps-bearer-tag.h"
+#include "epc-gtpu-header.h"
+#include "eps-bearer-tag.h"
 
 
 namespace ns3 {

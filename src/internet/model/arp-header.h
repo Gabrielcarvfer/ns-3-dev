@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/header.h"
-#include "ns3/address.h"
-#include "ns3/ipv4-address.h"
+#include "../../network/model/header.h"
+#include "../../network/model/address.h"
+#include "../../network/utils/ipv4-address.h"
 #include <string>
 
 namespace ns3 {

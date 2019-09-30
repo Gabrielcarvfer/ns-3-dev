@@ -20,16 +20,16 @@
 
 #pragma once
 
-#include "ns3/traced-callback.h"
-#include "ns3/object.h"
-#include "ns3/data-rate.h"
-#include "ns3/mac48-address.h"
-#include "ns3/wifi-mode.h"
-#include "ns3/wifi-utils.h"
-#include "ns3/wifi-remote-station-info.h"
-#include "ns3/ht-capabilities.h"
-#include "ns3/vht-capabilities.h"
-#include "ns3/he-capabilities.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/object.h"
+#include "../../network/utils/data-rate.h"
+#include "../../network/utils/mac48-address.h"
+#include "wifi-mode.h"
+#include "wifi-utils.h"
+#include "wifi-remote-station-info.h"
+#include "ht-capabilities.h"
+#include "vht-capabilities.h"
+#include "he-capabilities.h"
 
 namespace ns3 {
 

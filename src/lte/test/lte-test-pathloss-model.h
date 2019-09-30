@@ -20,11 +20,11 @@
 
 #pragma once
 
-#include "ns3/spectrum-value.h"
+#include "../../spectrum/model/spectrum-value.h"
 
-#include "ns3/test.h"
+#include "../../core/model/test.h"
 
-#include <ns3/buildings-propagation-loss-model.h>
+#include "../../buildings/model/buildings-propagation-loss-model.h"
 
 
 using namespace ns3;

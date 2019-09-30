@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "ns3/device-energy-model.h"
+#include "device-energy-model.h"
 #include <vector>
 #include <stdint.h>
 

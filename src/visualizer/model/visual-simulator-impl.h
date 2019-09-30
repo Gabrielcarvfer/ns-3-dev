@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/simulator-impl.h"
+#include "../../core/model/simulator-impl.h"
 
 namespace ns3 {
 

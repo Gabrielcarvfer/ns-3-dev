@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/mac48-address.h"
-#include "ns3/event-id.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../core/model/event-id.h"
 
 namespace ns3 {
 /**

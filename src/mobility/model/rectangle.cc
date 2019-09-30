@@ -17,10 +17,10 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/rectangle.h"
-#include "ns3/vector.h"
-#include "ns3/assert.h"
-#include "ns3/fatal-error.h"
+#include "rectangle.h"
+#include "../../core/model/vector.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/fatal-error.h"
 #include <cmath>
 #include <algorithm>
 #include <sstream> 

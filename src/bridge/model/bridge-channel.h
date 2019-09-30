@@ -17,8 +17,8 @@
  */
 #pragma once
 
-#include "ns3/net-device.h"
-#include "ns3/channel.h"
+#include "../../network/model/net-device.h"
+#include "../../network/model/channel.h"
 #include <vector>
 
 namespace ns3 {

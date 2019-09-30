@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "ns3/mobility-model.h"
+#include "mobility-model.h"
 
 namespace ns3 {
 

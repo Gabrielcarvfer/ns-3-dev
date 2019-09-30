@@ -15,8 +15,8 @@
  */
 #pragma once
 
-#include "ns3/tcp-socket-factory.h"
-#include "ns3/ptr.h"
+#include "tcp-socket-factory.h"
+#include "../../core/model/ptr.h"
 
 namespace ns3 {
 

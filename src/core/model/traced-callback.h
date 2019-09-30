@@ -21,7 +21,7 @@
 #pragma once
 
 #include <list>
-#include "ns3/callback.h"
+#include "callback.h"
 
 /**
  * \file

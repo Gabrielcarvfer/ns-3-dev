@@ -17,8 +17,8 @@
  */
 #pragma once
 
-#include "ns3/mobility-model.h"
-#include "ns3/nstime.h"
+#include "mobility-model.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 

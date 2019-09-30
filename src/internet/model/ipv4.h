@@ -20,12 +20,12 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/object.h"
-#include "ns3/socket.h"
-#include "ns3/callback.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/ipv4-route.h"
-#include "ns3/ipv4-interface-address.h"
+#include "../../core/model/object.h"
+#include "../../network/model/socket.h"
+#include "../../core/model/callback.h"
+#include "../../network/utils/ipv4-address.h"
+#include "ipv4-route.h"
+#include "ipv4-interface-address.h"
 
 namespace ns3 {
 

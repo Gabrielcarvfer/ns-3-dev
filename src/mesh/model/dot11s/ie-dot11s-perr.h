@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/mac48-address.h"
-#include "ns3/mesh-information-element-vector.h"
-#include "ns3/hwmp-protocol.h"
+#include "../../../network/utils/mac48-address.h"
+#include "../mesh-information-element-vector.h"
+#include "hwmp-protocol.h"
 
 namespace ns3 {
 namespace dot11s {

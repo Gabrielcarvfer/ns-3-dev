@@ -27,13 +27,13 @@
 
 #include <iomanip>
 
-#include "ns3/event-id.h"
-#include "ns3/log.h"
-#include "ns3/nstime.h"
-#include "ns3/simulator.h"
-#include "ns3/singleton.h"
+#include "event-id.h"
+#include "log.h"
+#include "nstime.h"
+#include "simulator.h"
+#include "singleton.h"
 
-#include "ns3/show-progress.h"
+#include "show-progress.h"
 
 namespace ns3 {
 

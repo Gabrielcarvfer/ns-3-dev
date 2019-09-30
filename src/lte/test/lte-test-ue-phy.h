@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/lte-phy.h"
+#include "../model/lte-phy.h"
 
-#include "ns3/lte-control-messages.h"
+#include "../model/lte-control-messages.h"
 
 namespace ns3 {
 

@@ -23,7 +23,7 @@
 
 #include <stdint.h>
 #include <vector>
-#include <ns3/building.h>
+#include "../model/building.h"
 
 namespace ns3 {
 

@@ -27,18 +27,18 @@
 #include <queue>
 #include <algorithm>
 #include <iostream>
-#include "ns3/assert.h"
-#include "ns3/fatal-error.h"
-#include "ns3/log.h"
-#include "ns3/node-list.h"
-#include "ns3/ipv4.h"
-#include "ns3/ipv4-routing-protocol.h"
-#include "ns3/ipv4-list-routing.h"
-#include "ns3/mpi-interface.h"
-#include "ns3/global-router-interface.h"
-#include "ns3/global-route-manager-impl.h"
-#include "ns3/candidate-queue.h"
-#include "ns3/ipv4-global-routing.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/log.h"
+#include "../../network/model/node-list.h"
+#include "ipv4.h"
+#include "ipv4-routing-protocol.h"
+#include "ipv4-list-routing.h"
+#include "../../mpi/model/mpi-interface.h"
+#include "global-router-interface.h"
+#include "global-route-manager-impl.h"
+#include "candidate-queue.h"
+#include "ipv4-global-routing.h"
 
 namespace ns3 {
 

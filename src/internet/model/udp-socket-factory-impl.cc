@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 #include "udp-socket-factory-impl.h"
-#include "ns3/udp-l4-protocol.h"
-#include "ns3/socket.h"
-#include "ns3/assert.h"
+#include "udp-l4-protocol.h"
+#include "../../network/model/socket.h"
+#include "../../core/model/assert.h"
 
 namespace ns3 {
 

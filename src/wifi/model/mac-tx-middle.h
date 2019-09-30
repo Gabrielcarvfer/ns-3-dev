@@ -23,7 +23,7 @@
 #pragma once
 
 #include <map>
-#include "ns3/simple-ref-count.h"
+#include "../../core/model/simple-ref-count.h"
 
 namespace ns3 {
 

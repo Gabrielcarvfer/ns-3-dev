@@ -26,8 +26,8 @@
 
 #include <vector>
 
-#include "ns3/ipv6.h"
-#include "ns3/ipv6-address.h"
+#include "../model/ipv6.h"
+#include "../../network/utils/ipv6-address.h"
 
 namespace ns3
 {

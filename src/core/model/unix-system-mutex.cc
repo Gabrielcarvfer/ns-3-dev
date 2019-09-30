@@ -22,9 +22,9 @@
 #include <cstring>
 #include <cerrno> // for strerror
 
-#include "ns3/fatal-error.h"
-#include "ns3/system-mutex.h"
-#include "ns3/log.h"
+#include "fatal-error.h"
+#include "system-mutex.h"
+#include "log.h"
 
 
 /**

@@ -19,10 +19,10 @@
  */
 
 
-#include "ns3/lte-global-pathloss-database.h"
-#include "ns3/lte-enb-net-device.h"
-#include "ns3/lte-ue-net-device.h"
-#include "ns3/lte-spectrum-phy.h"
+#include "lte-global-pathloss-database.h"
+#include "../model/lte-enb-net-device.h"
+#include "../model/lte-ue-net-device.h"
+#include "../model/lte-spectrum-phy.h"
 
 #include <limits>
 

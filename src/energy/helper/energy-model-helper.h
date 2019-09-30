@@ -20,16 +20,16 @@
 
 #pragma once
 
-#include "ns3/attribute.h"
-#include "ns3/object-factory.h"
-#include "ns3/node-container.h"
-#include "ns3/ptr.h"
-#include "ns3/net-device.h"
-#include "ns3/net-device-container.h"
-#include "ns3/energy-source.h"
-#include "ns3/device-energy-model.h"
-#include "ns3/device-energy-model-container.h"
-#include "ns3/energy-source-container.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/object-factory.h"
+#include "../../network/helper/node-container.h"
+#include "../../core/model/ptr.h"
+#include "../../network/model/net-device.h"
+#include "../../network/helper/net-device-container.h"
+#include "../model/energy-source.h"
+#include "../model/device-energy-model.h"
+#include "../model/device-energy-model-container.h"
+#include "energy-source-container.h"
 
 namespace ns3 {
 

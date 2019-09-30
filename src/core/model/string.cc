@@ -17,7 +17,7 @@
  *
  */
 
-#include "ns3/string.h"
+#include "string.h"
 
 /**
  * \file

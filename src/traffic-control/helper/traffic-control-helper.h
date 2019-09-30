@@ -22,9 +22,9 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "ns3/object-factory.h"
-#include "ns3/net-device-container.h"
-#include "ns3/queue-disc-container.h"
+#include "../../core/model/object-factory.h"
+#include "../../network/helper/net-device-container.h"
+#include "queue-disc-container.h"
 
 namespace ns3 {
 

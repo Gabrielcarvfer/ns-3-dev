@@ -19,7 +19,7 @@
  *
  */
 
-#include "ns3/lte-ue-ccm-rrc-sap.h"
+#include "lte-ue-ccm-rrc-sap.h"
 
 namespace ns3 {
 

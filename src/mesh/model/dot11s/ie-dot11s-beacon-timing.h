@@ -21,8 +21,8 @@
 #pragma once
 
 #include <vector>
-#include "ns3/nstime.h"
-#include "ns3/mesh-information-element-vector.h"
+#include "../../../core/model/nstime.h"
+#include "../mesh-information-element-vector.h"
 
 namespace ns3 {
 namespace dot11s {

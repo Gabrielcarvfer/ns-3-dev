@@ -26,7 +26,7 @@
 ///		state of an OLSR node.
 ///
 
-#include "ns3/olsr-state.h"
+#include "olsr-state.h"
 
 
 namespace ns3 {

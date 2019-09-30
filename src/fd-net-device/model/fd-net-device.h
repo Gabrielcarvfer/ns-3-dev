@@ -21,19 +21,19 @@
 
 #pragma once
 
-#include "ns3/address.h"
-#include "ns3/callback.h"
-#include "ns3/data-rate.h"
-#include "ns3/event-id.h"
-#include "ns3/mac48-address.h"
-#include "ns3/net-device.h"
-#include "ns3/node.h"
-#include "ns3/packet.h"
-#include "ns3/ptr.h"
-#include "ns3/system-condition.h"
-#include "ns3/traced-callback.h"
-#include "ns3/unix-fd-reader.h"
-#include "ns3/system-mutex.h"
+#include "../../network/model/address.h"
+#include "../../core/model/callback.h"
+#include "../../network/utils/data-rate.h"
+#include "../../core/model/event-id.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../network/model/net-device.h"
+#include "../../network/model/node.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/system-condition.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/unix-fd-reader.h"
+#include "../../core/model/system-mutex.h"
 
 #include <utility>
 #include <queue>

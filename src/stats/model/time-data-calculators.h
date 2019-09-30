@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/nstime.h"
+#include "../../core/model/nstime.h"
 
-#include "ns3/data-calculator.h"
-#include "ns3/data-output-interface.h"
+#include "data-calculator.h"
+#include "data-output-interface.h"
 
 namespace ns3 {
 

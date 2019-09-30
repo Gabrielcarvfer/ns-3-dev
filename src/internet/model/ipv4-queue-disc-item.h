@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "ns3/packet.h"
-#include "ns3/queue-item.h"
-#include "ns3/ipv4-header.h"
+#include "../../network/model/packet.h"
+#include "../../network/utils/queue-item.h"
+#include "ipv4-header.h"
 
 namespace ns3 {
 

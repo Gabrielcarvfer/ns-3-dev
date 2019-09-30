@@ -22,9 +22,9 @@
 
 #pragma once
 
-#include "ns3/spectrum-value.h"
+#include "../../spectrum/model/spectrum-value.h"
 
-#include "ns3/test.h"
+#include "../../core/model/test.h"
 
 
 using namespace ns3;

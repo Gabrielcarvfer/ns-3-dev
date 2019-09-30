@@ -19,11 +19,11 @@
  *
  */
 
-#include "ns3/three-gpp-http-variables.h"
+#include "three-gpp-http-variables.h"
 
-#include <ns3/log.h>
-#include <ns3/uinteger.h>
-#include <ns3/double.h>
+#include "../../core/model/log.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/double.h"
 #include <math.h>
 
 

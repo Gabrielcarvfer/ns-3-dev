@@ -21,11 +21,11 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/event-id.h"
-#include "ns3/mac-messages.h"
-#include "ns3/buffer.h"
-#include "ns3/service-flow-manager.h"
-#include "ns3/bs-net-device.h"
+#include "../../core/model/event-id.h"
+#include "mac-messages.h"
+#include "../../network/model/buffer.h"
+#include "service-flow-manager.h"
+#include "bs-net-device.h"
 
 namespace ns3 {
 

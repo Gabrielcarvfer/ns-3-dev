@@ -20,19 +20,19 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/buffer.h"
-#include "ns3/header.h"
-#include "ns3/trailer.h"
-#include "ns3/packet-metadata.h"
-#include "ns3/tag.h"
-#include "ns3/byte-tag-list.h"
-#include "ns3/packet-tag-list.h"
-#include "ns3/nix-vector.h"
-#include "ns3/mac48-address.h"
-#include "ns3/callback.h"
-#include "ns3/assert.h"
-#include "ns3/ptr.h"
-#include "ns3/deprecated.h"
+#include "buffer.h"
+#include "header.h"
+#include "trailer.h"
+#include "packet-metadata.h"
+#include "tag.h"
+#include "byte-tag-list.h"
+#include "packet-tag-list.h"
+#include "nix-vector.h"
+#include "../utils/mac48-address.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/deprecated.h"
 
 namespace ns3 {
 

@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include "ns3/tcp-option.h"
+#include "tcp-option.h"
 
 namespace ns3 {
 

@@ -18,16 +18,16 @@
  * Author: Matías Richart <mrichart@fing.edu.uy>
  */
 
-#include "ns3/packet.h"
-#include "ns3/log.h"
-#include "ns3/boolean.h"
-#include "ns3/double.h"
-#include "ns3/uinteger.h"
-#include "ns3/simulator.h"
-#include "ns3/data-rate.h"
-#include "ns3/rrpaa-wifi-manager.h"
-#include "ns3/wifi-phy.h"
-#include "ns3/wifi-mac.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/log.h"
+#include "../../core/model/boolean.h"
+#include "../../core/model/double.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/simulator.h"
+#include "../../network/utils/data-rate.h"
+#include "rrpaa-wifi-manager.h"
+#include "wifi-phy.h"
+#include "wifi-mac.h"
 
 NS_LOG_COMPONENT_DEFINE ("RrpaaWifiManager");
 

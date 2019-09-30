@@ -23,9 +23,9 @@
 
 #pragma once
 
-#include "ns3/callback.h"
-#include "ns3/probe.h"
-#include "ns3/traced-value.h"
+#include "../../core/model/callback.h"
+#include "probe.h"
+#include "../../core/model/traced-value.h"
 
 namespace ns3 {
 

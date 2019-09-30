@@ -24,13 +24,13 @@
 
 #pragma once
 
-#include "ns3/lte-net-device.h"
-#include "ns3/event-id.h"
-#include "ns3/traced-callback.h"
-#include "ns3/nstime.h"
-#include "ns3/lte-phy.h"
-#include "ns3/eps-bearer.h"
-#include "ns3/component-carrier-ue.h"
+#include "lte-net-device.h"
+#include "../../core/model/event-id.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/nstime.h"
+#include "lte-phy.h"
+#include "eps-bearer.h"
+#include "component-carrier-ue.h"
 #include <vector>
 #include <map>
 

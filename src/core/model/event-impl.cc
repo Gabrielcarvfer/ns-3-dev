@@ -18,8 +18,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/event-impl.h"
-#include "ns3/log.h"
+#include "event-impl.h"
+#include "log.h"
 
 /**
  * \file

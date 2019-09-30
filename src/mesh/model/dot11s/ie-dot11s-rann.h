@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/mac48-address.h"
-#include "ns3/mesh-information-element-vector.h"
+#include "../../../network/utils/mac48-address.h"
+#include "../mesh-information-element-vector.h"
 
 namespace ns3 {
 namespace dot11s {

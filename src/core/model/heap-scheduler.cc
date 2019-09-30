@@ -20,10 +20,10 @@
  *
  */
 
-#include "ns3/heap-scheduler.h"
-#include "ns3/event-impl.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "heap-scheduler.h"
+#include "event-impl.h"
+#include "assert.h"
+#include "log.h"
 
 /**
  * \file

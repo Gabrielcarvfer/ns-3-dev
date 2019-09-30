@@ -21,10 +21,10 @@
 
 #pragma once
 
-#include "ns3/application.h"
-#include "ns3/wave-bsm-stats.h"
-#include "ns3/random-variable-stream.h"
-#include "ns3/internet-stack-helper.h"
+#include "../../network/model/application.h"
+#include "../helper/wave-bsm-stats.h"
+#include "../../core/model/random-variable-stream.h"
+#include "../../internet/helper/internet-stack-helper.h"
 
 namespace ns3 {
 /**

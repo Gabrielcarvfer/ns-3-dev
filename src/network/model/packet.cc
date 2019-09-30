@@ -17,10 +17,10 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/packet.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/simulator.h"
+#include "packet.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
 #include <string>
 #include <cstdarg>
 

@@ -22,9 +22,9 @@
 #pragma once
 
 
-#include "ns3/ptr.h"
-#include "ns3/simple-ref-count.h"
-#include "ns3/epc-tft.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/simple-ref-count.h"
+#include "epc-tft.h"
 
 #include <map>
 

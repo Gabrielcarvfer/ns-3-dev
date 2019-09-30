@@ -24,7 +24,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/cid.h"
+#include "cid.h"
 
 namespace ns3 {
 

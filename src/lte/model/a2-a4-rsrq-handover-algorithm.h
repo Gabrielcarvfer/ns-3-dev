@@ -27,11 +27,11 @@
 
 #pragma once
 
-#include <ns3/lte-handover-algorithm.h>
-#include <ns3/lte-handover-management-sap.h>
-#include <ns3/lte-rrc-sap.h>
-#include <ns3/simple-ref-count.h>
-#include <ns3/ptr.h>
+#include "lte-handover-algorithm.h"
+#include "lte-handover-management-sap.h"
+#include "lte-rrc-sap.h"
+#include "../../core/model/simple-ref-count.h"
+#include "../../core/model/ptr.h"
 #include <map>
 
 namespace ns3 {

@@ -18,10 +18,10 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/onoe-wifi-manager.h"
-#include "ns3/wifi-tx-vector.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
+#include "onoe-wifi-manager.h"
+#include "wifi-tx-vector.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 

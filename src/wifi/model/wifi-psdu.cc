@@ -18,13 +18,13 @@
  * Author: Stefano Avallone <stavallo@unina.it>
  */
 
-#include "ns3/packet.h"
-#include "ns3/log.h"
-#include "ns3/wifi-mac-queue-item.h"
-#include "ns3/wifi-psdu.h"
-#include "ns3/wifi-mac-trailer.h"
-#include "ns3/mpdu-aggregator.h"
-#include "ns3/wifi-utils.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/log.h"
+#include "wifi-mac-queue-item.h"
+#include "wifi-psdu.h"
+#include "wifi-mac-trailer.h"
+#include "mpdu-aggregator.h"
+#include "wifi-utils.h"
 
 namespace ns3 {
 

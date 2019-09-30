@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/uan-prop-model.h"
-#include "ns3/mobility-model.h"
-#include "ns3/nstime.h"
+#include "uan-prop-model.h"
+#include "../../mobility/model/mobility-model.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 

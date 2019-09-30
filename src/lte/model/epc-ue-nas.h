@@ -21,9 +21,9 @@
 #pragma once
 
 
-#include <ns3/object.h>
-#include <ns3/lte-as-sap.h>
-#include <ns3/epc-tft-classifier.h>
+#include "../../core/model/object.h"
+#include "lte-as-sap.h"
+#include "epc-tft-classifier.h"
 
 namespace ns3 {
 

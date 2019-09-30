@@ -18,8 +18,8 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/infrastructure-wifi-mac.h"
-#include "ns3/log.h"
+#include "infrastructure-wifi-mac.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

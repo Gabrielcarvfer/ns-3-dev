@@ -19,9 +19,9 @@
  */
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/nstime.h"
-#include "ns3/random-variable-stream.h"
+#include "../../core/model/object.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/random-variable-stream.h"
 #include <complex>
 
 namespace ns3

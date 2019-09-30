@@ -23,13 +23,13 @@
 
 #pragma once
 
-#include "ns3/header.h"
+#include "../../network/model/header.h"
 
 #include <bitset>
 #include <string>
 
-#include "ns3/lte-rrc-sap.h"
-#include "ns3/lte-asn1-header.h"
+#include "lte-rrc-sap.h"
+#include "lte-asn1-header.h"
 
 namespace ns3 {
 

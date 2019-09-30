@@ -20,8 +20,8 @@
  */
 #pragma once
 
-#include "ns3/block-ack-agreement.h"
-#include "ns3/block-ack-window.h"
+#include "block-ack-agreement.h"
+#include "block-ack-window.h"
 
 class OriginatorBlockAckWindowTest;
 

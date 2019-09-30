@@ -18,11 +18,11 @@
  * Authors: Tiago G. Rodrigues (tgr002@bucknell.edu)
  */
 
-#include "ns3/log.h"
-#include "ns3/string.h"
-#include "ns3/boolean.h"
+#include "../../core/model/log.h"
+#include "../../core/model/string.h"
+#include "../../core/model/boolean.h"
 
-#include "ns3/data-collection-object.h"
+#include "data-collection-object.h"
 
 namespace ns3 {
 

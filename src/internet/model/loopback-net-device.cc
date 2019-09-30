@@ -17,12 +17,12 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/loopback-net-device.h"
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/channel.h"
-#include "ns3/node.h"
-#include "ns3/packet.h"
+#include "loopback-net-device.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
+#include "../../network/model/channel.h"
+#include "../../network/model/node.h"
+#include "../../network/model/packet.h"
 
 namespace ns3 {
 

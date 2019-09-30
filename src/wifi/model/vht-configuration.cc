@@ -18,9 +18,9 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/uinteger.h"
-#include "ns3/vht-configuration.h"
+#include "../../core/model/log.h"
+#include "../../core/model/uinteger.h"
+#include "vht-configuration.h"
 
 namespace ns3 {
 

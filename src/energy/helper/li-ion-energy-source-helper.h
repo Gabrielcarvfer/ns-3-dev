@@ -22,8 +22,8 @@
 
 #pragma once
 
-#include "ns3/energy-model-helper.h"
-#include "ns3/node.h"
+#include "energy-model-helper.h"
+#include "../../network/model/node.h"
 
 namespace ns3 {
 

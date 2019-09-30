@@ -18,10 +18,10 @@
  * Author: Peter D. Barnes, Jr. <pdbarnes@llnl.gov>
  */
 
-#include "ns3/log.h"
-#include "ns3/time-printer.h"
-#include "ns3/simulator.h"  // Now()
-#include "ns3/nstime.h"
+#include "log.h"
+#include "time-printer.h"
+#include "simulator.h"  // Now()
+#include "nstime.h"
 
 #include <iomanip>
 

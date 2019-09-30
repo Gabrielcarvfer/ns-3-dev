@@ -16,8 +16,8 @@
  * Author: Moatamri Faker <faker.moatamri@sophia.inria.fr>
  */
 
-#include "ns3/attribute-default-iterator.h"
-#include "ns3/type-id.h"
+#include "attribute-default-iterator.h"
+#include "../../core/model/type-id.h"
 #include <gtk/gtk.h>
 #include <vector>
 

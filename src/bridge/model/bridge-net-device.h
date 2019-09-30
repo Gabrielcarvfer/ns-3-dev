@@ -17,10 +17,10 @@
  */
 #pragma once
 
-#include "ns3/net-device.h"
-#include "ns3/mac48-address.h"
-#include "ns3/nstime.h"
-#include "ns3/bridge-channel.h"
+#include "../../network/model/net-device.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../core/model/nstime.h"
+#include "bridge-channel.h"
 #include <stdint.h>
 #include <string>
 #include <map>

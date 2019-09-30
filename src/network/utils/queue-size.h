@@ -22,9 +22,9 @@
 
 #include <string>
 #include <iostream>
-#include "ns3/attribute.h"
-#include "ns3/attribute-helper.h"
-#include "ns3/abort.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/attribute-helper.h"
+#include "../../core/model/abort.h"
 
 namespace ns3 {
 

@@ -20,13 +20,13 @@
 
 #pragma once
 
-#include <ns3/assert.h>
+#include "../../core/model/assert.h"
 
 #include <limits>
 #include <iostream>
 #include <stdint.h>
 
-// #include "ns3/lte-rlc.h"
+// #include "lte-rlc.h"
 
 namespace ns3 {
 

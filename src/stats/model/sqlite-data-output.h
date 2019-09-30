@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/nstime.h"
+#include "../../core/model/nstime.h"
 
-#include "ns3/data-output-interface.h"
+#include "data-output-interface.h"
 
 #define STATS_HAS_SQLITE3
 

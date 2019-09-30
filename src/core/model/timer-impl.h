@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/simulator.h"
-#include "ns3/type-traits.h"
-#include "ns3/fatal-error.h"
-#include "ns3/int-to-type.h"
+#include "simulator.h"
+#include "type-traits.h"
+#include "fatal-error.h"
+#include "int-to-type.h"
 
 /**
  * \file

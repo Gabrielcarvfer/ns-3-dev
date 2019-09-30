@@ -17,9 +17,9 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/vector.h"
-#include "ns3/fatal-error.h"
-#include "ns3/log.h"
+#include "vector.h"
+#include "fatal-error.h"
+#include "log.h"
 #include <cmath>
 #include <sstream>
 #include <tuple>

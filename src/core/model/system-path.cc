@@ -17,10 +17,10 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/system-path.h"
-#include "ns3/fatal-error.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "system-path.h"
+#include "fatal-error.h"
+#include "assert.h"
+#include "log.h"
 #include "ns3/core-config.h"
 #include <cstdlib>
 #include <cerrno>

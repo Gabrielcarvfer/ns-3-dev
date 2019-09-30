@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/status-code.h"
+#include "status-code.h"
 
 namespace ns3 {
 

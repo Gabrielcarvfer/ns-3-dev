@@ -18,22 +18,22 @@
  * Author: Jahanzeb Farooq <jahanzeb.farooq@sophia.inria.fr>
  */
 
-#include "ns3/bs-scheduler-simple.h"
-#include "ns3/simulator.h"
-#include "ns3/bs-net-device.h"
-#include "ns3/packet-burst.h"
-#include "ns3/cid.h"
-#include "ns3/wimax-mac-header.h"
-#include "ns3/ss-record.h"
-#include "ns3/wimax-mac-queue.h"
-#include "ns3/log.h"
+#include "bs-scheduler-simple.h"
+#include "../../core/model/simulator.h"
+#include "bs-net-device.h"
+#include "../../network/utils/packet-burst.h"
+#include "cid.h"
+#include "wimax-mac-header.h"
+#include "ss-record.h"
+#include "wimax-mac-queue.h"
+#include "../../core/model/log.h"
 #include "burst-profile-manager.h"
-#include "ns3/wimax-connection.h"
-#include "ns3/connection-manager.h"
-#include "ns3/ss-manager.h"
-#include "ns3/service-flow.h"
-#include "ns3/service-flow-record.h"
-#include "ns3/service-flow-manager.h"
+#include "wimax-connection.h"
+#include "connection-manager.h"
+#include "ss-manager.h"
+#include "service-flow.h"
+#include "service-flow-record.h"
+#include "service-flow-manager.h"
 
 namespace ns3 {
 

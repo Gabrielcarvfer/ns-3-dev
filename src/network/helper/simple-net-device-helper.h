@@ -21,11 +21,11 @@
 
 #include <string>
 
-#include "ns3/attribute.h"
-#include "ns3/object-factory.h"
-#include "ns3/net-device-container.h"
-#include "ns3/node-container.h"
-#include "ns3/simple-channel.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/object-factory.h"
+#include "net-device-container.h"
+#include "node-container.h"
+#include "../utils/simple-channel.h"
 
 namespace ns3 {
 

@@ -21,11 +21,11 @@
 
 #pragma once
 
-#include "ns3/node.h"
-#include "ns3/net-device.h"
-#include "ns3/mac48-address.h"
-#include "ns3/bridge-channel.h"
-#include "ns3/mesh-l2-routing-protocol.h"
+#include "../../network/model/node.h"
+#include "../../network/model/net-device.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../bridge/model/bridge-channel.h"
+#include "mesh-l2-routing-protocol.h"
 
 namespace ns3 {
 

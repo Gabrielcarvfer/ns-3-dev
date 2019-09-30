@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <ns3/log.h>
-#include <ns3/ptr.h>
+#include "../../core/model/log.h"
+#include "../../core/model/ptr.h"
 #include <string>
 #include <map>
 

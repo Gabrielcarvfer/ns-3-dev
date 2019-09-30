@@ -25,9 +25,9 @@
 
 #pragma once
 
-#include "ns3/queue-limits.h"
-#include "ns3/nstime.h"
-#include "ns3/traced-value.h"
+#include "queue-limits.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/traced-value.h"
 #include <limits.h>
 
 namespace ns3 {

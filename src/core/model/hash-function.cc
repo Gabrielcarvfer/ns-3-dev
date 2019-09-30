@@ -18,8 +18,8 @@
  * Author: Peter D. Barnes, Jr. <pdbarnes@llnl.gov>
  */
 
-#include "ns3/log.h"
-#include "ns3/hash-function.h"
+#include "log.h"
+#include "hash-function.h"
 
 /**
  * \file

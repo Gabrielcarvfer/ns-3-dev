@@ -18,7 +18,7 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "ns3/uan-noise-model.h"
+#include "uan-noise-model.h"
 
 namespace ns3 {
 

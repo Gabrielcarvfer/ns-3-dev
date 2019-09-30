@@ -22,8 +22,8 @@
 
 #include <stdint.h>
 #include <vector>
-#include "ns3/ipv4.h"
-#include "ns3/ipv4-address.h"
+#include "../model/ipv4.h"
+#include "../../network/utils/ipv4-address.h"
 
 namespace ns3 {
 

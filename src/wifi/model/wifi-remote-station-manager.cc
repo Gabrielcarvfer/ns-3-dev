@@ -18,22 +18,22 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/log.h"
-#include "ns3/boolean.h"
-#include "ns3/uinteger.h"
-#include "ns3/enum.h"
-#include "ns3/simulator.h"
-#include "ns3/wifi-remote-station-manager.h"
-#include "ns3/wifi-phy.h"
-#include "ns3/wifi-mac.h"
-#include "ns3/wifi-utils.h"
-#include "ns3/wifi-mac-header.h"
-#include "ns3/wifi-mac-trailer.h"
-#include "ns3/ht-configuration.h"
-#include "ns3/vht-configuration.h"
-#include "ns3/he-configuration.h"
-#include "ns3/wifi-net-device.h"
-#include "ns3/tx-vector-tag.h"
+#include "../../core/model/log.h"
+#include "../../core/model/boolean.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/enum.h"
+#include "../../core/model/simulator.h"
+#include "wifi-remote-station-manager.h"
+#include "wifi-phy.h"
+#include "wifi-mac.h"
+#include "wifi-utils.h"
+#include "wifi-mac-header.h"
+#include "wifi-mac-trailer.h"
+#include "ht-configuration.h"
+#include "vht-configuration.h"
+#include "he-configuration.h"
+#include "wifi-net-device.h"
+#include "tx-vector-tag.h"
 
 namespace ns3 {
 

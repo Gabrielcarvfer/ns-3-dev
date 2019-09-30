@@ -18,12 +18,12 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "ns3/spectrum-phy.h"
-#include <ns3/net-device.h>
-#include <ns3/mobility-model.h>
-#include <ns3/spectrum-value.h>
-#include <ns3/spectrum-channel.h>
-#include <ns3/log.h>
+#include "spectrum-phy.h"
+#include "../../network/model/net-device.h"
+#include "../../mobility/model/mobility-model.h"
+#include "spectrum-value.h"
+#include "spectrum-channel.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

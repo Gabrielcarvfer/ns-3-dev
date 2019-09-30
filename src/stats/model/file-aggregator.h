@@ -26,7 +26,7 @@
 #include <fstream>
 #include <map>
 #include <string>
-#include "ns3/data-collection-object.h"
+#include "data-collection-object.h"
 
 namespace ns3 {
 

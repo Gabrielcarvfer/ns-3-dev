@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/test.h"
+#include "../../core/model/test.h"
 
 namespace ns3 {
 

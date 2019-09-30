@@ -20,10 +20,10 @@
 
 #include <cmath>
 
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
 
-#include "ns3/olsr-header.h"
+#include "olsr-header.h"
 
 #define IPV4_ADDRESS_SIZE 4
 #define OLSR_MSG_HEADER_SIZE 12

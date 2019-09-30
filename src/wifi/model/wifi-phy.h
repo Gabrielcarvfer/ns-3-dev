@@ -21,13 +21,13 @@
 
 #pragma once
 
-#include "ns3/event-id.h"
-#include "ns3/deprecated.h"
-#include "ns3/error-model.h"
-#include "ns3/wifi-mpdu-type.h"
-#include "ns3/wifi-phy-standard.h"
-#include "ns3/interference-helper.h"
-#include "ns3/wifi-phy-state-helper.h"
+#include "../../core/model/event-id.h"
+#include "../../core/model/deprecated.h"
+#include "../../network/utils/error-model.h"
+#include "wifi-mpdu-type.h"
+#include "wifi-phy-standard.h"
+#include "interference-helper.h"
+#include "wifi-phy-state-helper.h"
 
 namespace ns3 {
 

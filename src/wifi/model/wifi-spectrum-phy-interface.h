@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/spectrum-phy.h"
+#include "../../spectrum/model/spectrum-phy.h"
 
 namespace ns3 {
 

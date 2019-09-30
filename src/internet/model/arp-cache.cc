@@ -17,19 +17,19 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/assert.h"
-#include "ns3/packet.h"
-#include "ns3/simulator.h"
-#include "ns3/uinteger.h"
-#include "ns3/log.h"
-#include "ns3/node.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/names.h"
+#include "../../core/model/assert.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/log.h"
+#include "../../network/model/node.h"
+#include "../../core/model/trace-source-accessor.h"
+#include "../../core/model/names.h"
 
-#include "ns3/arp-cache.h"
-#include "ns3/arp-header.h"
-#include "ns3/ipv4-interface.h"
-#include "ns3/ipv4-header.h"
+#include "arp-cache.h"
+#include "arp-header.h"
+#include "ipv4-interface.h"
+#include "ipv4-header.h"
 
 namespace ns3 {
 

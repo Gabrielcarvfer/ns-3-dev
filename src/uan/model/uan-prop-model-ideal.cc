@@ -18,9 +18,9 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "ns3/uan-prop-model-ideal.h"
-#include "ns3/uan-tx-mode.h"
-#include "ns3/mobility-model.h"
+#include "uan-prop-model-ideal.h"
+#include "uan-tx-mode.h"
+#include "../../mobility/model/mobility-model.h"
 
 namespace ns3 {
 

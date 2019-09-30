@@ -33,8 +33,8 @@
  * Other conversions to std::size_t are marked.
  */
 
-#include "ns3/log.h"
-#include "ns3/hash-murmur3.h"
+#include "log.h"
+#include "hash-murmur3.h"
 
 #include <iomanip>
 

@@ -19,10 +19,10 @@
  *         Danilo Abrignani <danilo.abrignani@unibo.it> (Modification due to new Architecture - Carrier Aggregation - GSoC 2015)
  */
 
-#include "ns3/phy-stats-calculator.h"
-#include "ns3/string.h"
-#include <ns3/simulator.h>
-#include <ns3/log.h>
+#include "phy-stats-calculator.h"
+#include "../../core/model/string.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

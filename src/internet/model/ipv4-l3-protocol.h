@@ -24,15 +24,15 @@
 #include <map>
 #include <vector>
 #include <stdint.h>
-#include "ns3/ipv4-address.h"
-#include "ns3/ptr.h"
-#include "ns3/net-device.h"
-#include "ns3/ipv4.h"
-#include "ns3/traced-callback.h"
-#include "ns3/ipv4-header.h"
-#include "ns3/ipv4-routing-protocol.h"
-#include "ns3/nstime.h"
-#include "ns3/simulator.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../core/model/ptr.h"
+#include "../../network/model/net-device.h"
+#include "ipv4.h"
+#include "../../core/model/traced-callback.h"
+#include "ipv4-header.h"
+#include "ipv4-routing-protocol.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/simulator.h"
 
 class Ipv4L3ProtocolTestCase;
 

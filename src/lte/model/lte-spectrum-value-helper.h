@@ -21,7 +21,7 @@
 #pragma once
 
 
-#include <ns3/spectrum-value.h>
+#include "../../spectrum/model/spectrum-value.h"
 #include <vector>
 
 namespace ns3 {

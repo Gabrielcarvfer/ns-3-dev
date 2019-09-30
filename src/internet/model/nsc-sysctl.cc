@@ -16,10 +16,10 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/string.h"
-#include "ns3/nsc-sysctl.h"
+#include "../../core/model/string.h"
+#include "nsc-sysctl.h"
 
-#include "ns3/sim_interface.h"
+#include "sim_interface.h"
 
 namespace ns3 {
 

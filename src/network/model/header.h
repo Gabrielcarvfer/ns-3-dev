@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/chunk.h"
-#include "ns3/buffer.h"
+#include "chunk.h"
+#include "buffer.h"
 #include <stdint.h>
 
 namespace ns3 {

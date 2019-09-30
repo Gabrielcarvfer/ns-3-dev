@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/energy-model-helper.h"
-#include "ns3/wifi-radio-energy-model.h"
+#include "../../energy/helper/energy-model-helper.h"
+#include "../model/wifi-radio-energy-model.h"
 
 namespace ns3 {
 

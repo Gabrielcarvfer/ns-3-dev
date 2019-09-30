@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/wifi-remote-station-manager.h"
+#include "wifi-remote-station-manager.h"
 
 namespace ns3 {
 

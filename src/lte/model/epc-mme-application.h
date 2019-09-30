@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/application.h"
-#include "ns3/socket.h"
-#include "ns3/epc-s1ap-sap.h"
+#include "../../network/model/application.h"
+#include "../../network/model/socket.h"
+#include "epc-s1ap-sap.h"
 
 namespace ns3 {
 

@@ -23,8 +23,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/ascii-file.h"
-#include "ns3/test.h"
+#include "ascii-file.h"
+#include "../../core/model/test.h"
 
 /**
  * \brief Test that a pair of new/reference ascii files are equal

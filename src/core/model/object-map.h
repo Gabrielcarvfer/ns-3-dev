@@ -19,10 +19,10 @@
  */
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/ptr.h"
-#include "ns3/attribute.h"
-#include "ns3/object-ptr-container.h"
+#include "object.h"
+#include "ptr.h"
+#include "attribute.h"
+#include "object-ptr-container.h"
 
 /**
  * \file

@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/object-factory.h"
-#include "ns3/ipv4-routing-helper.h"
+#include "../../core/model/object-factory.h"
+#include "../../internet/helper/ipv4-routing-helper.h"
 
 namespace ns3 {
 

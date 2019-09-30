@@ -15,9 +15,9 @@
  *
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#include "ns3/channel-coordinator.h"
-#include "ns3/log.h"
-#include "ns3/simulator.h"
+#include "channel-coordinator.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
 
 namespace ns3 {
 

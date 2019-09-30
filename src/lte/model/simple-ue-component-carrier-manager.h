@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include <ns3/lte-ue-component-carrier-manager.h>
-#include <ns3/lte-ue-ccm-rrc-sap.h>
-#include <ns3/lte-rrc-sap.h>
+#include "lte-ue-component-carrier-manager.h"
+#include "lte-ue-ccm-rrc-sap.h"
+#include "lte-rrc-sap.h"
 #include <map>
 
 namespace ns3 {

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/mesh-information-element-vector.h"
+#include "../mesh-information-element-vector.h"
 
 namespace ns3
 {

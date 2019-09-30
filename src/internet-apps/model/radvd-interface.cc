@@ -18,8 +18,8 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#include "ns3/radvd-interface.h"
-#include <ns3/log.h>
+#include "radvd-interface.h"
+#include "../../core/model/log.h"
 
 namespace ns3 
 {

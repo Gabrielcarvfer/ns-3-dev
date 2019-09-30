@@ -19,8 +19,8 @@
  *          Stefano Avallone <stefano.avallone@unina.it>
  */
 
-#include "ns3/log.h"
-#include "ns3/queue-limits.h"
+#include "../../core/model/log.h"
+#include "queue-limits.h"
 
 namespace ns3 {
 

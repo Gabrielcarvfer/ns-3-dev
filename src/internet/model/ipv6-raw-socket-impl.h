@@ -22,9 +22,9 @@
 
 #include <list>
 
-#include "ns3/socket.h"
-#include "ns3/ipv6-address.h"
-#include "ns3/ipv6-header.h"
+#include "../../network/model/socket.h"
+#include "../../network/utils/ipv6-address.h"
+#include "ipv6-header.h"
 
 namespace ns3
 {

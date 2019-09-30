@@ -19,7 +19,7 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/ht-capabilities.h"
+#include "ht-capabilities.h"
 
 namespace ns3 {
 

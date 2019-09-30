@@ -22,8 +22,8 @@
 
 #include <stdint.h>
 #include <ostream>
-#include "ns3/address.h"
-#include "ns3/attribute-helper.h"
+#include "../model/address.h"
+#include "../../core/model/attribute-helper.h"
 
 namespace ns3 {
 

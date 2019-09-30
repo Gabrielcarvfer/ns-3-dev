@@ -22,10 +22,10 @@
 #include <stdint.h>
 #include <vector>
 #include <limits>
-#include "ns3/callback.h"
-#include "ns3/assert.h"
-#include "ns3/type-id.h"
-#include "ns3/buffer.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/type-id.h"
+#include "buffer.h"
 
 namespace ns3 {
 

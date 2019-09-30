@@ -19,22 +19,22 @@
  *         Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#include "ns3/uan-phy-gen.h"
-#include "ns3/uan-transducer.h"
-#include "ns3/uan-channel.h"
-#include "ns3/uan-net-device.h"
-#include "ns3/simulator.h"
-#include "ns3/traced-callback.h"
-#include "ns3/ptr.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/double.h"
-#include "ns3/string.h"
-#include "ns3/log.h"
-#include "ns3/uan-tx-mode.h"
-#include "ns3/node.h"
-#include "ns3/uinteger.h"
-#include "ns3/energy-source-container.h"
-#include "ns3/acoustic-modem-energy-model.h"
+#include "uan-phy-gen.h"
+#include "uan-transducer.h"
+#include "uan-channel.h"
+#include "uan-net-device.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/trace-source-accessor.h"
+#include "../../core/model/double.h"
+#include "../../core/model/string.h"
+#include "../../core/model/log.h"
+#include "uan-tx-mode.h"
+#include "../../network/model/node.h"
+#include "../../core/model/uinteger.h"
+#include "../../energy/helper/energy-source-container.h"
+#include "acoustic-modem-energy-model.h"
 
 
 namespace ns3 {

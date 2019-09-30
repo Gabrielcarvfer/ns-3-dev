@@ -21,12 +21,12 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/traced-value.h"
-#include "ns3/sequence-number.h"
-#include "ns3/nstime.h"
-#include "ns3/tcp-option-sack.h"
-#include "ns3/packet.h"
+#include "../../core/model/object.h"
+#include "../../core/model/traced-value.h"
+#include "../../network/utils/sequence-number.h"
+#include "../../core/model/nstime.h"
+#include "tcp-option-sack.h"
+#include "../../network/model/packet.h"
 
 namespace ns3 {
 class Packet;

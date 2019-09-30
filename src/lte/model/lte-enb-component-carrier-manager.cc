@@ -19,8 +19,8 @@
  *
  */
 
-#include "ns3/lte-enb-component-carrier-manager.h"
-#include <ns3/log.h>
+#include "lte-enb-component-carrier-manager.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

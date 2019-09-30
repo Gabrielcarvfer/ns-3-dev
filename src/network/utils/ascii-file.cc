@@ -22,10 +22,10 @@
 
 #include <iostream>
 #include <string>
-#include "ns3/assert.h"
-#include "ns3/fatal-error.h"
-#include "ns3/fatal-impl.h"
-#include "ns3/ascii-file.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/fatal-impl.h"
+#include "ascii-file.h"
 //
 // This file is used as part of the ns-3 test framework, so please refrain from 
 // adding any ns-3 specific constructs such as Packet to this file.

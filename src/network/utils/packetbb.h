@@ -26,11 +26,11 @@
 
 #include <list>
 
-#include "ns3/ptr.h"
-#include "ns3/address.h"
-#include "ns3/header.h"
-#include "ns3/buffer.h"
-#include "ns3/simple-ref-count.h"
+#include "../../core/model/ptr.h"
+#include "../model/address.h"
+#include "../model/header.h"
+#include "../model/buffer.h"
+#include "../../core/model/simple-ref-count.h"
 
 namespace ns3 {
 

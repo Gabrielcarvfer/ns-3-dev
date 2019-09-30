@@ -21,7 +21,7 @@
 
 #include <stdint.h>
 #include <vector>
-#include "ns3/node.h"
+#include "../model/node.h"
 
 namespace ns3 {
 

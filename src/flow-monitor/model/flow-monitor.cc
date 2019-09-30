@@ -18,10 +18,10 @@
 // Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt> <gjcarneiro@gmail.com>
 //
 
-#include "ns3/flow-monitor.h"
-#include "ns3/simulator.h"
-#include "ns3/log.h"
-#include "ns3/double.h"
+#include "flow-monitor.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/log.h"
+#include "../../core/model/double.h"
 #include <fstream>
 #include <sstream>
 

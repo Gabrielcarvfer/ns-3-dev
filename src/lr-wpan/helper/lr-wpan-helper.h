@@ -21,10 +21,10 @@
  */
 #pragma once
 
-#include <ns3/node-container.h>
-#include <ns3/lr-wpan-phy.h>
-#include <ns3/lr-wpan-mac.h>
-#include <ns3/trace-helper.h>
+#include "../../network/helper/node-container.h"
+#include "../model/lr-wpan-phy.h"
+#include "../model/lr-wpan-mac.h"
+#include "../../network/helper/trace-helper.h"
 
 namespace ns3 {
 

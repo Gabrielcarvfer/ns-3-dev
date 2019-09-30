@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/address.h"
+#include "../model/address.h"
 #include <iostream>
 
 namespace ns3 {

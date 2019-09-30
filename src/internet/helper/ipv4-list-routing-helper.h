@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "ns3/ipv4-routing-helper.h"
+#include "ipv4-routing-helper.h"
 #include <stdint.h>
 #include <list>
 

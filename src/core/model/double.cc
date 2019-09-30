@@ -17,9 +17,9 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/double.h"
-#include "ns3/object.h"
-#include "ns3/log.h"
+#include "double.h"
+#include "object.h"
+#include "log.h"
 #include <sstream>
 
 /**

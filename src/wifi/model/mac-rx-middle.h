@@ -21,8 +21,8 @@
 #pragma once
 
 #include <map>
-#include "ns3/simple-ref-count.h"
-#include "ns3/callback.h"
+#include "../../core/model/simple-ref-count.h"
+#include "../../core/model/callback.h"
 
 namespace ns3 {
 

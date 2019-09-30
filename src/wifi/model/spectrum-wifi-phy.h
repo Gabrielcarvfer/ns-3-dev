@@ -25,10 +25,10 @@
 
 #pragma once
 
-#include "ns3/antenna-model.h"
-#include "ns3/spectrum-channel.h"
-#include "ns3/spectrum-model.h"
-#include "ns3/wifi-phy.h"
+#include "../../antenna/model/antenna-model.h"
+#include "../../spectrum/model/spectrum-channel.h"
+#include "../../spectrum/model/spectrum-model.h"
+#include "wifi-phy.h"
 
 namespace ns3 {
 

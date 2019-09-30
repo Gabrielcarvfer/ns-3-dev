@@ -21,10 +21,10 @@
  *
  */
 
-#include "ns3/tcp-prr-recovery.h"
-#include "ns3/tcp-socket-base.h"
-#include "ns3/tcp-congestion-ops.h"
-#include "ns3/log.h"
+#include "tcp-prr-recovery.h"
+#include "tcp-socket-base.h"
+#include "tcp-congestion-ops.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

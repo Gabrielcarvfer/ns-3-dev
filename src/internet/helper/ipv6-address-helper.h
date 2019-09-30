@@ -23,9 +23,9 @@
 
 #include <vector>
 
-#include "ns3/ipv6-address.h"
-#include "ns3/net-device-container.h"
-#include "ns3/ipv6-interface-container.h"
+#include "../../network/utils/ipv6-address.h"
+#include "../../network/helper/net-device-container.h"
+#include "ipv6-interface-container.h"
 
 namespace ns3 {
 

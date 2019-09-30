@@ -22,9 +22,9 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/event-id.h>
-#include <ns3/lr-wpan-mac.h>
+#include "../../core/model/object.h"
+#include "../../core/model/event-id.h"
+#include "lr-wpan-mac.h"
 
 namespace ns3 {
 

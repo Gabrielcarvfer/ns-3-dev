@@ -18,8 +18,8 @@
  * Author: Benjamin Cizdziel <ben.cizdziel@gmail.com>
  */
 
-#include <ns3/vector.h>
-#include <ns3/random-variable-stream.h>
+#include "../../core/model/vector.h"
+#include "../../core/model/random-variable-stream.h"
 
 #pragma once
 

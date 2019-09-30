@@ -18,8 +18,8 @@
  * Author: Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
 
-#include "ns3/backoff.h"
-#include "ns3/log.h"
+#include "backoff.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

@@ -19,10 +19,10 @@
  *         Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "ns3/radio-bearer-stats-calculator.h"
-#include "ns3/string.h"
-#include "ns3/nstime.h"
-#include <ns3/log.h>
+#include "radio-bearer-stats-calculator.h"
+#include "../../core/model/string.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/log.h"
 #include <vector>
 #include <algorithm>
 

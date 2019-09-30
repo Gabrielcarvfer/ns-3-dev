@@ -22,13 +22,13 @@
 
 #include <list>
 
-#include "ns3/ipv6-routing-protocol.h"
-#include "ns3/ipv6-interface.h"
-#include "ns3/inet6-socket-address.h"
-#include "ns3/ipv6-l3-protocol.h"
-#include "ns3/ipv6-routing-table-entry.h"
-#include "ns3/random-variable-stream.h"
-#include "ns3/ripng-header.h"
+#include "ipv6-routing-protocol.h"
+#include "ipv6-interface.h"
+#include "../../network/utils/inet6-socket-address.h"
+#include "ipv6-l3-protocol.h"
+#include "ipv6-routing-table-entry.h"
+#include "../../core/model/random-variable-stream.h"
+#include "ripng-header.h"
 
 namespace ns3 {
 

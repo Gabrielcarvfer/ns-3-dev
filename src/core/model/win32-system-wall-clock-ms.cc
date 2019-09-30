@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage.inria.fr>
  */
 
-#include "ns3/system-wall-clock-ms.h"
+#include "system-wall-clock-ms.h"
 
 #include <ctime>
 

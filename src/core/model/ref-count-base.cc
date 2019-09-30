@@ -21,8 +21,8 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/ref-count-base.h"
-#include "ns3/log.h"
+#include "ref-count-base.h"
+#include "log.h"
 
 /**
  * \file

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/header.h"
+#include "../../network/model/header.h"
 
 #include <bitset>
 #include <string>

@@ -26,8 +26,8 @@
 
 #pragma once
 
-#include "ns3/tcp-congestion-ops.h"
-#include "ns3/tcp-recovery-ops.h"
+#include "tcp-congestion-ops.h"
+#include "tcp-recovery-ops.h"
 
 namespace ns3 {
 

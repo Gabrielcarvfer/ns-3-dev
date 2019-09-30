@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include <ns3/callback.h>
+#include "../../core/model/callback.h"
 
 namespace ns3 {
 

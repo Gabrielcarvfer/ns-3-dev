@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/spectrum-propagation-loss-model.h"
+#include "spectrum-propagation-loss-model.h"
 
 namespace ns3 {
 

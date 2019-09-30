@@ -18,10 +18,10 @@
  * Author: Tom Henderson (tomhend@u.washington.edu)
  */
 
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/simulation-singleton.h"
-#include "ns3/global-route-manager.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulation-singleton.h"
+#include "global-route-manager.h"
 #include "global-route-manager-impl.h"
 
 namespace ns3 {

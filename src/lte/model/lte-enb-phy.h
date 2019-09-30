@@ -22,11 +22,11 @@
 #pragma once
 
 
-#include <ns3/lte-control-messages.h>
-#include <ns3/lte-enb-phy-sap.h>
-#include <ns3/lte-enb-cphy-sap.h>
-#include <ns3/lte-phy.h>
-#include <ns3/lte-harq-phy.h>
+#include "lte-control-messages.h"
+#include "lte-enb-phy-sap.h"
+#include "lte-enb-cphy-sap.h"
+#include "lte-phy.h"
+#include "lte-harq-phy.h"
 
 #include <map>
 #include <set>

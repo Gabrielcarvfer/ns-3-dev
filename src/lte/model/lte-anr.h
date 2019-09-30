@@ -27,9 +27,9 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/lte-rrc-sap.h>
-#include <ns3/lte-anr-sap.h>
+#include "../../core/model/object.h"
+#include "lte-rrc-sap.h"
+#include "lte-anr-sap.h"
 #include <map>
 
 namespace ns3 {

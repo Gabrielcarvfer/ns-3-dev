@@ -19,10 +19,10 @@
  *
  */
 
-#include "ns3/lte-ffr-algorithm.h"
-#include "ns3/uinteger.h"
-#include "ns3/boolean.h"
-#include <ns3/log.h>
+#include "lte-ffr-algorithm.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/boolean.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

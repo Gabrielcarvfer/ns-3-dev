@@ -21,9 +21,9 @@
 #pragma once
 
 #include <list>
-#include "ns3/channel.h"
-#include "ns3/wimax-connection.h"
-#include "ns3/log.h"
+#include "../../network/model/channel.h"
+#include "wimax-connection.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

@@ -32,10 +32,10 @@
 #pragma once
 
 #include <vector>
-#include "ns3/ipv4-routing-protocol.h"
-#include "ns3/simulator.h"
-#include "ns3/ipv4-header.h"
-#include "ns3/dsr-option-header.h"
+#include "../../internet/model/ipv4-routing-protocol.h"
+#include "../../core/model/simulator.h"
+#include "../../internet/model/ipv4-header.h"
+#include "dsr-option-header.h"
 
 namespace ns3 {
 namespace dsr {

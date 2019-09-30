@@ -19,8 +19,8 @@
  *          Aleksey Kovalenko <kovalenko@iitp.ru>
  */
 
-#include "ns3/ie-dot11s-configuration.h"
-#include "ns3/packet.h"
+#include "ie-dot11s-configuration.h"
+#include "../../../network/model/packet.h"
 namespace ns3 {
 namespace dot11s {
 

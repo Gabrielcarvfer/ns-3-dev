@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "ns3/nstime.h"
-#include "ns3/propagation-loss-model.h"
+#include "../../core/model/nstime.h"
+#include "propagation-loss-model.h"
 
 namespace ns3 {
 

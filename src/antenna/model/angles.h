@@ -21,7 +21,7 @@
 #pragma once
 
 
-#include <ns3/vector.h>
+#include "../../core/model/vector.h"
 
 namespace ns3 {
 

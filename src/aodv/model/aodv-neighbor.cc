@@ -27,9 +27,9 @@
  */
 
 #include <algorithm>
-#include "ns3/log.h"
-#include "ns3/wifi-mac-header.h"
-#include "ns3/aodv-neighbor.h"
+#include "../../core/model/log.h"
+#include "../../wifi/model/wifi-mac-header.h"
+#include "aodv-neighbor.h"
 
 namespace ns3 {
 

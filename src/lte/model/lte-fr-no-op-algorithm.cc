@@ -19,8 +19,8 @@
  *
  */
 
-#include "ns3/lte-fr-no-op-algorithm.h"
-#include <ns3/log.h>
+#include "lte-fr-no-op-algorithm.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

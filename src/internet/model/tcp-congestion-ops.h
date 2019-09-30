@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include "ns3/tcp-socket-state.h"
+#include "tcp-socket-state.h"
 
 namespace ns3 {
 

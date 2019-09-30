@@ -25,8 +25,8 @@
 #include <stdint.h>
 #include <list>
 
-#include <ns3/ptr.h>
-#include <ns3/simulator.h>
+#include "../../core/model/ptr.h"
+#include "../../core/model/simulator.h"
 
 namespace ns3 {
 

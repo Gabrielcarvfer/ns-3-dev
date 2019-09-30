@@ -22,7 +22,7 @@
 #pragma once
 
 
-#include <ns3/spectrum-signal-parameters.h>
+#include "../../spectrum/model/spectrum-signal-parameters.h"
 
 namespace ns3 {
 

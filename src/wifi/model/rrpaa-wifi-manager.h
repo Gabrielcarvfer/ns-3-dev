@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/nstime.h"
-#include "ns3/random-variable-stream.h"
-#include "ns3/wifi-remote-station-manager.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/random-variable-stream.h"
+#include "wifi-remote-station-manager.h"
 
 namespace ns3 {
 

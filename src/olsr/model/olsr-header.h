@@ -22,9 +22,9 @@
 
 #include <stdint.h>
 #include <vector>
-#include "ns3/header.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/nstime.h"
+#include "../../network/model/header.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../core/model/nstime.h"
 
 
 namespace ns3 {

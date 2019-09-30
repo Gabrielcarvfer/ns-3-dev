@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include <ns3/ptr.h>
-#include <ns3/simple-ref-count.h>
-#include <ns3/spectrum-model.h>
+#include "../../core/model/ptr.h"
+#include "../../core/model/simple-ref-count.h"
+#include "spectrum-model.h"
 #include <ostream>
 #include <vector>
 

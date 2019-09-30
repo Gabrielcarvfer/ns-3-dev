@@ -33,8 +33,8 @@
 #include <sys/types.h>
 #include <stdlib.h>
 
-#include "ns3/log.h"
-#include "ns3/hash-fnv.h"
+#include "log.h"
+#include "hash-fnv.h"
 
 /**
  * \file

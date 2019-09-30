@@ -21,9 +21,9 @@
 #pragma once
 
 #include <list>
-#include "ns3/ptr.h"
-#include "ns3/object.h"
-#include "ns3/ipv6-interface-address.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/object.h"
+#include "ipv6-interface-address.h"
 
 namespace ns3
 {

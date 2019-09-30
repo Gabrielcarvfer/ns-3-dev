@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "ns3/net-device.h"
-#include "ns3/mac48-address.h"
+#include "../../network/model/net-device.h"
+#include "../../network/utils/mac48-address.h"
 #include <stdint.h>
 #include <string>
 

@@ -17,11 +17,11 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/ipv4-global-routing-helper.h"
-#include "ns3/global-router-interface.h"
-#include "ns3/ipv4-global-routing.h"
-#include "ns3/ipv4-list-routing.h"
-#include "ns3/log.h"
+#include "ipv4-global-routing-helper.h"
+#include "../model/global-router-interface.h"
+#include "../model/ipv4-global-routing.h"
+#include "../model/ipv4-list-routing.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

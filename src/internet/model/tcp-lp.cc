@@ -21,9 +21,9 @@
  *
  */
 
-#include "ns3/tcp-lp.h"
-#include "ns3/tcp-socket-base.h"
-#include "ns3/log.h"
+#include "tcp-lp.h"
+#include "tcp-socket-base.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

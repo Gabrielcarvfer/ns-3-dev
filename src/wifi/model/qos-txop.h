@@ -22,10 +22,10 @@
 
 #pragma once
 
-#include "ns3/traced-value.h"
-#include "ns3/block-ack-manager.h"
-#include "ns3/txop.h"
-#include "ns3/qos-utils.h"
+#include "../../core/model/traced-value.h"
+#include "block-ack-manager.h"
+#include "txop.h"
+#include "qos-utils.h"
 
 class AmpduAggregationTest;
 class TwoLevelAggregationTest;

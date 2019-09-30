@@ -18,14 +18,14 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include <ns3/fatal-error.h>
-#include <ns3/log.h>
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/log.h"
 
-#include <ns3/epc-helper.h>
+#include "../helper/epc-helper.h"
 
-#include "ns3/lte-enb-net-device.h"
-#include "ns3/epc-ue-nas.h"
-#include "ns3/lte-as-sap.h"
+#include "lte-enb-net-device.h"
+#include "epc-ue-nas.h"
+#include "lte-as-sap.h"
 
 namespace ns3 {
 

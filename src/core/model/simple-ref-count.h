@@ -21,10 +21,10 @@
  */
 #pragma once
 
-#include "ns3/empty.h"
-#include "ns3/default-deleter.h"
-#include "ns3/assert.h"
-#include "ns3/unused.h"
+#include "empty.h"
+#include "default-deleter.h"
+#include "assert.h"
+#include "unused.h"
 #include <stdint.h>
 #include <limits>
 

@@ -21,13 +21,13 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/callback.h"
-#include "ns3/object.h"
-#include "ns3/ptr.h"
-#include "ns3/packet.h"
-#include "ns3/address.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/ipv6-address.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/object.h"
+#include "../../core/model/ptr.h"
+#include "packet.h"
+#include "address.h"
+#include "../utils/ipv4-address.h"
+#include "../utils/ipv6-address.h"
 
 namespace ns3 {
 

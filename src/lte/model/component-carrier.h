@@ -21,12 +21,12 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/packet.h>
-#include <ns3/nstime.h>
-#include "ns3/lte-phy.h"
-#include <ns3/lte-enb-phy.h>
-#include <ns3/pointer.h>
+#include "../../core/model/object.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/nstime.h"
+#include "lte-phy.h"
+#include "lte-enb-phy.h"
+#include "../../core/model/pointer.h"
 
 namespace ns3 {
 

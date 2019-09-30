@@ -21,7 +21,7 @@
 #pragma once
 
 #include <cstring>  // memcpy
-#include "ns3/simple-ref-count.h"
+#include "simple-ref-count.h"
 
 /**
  * \file

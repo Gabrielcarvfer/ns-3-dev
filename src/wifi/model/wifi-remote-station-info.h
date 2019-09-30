@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/nstime.h"
-#include "ns3/uinteger.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/uinteger.h"
 
 namespace ns3 {
 

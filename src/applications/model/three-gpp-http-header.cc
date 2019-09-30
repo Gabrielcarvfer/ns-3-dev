@@ -19,10 +19,10 @@
  *
  */
 
-#include <ns3/log.h>
-#include <ns3/packet.h>
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
 #include <sstream>
-#include "ns3/three-gpp-http-header.h"
+#include "three-gpp-http-header.h"
 
 NS_LOG_COMPONENT_DEFINE ("ThreeGppHttpHeader");
 

@@ -23,7 +23,7 @@
 #include <vector>
 #include <ostream>
 
-#include "ns3/ipv4-address.h"
+#include "../../network/utils/ipv4-address.h"
 
 namespace ns3 {
 

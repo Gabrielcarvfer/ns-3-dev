@@ -24,8 +24,8 @@
 
 #include <map>
 
-#include "ns3/radvd-interface.h"
-#include "ns3/application.h"
+#include "radvd-interface.h"
+#include "../../network/model/application.h"
 
 
 namespace ns3

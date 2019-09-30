@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/epc-gtpu-header.h"
+#include "../model/epc-gtpu-header.h"
 
-#include "ns3/test.h"
+#include "../../core/model/test.h"
 
 
 using namespace ns3;

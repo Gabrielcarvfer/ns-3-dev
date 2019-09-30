@@ -19,14 +19,14 @@
  * Author: Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#include "ns3/basic-energy-harvester.h"
+#include "basic-energy-harvester.h"
 
-#include "ns3/log.h"
-#include "ns3/assert.h"
-#include "ns3/pointer.h"
-#include "ns3/string.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/simulator.h"
+#include "../../core/model/log.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/pointer.h"
+#include "../../core/model/string.h"
+#include "../../core/model/trace-source-accessor.h"
+#include "../../core/model/simulator.h"
 
 namespace ns3 {
 

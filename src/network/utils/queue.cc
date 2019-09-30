@@ -16,11 +16,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/abort.h"
-#include "ns3/enum.h"
-#include "ns3/uinteger.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/queue.h"
+#include "../../core/model/abort.h"
+#include "../../core/model/enum.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/trace-source-accessor.h"
+#include "queue.h"
 
 namespace ns3 {
 

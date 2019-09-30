@@ -19,10 +19,10 @@
 //
 #pragma once
 
-#include "ns3/node-container.h"
-#include "ns3/object-factory.h"
-#include "ns3/flow-monitor.h"
-#include "ns3/flow-classifier.h"
+#include "../../network/helper/node-container.h"
+#include "../../core/model/object-factory.h"
+#include "../model/flow-monitor.h"
+#include "../model/flow-classifier.h"
 #include <string>
 
 namespace ns3 {

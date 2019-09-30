@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/node-container.h"
+#include "node-container.h"
 
 namespace ns3 {
 

@@ -22,12 +22,12 @@
 #include <stdint.h>
 #include <string>
 
-#include "ns3/traced-callback.h"
-#include "ns3/net-device.h"
-#include "ns3/data-rate.h"
-#include "ns3/event-id.h"
+#include "../../core/model/traced-callback.h"
+#include "../model/net-device.h"
+#include "data-rate.h"
+#include "../../core/model/event-id.h"
 
-#include "ns3/mac48-address.h"
+#include "mac48-address.h"
 
 namespace ns3 {
 

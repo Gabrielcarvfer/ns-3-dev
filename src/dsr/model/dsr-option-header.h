@@ -34,9 +34,9 @@
 #include <ostream>
 #include <algorithm>
 
-#include "ns3/header.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/simulator.h"
+#include "../../network/model/header.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../core/model/simulator.h"
 
 namespace ns3 {
 

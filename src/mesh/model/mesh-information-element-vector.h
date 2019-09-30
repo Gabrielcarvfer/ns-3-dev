@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "ns3/wifi-information-element-vector.h"
+#include "../../wifi/model/wifi-information-element-vector.h"
 
 namespace ns3 {
 

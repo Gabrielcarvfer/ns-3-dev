@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/ipv4-raw-socket-factory.h"
+#include "ipv4-raw-socket-factory.h"
 
 namespace ns3 {
 

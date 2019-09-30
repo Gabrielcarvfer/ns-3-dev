@@ -19,9 +19,9 @@
  */
 
 
-#include <ns3/log.h>
+#include "../../core/model/log.h"
 #include <cmath>
-#include "ns3/antenna-model.h"
+#include "antenna-model.h"
 
 
 namespace ns3 {

@@ -18,10 +18,10 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/ipv4-end-point-demux.h"
-#include "ns3/ipv4-end-point.h"
-#include "ns3/ipv4-interface-address.h"
-#include "ns3/log.h"
+#include "ipv4-end-point-demux.h"
+#include "ipv4-end-point.h"
+#include "ipv4-interface-address.h"
+#include "../../core/model/log.h"
 
 
 namespace ns3 {

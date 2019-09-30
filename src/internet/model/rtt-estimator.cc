@@ -28,9 +28,9 @@
 #include <iostream>
 #include <cmath>
 
-#include "ns3/rtt-estimator.h"
-#include "ns3/double.h"
-#include "ns3/log.h"
+#include "rtt-estimator.h"
+#include "../../core/model/double.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

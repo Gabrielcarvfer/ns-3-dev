@@ -19,9 +19,9 @@
  */
 #pragma once
 
-#include "ns3/nstime.h"
-#include "ns3/vector.h"
-#include "ns3/box.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/vector.h"
+#include "box.h"
 
 namespace ns3 {
 

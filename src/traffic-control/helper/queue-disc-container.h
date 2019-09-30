@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 #include <vector>
-#include "ns3/queue-disc.h"
+#include "../model/queue-disc.h"
 
 namespace ns3 {
 

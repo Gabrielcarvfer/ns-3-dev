@@ -18,10 +18,10 @@
 // Author: Rajib Bhattacharjea<raj.b@gatech.edu>
 //
 
-#include "ns3/data-rate.h"
-#include "ns3/nstime.h"
-#include "ns3/fatal-error.h"
-#include "ns3/log.h"
+#include "data-rate.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
   

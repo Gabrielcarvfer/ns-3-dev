@@ -22,8 +22,8 @@
 
 #pragma once
 
-#include "ns3/uinteger.h"
-#include "ns3/block-ack-type.h"
+#include "../../core/model/uinteger.h"
+#include "block-ack-type.h"
 
 namespace ns3 {
 

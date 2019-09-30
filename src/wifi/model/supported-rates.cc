@@ -18,8 +18,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/log.h"
-#include "ns3/supported-rates.h"
+#include "../../core/model/log.h"
+#include "supported-rates.h"
 
 namespace ns3 {
 

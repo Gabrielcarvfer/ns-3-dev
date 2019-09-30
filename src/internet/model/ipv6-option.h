@@ -22,14 +22,14 @@
 
 #include <map>
 
-#include "ns3/object.h"
-#include "ns3/node.h"
-#include "ns3/ptr.h"
-#include "ns3/ipv6-interface.h"
-#include "ns3/ipv6-header.h"
-#include "ns3/buffer.h"
-#include "ns3/packet.h"
-#include "ns3/ipv6-address.h"
+#include "../../core/model/object.h"
+#include "../../network/model/node.h"
+#include "../../core/model/ptr.h"
+#include "ipv6-interface.h"
+#include "ipv6-header.h"
+#include "../../network/model/buffer.h"
+#include "../../network/model/packet.h"
+#include "../../network/utils/ipv6-address.h"
 
 namespace ns3
 {

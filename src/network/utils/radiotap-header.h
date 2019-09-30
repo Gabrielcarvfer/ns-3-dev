@@ -22,7 +22,7 @@
 #pragma once
 
 
-#include <ns3/header.h>
+#include "../model/header.h"
 
 namespace ns3 {
 

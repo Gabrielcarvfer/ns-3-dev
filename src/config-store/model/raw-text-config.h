@@ -22,7 +22,7 @@
 
 #include <string>
 #include <fstream>
-#include "ns3/file-config.h"
+#include "file-config.h"
 
 namespace ns3 {
 

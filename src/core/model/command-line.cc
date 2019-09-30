@@ -25,14 +25,14 @@
 #include <set>
 #include <sstream>
 
-#include "ns3/command-line.h"
-#include "ns3/des-metrics.h"
-#include "ns3/log.h"
-#include "ns3/config.h"
-#include "ns3/global-value.h"
-#include "ns3/system-path.h"
-#include "ns3/type-id.h"
-#include "ns3/string.h"
+#include "command-line.h"
+#include "des-metrics.h"
+#include "log.h"
+#include "config.h"
+#include "global-value.h"
+#include "system-path.h"
+#include "type-id.h"
+#include "string.h"
 
 
 /**

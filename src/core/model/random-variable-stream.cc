@@ -23,17 +23,17 @@
  * Modified by Mitch Watrous <watrous@u.washington.edu>
  *
  */
-#include "ns3/random-variable-stream.h"
-#include "ns3/assert.h"
-#include "ns3/boolean.h"
-#include "ns3/double.h"
-#include "ns3/integer.h"
-#include "ns3/string.h"
-#include "ns3/pointer.h"
-#include "ns3/log.h"
-#include "ns3/rng-stream.h"
-#include "ns3/rng-seed-manager.h"
-#include "ns3/unused.h"
+#include "random-variable-stream.h"
+#include "assert.h"
+#include "boolean.h"
+#include "double.h"
+#include "integer.h"
+#include "string.h"
+#include "pointer.h"
+#include "log.h"
+#include "rng-stream.h"
+#include "rng-seed-manager.h"
+#include "unused.h"
 #include <cmath>
 #include <iostream>
 

@@ -18,10 +18,10 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/double.h"
-#include "ns3/threshold-preamble-detection-model.h"
-#include "ns3/wifi-utils.h"
+#include "../../core/model/log.h"
+#include "../../core/model/double.h"
+#include "threshold-preamble-detection-model.h"
+#include "wifi-utils.h"
 
 namespace ns3 {
 

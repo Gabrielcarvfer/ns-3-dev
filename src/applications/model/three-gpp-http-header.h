@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <ns3/header.h>
-#include <ns3/nstime.h>
+#include "../../network/model/header.h"
+#include "../../core/model/nstime.h"
 
 
 namespace ns3 {

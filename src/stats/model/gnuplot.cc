@@ -18,8 +18,8 @@
  * Original Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  * Enhancements: Timo Bingmann <timo.bingmann@student.kit.edu>
  */
-#include "ns3/gnuplot.h"
-#include "ns3/assert.h"
+#include "gnuplot.h"
+#include "../../core/model/assert.h"
 #include <ostream>
 #include <stdexcept>
 

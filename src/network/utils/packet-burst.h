@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 #include <list>
-#include "ns3/object.h"
+#include "../../core/model/object.h"
 
 namespace ns3 {
 

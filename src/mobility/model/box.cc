@@ -18,10 +18,10 @@
  * Author: Dan Broyles <dbroyl01@ku.edu>
  */
 
-#include "ns3/box.h"
-#include "ns3/vector.h"
-#include "ns3/assert.h"
-#include "ns3/fatal-error.h"
+#include "box.h"
+#include "../../core/model/vector.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/fatal-error.h"
 #include <cmath>
 #include <algorithm>
 #include <sstream> 

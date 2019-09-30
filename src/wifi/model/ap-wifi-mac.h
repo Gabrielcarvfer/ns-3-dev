@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "ns3/infrastructure-wifi-mac.h"
+#include "infrastructure-wifi-mac.h"
 
 namespace ns3 {
 

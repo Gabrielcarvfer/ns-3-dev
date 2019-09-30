@@ -22,8 +22,8 @@
 
 
 #include <stdint.h>
-#include "ns3/dl-mac-messages.h"
-#include "ns3/address-utils.h"
+#include "dl-mac-messages.h"
+#include "../../network/utils/address-utils.h"
 
 namespace ns3 {
 

@@ -21,12 +21,12 @@
 
 #pragma once
 
-#include "ns3/test.h"
-#include "ns3/spectrum-value.h"
-#include <ns3/lte-rrc-sap.h>
+#include "../../core/model/test.h"
+#include "../../spectrum/model/spectrum-value.h"
+#include "../model/lte-rrc-sap.h"
 
-#include "ns3/spectrum-test.h"
-#include "ns3/lte-spectrum-value-helper.h"
+#include "../../spectrum/test/spectrum-test.h"
+#include "../model/lte-spectrum-value-helper.h"
 
 using namespace ns3;
 

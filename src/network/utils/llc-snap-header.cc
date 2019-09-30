@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/llc-snap-header.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "llc-snap-header.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
 #include <string>
 
 namespace ns3 {

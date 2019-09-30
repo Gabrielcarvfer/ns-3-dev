@@ -23,8 +23,8 @@
  *                            James P.G. Sterbenz <jpgs@ittc.ku.edu>, director
  */
 
-#include "ns3/tcp-option-sack.h"
-#include "ns3/log.h"
+#include "tcp-option-sack.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

@@ -18,9 +18,9 @@
  
 #pragma once
 
-#include "ns3/ptr.h"
-#include "ns3/object.h"
-#include "ns3/object-ptr-container.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/object.h"
+#include "../../core/model/object-ptr-container.h"
 #include <vector>
 
 namespace ns3 {

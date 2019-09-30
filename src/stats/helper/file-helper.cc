@@ -22,11 +22,11 @@
 #include <fstream>
 #include <string>
 
-#include "ns3/file-helper.h"
-#include "ns3/abort.h"
-#include "ns3/log.h"
-#include "ns3/config.h"
-#include "ns3/get-wildcard-matches.h"
+#include "file-helper.h"
+#include "../../core/model/abort.h"
+#include "../../core/model/log.h"
+#include "../../core/model/config.h"
+#include "../model/get-wildcard-matches.h"
 
 namespace ns3 {
 

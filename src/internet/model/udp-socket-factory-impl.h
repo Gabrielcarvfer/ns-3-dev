@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "ns3/udp-socket-factory.h"
-#include "ns3/ptr.h"
+#include "udp-socket-factory.h"
+#include "../../core/model/ptr.h"
 
 namespace ns3 {
 

@@ -21,11 +21,11 @@
 
 #pragma once
 
-#include <ns3/lte-rrc-sap.h>
-#include <ns3/eps-bearer.h>
-#include <ns3/lte-enb-cmac-sap.h>
-#include <ns3/lte-mac-sap.h>
-#include <ns3/ff-mac-common.h>
+#include "lte-rrc-sap.h"
+#include "eps-bearer.h"
+#include "lte-enb-cmac-sap.h"
+#include "lte-mac-sap.h"
+#include "ff-mac-common.h"
 
 
 namespace ns3 {

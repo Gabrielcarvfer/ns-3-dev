@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include <ns3/event-id.h>
-#include <ns3/lte-rlc-sequence-number.h>
-#include <ns3/lte-rlc.h>
+#include "../../core/model/event-id.h"
+#include "lte-rlc-sequence-number.h"
+#include "lte-rlc.h"
 
 #include <vector>
 #include <map>

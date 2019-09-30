@@ -19,9 +19,9 @@
 #pragma once
 
 #include <list>
-#include "ns3/ipv4-routing-protocol.h"
-#include "ns3/simulator.h"
-#include "ns3/nstime.h"
+#include "ipv4-routing-protocol.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 

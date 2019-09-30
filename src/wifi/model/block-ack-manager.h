@@ -21,12 +21,12 @@
 #pragma once
 
 #include <map>
-#include "ns3/nstime.h"
-#include "ns3/traced-callback.h"
-#include "ns3/wifi-mac-header.h"
-#include "ns3/originator-block-ack-agreement.h"
-#include "ns3/block-ack-type.h"
-#include "ns3/wifi-mac-queue-item.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/traced-callback.h"
+#include "wifi-mac-header.h"
+#include "originator-block-ack-agreement.h"
+#include "block-ack-type.h"
+#include "wifi-mac-queue-item.h"
 
 namespace ns3 {
 

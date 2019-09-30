@@ -20,11 +20,11 @@
  */
 #pragma once
 
-#include "ns3/mac-low.h"
-#include "ns3/msdu-aggregator.h"
-#include "ns3/mpdu-aggregator.h"
-#include "ns3/wifi-psdu.h"
-#include "ns3/wave-net-device.h"
+#include "../../wifi/model/mac-low.h"
+#include "../../wifi/model/msdu-aggregator.h"
+#include "../../wifi/model/mpdu-aggregator.h"
+#include "../../wifi/model/wifi-psdu.h"
+#include "wave-net-device.h"
 
 namespace ns3 {
 class WaveNetDevice;

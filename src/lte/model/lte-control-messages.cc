@@ -19,12 +19,12 @@
  *         Marco Miozzo <marco.miozzo@cttc.es>
  */
 
-#include "ns3/lte-control-messages.h"
-#include "ns3/address-utils.h"
-#include "ns3/uinteger.h"
-#include "ns3/log.h"
-#include "ns3/lte-net-device.h"
-#include "ns3/lte-ue-net-device.h"
+#include "lte-control-messages.h"
+#include "../../network/utils/address-utils.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/log.h"
+#include "lte-net-device.h"
+#include "lte-ue-net-device.h"
 
 namespace ns3 {
 

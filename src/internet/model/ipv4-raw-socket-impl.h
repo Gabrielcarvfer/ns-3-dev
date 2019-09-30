@@ -1,10 +1,10 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 #pragma once
 
-#include "ns3/socket.h"
-#include "ns3/ipv4-header.h"
-#include "ns3/ipv4-route.h"
-#include "ns3/ipv4-interface.h"
+#include "../../network/model/socket.h"
+#include "ipv4-header.h"
+#include "ipv4-route.h"
+#include "ipv4-interface.h"
 #include <list>
 
 namespace ns3 {

@@ -18,11 +18,11 @@
  * Author: Matias Richart <mrichart@fing.edu.uy>
  */
 
-#include "ns3/log.h"
-#include "ns3/uinteger.h"
-#include "ns3/data-rate.h"
-#include "ns3/parf-wifi-manager.h"
-#include "ns3/wifi-phy.h"
+#include "../../core/model/log.h"
+#include "../../core/model/uinteger.h"
+#include "../../network/utils/data-rate.h"
+#include "parf-wifi-manager.h"
+#include "wifi-phy.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 

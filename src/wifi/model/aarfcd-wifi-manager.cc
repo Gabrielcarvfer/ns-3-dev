@@ -18,10 +18,10 @@
  * Author: Federico Maguolo <maguolof@dei.unipd.it>
  */
 
-#include "ns3/log.h"
-#include "ns3/packet.h"
-#include "ns3/aarfcd-wifi-manager.h"
-#include "ns3/wifi-tx-vector.h"
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
+#include "aarfcd-wifi-manager.h"
+#include "wifi-tx-vector.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 #define Max(a,b) ((a > b) ? a : b)

@@ -23,10 +23,10 @@
 
 #pragma once
 
-#include "ns3/packet.h"
-#include "ns3/sequence-number.h"
+#include "../../network/model/packet.h"
+#include "../../network/utils/sequence-number.h"
 
-#include "ns3/ptr.h"
+#include "../../core/model/ptr.h"
 namespace ns3
 {
 class Packet;

@@ -18,15 +18,15 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/log.h"
-#include "ns3/packet.h"
-#include "ns3/wifi-mac.h"
-#include "ns3/txop.h"
-#include "ns3/ssid.h"
-#include "ns3/wifi-net-device.h"
-#include "ns3/ht-configuration.h"
-#include "ns3/vht-configuration.h"
-#include "ns3/he-configuration.h"
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
+#include "wifi-mac.h"
+#include "txop.h"
+#include "ssid.h"
+#include "wifi-net-device.h"
+#include "ht-configuration.h"
+#include "vht-configuration.h"
+#include "he-configuration.h"
 
 namespace ns3 {
 

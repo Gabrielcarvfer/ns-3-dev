@@ -18,10 +18,10 @@
  * Author: Stefano Avallone <stefano.avallone@unina.it>
  */
 
-#include "ns3/log.h"
-#include "ns3/double.h"
-#include "ns3/wifi-tx-current-model.h"
-#include "ns3/wifi-utils.h"
+#include "../../core/model/log.h"
+#include "../../core/model/double.h"
+#include "wifi-tx-current-model.h"
+#include "wifi-utils.h"
 
 namespace ns3 {
 

@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/data-calculator.h"
-#include "ns3/data-output-interface.h"
-#include "ns3/type-name.h"
+#include "data-calculator.h"
+#include "data-output-interface.h"
+#include "../../core/model/type-name.h"
 
 namespace ns3 {
 

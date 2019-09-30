@@ -17,8 +17,8 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/byte-tag-list.h"
-#include "ns3/log.h"
+#include "byte-tag-list.h"
+#include "../../core/model/log.h"
 #include <vector>
 #include <cstring>
 #include <limits>

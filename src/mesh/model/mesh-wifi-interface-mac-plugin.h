@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/packet.h"
-#include "ns3/mac48-address.h"
-#include "ns3/mesh-wifi-beacon.h"
-#include "ns3/simple-ref-count.h"
+#include "../../network/model/packet.h"
+#include "../../network/utils/mac48-address.h"
+#include "mesh-wifi-beacon.h"
+#include "../../core/model/simple-ref-count.h"
 
 namespace ns3 {
 

@@ -18,10 +18,10 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/socket.h"
+#include "../../network/model/socket.h"
 
 #include "ipv6-raw-socket-factory-impl.h"
-#include "ns3/ipv6-l3-protocol.h"
+#include "ipv6-l3-protocol.h"
 
 namespace ns3
 {

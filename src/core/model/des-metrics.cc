@@ -25,9 +25,9 @@
  * ns3::DesMetrics implementation.
  */
 
-#include "ns3/des-metrics.h"
-#include "ns3/simulator.h"
-#include "ns3/system-path.h"
+#include "des-metrics.h"
+#include "simulator.h"
+#include "system-path.h"
 
 #include <ctime>    // time_t, time()
 #include <sstream>

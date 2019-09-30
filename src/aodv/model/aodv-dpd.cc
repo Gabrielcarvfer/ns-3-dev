@@ -20,7 +20,7 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#include "ns3/aodv-dpd.h"
+#include "aodv-dpd.h"
 
 namespace ns3 {
 namespace aodv {

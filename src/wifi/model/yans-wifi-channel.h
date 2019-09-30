@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/channel.h"
+#include "../../network/model/channel.h"
 
 namespace ns3 {
 

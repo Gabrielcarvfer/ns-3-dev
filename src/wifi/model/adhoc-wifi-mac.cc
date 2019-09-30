@@ -20,13 +20,13 @@
  *          Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/packet.h"
-#include "ns3/adhoc-wifi-mac.h"
-#include "ns3/ht-capabilities.h"
-#include "ns3/vht-capabilities.h"
-#include "ns3/he-capabilities.h"
-#include "ns3/mac-low.h"
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
+#include "adhoc-wifi-mac.h"
+#include "ht-capabilities.h"
+#include "vht-capabilities.h"
+#include "he-capabilities.h"
+#include "mac-low.h"
 
 namespace ns3 {
 

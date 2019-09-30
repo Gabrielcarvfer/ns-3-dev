@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/net-device.h"
-#include "ns3/traced-callback.h"
+#include "../../network/model/net-device.h"
+#include "../../core/model/traced-callback.h"
 
 namespace ns3 {
 

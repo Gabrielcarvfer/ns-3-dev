@@ -20,10 +20,10 @@
  */
 #pragma once
 
-#include <ns3/ptr.h>
-#include <ns3/position-allocator.h>
-#include <ns3/node-container.h>
-#include "ns3/random-variable-stream.h"
+#include "../../core/model/ptr.h"
+#include "../../mobility/model/position-allocator.h"
+#include "../../network/helper/node-container.h"
+#include "../../core/model/random-variable-stream.h"
 
 namespace ns3 {
 

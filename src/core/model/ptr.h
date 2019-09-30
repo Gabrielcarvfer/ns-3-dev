@@ -22,7 +22,7 @@
 
 #include <iostream>
 #include <stdint.h>
-#include "ns3/assert.h"
+#include "assert.h"
 
 /**
  * \file

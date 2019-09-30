@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <ns3/propagation-loss-model.h>
+#include "propagation-loss-model.h"
 
 namespace ns3 {
 

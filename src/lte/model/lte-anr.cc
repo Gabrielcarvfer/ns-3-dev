@@ -25,9 +25,9 @@
  * - Budiarto Herman <budiarto.herman@magister.fi>
  */
 
-#include "ns3/lte-anr.h"
-#include <ns3/log.h>
-#include <ns3/uinteger.h>
+#include "lte-anr.h"
+#include "../../core/model/log.h"
+#include "../../core/model/uinteger.h"
 
 namespace ns3 {
 

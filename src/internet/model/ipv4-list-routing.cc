@@ -17,12 +17,12 @@
  *
  */
 
-#include "ns3/log.h"
-#include "ns3/ipv4.h"
-#include "ns3/ipv4-route.h"
-#include "ns3/node.h"
-#include "ns3/ipv4-static-routing.h"
-#include "ns3/ipv4-list-routing.h"
+#include "../../core/model/log.h"
+#include "ipv4.h"
+#include "ipv4-route.h"
+#include "../../network/model/node.h"
+#include "ipv4-static-routing.h"
+#include "ipv4-list-routing.h"
 
 namespace ns3 {
 

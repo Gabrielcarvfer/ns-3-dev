@@ -29,8 +29,8 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "ns3/dsr-rreq-table.h"
-#include "ns3/log.h"
+#include "dsr-rreq-table.h"
+#include "../../core/model/log.h"
 #include <algorithm>
 #include <iostream>
 

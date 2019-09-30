@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/uan-mac.h"
-#include "ns3/mac8-address.h"
+#include "uan-mac.h"
+#include "../../network/utils/mac8-address.h"
 
 namespace ns3
 {

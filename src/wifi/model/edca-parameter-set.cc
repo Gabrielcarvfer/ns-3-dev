@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/edca-parameter-set.h"
+#include "edca-parameter-set.h"
 #include <cmath>
 
 namespace ns3 {

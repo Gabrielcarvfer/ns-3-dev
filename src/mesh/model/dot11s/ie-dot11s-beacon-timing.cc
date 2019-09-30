@@ -18,8 +18,8 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ns3/ie-dot11s-beacon-timing.h"
-#include "ns3/packet.h"
+#include "ie-dot11s-beacon-timing.h"
+#include "../../../network/model/packet.h"
 namespace ns3 {
 namespace dot11s {
 /*******************************************

@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "ns3/ipv4-address.h"
-#include "ns3/net-device-container.h"
-#include "ns3/ipv4-interface-container.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../network/helper/net-device-container.h"
+#include "ipv4-interface-container.h"
 
 namespace ns3 {
 

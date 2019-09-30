@@ -24,7 +24,7 @@
 
 #pragma once
 
-#include "ns3/point-to-point-channel.h"
+#include "point-to-point-channel.h"
 
 namespace ns3 {
 

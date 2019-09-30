@@ -18,8 +18,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/callback.h"
-#include "ns3/log.h"
+#include "callback.h"
+#include "log.h"
 
 /**
  * \file
@@ -80,7 +80,7 @@ ATTRIBUTE_CHECKER_IMPLEMENT (Callback);
 
 #include <cstdlib>
 #include <cxxabi.h>
-#include "ns3/log.h"
+#include "log.h"
 
 namespace ns3 {
 

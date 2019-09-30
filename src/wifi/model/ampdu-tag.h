@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "ns3/nstime.h"
-#include "ns3/tag.h"
+#include "../../core/model/nstime.h"
+#include "../../network/model/tag.h"
 
 namespace ns3 {
 

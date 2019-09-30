@@ -22,11 +22,11 @@
 
 #include <stdint.h>
 
-#include "ns3/ipv6-address.h"
-#include "ns3/callback.h"
-#include "ns3/ipv6-header.h"
-#include "ns3/net-device.h"
-#include "ns3/ipv6-interface.h"
+#include "../../network/utils/ipv6-address.h"
+#include "../../core/model/callback.h"
+#include "ipv6-header.h"
+#include "../../network/model/net-device.h"
+#include "ipv6-interface.h"
 
 namespace ns3
 {

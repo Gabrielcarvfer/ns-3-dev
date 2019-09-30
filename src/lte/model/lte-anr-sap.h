@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <ns3/lte-rrc-sap.h>
+#include "lte-rrc-sap.h"
 
 namespace ns3 {
 

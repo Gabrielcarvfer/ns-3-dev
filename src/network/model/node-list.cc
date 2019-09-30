@@ -19,13 +19,13 @@
  *  Mathieu Lacage <mathieu.lacage@sophia.inria.fr>,
  */
 
-#include "ns3/simulator.h"
-#include "ns3/object-vector.h"
-#include "ns3/config.h"
-#include "ns3/log.h"
-#include "ns3/assert.h"
-#include "ns3/node-list.h"
-#include "ns3/node.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/object-vector.h"
+#include "../../core/model/config.h"
+#include "../../core/model/log.h"
+#include "../../core/model/assert.h"
+#include "node-list.h"
+#include "node.h"
 
 namespace ns3 {
 

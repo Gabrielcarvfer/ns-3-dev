@@ -20,8 +20,8 @@
 #pragma once
 
 #include <set>
-#include "ns3/event-id.h"
-#include "ns3/simulator.h"
+#include "../model/event-id.h"
+#include "../model/simulator.h"
 
 /**
  * \file

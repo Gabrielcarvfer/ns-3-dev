@@ -16,8 +16,8 @@
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
 
-#include "ns3/channel-scheduler.h"
-#include "ns3/log.h"
+#include "channel-scheduler.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

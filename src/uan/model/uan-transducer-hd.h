@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/uan-transducer.h"
-#include "ns3/simulator.h"
+#include "uan-transducer.h"
+#include "../../core/model/simulator.h"
 namespace ns3 {
 
 /**

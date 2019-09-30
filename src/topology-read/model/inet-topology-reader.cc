@@ -22,10 +22,10 @@
 #include <fstream>
 #include <cstdlib>
 #include <sstream>
-#include "ns3/node-container.h"
-#include "ns3/log.h"
+#include "../../network/helper/node-container.h"
+#include "../../core/model/log.h"
 
-#include "ns3/inet-topology-reader.h"
+#include "inet-topology-reader.h"
 
 
 namespace ns3 {

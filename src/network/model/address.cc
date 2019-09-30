@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/address.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "address.h"
 #include <cstring>
 #include <iostream>
 #include <iomanip>

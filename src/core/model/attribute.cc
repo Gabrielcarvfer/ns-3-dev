@@ -17,10 +17,10 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/attribute.h"
-#include "ns3/log.h"
-#include "ns3/fatal-error.h"
-#include "ns3/string.h"
+#include "attribute.h"
+#include "log.h"
+#include "fatal-error.h"
+#include "string.h"
 #include <sstream>
 
 /**

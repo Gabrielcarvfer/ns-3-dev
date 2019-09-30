@@ -20,13 +20,13 @@
 #include <string>
 #include <vector>
 
-#include "ns3/channel.h"
-#include "ns3/node-container.h"
-#include "ns3/node-list.h"
-#include "ns3/point-to-point-helper.h"
-#include "ns3/internet-stack-helper.h"
-#include "ns3/ipv6-address-helper.h"
-#include "ns3/random-variable-stream.h"
+#include "../../network/model/channel.h"
+#include "../../network/helper/node-container.h"
+#include "../../network/model/node-list.h"
+#include "../../point-to-point/helper/point-to-point-helper.h"
+#include "../../internet/helper/internet-stack-helper.h"
+#include "../../internet/helper/ipv6-address-helper.h"
+#include "../../core/model/random-variable-stream.h"
 
 //located in BRITE source directory
 #include "ns3/Brite.h"

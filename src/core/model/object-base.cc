@@ -17,11 +17,11 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/object-base.h"
-#include "ns3/log.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/attribute-construction-list.h"
-#include "ns3/string.h"
+#include "object-base.h"
+#include "log.h"
+#include "trace-source-accessor.h"
+#include "attribute-construction-list.h"
+#include "string.h"
 #include "ns3/core-config.h"
 #ifdef HAVE_STDLIB_H
 #include <cstdlib>

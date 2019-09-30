@@ -23,7 +23,7 @@
 
 #include <list>
 
-#include "ns3/ipv6-routing-helper.h"
+#include "ipv6-routing-helper.h"
 
 namespace ns3 {
 

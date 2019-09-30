@@ -18,15 +18,15 @@
  * Author: Adrian Sai-wah Tam <adrian.sw.tam@gmail.com>
  */
 
-#include "ns3/tcp-option.h"
-#include "ns3/tcp-option-rfc793.h"
-#include "ns3/tcp-option-winscale.h"
-#include "ns3/tcp-option-ts.h"
-#include "ns3/tcp-option-sack-permitted.h"
-#include "ns3/tcp-option-sack.h"
+#include "tcp-option.h"
+#include "tcp-option-rfc793.h"
+#include "tcp-option-winscale.h"
+#include "tcp-option-ts.h"
+#include "tcp-option-sack-permitted.h"
+#include "tcp-option-sack.h"
 
-#include "ns3/type-id.h"
-#include "ns3/log.h"
+#include "../../core/model/type-id.h"
+#include "../../core/model/log.h"
 
 #include <vector>
 

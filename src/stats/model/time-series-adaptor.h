@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/data-collection-object.h"
-#include "ns3/object.h"
-#include "ns3/type-id.h"
-#include "ns3/traced-value.h"
+#include "data-collection-object.h"
+#include "../../core/model/object.h"
+#include "../../core/model/type-id.h"
+#include "../../core/model/traced-value.h"
 
 namespace ns3 {
 

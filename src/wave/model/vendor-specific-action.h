@@ -20,12 +20,12 @@
 
 #include <ostream>
 #include <map>
-#include "ns3/header.h"
-#include "ns3/packet.h"
-#include "ns3/pointer.h"
-#include "ns3/attribute.h"
-#include "ns3/attribute-helper.h"
-#include "ns3/address.h"
+#include "../../network/model/header.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/pointer.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/attribute-helper.h"
+#include "../../network/model/address.h"
 
 namespace ns3 {
 

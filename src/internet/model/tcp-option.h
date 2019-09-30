@@ -21,9 +21,9 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/object.h"
-#include "ns3/buffer.h"
-#include "ns3/object-factory.h"
+#include "../../core/model/object.h"
+#include "../../network/model/buffer.h"
+#include "../../core/model/object-factory.h"
 
 namespace ns3 {
 

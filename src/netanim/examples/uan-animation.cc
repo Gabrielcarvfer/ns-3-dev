@@ -36,7 +36,7 @@
  * the simulation in order to show the variation in throughput with respect to changes in CW.
  */
 
-#include "ns3/uan-animation.h"
+#include "uan-animation.h"
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/netanim-module.h"

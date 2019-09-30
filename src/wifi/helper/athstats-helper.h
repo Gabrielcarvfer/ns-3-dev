@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/wifi-phy-state.h"
+#include "../model/wifi-phy-state.h"
 
 namespace ns3 {
 

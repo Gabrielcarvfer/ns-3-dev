@@ -21,11 +21,11 @@
 #include <cstring>
 #include <limits>
 #include <fstream>
-#include "ns3/ptr.h"
-#include "ns3/packet.h"
-#include "ns3/object.h"
-#include "ns3/nstime.h"
-#include "ns3/pcap-file.h"
+#include "../../core/model/ptr.h"
+#include "../model/packet.h"
+#include "../../core/model/object.h"
+#include "../../core/model/nstime.h"
+#include "pcap-file.h"
 
 namespace ns3 {
 

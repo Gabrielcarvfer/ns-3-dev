@@ -21,9 +21,9 @@
 // NS3 - Layer 4 Protocol base class
 // George F. Riley, Georgia Tech, Spring 2007
 
-#include "ns3/ip-l4-protocol.h"
-#include "ns3/integer.h"
-#include "ns3/log.h"
+#include "ip-l4-protocol.h"
+#include "../../core/model/integer.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

@@ -19,9 +19,9 @@
  *                              <amine.ismail@udcast.com>
  */
 
-#include "ns3/simple-ofdm-send-param.h"
-#include "ns3/simple-ofdm-wimax-phy.h"
-#include "ns3/simple-ofdm-wimax-channel.h"
+#include "simple-ofdm-send-param.h"
+#include "simple-ofdm-wimax-phy.h"
+#include "simple-ofdm-wimax-channel.h"
 
 namespace ns3 {
 simpleOfdmSendParam::simpleOfdmSendParam (void)

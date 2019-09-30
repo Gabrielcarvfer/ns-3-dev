@@ -18,9 +18,9 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/nstime.h"
-#include "ns3/simulator.h"
-#include "ns3/frame-capture-model.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/simulator.h"
+#include "frame-capture-model.h"
 
 namespace ns3 {
 

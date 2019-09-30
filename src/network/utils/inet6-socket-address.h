@@ -22,8 +22,8 @@
 
 #include <stdint.h>
 
-#include "ns3/address.h"
-#include "ns3/ipv6-address.h"
+#include "../model/address.h"
+#include "ipv6-address.h"
 
 namespace ns3 {
 

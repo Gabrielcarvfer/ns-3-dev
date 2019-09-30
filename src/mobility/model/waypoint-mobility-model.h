@@ -21,9 +21,9 @@
 
 #include <stdint.h>
 #include <deque>
-#include "ns3/mobility-model.h"
-#include "ns3/vector.h"
-#include "ns3/waypoint.h"
+#include "mobility-model.h"
+#include "../../core/model/vector.h"
+#include "waypoint.h"
 
 class WaypointMobilityModelNotifyTest;
 

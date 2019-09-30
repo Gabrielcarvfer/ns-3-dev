@@ -18,9 +18,9 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "ns3/eps-bearer.h"
-#include <ns3/fatal-error.h>
-#include <ns3/attribute-construction-list.h>
+#include "eps-bearer.h"
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/attribute-construction-list.h"
 
 namespace ns3 {
 

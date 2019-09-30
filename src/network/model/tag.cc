@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/tag.h"
+#include "tag.h"
 
 namespace ns3 {
 

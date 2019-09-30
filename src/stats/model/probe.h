@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "ns3/data-collection-object.h"
-#include "ns3/nstime.h"
+#include "data-collection-object.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 

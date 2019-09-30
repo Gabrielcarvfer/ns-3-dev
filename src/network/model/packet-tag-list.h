@@ -26,7 +26,7 @@
 
 #include <stdint.h>
 #include <ostream>
-#include "ns3/type-id.h"
+#include "../../core/model/type-id.h"
 
 namespace ns3 {
 

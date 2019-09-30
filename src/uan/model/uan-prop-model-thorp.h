@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/uan-prop-model.h"
+#include "uan-prop-model.h"
 
 namespace ns3 {
 

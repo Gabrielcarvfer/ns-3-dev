@@ -26,12 +26,12 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/ptr.h"
-#include "ns3/type-id.h"
-#include "ns3/node.h"
-#include "ns3/device-energy-model-container.h"  // #include "ns3/device-energy-model.h"
-#include "ns3/energy-harvester.h"
+#include "../../core/model/object.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/type-id.h"
+#include "../../network/model/node.h"
+#include "device-energy-model-container.h"  // #include "ns3/device-energy-model.h"
+#include "energy-harvester.h"
 
 namespace ns3 {
   

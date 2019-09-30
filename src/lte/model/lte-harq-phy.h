@@ -23,12 +23,12 @@
 
 
 
-#include <ns3/log.h>
-#include <ns3/assert.h>
+#include "../../core/model/log.h"
+#include "../../core/model/assert.h"
 #include <math.h>
 #include <vector>
 #include <map>
-#include <ns3/simple-ref-count.h>
+#include "../../core/model/simple-ref-count.h"
 
 
 namespace ns3 {

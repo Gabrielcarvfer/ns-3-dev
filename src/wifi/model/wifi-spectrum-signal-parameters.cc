@@ -19,9 +19,9 @@
  * Modified by Marco Miozzo <mmiozzo@cttc.es> (add data and ctrl diversity)
  */
 
-#include "ns3/log.h"
-#include "ns3/packet.h"
-#include "ns3/wifi-spectrum-signal-parameters.h"
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
+#include "wifi-spectrum-signal-parameters.h"
 
 namespace ns3 {
 

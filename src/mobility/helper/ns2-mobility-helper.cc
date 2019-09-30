@@ -41,13 +41,13 @@
 #include <fstream>
 #include <sstream>
 #include <map>
-#include "ns3/log.h"
-#include "ns3/unused.h"
-#include "ns3/simulator.h"
-#include "ns3/node-list.h"
-#include "ns3/node.h"
-#include "ns3/constant-velocity-mobility-model.h"
-#include "ns3/ns2-mobility-helper.h"
+#include "../../core/model/log.h"
+#include "../../core/model/unused.h"
+#include "../../core/model/simulator.h"
+#include "../../network/model/node-list.h"
+#include "../../network/model/node.h"
+#include "../model/constant-velocity-mobility-model.h"
+#include "ns2-mobility-helper.h"
 
 namespace ns3 {
 

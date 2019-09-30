@@ -22,15 +22,15 @@
 
 #include <stdint.h>
 #include <queue>
-#include "ns3/traced-value.h"
-#include "ns3/tcp-socket.h"
-#include "ns3/ipv4-header.h"
-#include "ns3/ipv6-header.h"
-#include "ns3/timer.h"
-#include "ns3/sequence-number.h"
-#include "ns3/data-rate.h"
-#include "ns3/node.h"
-#include "ns3/tcp-socket-state.h"
+#include "../../core/model/traced-value.h"
+#include "tcp-socket.h"
+#include "ipv4-header.h"
+#include "ipv6-header.h"
+#include "../../core/model/timer.h"
+#include "../../network/utils/sequence-number.h"
+#include "../../network/utils/data-rate.h"
+#include "../../network/model/node.h"
+#include "tcp-socket-state.h"
 
 namespace ns3 {
 

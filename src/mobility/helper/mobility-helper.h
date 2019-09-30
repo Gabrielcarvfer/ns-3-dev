@@ -21,11 +21,11 @@
 #pragma once
 
 #include <vector>
-#include "ns3/object-factory.h"
-#include "ns3/attribute.h"
-#include "ns3/output-stream-wrapper.h"
-#include "ns3/position-allocator.h"
-#include "ns3/node-container.h"
+#include "../../core/model/object-factory.h"
+#include "../../core/model/attribute.h"
+#include "../../network/utils/output-stream-wrapper.h"
+#include "../model/position-allocator.h"
+#include "../../network/helper/node-container.h"
 
 namespace ns3 {
 

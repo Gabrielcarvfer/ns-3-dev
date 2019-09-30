@@ -21,8 +21,8 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
-#include "ns3/boolean.h"
-#include "ns3/wave-mac-helper.h"
+#include "../../core/model/boolean.h"
+#include "wave-mac-helper.h"
 
 namespace ns3 {
 

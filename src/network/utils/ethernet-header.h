@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/header.h"
+#include "../model/header.h"
 #include <string>
-#include "ns3/mac48-address.h"
+#include "mac48-address.h"
 
 namespace ns3 {
 

@@ -18,16 +18,16 @@
 
 #pragma once
 
-#include "ns3/ipv6.h"
-#include "ns3/ipv6-static-routing.h"
-#include "ns3/ptr.h"
-#include "ns3/ipv6-address.h"
-#include "ns3/node.h"
-#include "ns3/net-device.h"
+#include "../model/ipv6.h"
+#include "../model/ipv6-static-routing.h"
+#include "../../core/model/ptr.h"
+#include "../../network/utils/ipv6-address.h"
+#include "../../network/model/node.h"
+#include "../../network/model/net-device.h"
 
-#include "ns3/node-container.h"
-#include "ns3/net-device-container.h"
-#include "ns3/ipv6-routing-helper.h"
+#include "../../network/helper/node-container.h"
+#include "../../network/helper/net-device-container.h"
+#include "ipv6-routing-helper.h"
 
 namespace ns3 {
 

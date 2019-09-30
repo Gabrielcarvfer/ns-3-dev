@@ -21,17 +21,17 @@
  */
 
 #include "bandwidth-manager.h"
-#include "ns3/node.h"
-#include "ns3/bs-net-device.h"
-#include "ns3/ss-net-device.h"
-#include "ns3/simulator.h"
+#include "../../network/model/node.h"
+#include "bs-net-device.h"
+#include "ss-net-device.h"
+#include "../../core/model/simulator.h"
 #include "burst-profile-manager.h"
-#include "ns3/ss-manager.h"
-#include "ns3/ss-record.h"
-#include "ns3/service-flow.h"
-#include "ns3/service-flow-record.h"
-#include "ns3/service-flow-manager.h"
-#include "ns3/connection-manager.h"
+#include "ss-manager.h"
+#include "ss-record.h"
+#include "service-flow.h"
+#include "service-flow-record.h"
+#include "service-flow-manager.h"
+#include "connection-manager.h"
 
 namespace ns3 {
 

@@ -20,13 +20,13 @@
 
 #pragma once
 
-#include "ns3/uan-mac.h"
-#include "ns3/nstime.h"
-#include "ns3/simulator.h"
-#include "ns3/uan-phy.h"
-#include "ns3/uan-tx-mode.h"
-#include "ns3/mac8-address.h"
-#include "ns3/random-variable-stream.h"
+#include "uan-mac.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/simulator.h"
+#include "uan-phy.h"
+#include "uan-tx-mode.h"
+#include "../../network/utils/mac8-address.h"
+#include "../../core/model/random-variable-stream.h"
 
 namespace ns3 {
 

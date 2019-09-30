@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "ns3/type-id.h"
-#include "ns3/callback.h"
+#include "type-id.h"
+#include "callback.h"
 #include <string>
 #include <list>
 

@@ -18,8 +18,8 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "ns3/address-utils.h"
-#include "ns3/amsdu-subframe-header.h"
+#include "../../network/utils/address-utils.h"
+#include "amsdu-subframe-header.h"
 
 namespace ns3 {
 

@@ -24,7 +24,7 @@
 #include <ostream>
 #include <limits>
 #include <stdint.h>
-#include "ns3/basic-data-calculators.h"
+#include "basic-data-calculators.h"
 
 namespace ns3 {
 

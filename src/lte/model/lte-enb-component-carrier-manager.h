@@ -21,13 +21,13 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/lte-enb-rrc.h>
-#include <ns3/lte-rrc-sap.h>
-#include <ns3/lte-ccm-rrc-sap.h>
-#include <ns3/lte-mac-sap.h>
-#include <ns3/lte-enb-cmac-sap.h>
-#include <ns3/lte-ccm-mac-sap.h>
+#include "../../core/model/object.h"
+#include "lte-enb-rrc.h"
+#include "lte-rrc-sap.h"
+#include "lte-ccm-rrc-sap.h"
+#include "lte-mac-sap.h"
+#include "lte-enb-cmac-sap.h"
+#include "lte-ccm-mac-sap.h"
 #include <map>
 #include <vector>
 

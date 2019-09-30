@@ -18,15 +18,15 @@
 
 #pragma once
 
-#include "ns3/ipv4.h"
-#include "ns3/ipv4-static-routing.h"
-#include "ns3/ptr.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/node.h"
-#include "ns3/net-device.h"
-#include "ns3/ipv4-routing-helper.h"
-#include "ns3/node-container.h"
-#include "ns3/net-device-container.h"
+#include "../model/ipv4.h"
+#include "../model/ipv4-static-routing.h"
+#include "../../core/model/ptr.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../network/model/node.h"
+#include "../../network/model/net-device.h"
+#include "ipv4-routing-helper.h"
+#include "../../network/helper/node-container.h"
+#include "../../network/helper/net-device-container.h"
 
 namespace ns3 {
 

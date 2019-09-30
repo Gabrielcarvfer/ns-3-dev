@@ -20,9 +20,9 @@
  *          Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "ns3/simulator.h"
-#include "ns3/address-utils.h"
-#include "ns3/mgt-headers.h"
+#include "../../core/model/simulator.h"
+#include "../../network/utils/address-utils.h"
+#include "mgt-headers.h"
 
 namespace ns3 {
 

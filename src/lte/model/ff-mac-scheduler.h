@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <ns3/object.h>
+#include "../../core/model/object.h"
 
 
 namespace ns3 {

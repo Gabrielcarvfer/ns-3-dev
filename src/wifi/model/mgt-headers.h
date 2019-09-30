@@ -22,22 +22,22 @@
 
 #pragma once
 
-#include "ns3/mac48-address.h"
-#include "ns3/status-code.h"
-#include "ns3/capability-information.h"
-#include "ns3/supported-rates.h"
-#include "ns3/ssid.h"
-#include "ns3/dsss-parameter-set.h"
-#include "ns3/extended-capabilities.h"
-#include "ns3/ht-capabilities.h"
-#include "ns3/ht-operation.h"
-#include "ns3/vht-capabilities.h"
-#include "ns3/vht-operation.h"
-#include "ns3/erp-information.h"
-#include "ns3/edca-parameter-set.h"
-#include "ns3/he-capabilities.h"
-#include "ns3/he-operation.h"
-#include "ns3/cf-parameter-set.h"
+#include "../../network/utils/mac48-address.h"
+#include "status-code.h"
+#include "capability-information.h"
+#include "supported-rates.h"
+#include "ssid.h"
+#include "dsss-parameter-set.h"
+#include "extended-capabilities.h"
+#include "ht-capabilities.h"
+#include "ht-operation.h"
+#include "vht-capabilities.h"
+#include "vht-operation.h"
+#include "erp-information.h"
+#include "edca-parameter-set.h"
+#include "he-capabilities.h"
+#include "he-operation.h"
+#include "cf-parameter-set.h"
 
 namespace ns3 {
 

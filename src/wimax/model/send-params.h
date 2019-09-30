@@ -53,7 +53,7 @@ private:
 
 
 #include <stdint.h>
-#include "ns3/packet-burst.h"
+#include "../../network/utils/packet-burst.h"
 
 namespace ns3 {
 

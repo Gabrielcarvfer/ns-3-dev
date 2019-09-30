@@ -22,8 +22,8 @@
 #pragma once
 
 #include <stdint.h>
-#include <ns3/ptr.h>
-#include <ns3/packet.h>
+#include "../../core/model/ptr.h"
+#include "../../network/model/packet.h"
 
 namespace ns3 {
 

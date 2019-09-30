@@ -19,20 +19,20 @@
  *         Stefano Avallone <stavallo@unina.it>
  */
 
-#include "ns3/log.h"
-#include "ns3/packet.h"
-#include "ns3/msdu-aggregator.h"
-#include "ns3/amsdu-subframe-header.h"
-#include "ns3/qos-txop.h"
-#include "ns3/mpdu-aggregator.h"
-#include "ns3/wifi-remote-station-manager.h"
-#include "ns3/mac-low.h"
-#include "ns3/wifi-phy.h"
-#include "ns3/wifi-net-device.h"
-#include "ns3/ht-capabilities.h"
-#include "ns3/wifi-mac.h"
-#include "ns3/wifi-mac-queue.h"
-#include "ns3/wifi-mac-trailer.h"
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
+#include "msdu-aggregator.h"
+#include "amsdu-subframe-header.h"
+#include "qos-txop.h"
+#include "mpdu-aggregator.h"
+#include "wifi-remote-station-manager.h"
+#include "mac-low.h"
+#include "wifi-phy.h"
+#include "wifi-net-device.h"
+#include "ht-capabilities.h"
+#include "wifi-mac.h"
+#include "wifi-mac-queue.h"
+#include "wifi-mac-trailer.h"
 #include <algorithm>
 
 namespace ns3 {

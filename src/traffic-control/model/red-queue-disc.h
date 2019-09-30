@@ -60,11 +60,11 @@
 
 #pragma once
 
-#include "ns3/queue-disc.h"
-#include "ns3/nstime.h"
-#include "ns3/boolean.h"
-#include "ns3/data-rate.h"
-#include "ns3/random-variable-stream.h"
+#include "queue-disc.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/boolean.h"
+#include "../../network/utils/data-rate.h"
+#include "../../core/model/random-variable-stream.h"
 
 namespace ns3 {
 

@@ -24,8 +24,8 @@
 #include <stdint.h>
 #include <map>
 
-#include "ns3/ipv6-header.h"
-#include "ns3/flow-classifier.h"
+#include "../../internet/model/ipv6-header.h"
+#include "flow-classifier.h"
 
 namespace ns3 {
 

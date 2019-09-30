@@ -22,9 +22,9 @@
 #include <fstream>
 #include <cstdlib>
 #include <sstream>
-#include "ns3/node-container.h"
-#include "ns3/log.h"
-#include "ns3/orbis-topology-reader.h"
+#include "../../network/helper/node-container.h"
+#include "../../core/model/log.h"
+#include "orbis-topology-reader.h"
 
 
 namespace ns3 {

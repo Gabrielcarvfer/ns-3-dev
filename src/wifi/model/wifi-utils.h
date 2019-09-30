@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/block-ack-type.h"
-#include "ns3/wifi-preamble.h"
-#include "ns3/wifi-mode.h"
+#include "block-ack-type.h"
+#include "wifi-preamble.h"
+#include "wifi-mode.h"
 
 namespace ns3 {
 

@@ -25,9 +25,9 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#include "ns3/aodv-packet.h"
-#include "ns3/address-utils.h"
-#include "ns3/packet.h"
+#include "aodv-packet.h"
+#include "../../network/utils/address-utils.h"
+#include "../../network/model/packet.h"
 
 namespace ns3 {
 namespace aodv {

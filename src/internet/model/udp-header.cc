@@ -18,8 +18,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/udp-header.h"
-#include "ns3/address-utils.h"
+#include "udp-header.h"
+#include "../../network/utils/address-utils.h"
 
 namespace ns3 {
 

@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "ns3/net-device-container.h"
-#include "ns3/object-factory.h"
-#include "ns3/tap-bridge.h"
+#include "../../network/helper/net-device-container.h"
+#include "../../core/model/object-factory.h"
+#include "../model/tap-bridge.h"
 #include <string>
 
 namespace ns3 {

@@ -24,9 +24,9 @@
 #include <stdint.h>
 #include <map>
 
-#include <ns3/ptr.h>
-#include <ns3/object.h>
-#include <ns3/lte-rrc-sap.h>
+#include "../../core/model/ptr.h"
+#include "../../core/model/object.h"
+#include "lte-rrc-sap.h"
 
 namespace ns3 {
 

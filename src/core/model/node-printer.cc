@@ -18,9 +18,9 @@
  * Author: Peter D. Barnes, Jr. <pdbarnes@llnl.gov>
  */
 
-#include "ns3/log.h"
-#include "ns3/node-printer.h"
-#include "ns3/simulator.h"  // GetContext()
+#include "log.h"
+#include "node-printer.h"
+#include "simulator.h"  // GetContext()
 
 #include <iomanip>
 

@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/traced-value.h"
-#include "ns3/nstime.h"
-#include "ns3/event-id.h"
-#include "ns3/energy-source.h"
+#include "../../core/model/traced-value.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/event-id.h"
+#include "energy-source.h"
 
 namespace ns3 {
 

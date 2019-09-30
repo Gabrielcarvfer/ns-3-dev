@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include <ns3/simulator.h>
-#include <ns3/test.h>
-#include <ns3/nstime.h>
+#include "../../core/model/simulator.h"
+#include "../../core/model/test.h"
+#include "../../core/model/nstime.h"
 
 
 using namespace ns3;

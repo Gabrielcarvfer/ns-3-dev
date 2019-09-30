@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/ipv6-raw-socket-factory.h"
+#include "ipv6-raw-socket-factory.h"
 
 namespace ns3
 {

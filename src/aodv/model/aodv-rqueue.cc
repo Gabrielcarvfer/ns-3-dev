@@ -25,12 +25,12 @@
  * Authors: Elena Buchatskaia <borovkovaes@iitp.ru>
  *          Pavel Boyko <boyko@iitp.ru>
  */
-#include "ns3/aodv-rqueue.h"
+#include "aodv-rqueue.h"
 #include <algorithm>
 #include <functional>
-#include "ns3/ipv4-route.h"
-#include "ns3/socket.h"
-#include "ns3/log.h"
+#include "../../internet/model/ipv4-route.h"
+#include "../../network/model/socket.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

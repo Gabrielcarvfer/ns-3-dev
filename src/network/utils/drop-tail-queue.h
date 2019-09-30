@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "ns3/queue.h"
+#include "queue.h"
 
 namespace ns3 {
 

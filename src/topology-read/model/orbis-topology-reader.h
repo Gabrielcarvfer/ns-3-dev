@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "ns3/topology-reader.h"
+#include "topology-reader.h"
 
 namespace ns3 {
 

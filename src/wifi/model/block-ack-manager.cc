@@ -18,15 +18,15 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/block-ack-manager.h"
-#include "ns3/wifi-remote-station-manager.h"
-#include "ns3/ctrl-headers.h"
-#include "ns3/mgt-headers.h"
-#include "ns3/wifi-mac-queue.h"
-#include "ns3/mac-tx-middle.h"
-#include "ns3/qos-utils.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
+#include "block-ack-manager.h"
+#include "wifi-remote-station-manager.h"
+#include "ctrl-headers.h"
+#include "mgt-headers.h"
+#include "wifi-mac-queue.h"
+#include "mac-tx-middle.h"
+#include "qos-utils.h"
 
 namespace ns3 {
 

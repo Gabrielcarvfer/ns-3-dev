@@ -24,12 +24,12 @@
 #include <list>
 #include <utility>
 #include <stdint.h>
-#include "ns3/ipv4-address.h"
-#include "ns3/ipv4-header.h"
-#include "ns3/socket.h"
-#include "ns3/ptr.h"
-#include "ns3/ipv4.h"
-#include "ns3/ipv4-routing-protocol.h"
+#include "../../network/utils/ipv4-address.h"
+#include "ipv4-header.h"
+#include "../../network/model/socket.h"
+#include "../../core/model/ptr.h"
+#include "ipv4.h"
+#include "ipv4-routing-protocol.h"
 
 namespace ns3 {
 

@@ -18,14 +18,14 @@
  * Author: Jaume Nin <jnin@cttc.es>
  */
 
-#include "ns3/lte-stats-calculator.h"
+#include "lte-stats-calculator.h"
 
-#include <ns3/log.h>
-#include <ns3/config.h>
-#include <ns3/lte-enb-rrc.h>
-#include <ns3/lte-ue-rrc.h>
-#include <ns3/lte-enb-net-device.h>
-#include <ns3/lte-ue-net-device.h>
+#include "../../core/model/log.h"
+#include "../../core/model/config.h"
+#include "../model/lte-enb-rrc.h"
+#include "../model/lte-ue-rrc.h"
+#include "../model/lte-enb-net-device.h"
+#include "../model/lte-ue-net-device.h"
 
 namespace ns3 {
 

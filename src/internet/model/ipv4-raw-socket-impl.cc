@@ -2,16 +2,16 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include "ns3/ipv4-raw-socket-impl.h"
-#include "ns3/ipv4-l3-protocol.h"
-#include "ns3/icmpv4.h"
-#include "ns3/ipv4-packet-info-tag.h"
-#include "ns3/inet-socket-address.h"
-#include "ns3/node.h"
-#include "ns3/packet.h"
-#include "ns3/uinteger.h"
-#include "ns3/boolean.h"
-#include "ns3/log.h"
+#include "ipv4-raw-socket-impl.h"
+#include "ipv4-l3-protocol.h"
+#include "icmpv4.h"
+#include "ipv4-packet-info-tag.h"
+#include "../../network/utils/inet-socket-address.h"
+#include "../../network/model/node.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/boolean.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

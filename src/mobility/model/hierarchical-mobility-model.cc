@@ -17,8 +17,8 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/hierarchical-mobility-model.h"
-#include "ns3/pointer.h"
+#include "hierarchical-mobility-model.h"
+#include "../../core/model/pointer.h"
 
 namespace ns3 {
 

@@ -18,18 +18,18 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/ipv4-interface.h"
-#include "ns3/loopback-net-device.h"
-#include "ns3/ipv4-l3-protocol.h"
-#include "ns3/ipv4-queue-disc-item.h"
-#include "ns3/arp-l3-protocol.h"
-#include "ns3/arp-cache.h"
-#include "ns3/net-device.h"
-#include "ns3/log.h"
-#include "ns3/packet.h"
-#include "ns3/node.h"
-#include "ns3/pointer.h"
-#include "ns3/traffic-control-layer.h"
+#include "ipv4-interface.h"
+#include "loopback-net-device.h"
+#include "ipv4-l3-protocol.h"
+#include "ipv4-queue-disc-item.h"
+#include "arp-l3-protocol.h"
+#include "arp-cache.h"
+#include "../../network/model/net-device.h"
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
+#include "../../network/model/node.h"
+#include "../../core/model/pointer.h"
+#include "../../traffic-control/model/traffic-control-layer.h"
 
 
 namespace ns3 {

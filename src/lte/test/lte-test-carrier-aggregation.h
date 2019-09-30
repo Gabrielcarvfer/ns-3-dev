@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "ns3/simulator.h"
-#include "ns3/test.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/test.h"
 #include "fcntl.h"
 
 

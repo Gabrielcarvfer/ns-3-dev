@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "ns3/epc-helper.h"
+#include "epc-helper.h"
 
 namespace ns3 {
 

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/scheduler.h"
+#include "scheduler.h"
 #include <list>
 #include <utility>
 #include <stdint.h>

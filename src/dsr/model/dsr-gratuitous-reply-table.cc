@@ -29,8 +29,8 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "ns3/dsr-gratuitous-reply-table.h"
-#include "ns3/log.h"
+#include "dsr-gratuitous-reply-table.h"
+#include "../../core/model/log.h"
 #include <algorithm>
 
 namespace ns3 {

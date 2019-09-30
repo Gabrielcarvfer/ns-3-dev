@@ -24,7 +24,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/buffer.h"
+#include "../../network/model/buffer.h"
 #include <list>
 
 namespace ns3 {
@@ -184,7 +184,7 @@ private:
 // ----------------------------------------------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/buffer.h"
+#include "../../network/model/buffer.h"
 
 namespace ns3 {
 
@@ -294,7 +294,7 @@ private:
 // ----------------------------------------------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
+#include "../../network/model/header.h"
 #include <vector>
 
 namespace ns3 {
@@ -426,8 +426,8 @@ private:
 // ----------------------------------------------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
-#include "ns3/cid.h"
+#include "../../network/model/header.h"
+#include "cid.h"
 
 namespace ns3 {
 
@@ -544,7 +544,7 @@ private:
 // ----------------------------------------------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
+#include "../../network/model/header.h"
 #include <vector>
 
 namespace ns3 {

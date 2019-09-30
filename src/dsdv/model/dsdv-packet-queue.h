@@ -32,8 +32,8 @@
 #pragma once
 
 #include <vector>
-#include "ns3/ipv4-routing-protocol.h"
-#include "ns3/simulator.h"
+#include "../../internet/model/ipv4-routing-protocol.h"
+#include "../../core/model/simulator.h"
 
 namespace ns3 {
 namespace dsdv {

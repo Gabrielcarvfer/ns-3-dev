@@ -18,17 +18,17 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/node.h"
-#include "ns3/config.h"
-#include "ns3/double.h"
-#include "ns3/uinteger.h"
-#include "ns3/constant-obss-pd-algorithm.h"
-#include "ns3/sta-wifi-mac.h"
-#include "ns3/wifi-utils.h"
-#include "ns3/wifi-phy.h"
-#include "ns3/wifi-net-device.h"
-#include "ns3/he-configuration.h"
+#include "../../core/model/log.h"
+#include "../../network/model/node.h"
+#include "../../core/model/config.h"
+#include "../../core/model/double.h"
+#include "../../core/model/uinteger.h"
+#include "constant-obss-pd-algorithm.h"
+#include "sta-wifi-mac.h"
+#include "wifi-utils.h"
+#include "wifi-phy.h"
+#include "wifi-net-device.h"
+#include "he-configuration.h"
 
 namespace ns3 {
 

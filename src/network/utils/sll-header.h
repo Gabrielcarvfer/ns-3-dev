@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "ns3/buffer.h"
-#include "ns3/header.h"
+#include "../model/buffer.h"
+#include "../model/header.h"
 #include <stdint.h>
 
 namespace ns3 {

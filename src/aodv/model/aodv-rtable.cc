@@ -26,11 +26,11 @@
  *          Pavel Boyko <boyko@iitp.ru>
  */
 
-#include "ns3/aodv-rtable.h"
+#include "aodv-rtable.h"
 #include <algorithm>
 #include <iomanip>
-#include "ns3/simulator.h"
-#include "ns3/log.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

@@ -21,20 +21,20 @@
 
 #pragma once
 
-#include "ns3/net-device.h"
-#include "ns3/event-id.h"
-#include "ns3/mac48-address.h"
-#include "ns3/cid.h"
-#include "ns3/wimax-connection.h"
-#include "ns3/cid-factory.h"
-#include "ns3/mac-messages.h"
-#include "ns3/dl-mac-messages.h"
-#include "ns3/ul-mac-messages.h"
-#include "ns3/traced-callback.h"
-#include "ns3/nstime.h"
-#include "ns3/log.h"
-#include "ns3/wimax-phy.h"
-#include "ns3/wimax-mac-header.h"
+#include "../../network/model/net-device.h"
+#include "../../core/model/event-id.h"
+#include "../../network/utils/mac48-address.h"
+#include "cid.h"
+#include "wimax-connection.h"
+#include "cid-factory.h"
+#include "mac-messages.h"
+#include "dl-mac-messages.h"
+#include "ul-mac-messages.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/log.h"
+#include "wimax-phy.h"
+#include "wimax-mac-header.h"
 
 namespace ns3 {
 

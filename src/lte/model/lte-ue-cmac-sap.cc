@@ -19,7 +19,7 @@
  */
 
 
-#include "ns3/lte-ue-cmac-sap.h"
+#include "lte-ue-cmac-sap.h"
 
 
 namespace ns3 {

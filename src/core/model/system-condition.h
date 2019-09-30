@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "ns3/ptr.h"
+#include "ptr.h"
 
 /**
  * @file

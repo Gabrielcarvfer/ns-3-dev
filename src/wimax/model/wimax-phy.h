@@ -22,14 +22,14 @@
 
 #include <stdint.h>
 #include <list>
-#include "ns3/callback.h"
-#include "ns3/nstime.h"
-#include "ns3/event-id.h"
-#include "ns3/bvec.h"
-#include "ns3/send-params.h"
-#include "ns3/log.h"
-#include "ns3/object.h"
-#include "ns3/traced-callback.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/event-id.h"
+#include "bvec.h"
+#include "send-params.h"
+#include "../../core/model/log.h"
+#include "../../core/model/object.h"
+#include "../../core/model/traced-callback.h"
 
 namespace ns3 {
 

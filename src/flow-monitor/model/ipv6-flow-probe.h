@@ -21,10 +21,10 @@
 
 #pragma once
 
-#include "ns3/flow-probe.h"
-#include "ns3/ipv6-flow-classifier.h"
-#include "ns3/ipv6-l3-protocol.h"
-#include "ns3/queue-item.h"
+#include "flow-probe.h"
+#include "ipv6-flow-classifier.h"
+#include "../../internet/model/ipv6-l3-protocol.h"
+#include "../../network/utils/queue-item.h"
 
 namespace ns3 {
 

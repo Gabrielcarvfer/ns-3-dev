@@ -20,9 +20,9 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/callback.h"
-#include "ns3/ptr.h"
-#include "ns3/simple-ref-count.h"
+#include "callback.h"
+#include "ptr.h"
+#include "simple-ref-count.h"
 
 /**
  * \file

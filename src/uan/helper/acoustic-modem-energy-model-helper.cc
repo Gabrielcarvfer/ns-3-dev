@@ -18,12 +18,12 @@
  * Author: Author: Andrea Sacco <andrea.sacco85@gmail.com>
  */
 
-#include "ns3/acoustic-modem-energy-model-helper.h"
-#include "ns3/basic-energy-source-helper.h"
-#include "ns3/uan-phy.h"
-#include "ns3/uan-net-device.h"
-#include "ns3/config.h"
-#include "ns3/names.h"
+#include "acoustic-modem-energy-model-helper.h"
+#include "../../energy/helper/basic-energy-source-helper.h"
+#include "../model/uan-phy.h"
+#include "../model/uan-net-device.h"
+#include "../../core/model/config.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

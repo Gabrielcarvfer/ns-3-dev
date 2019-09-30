@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/tag.h"
-#include "ns3/ipv4-address.h"
+#include "../../network/model/tag.h"
+#include "../../network/utils/ipv4-address.h"
 
 namespace ns3 {
 

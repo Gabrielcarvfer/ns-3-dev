@@ -23,9 +23,9 @@
 
 #include "null-message-simulator-impl.h"
 
-#include <ns3/channel.h>
-#include <ns3/ptr.h>
-#include <ns3/pointer.h>
+#include "../../network/model/channel.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/pointer.h"
 
 #include <map>
 

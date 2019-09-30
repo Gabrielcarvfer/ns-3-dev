@@ -18,15 +18,15 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#include "ns3/log.h"
-#include "ns3/uinteger.h"
-#include "ns3/node.h"
-#include "ns3/names.h"
+#include "../../core/model/log.h"
+#include "../../core/model/uinteger.h"
+#include "../../network/model/node.h"
+#include "../../core/model/names.h"
 
-#include "ns3/ipv6-l3-protocol.h" 
-#include "ns3/icmpv6-l4-protocol.h"
-#include "ns3/ndisc-cache.h"
-#include "ns3/ipv6-interface.h"
+#include "ipv6-l3-protocol.h" 
+#include "icmpv6-l4-protocol.h"
+#include "ndisc-cache.h"
+#include "ipv6-interface.h"
 
 namespace ns3
 {

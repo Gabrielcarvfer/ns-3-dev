@@ -19,8 +19,8 @@
  */
 
 
-#include "ns3/uan-header-rc.h"
-#include "ns3/mac8-address.h"
+#include "uan-header-rc.h"
+#include "../../network/utils/mac8-address.h"
 
 #include <set>
 

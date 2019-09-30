@@ -21,10 +21,10 @@
 #pragma once
 
 #include <list>
-#include "ns3/header.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/packet.h"
-#include "ns3/ipv4-header.h"
+#include "../../network/model/header.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../network/model/packet.h"
+#include "ipv4-header.h"
 
 
 namespace ns3 {

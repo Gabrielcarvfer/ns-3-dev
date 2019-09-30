@@ -19,8 +19,8 @@
  */
 #pragma once
 
-#include "ns3/attribute.h"
-#include "ns3/unused.h"
+#include "attribute.h"
+#include "unused.h"
 
 /**
  * \file
@@ -125,7 +125,7 @@ MakeAccessorHelper (T1 a1, T2 a2);
  *  Implementation of the templates declared above.
  ***************************************************************/
 
-#include "ns3/type-traits.h"
+#include "type-traits.h"
 
 namespace ns3 {
 

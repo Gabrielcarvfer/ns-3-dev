@@ -17,11 +17,11 @@
  */
 
 #include <iostream>
-#include "ns3/abort.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/header.h"
-#include "ns3/ppp-header.h"
+#include "../../core/model/abort.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "../../network/model/header.h"
+#include "ppp-header.h"
 
 namespace ns3 {
 

@@ -20,11 +20,11 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/bulk-send-helper.h"
-#include "ns3/inet-socket-address.h"
-#include "ns3/packet-socket-address.h"
-#include "ns3/string.h"
-#include "ns3/names.h"
+#include "bulk-send-helper.h"
+#include "../../network/utils/inet-socket-address.h"
+#include "../../network/utils/packet-socket-address.h"
+#include "../../core/model/string.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

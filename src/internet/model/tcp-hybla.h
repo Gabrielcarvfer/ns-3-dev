@@ -18,9 +18,9 @@
  */
 #pragma once
 
-#include "ns3/tcp-congestion-ops.h"
-#include "ns3/tcp-recovery-ops.h"
-#include "ns3/traced-value.h"
+#include "tcp-congestion-ops.h"
+#include "tcp-recovery-ops.h"
+#include "../../core/model/traced-value.h"
 
 namespace ns3 {
 

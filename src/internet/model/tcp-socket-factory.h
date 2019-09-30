@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "ns3/socket-factory.h"
+#include "../../network/model/socket-factory.h"
 
 namespace ns3 {
 

@@ -30,8 +30,8 @@
 
 #include <iostream>
 
-#include "ns3/nstime.h"
-#include "ns3/system-wall-clock-ms.h"
+#include "nstime.h"
+#include "system-wall-clock-ms.h"
 
 namespace ns3 {
 

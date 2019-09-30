@@ -16,11 +16,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/bridge-helper.h"
-#include "ns3/log.h"
-#include "ns3/bridge-net-device.h"
-#include "ns3/node.h"
-#include "ns3/names.h"
+#include "bridge-helper.h"
+#include "../../core/model/log.h"
+#include "../model/bridge-net-device.h"
+#include "../../network/model/node.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

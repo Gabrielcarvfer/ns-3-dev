@@ -20,12 +20,12 @@
 
 #include <stdint.h>
 #include "burst-profile-manager.h"
-#include "ns3/bs-net-device.h"
-#include "ns3/ss-net-device.h"
-#include "ns3/ss-record.h"
-#include "ns3/ss-manager.h"
-#include "ns3/log.h"
-#include "ns3/mac-messages.h"
+#include "bs-net-device.h"
+#include "ss-net-device.h"
+#include "ss-record.h"
+#include "ss-manager.h"
+#include "../../core/model/log.h"
+#include "mac-messages.h"
 
 namespace ns3 {
 

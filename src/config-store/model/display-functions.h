@@ -18,8 +18,8 @@
  */
 #pragma once
 
-#include "ns3/model-node-creator.h"
-#include "ns3/model-typeid-creator.h"
+#include "model-node-creator.h"
+#include "model-typeid-creator.h"
 #include <gtk/gtk.h>
 
 namespace ns3 {

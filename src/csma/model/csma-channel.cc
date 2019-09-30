@@ -18,11 +18,11 @@
  * Author: Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
 
-#include "ns3/csma-channel.h"
-#include "ns3/csma-net-device.h"
-#include "ns3/packet.h"
-#include "ns3/simulator.h"
-#include "ns3/log.h"
+#include "csma-channel.h"
+#include "csma-net-device.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

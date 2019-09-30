@@ -21,11 +21,11 @@
  */
 #pragma once
 
-#include "ns3/object-factory.h"
-#include "ns3/regular-wifi-mac.h"
-#include "ns3/wifi-mac-queue.h"
-#include "ns3/vendor-specific-action.h"
-#include "ns3/wave-net-device.h"
+#include "../../core/model/object-factory.h"
+#include "../../wifi/model/regular-wifi-mac.h"
+#include "../../wifi/model/wifi-mac-queue.h"
+#include "vendor-specific-action.h"
+#include "wave-net-device.h"
 
 namespace ns3 {
 

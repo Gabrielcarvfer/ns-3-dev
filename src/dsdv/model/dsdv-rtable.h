@@ -34,11 +34,11 @@
 #include <cassert>
 #include <map>
 #include <sys/types.h>
-#include "ns3/ipv4.h"
-#include "ns3/ipv4-route.h"
-#include "ns3/timer.h"
-#include "ns3/net-device.h"
-#include "ns3/output-stream-wrapper.h"
+#include "../../internet/model/ipv4.h"
+#include "../../internet/model/ipv4-route.h"
+#include "../../core/model/timer.h"
+#include "../../network/model/net-device.h"
+#include "../../network/utils/output-stream-wrapper.h"
 
 namespace ns3 {
 namespace dsdv {

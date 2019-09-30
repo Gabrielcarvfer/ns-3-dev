@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/energy-model-helper.h"
-#include "ns3/acoustic-modem-energy-model.h"
+#include "../../energy/helper/energy-model-helper.h"
+#include "../model/acoustic-modem-energy-model.h"
 
 namespace ns3 {
 

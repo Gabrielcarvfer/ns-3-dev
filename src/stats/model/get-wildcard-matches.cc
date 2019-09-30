@@ -20,8 +20,8 @@
 
 #include <string>
 #include <vector>
-#include "ns3/get-wildcard-matches.h"
-#include "ns3/assert.h"
+#include "get-wildcard-matches.h"
+#include "../../core/model/assert.h"
 
 namespace ns3 {
 

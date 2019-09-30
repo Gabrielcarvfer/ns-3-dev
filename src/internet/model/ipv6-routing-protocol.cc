@@ -18,10 +18,10 @@
 
 /* taken from src/node/ipv4-routing-protocol.cc and adapted to IPv6 */
 
-#include "ns3/assert.h"
+#include "../../core/model/assert.h"
 
-#include "ns3/ipv6-route.h"
-#include "ns3/ipv6-routing-protocol.h"
+#include "ipv6-route.h"
+#include "ipv6-routing-protocol.h"
 
 namespace ns3 
 {

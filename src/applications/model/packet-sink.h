@@ -20,11 +20,11 @@
 
 #pragma once
 
-#include "ns3/application.h"
-#include "ns3/event-id.h"
-#include "ns3/ptr.h"
-#include "ns3/traced-callback.h"
-#include "ns3/address.h"
+#include "../../network/model/application.h"
+#include "../../core/model/event-id.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/traced-callback.h"
+#include "../../network/model/address.h"
 
 namespace ns3 {
 

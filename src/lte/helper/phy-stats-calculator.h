@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/lte-stats-calculator.h"
-#include "ns3/nstime.h"
-#include "ns3/uinteger.h"
-#include "ns3/spectrum-value.h"
+#include "lte-stats-calculator.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/uinteger.h"
+#include "../../spectrum/model/spectrum-value.h"
 #include <string>
 #include <fstream>
 

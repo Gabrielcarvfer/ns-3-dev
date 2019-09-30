@@ -22,7 +22,7 @@
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
 #pragma once
-#include "ns3/wifi-helper.h"
+#include "../../wifi/helper/wifi-helper.h"
 
 namespace ns3 {
 

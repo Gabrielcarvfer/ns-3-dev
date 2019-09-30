@@ -17,11 +17,11 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/log.h"  // NS_ASSERT and NS_LOG
-#include "ns3/hash.h"
-#include "ns3/type-id.h"
-#include "ns3/singleton.h"
-#include "ns3/trace-source-accessor.h"
+#include "log.h"  // NS_ASSERT and NS_LOG
+#include "hash.h"
+#include "type-id.h"
+#include "singleton.h"
+#include "trace-source-accessor.h"
 
 #include <map>
 #include <vector>

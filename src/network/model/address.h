@@ -22,9 +22,9 @@
 
 #include <stdint.h>
 #include <ostream>
-#include "ns3/attribute.h"
-#include "ns3/attribute-helper.h"
-#include "ns3/tag-buffer.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/attribute-helper.h"
+#include "tag-buffer.h"
 
 namespace ns3 {
 

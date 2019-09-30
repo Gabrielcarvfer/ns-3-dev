@@ -21,8 +21,8 @@
 
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
-#include "ns3/type-id.h"
-#include "ns3/tag-buffer.h"
+#include "../../core/model/type-id.h"
+#include "tag-buffer.h"
 
 namespace ns3 {
 

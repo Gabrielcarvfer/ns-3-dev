@@ -19,9 +19,9 @@
  */
 
 #include "ipv4-raw-socket-factory-impl.h"
-#include "ns3/ipv4-l3-protocol.h"
-#include "ns3/socket.h"
-#include "ns3/log.h"
+#include "ipv4-l3-protocol.h"
+#include "../../network/model/socket.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

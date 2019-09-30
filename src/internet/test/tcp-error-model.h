@@ -18,9 +18,9 @@
  */
 #pragma once
 
-#include "ns3/error-model.h"
-#include "ns3/tcp-header.h"
-#include "ns3/ipv4-header.h"
+#include "../../network/utils/error-model.h"
+#include "../model/tcp-header.h"
+#include "../model/ipv4-header.h"
 
 namespace ns3 {
 

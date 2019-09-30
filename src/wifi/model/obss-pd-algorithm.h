@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/traced-callback.h"
-#include "ns3/he-configuration.h"
+#include "../../core/model/object.h"
+#include "../../core/model/traced-callback.h"
+#include "he-configuration.h"
 
 namespace ns3 {
 

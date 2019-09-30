@@ -17,9 +17,9 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/packet-socket-address.h"
-#include "ns3/net-device.h"
-#include "ns3/log.h"
+#include "packet-socket-address.h"
+#include "../model/net-device.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

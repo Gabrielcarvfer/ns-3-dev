@@ -26,8 +26,8 @@
 #include <vector>
 #include <ostream>
 
-#include "ns3/timer.h"
-#include "ns3/ipv6-address.h"
+#include "../../core/model/timer.h"
+#include "../../network/utils/ipv6-address.h"
 
 namespace ns3
 {

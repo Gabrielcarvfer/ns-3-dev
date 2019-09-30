@@ -21,14 +21,14 @@
 
 #include <stdint.h>
 #include <queue>
-#include "ns3/callback.h"
-#include "ns3/traced-callback.h"
-#include "ns3/socket.h"
-#include "ns3/ptr.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/udp-socket.h"
-#include "ns3/ipv4-interface.h"
-#include "ns3/icmpv4.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/traced-callback.h"
+#include "../../network/model/socket.h"
+#include "../../core/model/ptr.h"
+#include "../../network/utils/ipv4-address.h"
+#include "udp-socket.h"
+#include "ipv4-interface.h"
+#include "icmpv4.h"
 
 namespace ns3 {
 

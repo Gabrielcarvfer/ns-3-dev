@@ -18,7 +18,7 @@
  */
 #pragma once
 #include <vector>
-#include "ns3/wave-net-device.h"
+#include "wave-net-device.h"
 
 namespace ns3 {
 

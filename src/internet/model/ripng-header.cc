@@ -18,8 +18,8 @@
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
-#include "ns3/ripng-header.h"
-#include "ns3/log.h"
+#include "ripng-header.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

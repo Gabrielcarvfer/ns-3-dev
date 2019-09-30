@@ -18,8 +18,8 @@
 
 #include <string>
 #include <stdint.h>
-#include "ns3/object.h"
-#include "ns3/ptr.h"
+#include "../../core/model/object.h"
+#include "../../core/model/ptr.h"
 
 namespace ns3 {
 

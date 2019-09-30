@@ -18,8 +18,8 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include "ns3/log.h"
-#include "ns3/microwave-oven-spectrum-value-helper.h"
+#include "../../core/model/log.h"
+#include "microwave-oven-spectrum-value-helper.h"
 
 namespace ns3 {
 

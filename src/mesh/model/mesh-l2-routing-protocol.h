@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/mac48-address.h"
-#include "ns3/packet.h"
+#include "../../core/model/object.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../network/model/packet.h"
 
 namespace ns3 {
 

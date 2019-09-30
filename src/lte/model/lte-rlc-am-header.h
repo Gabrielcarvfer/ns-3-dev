@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/header.h"
-#include "ns3/lte-rlc-sequence-number.h"
+#include "../../network/model/header.h"
+#include "lte-rlc-sequence-number.h"
 
 #include <list>
 

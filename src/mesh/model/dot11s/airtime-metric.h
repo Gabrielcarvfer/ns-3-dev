@@ -19,7 +19,7 @@
  */
 
 #pragma once
-#include "ns3/mesh-wifi-interface-mac.h"
+#include "../mesh-wifi-interface-mac.h"
 namespace ns3 {
 namespace dot11s {
 /**

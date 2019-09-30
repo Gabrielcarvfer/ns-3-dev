@@ -19,8 +19,8 @@
  * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "ns3/mac48-address.h"
-#include "ns3/qos-blocked-destinations.h"
+#include "../../network/utils/mac48-address.h"
+#include "qos-blocked-destinations.h"
 
 namespace ns3 {
 

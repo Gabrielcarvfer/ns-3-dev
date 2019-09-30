@@ -19,11 +19,11 @@
  */
 
 #include <sstream>
-#include "ns3/node.h"
-#include "ns3/ptr.h"
-#include "ns3/object-vector.h"
+#include "../../network/model/node.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/object-vector.h"
 #include "ipv6-option-demux.h"
-#include "ns3/ipv6-option.h"
+#include "ipv6-option.h"
 
 namespace ns3
 {

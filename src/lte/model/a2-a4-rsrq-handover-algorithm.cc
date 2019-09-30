@@ -25,9 +25,9 @@
  * - Budiarto Herman <budiarto.herman@magister.fi>
  */
 
-#include "ns3/a2-a4-rsrq-handover-algorithm.h"
-#include <ns3/log.h>
-#include <ns3/uinteger.h>
+#include "a2-a4-rsrq-handover-algorithm.h"
+#include "../../core/model/log.h"
+#include "../../core/model/uinteger.h"
 
 namespace ns3 {
 

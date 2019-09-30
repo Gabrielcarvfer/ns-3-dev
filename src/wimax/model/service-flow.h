@@ -22,9 +22,9 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/wimax-phy.h"
-#include "ns3/wimax-connection.h"
-#include "ns3/cs-parameters.h"
+#include "wimax-phy.h"
+#include "wimax-connection.h"
+#include "cs-parameters.h"
 
 namespace ns3 {
 

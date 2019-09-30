@@ -20,12 +20,12 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/callback.h"
-#include "ns3/traced-callback.h"
-#include "ns3/nstime.h"
-#include "ns3/wifi-phy-state.h"
-#include "ns3/wifi-preamble.h"
+#include "../../core/model/object.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/nstime.h"
+#include "wifi-phy-state.h"
+#include "wifi-preamble.h"
 
 namespace ns3 {
 

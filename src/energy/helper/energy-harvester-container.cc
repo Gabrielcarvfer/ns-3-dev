@@ -19,10 +19,10 @@
  * Author: Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#include "ns3/energy-harvester-container.h"
+#include "energy-harvester-container.h"
 
-#include "ns3/names.h"
-#include "ns3/log.h"
+#include "../../core/model/names.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

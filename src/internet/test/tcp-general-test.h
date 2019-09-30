@@ -18,12 +18,12 @@
  */
 #pragma once
 
-#include "ns3/simple-net-device.h"
-#include "ns3/error-model.h"
-#include "ns3/tcp-socket-base.h"
-#include "ns3/tcp-congestion-ops.h"
-#include "ns3/tcp-recovery-ops.h"
-#include "ns3/test.h"
+#include "../../network/utils/simple-net-device.h"
+#include "../../network/utils/error-model.h"
+#include "../model/tcp-socket-base.h"
+#include "../model/tcp-congestion-ops.h"
+#include "../model/tcp-recovery-ops.h"
+#include "../../core/model/test.h"
 
 namespace ns3 {
 

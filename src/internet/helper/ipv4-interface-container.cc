@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "ns3/ipv4-interface-container.h"
-#include "ns3/node-list.h"
-#include "ns3/names.h"
+#include "ipv4-interface-container.h"
+#include "../../network/model/node-list.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

@@ -32,11 +32,11 @@
 
 #pragma once
 
-#include "ns3/tcp-congestion-ops.h"
-#include "ns3/tcp-recovery-ops.h"
-#include "ns3/sequence-number.h"
-#include "ns3/traced-value.h"
-#include "ns3/event-id.h"
+#include "tcp-congestion-ops.h"
+#include "tcp-recovery-ops.h"
+#include "../../network/utils/sequence-number.h"
+#include "../../core/model/traced-value.h"
+#include "../../core/model/event-id.h"
 
 namespace ns3 {
 

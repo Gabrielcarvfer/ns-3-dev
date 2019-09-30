@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/application.h"
-#include "ns3/event-id.h"
-#include "ns3/ptr.h"
-#include "ns3/packet-socket-address.h"
+#include "../model/application.h"
+#include "../../core/model/event-id.h"
+#include "../../core/model/ptr.h"
+#include "packet-socket-address.h"
 
 namespace ns3 {
 

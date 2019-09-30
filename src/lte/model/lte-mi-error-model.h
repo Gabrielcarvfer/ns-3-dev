@@ -34,10 +34,10 @@
 
 #include <list>
 #include <vector>
-#include <ns3/ptr.h>
+#include "../../core/model/ptr.h"
 #include <stdint.h>
-#include <ns3/spectrum-value.h>
-#include <ns3/lte-harq-phy.h>
+#include "../../spectrum/model/spectrum-value.h"
+#include "lte-harq-phy.h"
 
 
 

@@ -17,15 +17,15 @@
  */
 #pragma once
 
-#include "ns3/packet.h"
-#include "ns3/callback.h"
-#include "ns3/object.h"
-#include "ns3/socket.h"
-#include "ns3/ipv4-header.h"
-#include "ns3/ipv4-interface-address.h"
-#include "ns3/ipv4.h"
-#include "ns3/output-stream-wrapper.h"
-#include "ns3/nstime.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/object.h"
+#include "../../network/model/socket.h"
+#include "ipv4-header.h"
+#include "ipv4-interface-address.h"
+#include "ipv4.h"
+#include "../../network/utils/output-stream-wrapper.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 

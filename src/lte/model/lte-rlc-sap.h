@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/packet.h"
+#include "../../network/model/packet.h"
 
 namespace ns3 {
 

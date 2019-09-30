@@ -23,14 +23,14 @@
  */
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/traced-callback.h>
-#include <ns3/traced-value.h>
-#include <ns3/mac16-address.h>
-#include <ns3/mac64-address.h>
-#include <ns3/sequence-number.h>
-#include <ns3/lr-wpan-phy.h>
-#include <ns3/event-id.h>
+#include "../../core/model/object.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/traced-value.h"
+#include "../../network/utils/mac16-address.h"
+#include "../../network/utils/mac64-address.h"
+#include "../../network/utils/sequence-number.h"
+#include "lr-wpan-phy.h"
+#include "../../core/model/event-id.h"
 #include <deque>
 
 

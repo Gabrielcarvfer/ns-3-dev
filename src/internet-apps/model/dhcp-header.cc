@@ -22,11 +22,11 @@
  *
  */
 
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/address-utils.h"
-#include "ns3/dhcp-header.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
+#include "../../network/utils/address-utils.h"
+#include "dhcp-header.h"
 
 namespace ns3 {
 

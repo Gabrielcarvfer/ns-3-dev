@@ -28,11 +28,11 @@
  * NSF grant CNS-1050226 (Multilayer Network Resilience Analysis and Experimentation on GENI),
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
-#include "ns3/dsdv-helper.h"
-#include "ns3/dsdv-routing-protocol.h"
-#include "ns3/node-list.h"
-#include "ns3/names.h"
-#include "ns3/ipv4-list-routing.h"
+#include "dsdv-helper.h"
+#include "../model/dsdv-routing-protocol.h"
+#include "../../network/model/node-list.h"
+#include "../../core/model/names.h"
+#include "../../internet/model/ipv4-list-routing.h"
 
 namespace ns3 {
 DsdvHelper::~DsdvHelper ()

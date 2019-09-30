@@ -20,17 +20,17 @@
  *          Mirko Banchi <mk.banchi@gmail.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/packet.h"
-#include "ns3/simulator.h"
-#include "ns3/sta-wifi-mac.h"
-#include "ns3/wifi-phy.h"
-#include "ns3/mac-low.h"
-#include "ns3/mgt-headers.h"
-#include "ns3/snr-tag.h"
-#include "ns3/wifi-net-device.h"
-#include "ns3/ht-configuration.h"
-#include "ns3/he-configuration.h"
+#include "../../core/model/log.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/simulator.h"
+#include "sta-wifi-mac.h"
+#include "wifi-phy.h"
+#include "mac-low.h"
+#include "mgt-headers.h"
+#include "snr-tag.h"
+#include "wifi-net-device.h"
+#include "ht-configuration.h"
+#include "he-configuration.h"
 
 namespace ns3 {
 

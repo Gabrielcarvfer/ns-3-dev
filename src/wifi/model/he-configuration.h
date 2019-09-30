@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/nstime.h"
+#include "../../core/model/object.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 

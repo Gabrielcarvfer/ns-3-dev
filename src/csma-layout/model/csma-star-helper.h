@@ -20,13 +20,13 @@
 
 #include <string>
 
-#include "ns3/csma-helper.h"
-#include "ns3/ipv4-address-helper.h"
-#include "ns3/ipv6-address-helper.h"
-#include "ns3/internet-stack-helper.h"
-#include "ns3/ipv4-interface-container.h"
-#include "ns3/ipv6-interface-container.h"
-#include "ns3/ipv6-address-generator.h"
+#include "../../csma/helper/csma-helper.h"
+#include "../../internet/helper/ipv4-address-helper.h"
+#include "../../internet/helper/ipv6-address-helper.h"
+#include "../../internet/helper/internet-stack-helper.h"
+#include "../../internet/helper/ipv4-interface-container.h"
+#include "../../internet/helper/ipv6-interface-container.h"
+#include "../../internet/model/ipv6-address-generator.h"
 
 namespace ns3 {
 

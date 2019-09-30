@@ -24,7 +24,7 @@
 
 #pragma once
 
-#include "ns3/tag.h"
+#include "../../network/model/tag.h"
 
 namespace ns3 {
 

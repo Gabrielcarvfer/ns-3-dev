@@ -21,15 +21,15 @@
 #pragma once
 
 
-#include <ns3/spectrum-value.h>
-#include <ns3/mobility-model.h>
-#include <ns3/packet.h>
-#include <ns3/nstime.h>
-#include <ns3/net-device.h>
-#include <ns3/spectrum-phy.h>
-#include <ns3/spectrum-channel.h>
-#include <ns3/trace-source-accessor.h>
-#include <ns3/event-id.h>
+#include "spectrum-value.h"
+#include "../../mobility/model/mobility-model.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/nstime.h"
+#include "../../network/model/net-device.h"
+#include "spectrum-phy.h"
+#include "spectrum-channel.h"
+#include "../../core/model/trace-source-accessor.h"
+#include "../../core/model/event-id.h"
 
 namespace ns3 {
 

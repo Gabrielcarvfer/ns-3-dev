@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include <ns3/test.h>
-#include <ns3/hybrid-buildings-propagation-loss-model.h>
+#include "../../core/model/test.h"
+#include "../model/hybrid-buildings-propagation-loss-model.h"
 
 
 using namespace ns3;

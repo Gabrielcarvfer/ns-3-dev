@@ -26,8 +26,8 @@
  */
 
 
-#include "ns3/tcp-illinois.h"
-#include "ns3/log.h"
+#include "tcp-illinois.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

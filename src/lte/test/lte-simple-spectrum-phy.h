@@ -21,13 +21,13 @@
 
 #pragma once
 
-#include <ns3/event-id.h>
-#include <ns3/spectrum-value.h>
-#include <ns3/mobility-model.h>
-#include <ns3/net-device.h>
-#include <ns3/spectrum-phy.h>
-#include <ns3/spectrum-channel.h>
-#include <ns3/traced-callback.h>
+#include "../../core/model/event-id.h"
+#include "../../spectrum/model/spectrum-value.h"
+#include "../../mobility/model/mobility-model.h"
+#include "../../network/model/net-device.h"
+#include "../../spectrum/model/spectrum-phy.h"
+#include "../../spectrum/model/spectrum-channel.h"
+#include "../../core/model/traced-callback.h"
 
 namespace ns3 {
 

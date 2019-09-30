@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/obss-pd-algorithm.h"
+#include "obss-pd-algorithm.h"
 
 namespace ns3 {
 

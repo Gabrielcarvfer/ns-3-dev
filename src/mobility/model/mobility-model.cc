@@ -20,8 +20,8 @@
 
 #include <cmath>
 
-#include "ns3/mobility-model.h"
-#include "ns3/trace-source-accessor.h"
+#include "mobility-model.h"
+#include "../../core/model/trace-source-accessor.h"
 
 namespace ns3 {
 

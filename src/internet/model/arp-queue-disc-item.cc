@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/log.h"
-#include "ns3/arp-queue-disc-item.h"
+#include "../../core/model/log.h"
+#include "arp-queue-disc-item.h"
 
 namespace ns3 {
 

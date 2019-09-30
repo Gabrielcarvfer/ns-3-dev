@@ -21,9 +21,9 @@
 #pragma once
 
 
-#include <ns3/object.h>
-#include <ns3/mobility-model.h>
-#include <ns3/spectrum-value.h>
+#include "../../core/model/object.h"
+#include "../../mobility/model/mobility-model.h"
+#include "spectrum-value.h"
 
 namespace ns3 {
 

@@ -16,8 +16,8 @@
  * Author: Gustavo Carneiro  <gjc@inescporto.pt>
  */
 
-#include "ns3/log.h"
-#include "ns3/bridge-channel.h"
+#include "../../core/model/log.h"
+#include "bridge-channel.h"
 
 namespace ns3 {
 

@@ -18,14 +18,14 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "ns3/uan-transducer-hd.h"
-#include "ns3/simulator.h"
-#include "ns3/uan-prop-model.h"
-#include "ns3/uan-phy.h"
-#include "ns3/uan-channel.h"
-#include "ns3/log.h"
-#include "ns3/pointer.h"
-#include "ns3/double.h"
+#include "uan-transducer-hd.h"
+#include "../../core/model/simulator.h"
+#include "uan-prop-model.h"
+#include "uan-phy.h"
+#include "uan-channel.h"
+#include "../../core/model/log.h"
+#include "../../core/model/pointer.h"
+#include "../../core/model/double.h"
 
 namespace ns3 {
 

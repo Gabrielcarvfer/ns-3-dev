@@ -19,8 +19,8 @@
  *          Stefano Avallone <stavallo@unina.it>
  */
 
-#include "ns3/log.h"
-#include "ns3/mq-queue-disc.h"
+#include "../../core/model/log.h"
+#include "mq-queue-disc.h"
 
 namespace ns3 {
 

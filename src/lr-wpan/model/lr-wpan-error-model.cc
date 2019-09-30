@@ -17,8 +17,8 @@
  *
  * Author: Gary Pei <guangyu.pei@boeing.com>
  */
-#include "ns3/lr-wpan-error-model.h"
-#include <ns3/log.h>
+#include "lr-wpan-error-model.h"
+#include "../../core/model/log.h"
 
 #include <cmath>
 

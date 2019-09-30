@@ -16,9 +16,9 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#include "ns3/tcp-congestion-ops.h"
-#include "ns3/tcp-socket-base.h"
-#include "ns3/log.h"
+#include "tcp-congestion-ops.h"
+#include "tcp-socket-base.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

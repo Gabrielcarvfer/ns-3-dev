@@ -17,11 +17,11 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/udp-echo-helper.h"
-#include "ns3/udp-echo-server.h"
-#include "ns3/udp-echo-client.h"
-#include "ns3/uinteger.h"
-#include "ns3/names.h"
+#include "udp-echo-helper.h"
+#include "../model/udp-echo-server.h"
+#include "../model/udp-echo-client.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

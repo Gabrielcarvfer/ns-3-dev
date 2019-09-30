@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/header.h"
-#include "ns3/epc-tft.h"
-#include "ns3/eps-bearer.h"
+#include "../../network/model/header.h"
+#include "epc-tft.h"
+#include "eps-bearer.h"
 
 namespace ns3 {
 

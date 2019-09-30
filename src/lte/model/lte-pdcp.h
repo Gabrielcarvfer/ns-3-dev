@@ -20,13 +20,13 @@
 
 #pragma once
 
-#include "ns3/traced-value.h"
-#include "ns3/trace-source-accessor.h"
+#include "../../core/model/traced-value.h"
+#include "../../core/model/trace-source-accessor.h"
 
-#include "ns3/object.h"
+#include "../../core/model/object.h"
 
-#include "ns3/lte-pdcp-sap.h"
-#include "ns3/lte-rlc-sap.h"
+#include "lte-pdcp-sap.h"
+#include "lte-rlc-sap.h"
 
 namespace ns3 {
 

@@ -19,9 +19,9 @@
  */
 #pragma once
 
-#include "ns3/channel.h"
-#include "ns3/nstime.h"
-#include "ns3/mac48-address.h"
+#include "../model/channel.h"
+#include "../../core/model/nstime.h"
+#include "mac48-address.h"
 #include <vector>
 #include <map>
 

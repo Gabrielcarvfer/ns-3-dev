@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/tx-vector-tag.h"
+#include "tx-vector-tag.h"
 
 /***************************************************************
  *           Packet Mode Tagger

@@ -17,13 +17,13 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/traffic-control-layer.h"
-#include "ns3/net-device-queue-interface.h"
-#include "ns3/log.h"
-#include "ns3/object-map.h"
-#include "ns3/packet.h"
-#include "ns3/socket.h"
-#include "ns3/queue-disc.h"
+#include "traffic-control-layer.h"
+#include "../../network/utils/net-device-queue-interface.h"
+#include "../../core/model/log.h"
+#include "../../core/model/object-map.h"
+#include "../../network/model/packet.h"
+#include "../../network/model/socket.h"
+#include "queue-disc.h"
 #include <tuple>
 
 namespace ns3 {

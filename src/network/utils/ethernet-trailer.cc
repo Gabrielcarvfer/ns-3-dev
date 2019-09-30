@@ -18,11 +18,11 @@
  * Author: Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
 
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/trailer.h"
-#include "ns3/ethernet-trailer.h"
-#include "ns3/crc32.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "../model/trailer.h"
+#include "ethernet-trailer.h"
+#include "crc32.h"
 
 namespace ns3 {
 

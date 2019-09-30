@@ -18,8 +18,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "ns3/trailer.h"
-#include "ns3/log.h"
+#include "trailer.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

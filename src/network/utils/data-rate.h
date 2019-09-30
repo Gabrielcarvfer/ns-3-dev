@@ -23,10 +23,10 @@
 #include <string>
 #include <iostream>
 #include <stdint.h>
-#include "ns3/nstime.h"
-#include "ns3/attribute.h"
-#include "ns3/attribute-helper.h"
-#include "ns3/deprecated.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/attribute-helper.h"
+#include "../../core/model/deprecated.h"
 
 namespace ns3 {
 

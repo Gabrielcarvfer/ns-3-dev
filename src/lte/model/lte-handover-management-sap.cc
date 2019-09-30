@@ -19,7 +19,7 @@
  *
  */
 
-#include "ns3/lte-handover-management-sap.h"
+#include "lte-handover-management-sap.h"
 
 namespace ns3 {
 

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/preamble-detection-model.h"
+#include "preamble-detection-model.h"
 
 namespace ns3 {
 /**

@@ -28,8 +28,8 @@
 
 #pragma once
 
-#include "ns3/ipv4-address.h"
-#include "ns3/simulator.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../core/model/simulator.h"
 #include <vector>
 
 namespace ns3 {

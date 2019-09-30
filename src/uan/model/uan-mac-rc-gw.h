@@ -20,11 +20,11 @@
 
 #pragma once
 
-#include "ns3/uan-mac.h"
-#include "ns3/mac8-address.h"
+#include "uan-mac.h"
+#include "../../network/utils/mac8-address.h"
 
-#include "ns3/nstime.h"
-#include "ns3/traced-callback.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/traced-callback.h"
 
 
 

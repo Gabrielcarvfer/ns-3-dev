@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/hash-function.h"
+#include "hash-function.h"
 
 /**
  * \file

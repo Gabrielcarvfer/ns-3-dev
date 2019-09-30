@@ -18,22 +18,22 @@
  * Authors: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ns3/hwmp-protocol.h"
+#include "hwmp-protocol.h"
 #include "hwmp-protocol-mac.h"
 #include "hwmp-tag.h"
-#include "ns3/hwmp-rtable.h"
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/packet.h"
-#include "ns3/mesh-point-device.h"
-#include "ns3/wifi-net-device.h"
-#include "ns3/mesh-wifi-interface-mac.h"
-#include "ns3/random-variable-stream.h"
+#include "hwmp-rtable.h"
+#include "../../../core/model/log.h"
+#include "../../../core/model/simulator.h"
+#include "../../../network/model/packet.h"
+#include "../mesh-point-device.h"
+#include "../../../wifi/model/wifi-net-device.h"
+#include "../mesh-wifi-interface-mac.h"
+#include "../../../core/model/random-variable-stream.h"
 #include "airtime-metric.h"
-#include "ns3/ie-dot11s-preq.h"
-#include "ns3/ie-dot11s-prep.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/ie-dot11s-perr.h"
+#include "ie-dot11s-preq.h"
+#include "ie-dot11s-prep.h"
+#include "../../../core/model/trace-source-accessor.h"
+#include "ie-dot11s-perr.h"
 
 namespace ns3 {
 

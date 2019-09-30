@@ -18,9 +18,9 @@
  * Author: Stefano Avallone <stefano.avallone@unina.it>
  */
 
-#include "ns3/queue-item.h"
-#include "ns3/packet.h"
-#include "ns3/log.h"
+#include "queue-item.h"
+#include "../model/packet.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

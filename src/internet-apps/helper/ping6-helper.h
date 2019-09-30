@@ -22,11 +22,11 @@
 
 #include <stdint.h>
 
-#include "ns3/object-factory.h"
-#include "ns3/ipv6-address.h"
+#include "../../core/model/object-factory.h"
+#include "../../network/utils/ipv6-address.h"
 
-#include "ns3/application-container.h"
-#include "ns3/node-container.h"
+#include "../../network/helper/application-container.h"
+#include "../../network/helper/node-container.h"
 
 namespace ns3 {
 

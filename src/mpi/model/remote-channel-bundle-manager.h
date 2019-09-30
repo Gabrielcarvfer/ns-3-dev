@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <ns3/nstime.h>
-#include <ns3/ptr.h>
+#include "../../core/model/nstime.h"
+#include "../../core/model/ptr.h"
 #include <map>
 
 namespace ns3 {

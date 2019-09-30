@@ -20,11 +20,11 @@
 
 #include <stdint.h>
 #include <iostream>
-#include "ns3/tcp-header.h"
-#include "ns3/tcp-option.h"
-#include "ns3/buffer.h"
-#include "ns3/address-utils.h"
-#include "ns3/log.h"
+#include "tcp-header.h"
+#include "tcp-option.h"
+#include "../../network/model/buffer.h"
+#include "../../network/utils/address-utils.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

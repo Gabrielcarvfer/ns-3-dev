@@ -18,12 +18,12 @@
 
 #pragma once
 
-#include "ns3/assert.h"
-#include "ns3/net-device-container.h"
-#include "ns3/node-container.h"
-#include "ns3/simulator.h"
-#include "ns3/pcap-file-wrapper.h"
-#include "ns3/output-stream-wrapper.h"
+#include "../../core/model/assert.h"
+#include "net-device-container.h"
+#include "node-container.h"
+#include "../../core/model/simulator.h"
+#include "../utils/pcap-file-wrapper.h"
+#include "../utils/output-stream-wrapper.h"
 
 namespace ns3 {
 

@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <ns3/lte-rrc-sap.h>
-#include <ns3/epc-x2-sap.h>
+#include "lte-rrc-sap.h"
+#include "epc-x2-sap.h"
 
 namespace ns3 {
 

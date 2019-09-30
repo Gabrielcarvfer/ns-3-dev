@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include "ns3/header.h"
-#include "ns3/nstime.h"
-#include "ns3/mac8-address.h"
+#include "../../network/model/header.h"
+#include "../../core/model/nstime.h"
+#include "../../network/utils/mac8-address.h"
 
 #include <set>
 

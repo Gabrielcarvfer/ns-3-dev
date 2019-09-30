@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "ns3/system-condition.h"
-#include "ns3/synchronizer.h"
+#include "system-condition.h"
+#include "synchronizer.h"
 
 /**
  * @file

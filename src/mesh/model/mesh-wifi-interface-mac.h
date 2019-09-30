@@ -23,14 +23,14 @@
 
 #include <stdint.h>
 #include <map>
-#include "ns3/mac48-address.h"
-#include "ns3/mgt-headers.h"
-#include "ns3/callback.h"
-#include "ns3/packet.h"
-#include "ns3/nstime.h"
-#include "ns3/regular-wifi-mac.h"
-#include "ns3/mesh-wifi-interface-mac-plugin.h"
-#include "ns3/event-id.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../wifi/model/mgt-headers.h"
+#include "../../core/model/callback.h"
+#include "../../network/model/packet.h"
+#include "../../core/model/nstime.h"
+#include "../../wifi/model/regular-wifi-mac.h"
+#include "mesh-wifi-interface-mac-plugin.h"
+#include "../../core/model/event-id.h"
 
 namespace ns3 {
 

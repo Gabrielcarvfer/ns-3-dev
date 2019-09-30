@@ -23,11 +23,11 @@
 #pragma once
 
 #include <list>
-#include "ns3/packet.h"
-#include "ns3/wimax-phy.h"
-#include "ns3/packet-burst.h"
-#include "ns3/dl-mac-messages.h"
-#include "ns3/bs-scheduler.h"
+#include "../../network/model/packet.h"
+#include "wimax-phy.h"
+#include "../../network/utils/packet-burst.h"
+#include "dl-mac-messages.h"
+#include "bs-scheduler.h"
 
 namespace ns3 {
 

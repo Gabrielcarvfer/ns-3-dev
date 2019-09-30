@@ -17,9 +17,9 @@
  */
 #ifdef NS3_OPENFLOW
 
-#include "ns3/openflow-switch-net-device.h"
-#include "ns3/udp-l4-protocol.h"
-#include "ns3/tcp-l4-protocol.h"
+#include "openflow-switch-net-device.h"
+#include "../../internet/model/udp-l4-protocol.h"
+#include "../../internet/model/tcp-l4-protocol.h"
 
 namespace ns3 {
 

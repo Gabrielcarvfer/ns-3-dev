@@ -17,8 +17,8 @@
  *
  * Author: Quincy Tse <quincy.tse@nicta.com.au>
  */
-#include "ns3/fatal-impl.h"
-#include "ns3/log.h"
+#include "fatal-impl.h"
+#include "log.h"
 
 #include <iostream>
 #include <list>

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/queue-disc.h"
+#include "queue-disc.h"
 
 namespace ns3 {
 

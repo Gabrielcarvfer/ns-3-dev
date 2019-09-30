@@ -18,13 +18,13 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/channel-access-manager.h"
-#include "ns3/txop.h"
-#include "ns3/wifi-phy-listener.h"
-#include "ns3/wifi-phy.h"
-#include "ns3/mac-low.h"
+#include "../../core/model/log.h"
+#include "../../core/model/simulator.h"
+#include "channel-access-manager.h"
+#include "txop.h"
+#include "wifi-phy-listener.h"
+#include "wifi-phy.h"
+#include "mac-low.h"
 
 namespace ns3 {
 

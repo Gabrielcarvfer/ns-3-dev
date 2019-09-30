@@ -23,8 +23,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/cid.h"
-#include "ns3/ss-record.h"
+#include "cid.h"
+#include "ss-record.h"
 
 namespace ns3 {
 

@@ -19,7 +19,7 @@
  
 #pragma once
 
-#include "ns3/type-id.h"
+#include "../../core/model/type-id.h"
 #include <string>
 
 namespace ns3 {

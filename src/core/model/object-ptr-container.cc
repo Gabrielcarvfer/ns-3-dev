@@ -17,8 +17,8 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@gmail.com>
  */
-#include "ns3/object-ptr-container.h"
-#include "ns3/log.h"
+#include "object-ptr-container.h"
+#include "log.h"
 
 /**
  * \file

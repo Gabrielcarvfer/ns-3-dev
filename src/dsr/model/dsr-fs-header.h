@@ -35,9 +35,9 @@
 #include <list>
 #include <ostream>
 
-#include "ns3/header.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/dsr-option-header.h"
+#include "../../network/model/header.h"
+#include "../../network/utils/ipv4-address.h"
+#include "dsr-option-header.h"
 
 namespace ns3 {
 namespace dsr {

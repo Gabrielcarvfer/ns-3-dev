@@ -17,7 +17,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/constant-position-mobility-model.h"
+#include "constant-position-mobility-model.h"
 
 namespace ns3 {
 

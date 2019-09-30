@@ -19,15 +19,15 @@
 #include <queue>
 #include <vector>
 
-#include "ns3/callback.h"
-#include "ns3/traced-value.h"
-#include "ns3/tcp-socket.h"
-#include "ns3/ptr.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/inet-socket-address.h"
-#include "ns3/event-id.h"
-#include "ns3/pending-data.h"
-#include "ns3/sequence-number.h"
+#include "../../core/model/callback.h"
+#include "../../core/model/traced-value.h"
+#include "tcp-socket.h"
+#include "../../core/model/ptr.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../network/utils/inet-socket-address.h"
+#include "../../core/model/event-id.h"
+#include "pending-data.h"
+#include "../../network/utils/sequence-number.h"
 
 struct INetStreamSocket;
 

@@ -17,11 +17,11 @@
  *
  */
 
-#include "ns3/test.h"
+#include "../../core/model/test.h"
 #include "ns3/core-module.h"
-#include "ns3/tcp-option.h"
-#include "ns3/tcp-option-winscale.h"
-#include "ns3/tcp-option-ts.h"
+#include "../model/tcp-option.h"
+#include "../model/tcp-option-winscale.h"
+#include "../model/tcp-option-ts.h"
 
 #include <string.h>
 

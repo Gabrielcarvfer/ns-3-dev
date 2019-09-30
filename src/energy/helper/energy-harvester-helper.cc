@@ -19,9 +19,9 @@
  * Author: Cristiano Tapparello <cristiano.tapparello@rochester.edu>
  */
 
-#include "ns3/energy-harvester-helper.h"
-#include "ns3/config.h"
-#include "ns3/names.h"
+#include "energy-harvester-helper.h"
+#include "../../core/model/config.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
   

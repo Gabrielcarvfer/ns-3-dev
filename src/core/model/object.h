@@ -23,11 +23,11 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
-#include "ns3/ptr.h"
-#include "ns3/attribute.h"
-#include "ns3/object-base.h"
-#include "ns3/attribute-construction-list.h"
-#include "ns3/simple-ref-count.h"
+#include "ptr.h"
+#include "attribute.h"
+#include "object-base.h"
+#include "attribute-construction-list.h"
+#include "simple-ref-count.h"
 
 /**
  * \file

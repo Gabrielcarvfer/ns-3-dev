@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include <ns3/ptr.h>
-#include <ns3/traced-callback.h>
-#include <ns3/object.h>
+#include "../../core/model/ptr.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/object.h"
 #include <vector>
 
 

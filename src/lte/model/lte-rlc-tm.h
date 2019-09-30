@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include "ns3/lte-rlc.h"
+#include "lte-rlc.h"
 
-#include <ns3/event-id.h>
+#include "../../core/model/event-id.h"
 #include <map>
 
 namespace ns3 {

@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/object-base.h"
-#include "ns3/buffer.h"
+#include "../../core/model/object-base.h"
+#include "buffer.h"
 
 namespace ns3 {
 

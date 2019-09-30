@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/epc-x2-sap.h"
-#include "ns3/header.h"
+#include "epc-x2-sap.h"
+#include "../../network/model/header.h"
 
 #include <vector>
 

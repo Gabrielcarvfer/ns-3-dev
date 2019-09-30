@@ -23,7 +23,7 @@
 #pragma once
 
 
-#include <ns3/spectrum-value.h>
+#include "spectrum-value.h"
 
 namespace ns3 {
 

@@ -18,10 +18,10 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/boolean.h"
-#include "ns3/uinteger.h"
-#include "ns3/ht-configuration.h"
+#include "../../core/model/log.h"
+#include "../../core/model/boolean.h"
+#include "../../core/model/uinteger.h"
+#include "ht-configuration.h"
 
 namespace ns3 {
 

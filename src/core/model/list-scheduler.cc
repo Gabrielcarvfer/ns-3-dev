@@ -18,12 +18,12 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/list-scheduler.h"
-#include "ns3/event-impl.h"
-#include "ns3/log.h"
+#include "list-scheduler.h"
+#include "event-impl.h"
+#include "log.h"
 #include <utility>
 #include <string>
-#include "ns3/assert.h"
+#include "assert.h"
 
 /**
  * \file

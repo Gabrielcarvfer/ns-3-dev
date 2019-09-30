@@ -19,18 +19,18 @@
  *          Lluis Parcerisa <lparcerisa@cttc.cat>
  */
 
-#include <ns3/fatal-error.h>
-#include <ns3/log.h>
-#include <ns3/nstime.h>
-#include <ns3/node-list.h>
-#include <ns3/node.h>
-#include <ns3/simulator.h>
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/log.h"
+#include "../../core/model/nstime.h"
+#include "../../network/model/node-list.h"
+#include "../../network/model/node.h"
+#include "../../core/model/simulator.h"
 
-#include "ns3/lte-rrc-protocol-real.h"
-#include "ns3/lte-ue-rrc.h"
-#include "ns3/lte-enb-rrc.h"
-#include "ns3/lte-enb-net-device.h"
-#include "ns3/lte-ue-net-device.h"
+#include "lte-rrc-protocol-real.h"
+#include "lte-ue-rrc.h"
+#include "lte-enb-rrc.h"
+#include "lte-enb-net-device.h"
+#include "lte-ue-net-device.h"
 
 namespace ns3 {
 

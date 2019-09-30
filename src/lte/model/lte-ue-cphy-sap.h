@@ -22,9 +22,9 @@
 #pragma once
 
 #include <stdint.h>
-#include <ns3/ptr.h>
+#include "../../core/model/ptr.h"
 
-#include <ns3/lte-rrc-sap.h>
+#include "lte-rrc-sap.h"
 
 namespace ns3 {
 

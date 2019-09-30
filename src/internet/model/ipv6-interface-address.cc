@@ -20,10 +20,10 @@
 
 #include <iostream>
 
-#include "ns3/log.h"
-#include "ns3/assert.h"
+#include "../../core/model/log.h"
+#include "../../core/model/assert.h"
 
-#include "ns3/ipv6-interface-address.h"
+#include "ipv6-interface-address.h"
 
 namespace ns3
 {

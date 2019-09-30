@@ -24,9 +24,9 @@
 #include <stdint.h>
 #include <string>
 #include <map>
-#include "ns3/traced-callback.h"
-#include "ns3/nstime.h"
-#include "ns3/net-device.h"
+#include "../../core/model/traced-callback.h"
+#include "../../core/model/nstime.h"
+#include "../../network/model/net-device.h"
 
 namespace ns3 {
 

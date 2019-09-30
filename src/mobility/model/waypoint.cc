@@ -17,7 +17,7 @@
  *
  * Author: Phillip Sitbon <phillip@sitbon.net>
  */
-#include "ns3/waypoint.h"
+#include "waypoint.h"
 
 namespace ns3 {
 

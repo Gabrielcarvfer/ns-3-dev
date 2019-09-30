@@ -20,7 +20,7 @@
  */
 #pragma once
 
-#include "ns3/fatal-error.h"
+#include "fatal-error.h"
 
 /**
  * \file

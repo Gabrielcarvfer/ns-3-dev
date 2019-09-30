@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/uan-noise-model.h"
-#include "ns3/attribute.h"
-#include "ns3/object.h"
+#include "uan-noise-model.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/object.h"
 
 namespace ns3 {
 

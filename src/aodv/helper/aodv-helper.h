@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/object-factory.h"
-#include "ns3/node.h"
-#include "ns3/node-container.h"
-#include "ns3/ipv4-routing-helper.h"
+#include "../../core/model/object-factory.h"
+#include "../../network/model/node.h"
+#include "../../network/helper/node-container.h"
+#include "../../internet/helper/ipv4-routing-helper.h"
 
 namespace ns3 {
 /**

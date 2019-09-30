@@ -19,10 +19,10 @@
  * The idea to use a std c++ map came from GTNetS
  */
 
-#include "ns3/map-scheduler.h"
-#include "ns3/event-impl.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "map-scheduler.h"
+#include "event-impl.h"
+#include "assert.h"
+#include "log.h"
 #include <string>
 
 /**

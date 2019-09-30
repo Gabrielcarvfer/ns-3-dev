@@ -19,13 +19,13 @@
  */
 #include <utility>
 #include <list>
-#include "ns3/assert.h"
-#include "ns3/fatal-error.h"
-#include "ns3/log.h"
-#include "ns3/packet-metadata.h"
-#include "ns3/buffer.h"
-#include "ns3/header.h"
-#include "ns3/trailer.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/fatal-error.h"
+#include "../../core/model/log.h"
+#include "packet-metadata.h"
+#include "buffer.h"
+#include "header.h"
+#include "trailer.h"
 
 namespace ns3 {
 

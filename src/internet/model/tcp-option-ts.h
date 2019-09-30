@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/tcp-option.h"
-#include "ns3/timer.h"
+#include "tcp-option.h"
+#include "../../core/model/timer.h"
 
 namespace ns3 {
 

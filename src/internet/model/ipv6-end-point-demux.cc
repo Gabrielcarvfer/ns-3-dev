@@ -18,9 +18,9 @@
  * Author: Sebastien Vincent <vincent@clarinet.u-strasbg.fr>
  */
 
-#include "ns3/ipv6-end-point-demux.h"
-#include "ns3/ipv6-end-point.h"
-#include "ns3/log.h"
+#include "ipv6-end-point-demux.h"
+#include "ipv6-end-point.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

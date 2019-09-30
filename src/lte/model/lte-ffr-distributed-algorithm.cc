@@ -19,8 +19,8 @@
  *
  */
 
-#include "ns3/lte-ffr-distributed-algorithm.h"
-#include <ns3/log.h>
+#include "lte-ffr-distributed-algorithm.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

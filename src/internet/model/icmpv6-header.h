@@ -22,9 +22,9 @@
 
 #pragma once
 
-#include "ns3/header.h"
-#include "ns3/ipv6-address.h"
-#include "ns3/packet.h"
+#include "../../network/model/header.h"
+#include "../../network/utils/ipv6-address.h"
+#include "../../network/model/packet.h"
 
 namespace ns3
 {

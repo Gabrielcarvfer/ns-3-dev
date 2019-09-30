@@ -25,11 +25,11 @@
 
 #include <ostream>
 
-#include "ns3/attribute-helper.h"
-#include "ns3/address.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/deprecated.h"
-#include "ns3/mac8-address.h"
+#include "../../core/model/attribute-helper.h"
+#include "../model/address.h"
+#include "ipv4-address.h"
+#include "../../core/model/deprecated.h"
+#include "mac8-address.h"
 
 namespace ns3 { 
 

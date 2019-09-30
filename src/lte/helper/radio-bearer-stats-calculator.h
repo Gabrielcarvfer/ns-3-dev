@@ -21,12 +21,12 @@
 
 #pragma once
 
-#include "ns3/lte-stats-calculator.h"
-#include "ns3/lte-common.h"
-#include "ns3/uinteger.h"
-#include "ns3/object.h"
-#include "ns3/basic-data-calculators.h"
-#include "ns3/lte-common.h"
+#include "lte-stats-calculator.h"
+#include "../model/lte-common.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/object.h"
+#include "../../stats/model/basic-data-calculators.h"
+#include "../model/lte-common.h"
 #include <string>
 #include <map>
 #include <fstream>

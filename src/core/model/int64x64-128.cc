@@ -17,10 +17,10 @@
  *
  */
 
-#include "ns3/int64x64-128.h"
-#include "ns3/abort.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "int64x64-128.h"
+#include "abort.h"
+#include "assert.h"
+#include "log.h"
 
 /**
  * \file

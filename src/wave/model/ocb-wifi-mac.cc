@@ -20,17 +20,17 @@
  *         Junling Bu <linlinjavaer@gmail.com>
  */
 
-#include "ns3/event-id.h"
-#include "ns3/pointer.h"
-#include "ns3/log.h"
-#include "ns3/string.h"
-#include "ns3/mac-rx-middle.h"
-#include "ns3/ht-capabilities.h"
-#include "ns3/vht-capabilities.h"
-#include "ns3/wave-mac-low.h"
-#include "ns3/ocb-wifi-mac.h"
-#include "ns3/vendor-specific-action.h"
-#include "ns3/higher-tx-tag.h"
+#include "../../core/model/event-id.h"
+#include "../../core/model/pointer.h"
+#include "../../core/model/log.h"
+#include "../../core/model/string.h"
+#include "../../wifi/model/mac-rx-middle.h"
+#include "../../wifi/model/ht-capabilities.h"
+#include "../../wifi/model/vht-capabilities.h"
+#include "wave-mac-low.h"
+#include "ocb-wifi-mac.h"
+#include "vendor-specific-action.h"
+#include "higher-tx-tag.h"
 
 namespace ns3 {
 

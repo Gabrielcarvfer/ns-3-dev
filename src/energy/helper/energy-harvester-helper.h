@@ -21,15 +21,15 @@
 
 #pragma once
 
-#include "ns3/attribute.h"
-#include "ns3/object-factory.h"
-#include "ns3/node-container.h"
-#include "ns3/ptr.h"
-#include "ns3/energy-harvester.h"
-#include "ns3/energy-harvester-container.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/object-factory.h"
+#include "../../network/helper/node-container.h"
+#include "../../core/model/ptr.h"
+#include "../model/energy-harvester.h"
+#include "energy-harvester-container.h"
 
-#include "ns3/energy-source.h"
-#include "ns3/energy-source-container.h"
+#include "../model/energy-source.h"
+#include "energy-source-container.h"
 
 
 namespace ns3 {

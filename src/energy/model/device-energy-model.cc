@@ -18,8 +18,8 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "ns3/device-energy-model.h"
-#include "ns3/log.h"
+#include "device-energy-model.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

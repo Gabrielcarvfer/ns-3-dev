@@ -22,8 +22,8 @@
 
 #pragma once
 
-#include <ns3/buildings-propagation-loss-model.h>
-#include <ns3/propagation-environment.h>
+#include "buildings-propagation-loss-model.h"
+#include "../../propagation/model/propagation-environment.h"
 
 namespace ns3 {
 

@@ -23,13 +23,13 @@
 #include <vector>
 #include <map>
 
-#include "ns3/ptr.h"
-#include "ns3/object.h"
-#include "ns3/flow-probe.h"
-#include "ns3/flow-classifier.h"
-#include "ns3/histogram.h"
-#include "ns3/nstime.h"
-#include "ns3/event-id.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/object.h"
+#include "flow-probe.h"
+#include "flow-classifier.h"
+#include "histogram.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/event-id.h"
 
 namespace ns3 {
 

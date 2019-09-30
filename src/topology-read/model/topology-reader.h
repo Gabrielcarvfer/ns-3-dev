@@ -24,8 +24,8 @@
 #include <string>
 #include <map>
 #include <list>
-#include "ns3/object.h"
-#include "ns3/node.h"
+#include "../../core/model/object.h"
+#include "../../network/model/node.h"
 
 
 namespace ns3 {

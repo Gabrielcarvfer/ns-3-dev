@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "ns3/no-backhaul-epc-helper.h"
+#include "no-backhaul-epc-helper.h"
 
 namespace ns3 {
 

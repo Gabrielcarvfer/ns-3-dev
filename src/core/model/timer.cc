@@ -17,10 +17,10 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/timer.h"
-#include "ns3/simulator.h"
-#include "ns3/simulation-singleton.h"
-#include "ns3/log.h"
+#include "timer.h"
+#include "simulator.h"
+#include "simulation-singleton.h"
+#include "log.h"
 
 /**
  * \file

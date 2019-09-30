@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@cutebugs.net>
  */
 
-#include "ns3/chunk.h"
+#include "chunk.h"
 
 namespace ns3 {
 

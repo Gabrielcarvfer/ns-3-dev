@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/header.h"
-#include "ns3/nstime.h"
-#include "ns3/simulator.h"
-#include "ns3/mac8-address.h"
+#include "../../network/model/header.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/simulator.h"
+#include "../../network/utils/mac8-address.h"
 
 namespace ns3 {
 

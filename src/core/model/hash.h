@@ -22,12 +22,12 @@
 
 #include <string>
 
-#include "ns3/assert.h"
-#include "ns3/ptr.h"
+#include "assert.h"
+#include "ptr.h"
 
-#include "ns3/hash-function.h"
-#include "ns3/hash-murmur3.h"
-#include "ns3/hash-fnv.h"
+#include "hash-function.h"
+#include "hash-murmur3.h"
+#include "hash-fnv.h"
 
 /**
  * \file

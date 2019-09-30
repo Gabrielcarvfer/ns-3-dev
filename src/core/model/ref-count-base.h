@@ -22,7 +22,7 @@
  */
 #pragma once
 
-#include "ns3/simple-ref-count.h"
+#include "simple-ref-count.h"
 
 /**
  * \file

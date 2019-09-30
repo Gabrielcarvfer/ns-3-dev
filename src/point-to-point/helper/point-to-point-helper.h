@@ -21,11 +21,11 @@
 
 #include <string>
 
-#include "ns3/object-factory.h"
-#include "ns3/net-device-container.h"
-#include "ns3/node-container.h"
+#include "../../core/model/object-factory.h"
+#include "../../network/helper/net-device-container.h"
+#include "../../network/helper/node-container.h"
 
-#include "ns3/trace-helper.h"
+#include "../../network/helper/trace-helper.h"
 
 namespace ns3 {
 

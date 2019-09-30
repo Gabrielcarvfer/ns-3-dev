@@ -17,25 +17,25 @@
  * 2008 Florian Westphal <fw@strlen.de>
  */
 
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/nstime.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "../../core/model/nstime.h"
 
-#include "ns3/packet.h"
-#include "ns3/node.h"
-#include "ns3/ipv4-route.h"
+#include "../../network/model/packet.h"
+#include "../../network/model/node.h"
+#include "ipv4-route.h"
 
-#include "ns3/object-vector.h"
-#include "ns3/string.h"
-#include "ns3/tcp-header.h"
-#include "ns3/ipv4-end-point-demux.h"
-#include "ns3/ipv4-end-point.h"
-#include "ns3/ipv4-l3-protocol.h"
-#include "ns3/nsc-tcp-l4-protocol.h"
-#include "ns3/nsc-tcp-socket-impl.h"
-#include "ns3/nsc-sysctl.h"
-#include "ns3/nsc-tcp-socket-factory-impl.h"
-#include "ns3/sim_interface.h"
+#include "../../core/model/object-vector.h"
+#include "../../core/model/string.h"
+#include "tcp-header.h"
+#include "ipv4-end-point-demux.h"
+#include "ipv4-end-point.h"
+#include "ipv4-l3-protocol.h"
+#include "nsc-tcp-l4-protocol.h"
+#include "nsc-tcp-socket-impl.h"
+#include "nsc-sysctl.h"
+#include "nsc-tcp-socket-factory-impl.h"
+#include "sim_interface.h"
 
 #include <vector>
 #include <sstream>

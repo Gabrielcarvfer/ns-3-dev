@@ -22,8 +22,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/ipv4-address.h"
-#include "ns3/wimax-tlv.h"
+#include "../../network/utils/ipv4-address.h"
+#include "wimax-tlv.h"
 
 namespace ns3 {
 

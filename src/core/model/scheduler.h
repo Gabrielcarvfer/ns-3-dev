@@ -21,7 +21,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/object.h"
+#include "object.h"
 
 /**
  * \file

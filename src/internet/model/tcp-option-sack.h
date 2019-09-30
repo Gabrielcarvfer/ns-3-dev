@@ -25,8 +25,8 @@
 
 #pragma once
 
-#include "ns3/tcp-option.h"
-#include "ns3/sequence-number.h"
+#include "tcp-option.h"
+#include "../../network/utils/sequence-number.h"
 
 namespace ns3 {
 

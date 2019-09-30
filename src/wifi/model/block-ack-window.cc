@@ -18,9 +18,9 @@
  * Author: Stefano Avallone <stavallo@unina.it>
  */
 
-#include "ns3/log.h"
-#include "ns3/block-ack-window.h"
-#include "ns3/wifi-utils.h"
+#include "../../core/model/log.h"
+#include "block-ack-window.h"
+#include "wifi-utils.h"
 
 namespace ns3 {
 

@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/trailer.h"
-#include "ns3/packet.h"
+#include "../model/trailer.h"
+#include "../model/packet.h"
 #include <string>
 
 namespace ns3 {

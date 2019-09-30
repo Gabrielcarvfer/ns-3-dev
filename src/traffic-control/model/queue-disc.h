@@ -19,16 +19,16 @@
 
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/traced-value.h"
-#include "ns3/traced-callback.h"
-#include "ns3/queue-item.h"
-#include "ns3/queue-size.h"
+#include "../../core/model/object.h"
+#include "../../core/model/traced-value.h"
+#include "../../core/model/traced-callback.h"
+#include "../../network/utils/queue-item.h"
+#include "../../network/utils/queue-size.h"
 #include <vector>
 #include <map>
 #include <functional>
 #include <string>
-#include "ns3/packet-filter.h"
+#include "packet-filter.h"
 
 namespace ns3 {
 

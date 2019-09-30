@@ -30,7 +30,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/header.h"
+#include "../../network/model/header.h"
 
 namespace ns3 {
 
@@ -101,10 +101,10 @@ private:
 // ---------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
-#include "ns3/mac48-address.h"
-#include "ns3/service-flow.h"
-#include "ns3/cid.h"
+#include "../../network/model/header.h"
+#include "../../network/utils/mac48-address.h"
+#include "service-flow.h"
+#include "cid.h"
 
 namespace ns3 {
 
@@ -349,10 +349,10 @@ private:
 // ---------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
-#include "ns3/buffer.h"
-#include "ns3/cid.h"
-#include "ns3/service-flow.h"
+#include "../../network/model/header.h"
+#include "../../network/model/buffer.h"
+#include "cid.h"
+#include "service-flow.h"
 
 namespace ns3 {
 class serviceFlow;
@@ -440,9 +440,9 @@ private:
 // ---------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
-#include "ns3/buffer.h"
-#include "ns3/cid.h"
+#include "../../network/model/header.h"
+#include "../../network/model/buffer.h"
+#include "cid.h"
 
 namespace ns3 {
 
@@ -545,8 +545,8 @@ private:
 // ---------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
-#include "ns3/buffer.h"
+#include "../../network/model/header.h"
+#include "../../network/model/buffer.h"
 
 namespace ns3 {
 
@@ -612,9 +612,9 @@ private:
 // ---------------------------------------------------------------------
 
 #include <stdint.h>
-#include "ns3/header.h"
-#include "ns3/mac48-address.h"
-#include "ns3/service-flow.h"
+#include "../../network/model/header.h"
+#include "../../network/utils/mac48-address.h"
+#include "service-flow.h"
 
 namespace ns3 {
 

@@ -27,8 +27,8 @@
 #include <limits>
 #include <stdint.h>
 
-#include "ns3/non-copyable.h"
-#include "ns3/system-wall-clock-ms.h"
+#include "non-copyable.h"
+#include "system-wall-clock-ms.h"
 
 /**
  * \file

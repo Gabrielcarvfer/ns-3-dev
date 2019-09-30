@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/mesh-wifi-interface-mac-plugin.h"
+#include "../mesh-wifi-interface-mac-plugin.h"
 
 namespace ns3 {
 class MeshWifiInterfaceMac;

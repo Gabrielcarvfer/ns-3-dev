@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/preamble-detection-model.h"
+#include "preamble-detection-model.h"
 
 namespace ns3 {
 

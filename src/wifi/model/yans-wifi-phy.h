@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "ns3/wifi-phy.h"
+#include "wifi-phy.h"
 
 namespace ns3 {
 

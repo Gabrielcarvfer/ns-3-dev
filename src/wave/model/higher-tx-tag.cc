@@ -19,8 +19,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *         Junling Bu <linlinjavaer@gmail.com>
  */
-#include "ns3/higher-tx-tag.h"
-#include "ns3/log.h"
+#include "higher-tx-tag.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

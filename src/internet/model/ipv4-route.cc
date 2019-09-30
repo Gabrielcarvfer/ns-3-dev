@@ -17,10 +17,10 @@
  *
  */
 
-#include "ns3/ipv4-route.h"
-#include "ns3/net-device.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "ipv4-route.h"
+#include "../../network/model/net-device.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

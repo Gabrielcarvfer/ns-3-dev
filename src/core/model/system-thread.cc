@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage.inria.fr>
  */
 
-#include "ns3/fatal-error.h"
-#include "ns3/system-thread.h"
-#include "ns3/log.h"
+#include "fatal-error.h"
+#include "system-thread.h"
+#include "log.h"
 #include <cstring>
 
 /**

@@ -23,7 +23,7 @@
 #pragma once
 
 #include <vector>
-#include "ns3/ptr.h"
+#include "../../core/model/ptr.h"
 
 namespace ns3 {
 

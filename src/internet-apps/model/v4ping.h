@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "ns3/application.h"
-#include "ns3/traced-callback.h"
-#include "ns3/average.h"
+#include "../../network/model/application.h"
+#include "../../core/model/traced-callback.h"
+#include "../../stats/model/average.h"
 #include <map>
 
 namespace ns3 {

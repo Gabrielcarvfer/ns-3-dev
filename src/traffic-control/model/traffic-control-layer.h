@@ -18,11 +18,11 @@
  */
 #pragma once
 
-#include "ns3/object.h"
-#include "ns3/address.h"
-#include "ns3/net-device.h"
-#include "ns3/node.h"
-#include "ns3/queue-item.h"
+#include "../../core/model/object.h"
+#include "../../network/model/address.h"
+#include "../../network/model/net-device.h"
+#include "../../network/model/node.h"
+#include "../../network/utils/queue-item.h"
 #include <map>
 #include <vector>
 

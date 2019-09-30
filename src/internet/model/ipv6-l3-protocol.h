@@ -22,12 +22,12 @@
 
 #include <list>
 
-#include "ns3/traced-callback.h"
-#include "ns3/net-device.h"
-#include "ns3/ipv6.h"
-#include "ns3/ipv6-address.h"
-#include "ns3/ipv6-header.h"
-#include "ns3/ipv6-pmtu-cache.h"
+#include "../../core/model/traced-callback.h"
+#include "../../network/model/net-device.h"
+#include "ipv6.h"
+#include "../../network/utils/ipv6-address.h"
+#include "ipv6-header.h"
+#include "ipv6-pmtu-cache.h"
 
 class Ipv6L3ProtocolTestCase;
 

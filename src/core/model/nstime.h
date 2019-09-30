@@ -19,11 +19,11 @@
  */
 #pragma once
 
-#include "ns3/assert.h"
-#include "ns3/attribute.h"
-#include "ns3/attribute-helper.h"
-#include "ns3/int64x64.h"
-#include "ns3/unused.h"
+#include "assert.h"
+#include "attribute.h"
+#include "attribute-helper.h"
+#include "int64x64.h"
+#include "unused.h"
 #include <stdint.h>
 #include <limits>
 #include <cmath>

@@ -22,7 +22,7 @@
 #pragma once
 
 #include <vector>
-#include "ns3/attribute-helper.h"
+#include "../../core/model/attribute-helper.h"
 
 namespace ns3 {
 

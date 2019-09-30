@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/mesh-wifi-interface-mac-plugin.h"
-#include "ns3/hwmp-protocol.h"
+#include "../mesh-wifi-interface-mac-plugin.h"
+#include "hwmp-protocol.h"
 
 namespace ns3 {
 

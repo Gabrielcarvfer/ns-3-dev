@@ -19,13 +19,13 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/packet-socket.h"
-#include "ns3/packet-socket-address.h"
-#include "ns3/log.h"
-#include "ns3/node.h"
-#include "ns3/packet.h"
-#include "ns3/uinteger.h"
-#include "ns3/trace-source-accessor.h"
+#include "packet-socket.h"
+#include "packet-socket-address.h"
+#include "../../core/model/log.h"
+#include "../model/node.h"
+#include "../model/packet.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/trace-source-accessor.h"
 
 #include <algorithm>
 

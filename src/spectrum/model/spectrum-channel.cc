@@ -18,11 +18,11 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include <ns3/log.h>
-#include <ns3/double.h>
-#include <ns3/pointer.h>
+#include "../../core/model/log.h"
+#include "../../core/model/double.h"
+#include "../../core/model/pointer.h"
 
-#include "ns3/spectrum-channel.h"
+#include "spectrum-channel.h"
 
 
 namespace ns3 {

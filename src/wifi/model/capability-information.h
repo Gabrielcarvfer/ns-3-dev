@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/buffer.h"
+#include "../../network/model/buffer.h"
 
 namespace ns3 {
 

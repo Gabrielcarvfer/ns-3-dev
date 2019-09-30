@@ -19,7 +19,7 @@
  *
  */
 
-#include "ns3/lte-ffr-sap.h"
+#include "lte-ffr-sap.h"
 
 
 namespace ns3 {

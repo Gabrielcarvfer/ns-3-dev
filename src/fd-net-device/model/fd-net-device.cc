@@ -19,22 +19,22 @@
  *         Claudio Freire <klaussfreire@sourceforge.net>
  */
 
-#include "ns3/fd-net-device.h"
+#include "fd-net-device.h"
 
-#include "ns3/abort.h"
-#include "ns3/boolean.h"
-#include "ns3/channel.h"
-#include "ns3/enum.h"
-#include "ns3/ethernet-header.h"
-#include "ns3/ethernet-trailer.h"
-#include "ns3/log.h"
-#include "ns3/llc-snap-header.h"
-#include "ns3/mac48-address.h"
-#include "ns3/pointer.h"
-#include "ns3/simulator.h"
-#include "ns3/string.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/uinteger.h"
+#include "../../core/model/abort.h"
+#include "../../core/model/boolean.h"
+#include "../../network/model/channel.h"
+#include "../../core/model/enum.h"
+#include "../../network/utils/ethernet-header.h"
+#include "../../network/utils/ethernet-trailer.h"
+#include "../../core/model/log.h"
+#include "../../network/utils/llc-snap-header.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../core/model/pointer.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/string.h"
+#include "../../core/model/trace-source-accessor.h"
+#include "../../core/model/uinteger.h"
 
 #include <unistd.h>
 #include <arpa/inet.h>

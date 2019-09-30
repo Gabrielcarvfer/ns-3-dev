@@ -22,10 +22,10 @@
 
 #pragma once
 
-#include "ns3/aodv-id-cache.h"
-#include "ns3/nstime.h"
-#include "ns3/packet.h"
-#include "ns3/ipv4-header.h"
+#include "aodv-id-cache.h"
+#include "../../core/model/nstime.h"
+#include "../../network/model/packet.h"
+#include "../../internet/model/ipv4-header.h"
 
 namespace ns3 {
 namespace aodv {

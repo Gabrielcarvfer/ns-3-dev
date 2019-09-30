@@ -18,18 +18,18 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  */
 
-#include "ns3/mesh-wifi-interface-mac.h"
-#include "ns3/packet.h"
-#include "ns3/simulator.h"
-#include "ns3/nstime.h"
-#include "ns3/log.h"
-#include "ns3/dot11s-mac-header.h"
+#include "../mesh-wifi-interface-mac.h"
+#include "../../../network/model/packet.h"
+#include "../../../core/model/simulator.h"
+#include "../../../core/model/nstime.h"
+#include "../../../core/model/log.h"
+#include "dot11s-mac-header.h"
 #include "hwmp-protocol-mac.h"
 #include "hwmp-tag.h"
-#include "ns3/ie-dot11s-preq.h"
-#include "ns3/ie-dot11s-prep.h"
-#include "ns3/ie-dot11s-rann.h"
-#include "ns3/ie-dot11s-perr.h"
+#include "ie-dot11s-preq.h"
+#include "ie-dot11s-prep.h"
+#include "ie-dot11s-rann.h"
+#include "ie-dot11s-perr.h"
 
 namespace ns3 {
 

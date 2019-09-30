@@ -19,9 +19,9 @@
  */
 
 #pragma once
-#include "ns3/test.h"
-#include "ns3/node-container.h"
-#include "ns3/nstime.h"
+#include "../../../core/model/test.h"
+#include "../../../network/helper/node-container.h"
+#include "../../../core/model/nstime.h"
 
 using namespace ns3;
 /**

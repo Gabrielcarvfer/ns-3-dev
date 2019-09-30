@@ -20,11 +20,11 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/pointer.h>
-#include <ns3/eps-bearer.h>
-#include <ns3/lte-rrc-sap.h>
-#include <ns3/ipv4-address.h>
+#include "../../core/model/object.h"
+#include "../../core/model/pointer.h"
+#include "eps-bearer.h"
+#include "lte-rrc-sap.h"
+#include "../../network/utils/ipv4-address.h"
 
 namespace ns3 {
 

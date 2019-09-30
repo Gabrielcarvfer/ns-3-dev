@@ -19,8 +19,8 @@
  * Documentation, test cases: Natale Patriciello <natale.patriciello@gmail.com>
  */
 
-#include "ns3/tcp-option-winscale.h"
-#include "ns3/log.h"
+#include "tcp-option-winscale.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

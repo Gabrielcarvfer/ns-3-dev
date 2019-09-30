@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/packet.h"
-#include "ns3/eps-bearer.h"
-#include "ns3/ipv4-address.h"
+#include "../../network/model/packet.h"
+#include "eps-bearer.h"
+#include "../../network/utils/ipv4-address.h"
 
 #include <bitset>
 

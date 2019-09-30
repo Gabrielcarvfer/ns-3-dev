@@ -25,10 +25,10 @@
 #include <stdint.h>
 #include <list>
 
-#include "ns3/nstime.h"
-#include "ns3/buffer.h"
+#include "../../core/model/nstime.h"
+#include "../../network/model/buffer.h"
 
-#include "ns3/parallel-communication-interface.h"
+#include "parallel-communication-interface.h"
 
 #ifdef NS3_MPI
 #include "ns3/mpi.h"

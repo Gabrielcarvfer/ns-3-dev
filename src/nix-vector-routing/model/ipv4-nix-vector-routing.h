@@ -22,15 +22,15 @@
 
 #include <map>
 
-#include "ns3/channel.h"
-#include "ns3/node-container.h"
-#include "ns3/node-list.h"
-#include "ns3/net-device-container.h"
-#include "ns3/ipv4-routing-protocol.h"
-#include "ns3/ipv4-route.h"
-#include "ns3/nix-vector.h"
-#include "ns3/bridge-net-device.h"
-#include "ns3/nstime.h"
+#include "../../network/model/channel.h"
+#include "../../network/helper/node-container.h"
+#include "../../network/model/node-list.h"
+#include "../../network/helper/net-device-container.h"
+#include "../../internet/model/ipv4-routing-protocol.h"
+#include "../../internet/model/ipv4-route.h"
+#include "../../network/model/nix-vector.h"
+#include "../../bridge/model/bridge-net-device.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 

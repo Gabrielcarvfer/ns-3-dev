@@ -18,8 +18,8 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "ns3/uan-noise-model-default.h"
-#include "ns3/double.h"
+#include "uan-noise-model-default.h"
+#include "../../core/model/double.h"
 
 #include <cmath>
 

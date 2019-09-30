@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/traced-value.h"
-#include "ns3/wifi-remote-station-manager.h"
+#include "../../core/model/traced-value.h"
+#include "wifi-remote-station-manager.h"
 
 namespace ns3 {
 

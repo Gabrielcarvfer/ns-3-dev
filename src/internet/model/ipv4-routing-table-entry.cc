@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/ipv4-routing-table-entry.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "ipv4-routing-table-entry.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
 
 namespace ns3 {
 

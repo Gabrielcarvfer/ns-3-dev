@@ -26,8 +26,8 @@
 #include <set>
 #include <vector>
 
-#include "ns3/ipv4-address.h"
-#include "ns3/nstime.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../core/model/nstime.h"
 
 namespace ns3 {
 namespace olsr {

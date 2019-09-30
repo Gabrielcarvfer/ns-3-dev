@@ -22,8 +22,8 @@
 
 
 #include <stdint.h>
-#include "ns3/cid-factory.h"
-#include "ns3/uinteger.h"
+#include "cid-factory.h"
+#include "../../core/model/uinteger.h"
 
 namespace ns3 {
 

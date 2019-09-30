@@ -19,9 +19,9 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr> (original node-container.cc)
  *         Nicola Baldo (wrote building-container.cc based on node-container.cc)
  */
-#include "ns3/building-container.h"
-#include "ns3/building-list.h"
-#include "ns3/names.h"
+#include "building-container.h"
+#include "../model/building-list.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

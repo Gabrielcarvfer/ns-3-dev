@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "ns3/energy-harvester.h"
-#include "ns3/object.h"
+#include "../model/energy-harvester.h"
+#include "../../core/model/object.h"
 #include <vector>
 #include <stdint.h>
 

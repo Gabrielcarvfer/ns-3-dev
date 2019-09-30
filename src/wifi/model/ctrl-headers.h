@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "ns3/header.h"
-#include "ns3/block-ack-type.h"
+#include "../../network/model/header.h"
+#include "block-ack-type.h"
 
 namespace ns3 {
 

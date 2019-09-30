@@ -18,8 +18,8 @@
  * Author: Nicola Baldo <nbaldo@cttc.es>
  */
 
-#include <ns3/log.h>
-#include "ns3/aloha-noack-mac-header.h"
+#include "../../core/model/log.h"
+#include "aloha-noack-mac-header.h"
 
 
 namespace ns3 {

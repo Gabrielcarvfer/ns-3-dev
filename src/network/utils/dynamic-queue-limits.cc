@@ -23,11 +23,11 @@
  * Author: Tom Herbert <therbert@google.com>
  */
 
-#include "ns3/log.h"
-#include "ns3/uinteger.h"
-#include "ns3/simulator.h"
-#include "ns3/string.h"
-#include "ns3/dynamic-queue-limits.h"
+#include "../../core/model/log.h"
+#include "../../core/model/uinteger.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/string.h"
+#include "dynamic-queue-limits.h"
 
 // Set some static maximums
 static const uint32_t UINTMAX = std::numeric_limits<uint32_t>::max ();

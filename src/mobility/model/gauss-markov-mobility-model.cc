@@ -18,12 +18,12 @@
  * Author: Dan Broyles <dbroyl01@ku.edu>
  */
 #include <cmath>
-#include "ns3/simulator.h"
-#include "ns3/double.h"
-#include "ns3/pointer.h"
-#include "ns3/string.h"
-#include "ns3/gauss-markov-mobility-model.h"
-#include "ns3/position-allocator.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/double.h"
+#include "../../core/model/pointer.h"
+#include "../../core/model/string.h"
+#include "gauss-markov-mobility-model.h"
+#include "position-allocator.h"
 
 namespace ns3 {
 

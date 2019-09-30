@@ -22,12 +22,12 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/ipv4-address-helper.h>
-#include <ns3/ipv6-address-helper.h>
-#include <ns3/data-rate.h>
-#include <ns3/epc-tft.h>
-#include <ns3/eps-bearer.h>
+#include "../../core/model/object.h"
+#include "../../internet/helper/ipv4-address-helper.h"
+#include "../../internet/helper/ipv6-address-helper.h"
+#include "../../network/utils/data-rate.h"
+#include "../model/epc-tft.h"
+#include "../model/eps-bearer.h"
 
 namespace ns3 {
 

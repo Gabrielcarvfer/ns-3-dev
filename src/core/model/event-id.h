@@ -20,8 +20,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/ptr.h"
-#include "ns3/event-impl.h"
+#include "ptr.h"
+#include "event-impl.h"
 
 /**
  * \file

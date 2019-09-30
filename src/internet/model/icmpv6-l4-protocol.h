@@ -24,12 +24,12 @@
 
 #include <list>
 
-#include "ns3/ipv6-address.h"
-#include "ns3/random-variable-stream.h"
+#include "../../network/utils/ipv6-address.h"
+#include "../../core/model/random-variable-stream.h"
 
-#include "ns3/icmpv6-header.h"
-#include "ns3/ip-l4-protocol.h"
-#include "ns3/ndisc-cache.h"
+#include "icmpv6-header.h"
+#include "ip-l4-protocol.h"
+#include "ndisc-cache.h"
 
 namespace ns3 {
 

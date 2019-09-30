@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "ns3/attribute.h"
+#include "attribute.h"
 #include <list>
 
 /**

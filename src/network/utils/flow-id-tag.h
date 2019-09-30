@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "ns3/tag.h"
+#include "../model/tag.h"
 
 namespace ns3 {
 

@@ -27,17 +27,17 @@
  */
 #pragma once
 
-#include "ns3/aodv-rtable.h"
-#include "ns3/aodv-rqueue.h"
-#include "ns3/aodv-packet.h"
-#include "ns3/aodv-neighbor.h"
-#include "ns3/aodv-dpd.h"
-#include "ns3/node.h"
-#include "ns3/random-variable-stream.h"
-#include "ns3/output-stream-wrapper.h"
-#include "ns3/ipv4-routing-protocol.h"
-#include "ns3/ipv4-interface.h"
-#include "ns3/ipv4-l3-protocol.h"
+#include "aodv-rtable.h"
+#include "aodv-rqueue.h"
+#include "aodv-packet.h"
+#include "aodv-neighbor.h"
+#include "aodv-dpd.h"
+#include "../../network/model/node.h"
+#include "../../core/model/random-variable-stream.h"
+#include "../../network/utils/output-stream-wrapper.h"
+#include "../../internet/model/ipv4-routing-protocol.h"
+#include "../../internet/model/ipv4-interface.h"
+#include "../../internet/model/ipv4-l3-protocol.h"
 #include <map>
 
 namespace ns3 {

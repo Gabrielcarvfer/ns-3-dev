@@ -20,7 +20,7 @@
 
 
 #pragma once
-#include "ns3/mesh-point-device.h"
+#include "../model/mesh-point-device.h"
 namespace ns3 {
 /**
  * \ingroup mesh

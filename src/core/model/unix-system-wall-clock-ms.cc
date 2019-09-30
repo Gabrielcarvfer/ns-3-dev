@@ -18,9 +18,9 @@
  * Author: Mathieu Lacage <mathieu.lacage.inria.fr>
  */
 
-#include "ns3/system-wall-clock-ms.h"
-#include "ns3/abort.h"
-#include "ns3/log.h"
+#include "system-wall-clock-ms.h"
+#include "abort.h"
+#include "log.h"
 #include <sys/times.h>
 #include <unistd.h>
 

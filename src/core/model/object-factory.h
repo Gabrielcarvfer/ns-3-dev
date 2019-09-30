@@ -19,9 +19,9 @@
  */
 #pragma once
 
-#include "ns3/attribute-construction-list.h"
-#include "ns3/object.h"
-#include "ns3/type-id.h"
+#include "attribute-construction-list.h"
+#include "object.h"
+#include "type-id.h"
 
 /**
  * \file

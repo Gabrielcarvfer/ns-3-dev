@@ -18,11 +18,11 @@
  * Author: Joe Kopena (tjkopena@cs.drexel.edu)
  */
 
-#include "ns3/object.h"
-#include "ns3/log.h"
+#include "../../core/model/object.h"
+#include "../../core/model/log.h"
 
-#include "ns3/data-collector.h"
-#include "ns3/data-calculator.h"
+#include "data-collector.h"
+#include "data-calculator.h"
 
 using namespace ns3;
 

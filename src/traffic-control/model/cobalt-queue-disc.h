@@ -28,15 +28,15 @@
 
 #pragma once
 
-#include "ns3/queue-disc.h"
-#include "ns3/nstime.h"
-#include "ns3/boolean.h"
-#include "ns3/data-rate.h"
-#include "ns3/simulator.h"
-#include "ns3/string.h"
-#include "ns3/traced-value.h"
-#include "ns3/random-variable-stream.h"
-#include "ns3/trace-source-accessor.h"
+#include "queue-disc.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/boolean.h"
+#include "../../network/utils/data-rate.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/string.h"
+#include "../../core/model/traced-value.h"
+#include "../../core/model/random-variable-stream.h"
+#include "../../core/model/trace-source-accessor.h"
 
 namespace ns3 {
 

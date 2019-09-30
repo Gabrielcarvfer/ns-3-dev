@@ -31,10 +31,10 @@
 
 #pragma once
 
-#include "ns3/simulator.h"
-#include "ns3/timer.h"
-#include "ns3/ipv4-address.h"
-#include "ns3/callback.h"
+#include "../../core/model/simulator.h"
+#include "../../core/model/timer.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../core/model/callback.h"
 #include <vector>
 
 namespace ns3 {

@@ -18,7 +18,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/ht-operation.h"
+#include "ht-operation.h"
 
 namespace ns3 {
 

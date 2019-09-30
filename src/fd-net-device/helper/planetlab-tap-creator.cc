@@ -41,7 +41,7 @@
 #include <net/route.h>
 #include <netinet/in.h>
 
-#include "ns3/creator-utils.h"
+#include "creator-utils.h"
 
 #define PLANETLAB_MAGIC 75867
 

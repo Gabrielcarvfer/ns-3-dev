@@ -19,10 +19,10 @@
  */
 #pragma once
 
-#include "ns3/attribute.h"
-#include "ns3/attribute-helper.h"
-#include "ns3/nstime.h"
-#include "ns3/vector.h"
+#include "../../core/model/attribute.h"
+#include "../../core/model/attribute-helper.h"
+#include "../../core/model/nstime.h"
+#include "../../core/model/vector.h"
 
 namespace ns3 {
 

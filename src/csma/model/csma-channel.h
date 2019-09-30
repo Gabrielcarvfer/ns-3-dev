@@ -20,10 +20,10 @@
 
 #pragma once
 
-#include "ns3/channel.h"
-#include "ns3/ptr.h"
-#include "ns3/nstime.h"
-#include "ns3/data-rate.h"
+#include "../../network/model/channel.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/nstime.h"
+#include "../../network/utils/data-rate.h"
 
 namespace ns3 {
 

@@ -21,9 +21,9 @@
 #include <time.h>        // for timespec
 #include <sys/time.h>    // for timeval, gettimeofday
 
-#include "ns3/fatal-error.h"
-#include "ns3/system-condition.h"
-#include "ns3/log.h"
+#include "fatal-error.h"
+#include "system-condition.h"
+#include "log.h"
 
 
 /**

@@ -21,11 +21,11 @@
 #pragma once
 
 #include <stdint.h>
-#include "ns3/ipv4-address.h"
-#include "ns3/callback.h"
-#include "ns3/net-device.h"
-#include "ns3/ipv4-header.h"
-#include "ns3/ipv4-interface.h"
+#include "../../network/utils/ipv4-address.h"
+#include "../../core/model/callback.h"
+#include "../../network/model/net-device.h"
+#include "ipv4-header.h"
+#include "ipv4-interface.h"
 
 namespace ns3 {
 

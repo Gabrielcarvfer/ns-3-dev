@@ -17,11 +17,11 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/propagation-delay-model.h"
-#include "ns3/mobility-model.h"
-#include "ns3/double.h"
-#include "ns3/string.h"
-#include "ns3/pointer.h"
+#include "propagation-delay-model.h"
+#include "../../mobility/model/mobility-model.h"
+#include "../../core/model/double.h"
+#include "../../core/model/string.h"
+#include "../../core/model/pointer.h"
 
 namespace ns3 {
 

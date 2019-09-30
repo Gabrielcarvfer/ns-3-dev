@@ -20,11 +20,11 @@
 
 #include <iomanip>
 #include <iostream>
-#include "ns3/assert.h"
-#include "ns3/log.h"
-#include "ns3/header.h"
-#include "ns3/ethernet-header.h"
-#include "ns3/address-utils.h"
+#include "../../core/model/assert.h"
+#include "../../core/model/log.h"
+#include "../model/header.h"
+#include "ethernet-header.h"
+#include "address-utils.h"
 
 namespace ns3 {
 

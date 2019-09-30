@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include <ns3/trailer.h>
+#include "../../network/model/trailer.h"
 
 namespace ns3 {
 

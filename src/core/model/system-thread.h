@@ -21,7 +21,7 @@
 #pragma once
 
 #include "ns3/core-config.h"
-#include "ns3/callback.h"
+#include "callback.h"
 #ifdef HAVE_PTHREAD_H
 #include <pthread.h>
 #endif /* HAVE_PTHREAD_H */

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/wifi-information-element.h"
+#include "wifi-information-element.h"
 
 /**
  * This defines the maximum number of supported MCSs that a STA is

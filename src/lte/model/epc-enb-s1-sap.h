@@ -21,8 +21,8 @@
 #pragma once
 
 #include <list>
-#include <ns3/eps-bearer.h>
-#include <ns3/ipv4-address.h>
+#include "eps-bearer.h"
+#include "../../network/utils/ipv4-address.h"
 
 namespace ns3 {
 

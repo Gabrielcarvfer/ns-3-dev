@@ -18,9 +18,9 @@
  * Authors: Sidharth Nabar <snabar@uw.edu>, He Wu <mdzz@u.washington.edu>
  */
 
-#include "ns3/energy-model-helper.h"
-#include "ns3/config.h"
-#include "ns3/names.h"
+#include "energy-model-helper.h"
+#include "../../core/model/config.h"
+#include "../../core/model/names.h"
 
 namespace ns3 {
 

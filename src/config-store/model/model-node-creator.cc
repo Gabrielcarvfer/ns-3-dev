@@ -17,7 +17,7 @@
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
  
-#include "ns3/model-node-creator.h"
+#include "model-node-creator.h"
 namespace ns3 {
 
 ModelCreator::ModelCreator ()

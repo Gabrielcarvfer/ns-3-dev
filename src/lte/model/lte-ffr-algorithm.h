@@ -21,10 +21,10 @@
 
 #pragma once
 
-#include <ns3/object.h>
-#include <ns3/lte-rrc-sap.h>
-#include <ns3/epc-x2-sap.h>
-#include <ns3/ff-mac-sched-sap.h>
+#include "../../core/model/object.h"
+#include "lte-rrc-sap.h"
+#include "epc-x2-sap.h"
+#include "ff-mac-sched-sap.h"
 #include <map>
 
 namespace ns3 {

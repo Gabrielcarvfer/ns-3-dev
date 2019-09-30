@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "ns3/object-factory.h"
+#include "../../core/model/object-factory.h"
 
 namespace ns3 {
 

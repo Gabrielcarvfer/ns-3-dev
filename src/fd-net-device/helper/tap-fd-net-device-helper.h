@@ -21,14 +21,14 @@
 
 #include <string>
 
-#include "ns3/attribute.h"
-#include "ns3/fd-net-device.h"
-#include "ns3/object-factory.h"
-#include "ns3/mac48-address.h"
-#include "ns3/net-device-container.h"
-#include "ns3/node-container.h"
+#include "../../core/model/attribute.h"
+#include "../model/fd-net-device.h"
+#include "../../core/model/object-factory.h"
+#include "../../network/utils/mac48-address.h"
+#include "../../network/helper/net-device-container.h"
+#include "../../network/helper/node-container.h"
 
-#include "ns3/emu-fd-net-device-helper.h"
+#include "emu-fd-net-device-helper.h"
 
 namespace ns3 {
 

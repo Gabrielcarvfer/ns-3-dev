@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "ns3/ptr.h"
-#include "ns3/simple-ref-count.h"
-#include "ns3/buffer.h"
+#include "../../core/model/ptr.h"
+#include "../../core/model/simple-ref-count.h"
+#include "buffer.h"
 
 namespace ns3 {
 

@@ -18,11 +18,11 @@
  * Author: Leonard Tracy <lentracy@gmail.com>
  */
 
-#include "ns3/uan-mac-aloha.h"
-#include "ns3/uan-tx-mode.h"
-#include "ns3/log.h"
-#include "ns3/uan-phy.h"
-#include "ns3/uan-header-common.h"
+#include "uan-mac-aloha.h"
+#include "uan-tx-mode.h"
+#include "../../core/model/log.h"
+#include "uan-phy.h"
+#include "uan-header-common.h"
 
 #include <iostream>
 

@@ -18,19 +18,19 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 #include "ns3/core-config.h"
-#include "ns3/simulator.h"
-#include "ns3/simulator-impl.h"
-#include "ns3/scheduler.h"
-#include "ns3/map-scheduler.h"
-#include "ns3/event-impl.h"
-#include "ns3/des-metrics.h"
+#include "simulator.h"
+#include "simulator-impl.h"
+#include "scheduler.h"
+#include "map-scheduler.h"
+#include "event-impl.h"
+#include "des-metrics.h"
 
-#include "ns3/ptr.h"
-#include "ns3/string.h"
-#include "ns3/object-factory.h"
-#include "ns3/global-value.h"
-#include "ns3/assert.h"
-#include "ns3/log.h"
+#include "ptr.h"
+#include "string.h"
+#include "object-factory.h"
+#include "global-value.h"
+#include "assert.h"
+#include "log.h"
 
 #include <cmath>
 #include <fstream>
