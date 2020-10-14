@@ -187,9 +187,11 @@ def parse_examples_to_run_file(
 
             # Set the full path for the example.
             example_path = os.path.join(cpp_executable_dir, example_path)
+            example_path += '.exe' if sys.platform == 'win32' else ''
             example_name = os.path.join(
                 os.path.relpath(cpp_executable_dir, NS3_BUILDDIR),
                 example_name)
+
             # Add all of the C++ examples that were built, i.e. found
             # in the directory, to the list of C++ examples to run.
             if os.path.exists(example_path):
@@ -628,7 +630,7 @@ def read_waf_config():
     global NS3_BASEDIR
     NS3_BASEDIR = top_dir
     global NS3_BUILDDIR
-    NS3_BUILDDIR = out_dir
+    NS3_BUILDDIR = out_dir if sys.platform != 'win32' else out_dir.replace('/', '\\')
     for line in open("%s/c4che/_cache.py" % out_dir).readlines():
         for item in interesting_config_items:
             if line.startswith(item):
@@ -1072,6 +1074,7 @@ def run_tests():
     # match what is done in the wscript file.
     #
     test_runner_name = "%s%s-%s%s" % (APPNAME, VERSION, "test-runner", BUILD_PROFILE_SUFFIX)
+    test_runner_name += '.exe' if sys.platform == 'win32' else ''
 
     #
     # Run waf to make sure that everything is built, configured and ready to go
@@ -1100,17 +1103,17 @@ def run_tests():
         #
         if options.kinds or options.list or (len(options.constrain) and options.constrain in core_kinds):
             if sys.platform == "win32":
-                waf_cmd = "./waf --target=test-runner"
+                waf_cmd = ".\\waf --target=test-runner"
             else:
                 waf_cmd = "./waf --target=test-runner"
         elif len(options.example):
             if sys.platform == "win32": #Modify for windows
-                waf_cmd = "./waf --target=%s" % os.path.basename(options.example)
+                waf_cmd = ".\\waf --target=%s" % os.path.basename(options.example)
             else:
                 waf_cmd = "./waf --target=%s" % os.path.basename(options.example)
         else:
             if sys.platform == "win32": #Modify for windows
-                waf_cmd = "./waf"
+                waf_cmd = ".\\waf"
             else:
                 waf_cmd = "./waf"
 
@@ -1308,7 +1311,7 @@ def run_tests():
     # This translates into allowing the following options with respect to the
     # suites
     #
-    #  ./test,py:                                           run all of the suites and examples
+    #  ./test.py:                                           run all of the suites and examples
     #  ./test.py --constrain=core:                          run all of the suites of all kinds
     #  ./test.py --constrain=unit:                          run all unit suites
     #  ./test.py --suite=some-test-suite:                   run a single suite
@@ -1408,6 +1411,8 @@ def run_tests():
             stderr_results = stderr_results.decode()
             if len(stderr_results) == 0:
                 processors = int(stdout_results)
+    else:
+        processors = os.cpu_count()
 
     if (options.process_limit):
         if (processors < options.process_limit):
@@ -1529,6 +1534,7 @@ def run_tests():
                     # Remove any arguments and directory names from test.
                     test_name = test.split(' ', 1)[0]
                     test_name = os.path.basename(test_name)
+                    test_name = test_name[:-4] if sys.platform == 'win32' else test_name
 
                     # Don't try to run this example if it isn't runnable.
                     if test_name in ns3_runnable_programs_dictionary:

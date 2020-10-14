@@ -1159,7 +1159,7 @@ public:
 PcapFileTestSuite::PcapFileTestSuite ()
   : TestSuite ("pcap-file", UNIT)
 {
-  SetDataDir (NS_TEST_SOURCEDIR);
+  SetDataDir (std::string ("src/network/test"));
   AddTestCase (new WriteModeCreateTestCase, TestCase::QUICK);
   AddTestCase (new ReadModeCreateTestCase, TestCase::QUICK);
   //AddTestCase (new AppendModeCreateTestCase, TestCase::QUICK);

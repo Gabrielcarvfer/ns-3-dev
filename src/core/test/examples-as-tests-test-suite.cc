@@ -66,7 +66,7 @@ public:
 CommandLineExampleTestCase::CommandLineExampleTestCase ()
     :   ExampleAsTestCase ("core-example-command-line", 
                            "command-line-example",
-                           NS_TEST_SOURCEDIR)
+                           std::string ("src/core/test"))
 {}
 
 CommandLineExampleTestCase::~CommandLineExampleTestCase ()
@@ -99,9 +99,9 @@ public:
 ExamplesAsTestsTestSuite::ExamplesAsTestsTestSuite ()
   : TestSuite ("examples-as-tests-test-suite", UNIT)
 {
-  AddTestCase (new ExampleAsTestCase ("core-example-simulator", "sample-simulator", NS_TEST_SOURCEDIR));
+  AddTestCase (new ExampleAsTestCase ("core-example-simulator", "sample-simulator", std::string ("src/core/test")));
 
-  AddTestCase (new ExampleAsTestCase ("core-example-sample-random-variable", "sample-random-variable", NS_TEST_SOURCEDIR));
+  AddTestCase (new ExampleAsTestCase ("core-example-sample-random-variable", "sample-random-variable", std::string ("src/core/test")));
 
   AddTestCase (new CommandLineExampleTestCase ());
 }
@@ -120,7 +120,7 @@ static ExamplesAsTestsTestSuite g_examplesAsTestsTestSuite;
  * Tests ExampleTestSuite which runs a single example as test suite as specified in constructor arguments.
  */
 
-static ExampleAsTestSuite g_exampleCommandLineTest ("core-example-simulator", "sample-simulator", NS_TEST_SOURCEDIR);
+static ExampleAsTestSuite g_exampleCommandLineTest ("core-example-simulator", "sample-simulator", std::string ("src/core/test"));
 
 }  // namespace tests
 
