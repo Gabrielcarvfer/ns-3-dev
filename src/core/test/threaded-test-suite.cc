@@ -99,7 +99,11 @@ ThreadedSimulatorEventsTestCase::SchedulingThread (std::pair<ThreadedSimulatorEv
                                       &ThreadedSimulatorEventsTestCase::DoNothing, me, threadno);
       while (!me->m_stop && me->m_threadWaiting[threadno])
         {
+          #ifndef __WIN32__
           std::this_thread::sleep_for (std::chrono::nanoseconds (500));
+          #else
+          std::this_thread::yield();
+          #endif
         }
     }
 }
