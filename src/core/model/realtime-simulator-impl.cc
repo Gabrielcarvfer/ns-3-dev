@@ -597,9 +597,14 @@ RealtimeSimulatorImpl::ScheduleNow (EventImpl *impl)
 }
 
 Time
-RealtimeSimulatorImpl::Now (void) const
+RealtimeSimulatorImpl::Now (void) 
 {
-  return TimeStep (m_currentTs);
+  if (m_previousTs != m_currentTs)
+  {
+    m_previousTs = m_currentTs;
+    m_now = TimeStep(m_currentTs);
+  }
+  return m_now;
 }
 
 //

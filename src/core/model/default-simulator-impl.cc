@@ -73,6 +73,8 @@ DefaultSimulatorImpl::DefaultSimulatorImpl ()
   m_unscheduledEvents = 0;
   m_eventCount = 0;
   m_eventsWithContextEmpty = true;
+  m_previousTs = 0;
+  m_now = TimeStep(0);
   m_main = SystemThread::Self ();
 }
 
@@ -306,10 +308,15 @@ DefaultSimulatorImpl::ScheduleDestroy (EventImpl *event)
 }
 
 Time
-DefaultSimulatorImpl::Now (void) const
+DefaultSimulatorImpl::Now (void) 
 {
   // Do not add function logging here, to avoid stack overflow
-  return TimeStep (m_currentTs);
+  if (m_previousTs != m_currentTs)
+  {
+    m_previousTs = m_currentTs;
+    m_now = TimeStep(m_currentTs);
+  }
+  return m_now;
 }
 
 Time
