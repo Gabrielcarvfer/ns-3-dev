@@ -33,6 +33,7 @@ OutputStreamWrapper::OutputStreamWrapper (std::string filename, std::ios::openmo
   std::ofstream* os = new std::ofstream ();
   os->open (filename.c_str (), filemode);
   m_ostream = os;
+  FatalImpl::RegisterStream (&m_sstream);
   FatalImpl::RegisterStream (m_ostream);
   NS_ABORT_MSG_UNLESS (os->is_open (), "AsciiTraceHelper::CreateFileStream():  " <<
                        "Unable to Open " << filename << " for mode " << filemode);
@@ -42,6 +43,7 @@ OutputStreamWrapper::OutputStreamWrapper (std::ostream* os)
   : m_ostream (os), m_destroyable (false)
 {
   NS_LOG_FUNCTION (this << os);
+  FatalImpl::RegisterStream (&m_sstream);
   FatalImpl::RegisterStream (m_ostream);
   NS_ABORT_MSG_UNLESS (m_ostream->good (), "Output stream is not valid for writing.");
 }
@@ -49,7 +51,9 @@ OutputStreamWrapper::OutputStreamWrapper (std::ostream* os)
 OutputStreamWrapper::~OutputStreamWrapper ()
 {
   NS_LOG_FUNCTION (this);
+  FatalImpl::UnregisterStream (&m_sstream);
   FatalImpl::UnregisterStream (m_ostream);
+  *m_ostream << m_sstream.str() << std::flush;
   if (m_destroyable) delete m_ostream;
   m_ostream = 0;
 }
@@ -58,7 +62,7 @@ std::ostream *
 OutputStreamWrapper::GetStream (void)
 {
   NS_LOG_FUNCTION (this);
-  return m_ostream;
+  return &m_sstream;
 }
 
 } // namespace ns3

@@ -94,6 +94,7 @@ public:
 
 private:
   std::ostream *m_ostream; //!< The output stream
+  std::stringstream m_sstream; //!< An intermediary stream to reduce disk writes
   bool m_destroyable; //!< Can be destroyed
 };
 

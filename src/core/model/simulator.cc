@@ -142,6 +142,9 @@ Simulator::Destroy (void)
     {
       return;
     }
+  // Flush all pending streams
+  FatalImpl::FlushStreams();
+
   /* Note: we have to call LogSetTimePrinter (0) below because if we do not do
    * this, and restart a simulation after this call to Destroy, (which is
    * legal), Simulator::GetImpl will trigger again an infinite recursion until

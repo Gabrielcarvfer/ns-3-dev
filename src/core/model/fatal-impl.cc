@@ -21,6 +21,7 @@
 #include "log.h"
 
 #include <iostream>
+#include <sstream>
 #include <list>
 
 #include <cstdlib>
@@ -196,6 +197,18 @@ FlushStreams (void)
     {
       std::ostream* s (l->front ());
       l->pop_front ();
+
+      // We check if the registered stream is a stringstream,
+      //  which indicates the contents should be flushed to the next ofstream
+      //   as part of output-stream-wrapper changes
+      std::stringstream* f = 0;
+      if ((f=dynamic_cast<std::stringstream*>(s)) != 0)
+      {
+        s = l->front();
+        l->pop_front();
+        *s << f->str();
+        f->clear();
+      }
       s->flush ();
     }
 
