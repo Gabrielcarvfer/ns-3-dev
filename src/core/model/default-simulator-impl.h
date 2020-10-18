@@ -71,7 +71,7 @@ public:
   virtual void Cancel (const EventId &id);
   virtual bool IsExpired (const EventId &id) const;
   virtual void Run (void);
-  virtual Time Now (void) const;
+  virtual Time Now (void);
   virtual Time GetDelayLeft (const EventId &id) const;
   virtual Time GetMaximumSimulationTime (void) const;
   virtual void SetScheduler (ObjectFactory schedulerFactory);
@@ -128,6 +128,9 @@ private:
   uint32_t m_currentContext;
   /** The event count. */
   uint64_t m_eventCount;
+  /** Memoization for Now() events **/
+  uint64_t m_previousTs;
+  Time m_now;
   /**
    * Number of events that have been inserted but not yet scheduled,
    *  not counting the Destroy events; this is used for validation
