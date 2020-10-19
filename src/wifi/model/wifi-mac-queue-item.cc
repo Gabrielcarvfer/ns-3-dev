@@ -186,6 +186,21 @@ WifiMacQueueItem::DoAggregate (Ptr<const WifiMacQueueItem> msdu)
   m_tstamp = Max (m_tstamp, msdu->GetTimeStamp ());
 }
 
+void WifiMacQueueItem::SetPreviousMaxDelayAndTimestamp(Time prevMaxDelay, Time tstampPlusMaxDelay)
+{
+  m_tstampPlusMaxDelay = tstampPlusMaxDelay;
+  m_prevMaxDelay = prevMaxDelay;
+}
+
+Time WifiMacQueueItem::GetPreviousMaxDelay()
+{
+  return m_prevMaxDelay;
+}
+
+Time WifiMacQueueItem::GetTimeStampWithMaxDelay()
+{
+  return m_tstampPlusMaxDelay;
+}
 
 MsduAggregator::DeaggregatedMsdusCI
 WifiMacQueueItem::begin (void)

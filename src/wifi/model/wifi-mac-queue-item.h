@@ -133,6 +133,9 @@ public:
    */
   virtual void Print (std::ostream &os) const;
 
+  void SetPreviousMaxDelayAndTimestamp(Time prevMaxDelay, Time tstampPlusMaxDelay);
+  Time GetPreviousMaxDelay();
+  Time GetTimeStampWithMaxDelay();
 private:
   /**
    * \brief Aggregate the MSDU contained in the given MPDU to this MPDU (thus
@@ -146,6 +149,8 @@ private:
   WifiMacHeader m_header;                       //!< Wifi MAC header associated with the packet
   Time m_tstamp;                                //!< timestamp when the packet arrived at the queue
   MsduAggregator::DeaggregatedMsdus m_msduList; //!< The list of aggregated MSDUs included in this MPDU
+  Time m_tstampPlusMaxDelay; //!< Used for memoization to prevent recalculation in max delay is the same
+  Time m_prevMaxDelay; //!< Used to keep track of previous max delay
 };
 
 /**
