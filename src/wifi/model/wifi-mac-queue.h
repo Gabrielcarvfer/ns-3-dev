@@ -312,6 +312,7 @@ private:
    * \return true if the item is removed, false otherwise
    */
   bool TtlExceeded (ConstIterator &it);
+  bool TtlExceeded (ConstIterator &it, const Time now);
 
   Time m_maxDelay;                          //!< Time to live for packets in the queue
   DropPolicy m_dropPolicy;                  //!< Drop behavior of queue
