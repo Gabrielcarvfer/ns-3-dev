@@ -66,48 +66,95 @@ uint32_t
 DsrPassiveBuffer::GetSize ()
 {
   Purge ();
-  return m_passiveBuffer.size ();
+
+  uint32_t size = 0;
+
+  for (auto it: m_passiveBuffer)
+  {
+    size += it.second.size();
+  }
+
+  return size;
 }
 
 bool
 DsrPassiveBuffer::Enqueue (DsrPassiveBuffEntry & entry)
 {
   Purge ();
-  for (std::vector<DsrPassiveBuffEntry>::const_iterator i = m_passiveBuffer.begin (); i
-       != m_passiveBuffer.end (); ++i)
-    {
-//      NS_LOG_INFO ("packet id " << i->GetPacket ()->GetUid () << " " << entry.GetPacket ()->GetUid () << " source " << i->GetSource () << " " << entry.GetSource ()
-//                                     << " dst " << i->GetDestination () << " " << entry.GetDestination () << " identification " << i->GetIdentification () << " "
-//                                     << entry.GetIdentification () << " fragment " << i->GetFragmentOffset () << " " << entry.GetFragmentOffset ()
-//                                     << " segLeft " << i->GetSegsLeft () << " " << entry.GetSegsLeft ());
+  int equal = false;
+  Ipv4Address dst = entry.GetDestination();
 
-      if ((i->GetPacket ()->GetUid () == entry.GetPacket ()->GetUid ()) && (i->GetSource () == entry.GetSource ()) && (i->GetNextHop () == entry.GetNextHop ())
-          && (i->GetDestination () == entry.GetDestination ()) && (i->GetIdentification () == entry.GetIdentification ()) && (i->GetFragmentOffset () == entry.GetFragmentOffset ())
-          && (i->GetSegsLeft () == entry.GetSegsLeft () + 1))
-        {
-          return false;
-        }
-    }
+  std::map<Ipv4Address, std::vector<DsrPassiveBuffEntry>>::iterator it;
+  it = m_passiveBuffer.find(dst);
+
+  if (it == m_passiveBuffer.end())
+  {
+
+    m_passiveBuffer.emplace(dst, std::vector<DsrPassiveBuffEntry>{});
+    it = m_passiveBuffer.find(dst);
+  }
+  else
+  {
+    for (std::vector<DsrPassiveBuffEntry>::const_iterator i = it->second.begin (); 
+          i != it->second.end (); ++i)
+      {
+  
+  //      NS_LOG_INFO ("packet id " << i->GetPacket ()->GetUid () << " " << entry.GetPacket ()->GetUid () << " source " << i->GetSource () << " " << entry.GetSource ()
+  //                                     << " dst " << i->GetDestination () << " " << entry.GetDestination () << " identification " << i->GetIdentification () << " "
+  //                                     << entry.GetIdentification () << " fragment " << i->GetFragmentOffset () << " " << entry.GetFragmentOffset ()
+  //                                     << " segLeft " << i->GetSegsLeft () << " " << entry.GetSegsLeft ());
+
+        if ((i->GetPacket ()->GetUid () == entry.GetPacket ()->GetUid ()) && (i->GetSource () == entry.GetSource ()) && (i->GetNextHop () == entry.GetNextHop ())
+            && (i->GetDestination () == entry.GetDestination ()) && (i->GetIdentification () == entry.GetIdentification ()) && (i->GetFragmentOffset () == entry.GetFragmentOffset ())
+            && (i->GetSegsLeft () == entry.GetSegsLeft () + 1))
+          {
+            equal = true;
+            break;
+          }
+      }
+  }
+  if (equal)
+  {
+    return false;
+  }
 
   entry.SetExpireTime (m_passiveBufferTimeout);     // Initialize the send buffer timeout
   /*
    * Drop the most aged packet when buffer reaches to max
    */
-  if (m_passiveBuffer.size () >= m_maxLen)
+  if (GetSize() >= m_maxLen)
     {
-      Drop (m_passiveBuffer.front (), "Drop the most aged packet");         // Drop the most aged packet
-      m_passiveBuffer.erase (m_passiveBuffer.begin ());
+      std::vector<DsrPassiveBuffEntry>::iterator old;
+      Time minExpireTime;
+      Time currExpireTime;
+      for(std::map<Ipv4Address, std::vector<DsrPassiveBuffEntry>>::iterator it = m_passiveBuffer.begin();
+        it != m_passiveBuffer.end(); ++it)
+      {
+        if((currExpireTime = it->second.begin()->GetExpireTime ()) < minExpireTime)
+        {
+          minExpireTime = it->second.begin()->GetExpireTime ();
+          old = it->second.begin();
+        }
+      }
+      Drop (*old, "Drop the most aged packet");         // Drop the most aged packet
+      m_passiveBuffer.at(old->GetDestination()).erase (m_passiveBuffer.at(old->GetDestination()).begin());
     }
   // enqueue the entry
-  m_passiveBuffer.push_back (entry);
+  it->second.push_back (entry);
   return true;
 }
 
 bool
 DsrPassiveBuffer::AllEqual (DsrPassiveBuffEntry & entry)
 {
-  for (std::vector<DsrPassiveBuffEntry>::iterator i = m_passiveBuffer.begin (); i
-       != m_passiveBuffer.end (); ++i)
+  bool equal = false;
+  std::map<Ipv4Address, std::vector<DsrPassiveBuffEntry>>::iterator it = m_passiveBuffer.find(entry.GetDestination());
+
+  if (it == m_passiveBuffer.end())
+    return false;
+
+  for (std::vector<DsrPassiveBuffEntry>::iterator i = it->second.begin (); i
+       != it->second.end (); ++i)
     {
 //      NS_LOG_INFO ("packet id " << i->GetPacket ()->GetUid () << " " << entry.GetPacket ()->GetUid () << " source " << i->GetSource () << " " << entry.GetSource ()
 //                                     << " dst " << i->GetDestination () << " " << entry.GetDestination () << " identification " << i->GetIdentification () << " "
@@ -118,11 +165,14 @@ DsrPassiveBuffer::AllEqual (DsrPassiveBuffEntry & entry)
           && (i->GetDestination () == entry.GetDestination ()) && (i->GetIdentification () == entry.GetIdentification ()) && (i->GetFragmentOffset () == entry.GetFragmentOffset ())
           && (i->GetSegsLeft () == entry.GetSegsLeft () + 1))
         {
-          i = m_passiveBuffer.erase (i);   // Erase the same maintain buffer entry for the received packet
-          return true;
+          i = it->second.erase (i);   // Erase the same maintain buffer entry for the received packet
+          if(it->second.size() == 0)
+            m_passiveBuffer.erase(it);
+          equal = true;
+          break;
         }
     }
-  return false;
+  return equal;
 }
 
 bool
@@ -132,15 +182,19 @@ DsrPassiveBuffer::Dequeue (Ipv4Address dst, DsrPassiveBuffEntry & entry)
   /*
    * Dequeue the entry with destination address dst
    */
-  for (std::vector<DsrPassiveBuffEntry>::iterator i = m_passiveBuffer.begin (); i != m_passiveBuffer.end (); ++i)
+  std::map<Ipv4Address, std::vector<DsrPassiveBuffEntry>>::iterator it = m_passiveBuffer.find(dst);
+
+  if (it == m_passiveBuffer.end())
+    return false;
+
+  for (std::vector<DsrPassiveBuffEntry>::iterator i = it->second.begin (); i != it->second.end (); ++i)
     {
-      if (i->GetDestination () == dst)
-        {
-          entry = *i;
-          i = m_passiveBuffer.erase (i);
-          NS_LOG_DEBUG ("Packet size while dequeuing " << entry.GetPacket ()->GetSize ());
-          return true;
-        }
+      entry = *i;
+      i = it->second.erase (i);
+      if(it->second.size() == 0)
+        m_passiveBuffer.erase(it);
+      NS_LOG_DEBUG ("Packet size while dequeuing " << entry.GetPacket ()->GetSize ());
+      return true;
     }
   return false;
 }
@@ -151,14 +205,16 @@ DsrPassiveBuffer::Find (Ipv4Address dst)
   /*
    * Make sure if the send buffer contains entry with certain dst
    */
-  for (std::vector<DsrPassiveBuffEntry>::const_iterator i = m_passiveBuffer.begin (); i
-       != m_passiveBuffer.end (); ++i)
+  std::map<Ipv4Address, std::vector<DsrPassiveBuffEntry>>::iterator it = m_passiveBuffer.find(dst);
+
+  if (it == m_passiveBuffer.end())
+    return false;
+
+  for (std::vector<DsrPassiveBuffEntry>::const_iterator i = it->second.begin (); i
+       != it->second.end (); ++i)
     {
-      if (i->GetDestination () == dst)
-        {
-          NS_LOG_DEBUG ("Found the packet");
-          return true;
-        }
+      NS_LOG_DEBUG ("Found the packet");
+      return true;  
     }
   return false;
 }
@@ -187,17 +243,24 @@ DsrPassiveBuffer::Purge ()
    */
   NS_LOG_DEBUG ("The passive buffer size " << m_passiveBuffer.size ());
   IsExpired pred;
-  for (std::vector<DsrPassiveBuffEntry>::iterator i = m_passiveBuffer.begin (); i
-       != m_passiveBuffer.end (); ++i)
-    {
-      if (pred (*i))
-        {
-          NS_LOG_DEBUG ("Dropping Queue Packets");
-          Drop (*i, "Drop out-dated packet ");
-        }
-    }
-  m_passiveBuffer.erase (std::remove_if (m_passiveBuffer.begin (), m_passiveBuffer.end (), pred),
-                         m_passiveBuffer.end ());
+
+  for(std::map<Ipv4Address, std::vector<DsrPassiveBuffEntry>>::iterator it = m_passiveBuffer.begin();
+    it != m_passiveBuffer.end(); ++it)
+  {
+    for (std::vector<DsrPassiveBuffEntry>::iterator i = it->second.begin (); i
+         != it->second.end (); ++i)
+      {
+        if (pred (*i))
+          {
+            NS_LOG_DEBUG ("Dropping Queue Packets");
+            Drop (*i, "Drop out-dated packet ");
+            it->second.erase(i);
+          }
+      }
+
+    if (it->second.size() == 0)
+      m_passiveBuffer.erase(it->first);
+  }
 }
 
 void

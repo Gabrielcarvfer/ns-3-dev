@@ -33,6 +33,7 @@
 #define DSR_PASSIVEBUFF_H
 
 #include <vector>
+#include <map>
 #include "ns3/ipv4-routing-protocol.h"
 #include "ns3/simulator.h"
 
@@ -326,7 +327,7 @@ public:
 
 private:
   /// The send buffer to cache unsent packet
-  std::vector<DsrPassiveBuffEntry> m_passiveBuffer;
+  std::map<Ipv4Address, std::vector<DsrPassiveBuffEntry>> m_passiveBuffer;
   /// Remove all expired entries
   void Purge ();
   /// Notify that packet is dropped from queue by timeout
