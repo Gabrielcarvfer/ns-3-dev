@@ -166,6 +166,9 @@ private:
    */
   bool m_ulFirstWrite;
 
+  std::ofstream dlOutFile;
+  std::ofstream ulOutFile;
+
 };
 
 } // namespace ns3

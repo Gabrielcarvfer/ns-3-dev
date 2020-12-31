@@ -143,6 +143,9 @@ private:
    */
   bool m_ulTxFirstWrite;
 
+  std::ofstream dlOutFile;
+  std::ofstream ulOutFile;
+
 };
 
 } // namespace ns3
