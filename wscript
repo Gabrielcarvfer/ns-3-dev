@@ -396,7 +396,7 @@ def configure(conf):
     if Options.options.build_profile == 'debug':
         env.append_value('DEFINES', 'NS3_BUILD_PROFILE_DEBUG')
         env.append_value('DEFINES', 'NS3_ASSERT_ENABLE')
-        env.append_value('DEFINES', 'NS3_LOG_ENABLE')
+        # env.append_value('DEFINES', 'NS3_LOG_ENABLE')
 
     if Options.options.build_profile == 'release':
         env.append_value('DEFINES', 'NS3_BUILD_PROFILE_RELEASE')
