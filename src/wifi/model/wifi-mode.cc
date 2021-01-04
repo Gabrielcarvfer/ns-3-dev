@@ -694,7 +694,7 @@ WifiModeFactory::CreateWifiMode (std::string uniqueName,
   //here costs are only suffered at simulation setup.
   if ((codingRate == WIFI_CODE_RATE_UNDEFINED) && modClass != WIFI_MOD_CLASS_DSSS && modClass != WIFI_MOD_CLASS_HR_DSSS)
     {
-      NS_FATAL_ERROR ("Error in creation of WifiMode named " << uniqueName << std::endl
+      NS_FATAL_ERROR ("Error in creation of WifiMode named " << uniqueName << "\n"
                                                              << "Code rate must be WIFI_CODE_RATE_UNDEFINED iff Modulation Class is WIFI_MOD_CLASS_DSSS or WIFI_MOD_CLASS_HR_DSSS");
     }
 

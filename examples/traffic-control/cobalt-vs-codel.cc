@@ -50,14 +50,14 @@ CheckQueueSize (Ptr<QueueDisc> queue,std::string queue_disc_type)
   Simulator::Schedule (Seconds (0.1), &CheckQueueSize, queue, queue_disc_type);
 
   std::ofstream fPlotQueue (dir + queue_disc_type + "/queueTraces/queue.plotme", std::ios::out | std::ios::app);
-  fPlotQueue << Simulator::Now ().GetSeconds () << " " << qSize << std::endl;
+  fPlotQueue << Simulator::Now ().GetSeconds () << " " << qSize << "\n";
   fPlotQueue.close ();
 }
 
 static void
 CwndTrace (Ptr<OutputStreamWrapper> stream, uint32_t oldCwnd, uint32_t newCwnd)
 {
-  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << newCwnd / 1446.0 << std::endl;
+  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << newCwnd / 1446.0 << "\n";
 }
 
 static void

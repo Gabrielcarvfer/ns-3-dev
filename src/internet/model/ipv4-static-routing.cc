@@ -698,11 +698,11 @@ Ipv4StaticRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Uni
   *os << "Node: " << m_ipv4->GetObject<Node> ()->GetId ()
       << ", Time: " << Now().As (unit)
       << ", Local time: " << m_ipv4->GetObject<Node> ()->GetLocalTime ().As (unit)
-      << ", Ipv4StaticRouting table" << std::endl;
+      << ", Ipv4StaticRouting table" << "\n";
 
   if (GetNRoutes () > 0)
     {
-      *os << "Destination     Gateway         Genmask         Flags Metric Ref    Use Iface" << std::endl;
+      *os << "Destination     Gateway         Genmask         Flags Metric Ref    Use Iface" << "\n";
       for (uint32_t j = 0; j < GetNRoutes (); j++)
         {
           std::ostringstream dest, gw, mask, flags;
@@ -736,10 +736,10 @@ Ipv4StaticRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Uni
             {
               *os << route.GetInterface ();
             }
-          *os << std::endl;
+          *os << "\n";
         }
     }
-  *os << std::endl;
+  *os << "\n";
 }
 
 } // namespace ns3

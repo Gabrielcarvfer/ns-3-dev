@@ -122,14 +122,14 @@ int main (int argc, char *argv[])
       stopIndex = index;
     }
 
-  std::cout << "wifiType: " << wifiType << " distance: " << distance << "m" << std::endl;
+  std::cout << "wifiType: " << wifiType << " distance: " << distance << "m" << "\n";
   std::cout << std::setw (5) << "index" <<
     std::setw (6) << "MCS" <<
     std::setw (8) << "width" <<
     std::setw (12) << "Rate (Mb/s)" <<
     std::setw (12) << "Tput (Mb/s)" <<
     std::setw (10) << "Received " <<
-    std::endl;
+    "\n";
   for (uint16_t i = startIndex; i <= stopIndex; i++)
     {
       uint32_t payloadSize;
@@ -665,7 +665,7 @@ int main (int argc, char *argv[])
         std::setw (10) << datarate <<
         std::setw (12) << throughput <<
         std::setw (8) << totalPacketsThrough <<
-        std::endl;
+        "\n";
       Simulator::Destroy ();
     }
   return 0;

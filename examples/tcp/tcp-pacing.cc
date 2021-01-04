@@ -105,31 +105,31 @@ std::ofstream packetTraceStream;
 static void
 CwndTracer (uint32_t oldval, uint32_t newval)
 {
-  cwndStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << std::setw (12) << newval << std::endl;
+  cwndStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << std::setw (12) << newval << "\n";
 }
 
 static void
 PacingRateTracer (DataRate oldval, DataRate newval)
 {
-  pacingRateStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << std::setw (12) << newval.GetBitRate () / 1e6 << std::endl;
+  pacingRateStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << std::setw (12) << newval.GetBitRate () / 1e6 << "\n";
 }
 
 static void
 SsThreshTracer (uint32_t oldval, uint32_t newval)
 {
-  ssThreshStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << std::setw (12) << newval << std::endl;
+  ssThreshStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << std::setw (12) << newval << "\n";
 }
 
 static void
 TxTracer (Ptr<const Packet> p, Ptr<Ipv4> ipv4, uint32_t interface)
 {
-  packetTraceStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << " tx " << p->GetSize () << std::endl;
+  packetTraceStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << " tx " << p->GetSize () << "\n";
 }
 
 static void
 RxTracer (Ptr<const Packet> p, Ptr<Ipv4> ipv4, uint32_t interface)
 {
-  packetTraceStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << " rx " << p->GetSize () << std::endl;
+  packetTraceStream << std::fixed << std::setprecision (6) << Simulator::Now ().GetSeconds () << " rx " << p->GetSize () << "\n";
 }
 
 void
@@ -285,16 +285,16 @@ main (int argc, char *argv[])
     }
 
   cwndStream.open ("tcp-dynamic-pacing-cwnd.dat", std::ios::out);
-  cwndStream << "#Time(s) Congestion Window (B)" << std::endl;
+  cwndStream << "#Time(s) Congestion Window (B)" << "\n";
 
   pacingRateStream.open ("tcp-dynamic-pacing-pacing-rate.dat", std::ios::out);
-  pacingRateStream << "#Time(s) Pacing Rate (Mb/s)" << std::endl;
+  pacingRateStream << "#Time(s) Pacing Rate (Mb/s)" << "\n";
 
   ssThreshStream.open ("tcp-dynamic-pacing-ssthresh.dat", std::ios::out);
-  ssThreshStream << "#Time(s) Slow Start threshold (B)" << std::endl;
+  ssThreshStream << "#Time(s) Slow Start threshold (B)" << "\n";
 
   packetTraceStream.open ("tcp-dynamic-pacing-packet-trace.dat", std::ios::out);
-  packetTraceStream << "#Time(s) tx/rx size (B)" << std::endl;
+  packetTraceStream << "#Time(s) tx/rx size (B)" << "\n";
 
   Simulator::Schedule (MicroSeconds (1001), &ConnectSocketTraces);
 

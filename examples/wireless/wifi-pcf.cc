@@ -269,17 +269,17 @@ int main (int argc, char *argv[])
       throughput += ((totalPacketsThrough * 8) / (simulationTime * 1000000.0)); //Mbit/s
     }
 
-  std::cout << "Throughput: " << throughput << " Mbit/s" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s" << "\n";
 
-  std::cout << "# tx beacons: " << m_countBeacon << std::endl;
-  std::cout << "# tx CF-END: " << m_countCfEnd << std::endl;
-  std::cout << "# tx CF-END-ACK: " << m_countCfEndAck << std::endl;
-  std::cout << "# tx CF-POLL: " << m_countCfPoll << std::endl;
-  std::cout << "# tx CF-POLL-ACK: " << m_countCfPollAck << std::endl;
-  std::cout << "# tx CF-POLL-DATA: " << m_countCfPollData << std::endl;
-  std::cout << "# tx CF-POLL-DATA-ACK: " << m_countCfPollDataAck << std::endl;
-  std::cout << "# tx DATA-NULL: " << m_countDataNull << std::endl;
-  std::cout << "# tx DATA: " << m_countData << std::endl;
+  std::cout << "# tx beacons: " << m_countBeacon << "\n";
+  std::cout << "# tx CF-END: " << m_countCfEnd << "\n";
+  std::cout << "# tx CF-END-ACK: " << m_countCfEndAck << "\n";
+  std::cout << "# tx CF-POLL: " << m_countCfPoll << "\n";
+  std::cout << "# tx CF-POLL-ACK: " << m_countCfPollAck << "\n";
+  std::cout << "# tx CF-POLL-DATA: " << m_countCfPollData << "\n";
+  std::cout << "# tx CF-POLL-DATA-ACK: " << m_countCfPollDataAck << "\n";
+  std::cout << "# tx DATA-NULL: " << m_countDataNull << "\n";
+  std::cout << "# tx DATA: " << m_countData << "\n";
 
   Simulator::Destroy ();
   return 0;

@@ -412,7 +412,7 @@ int main (int argc, char *argv[])
       PrintAttributesIfEnabled (printAttributes);
       break;
     default:
-      std::cerr << "Invalid testcase number " << testCase << std::endl;
+      std::cerr << "Invalid testcase number " << testCase << "\n";
       exit (1);
       break;
     }

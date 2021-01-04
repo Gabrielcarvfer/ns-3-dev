@@ -980,7 +980,7 @@ PacketTagListTest::RemoveTime (const PacketTagList & ref,
     std::cout << GetName () << "remove time: " << msg << ": " << std::setw (8)
               << delta      << " ticks to remove "
               << reps       << " times"
-              << std::endl;
+              << "\n";
   }
   return delta;
 }
@@ -1002,7 +1002,7 @@ PacketTagListTest::AddRemoveTime (const bool verbose /* = false */)
     std::cout << GetName () << "add/remove time: " << std::setw (8)
               << delta      << " ticks to add+remove "
               << reps       << " times"
-              << std::endl;
+              << "\n";
   }
   return delta;
 }
@@ -1010,7 +1010,7 @@ PacketTagListTest::AddRemoveTime (const bool verbose /* = false */)
 void
 PacketTagListTest::DoRun (void)
 {
-  std::cout << GetName () << "begin" << std::endl;
+  std::cout << GetName () << "begin" << "\n";
 
   MAKE_TEST_TAGS ;
   
@@ -1025,13 +1025,13 @@ PacketTagListTest::DoRun (void)
   
   { // Peek
     std::cout << GetName () << "check Peek (missing tag) returns false"
-              << std::endl;
+              << "\n";
     ATestTag<10> t10;
     NS_TEST_EXPECT_MSG_EQ (ref.Peek (t10), false, "missing tag");
   }
 
   { // Copy ctor, assignment
-    std::cout << GetName () << "check copy and assignment" << std::endl;
+    std::cout << GetName () << "check copy and assignment" << "\n";
     { PacketTagList ptl (ref);
       CheckRefList (ref, "copy ctor orig");
       CheckRefList (ptl, "copy ctor copy");
@@ -1051,7 +1051,7 @@ PacketTagListTest::DoRun (void)
     }
     
     { // Remove single tags from list
-      std::cout << GetName () << "check removal of each tag" << std::endl;
+      std::cout << GetName () << "check removal of each tag" << "\n";
       RemoveCheck (1);
       RemoveCheck (2);
       RemoveCheck (3);
@@ -1063,7 +1063,7 @@ PacketTagListTest::DoRun (void)
     
     { // Remove in the presence of a merge
       std::cout << GetName () << "check removal doesn't disturb merge "
-                << std::endl;
+                << "\n";
       PacketTagList ptl = ref;
       ptl.Remove (t7);
       ptl.Remove (t6);
@@ -1090,7 +1090,7 @@ PacketTagListTest::DoRun (void)
 
   { // Replace
 
-    std::cout << GetName () << "check replacing each tag" << std::endl;
+    std::cout << GetName () << "check replacing each tag" << "\n";
       
 #   define ReplaceCheck(n)					\
     t ## n .m_data = 2;						\
@@ -1110,7 +1110,7 @@ PacketTagListTest::DoRun (void)
   }
   
   { // Timing
-    std::cout << GetName () << "add+remove timing" << std::endl;
+    std::cout << GetName () << "add+remove timing" << "\n";
     int flm = std::numeric_limits<int>::max ();
     const int nIterations = 100;
     for (int i = 0; i < nIterations; ++i) {
@@ -1119,9 +1119,9 @@ PacketTagListTest::DoRun (void)
     }
     std::cout << GetName () << "min add+remove time: "
               << std::setw (8) << flm        << " ticks"
-              << std::endl;
+              << "\n";
     
-    std::cout << GetName () << "remove timing" << std::endl;
+    std::cout << GetName () << "remove timing" << "\n";
     // tags numbered from 1, so add one for (unused) entry at 0
     std::vector <int> rmn (tagLast + 1, std::numeric_limits<int>::max ());
     for (int i = 0; i < nIterations; ++i) {
@@ -1144,7 +1144,7 @@ PacketTagListTest::DoRun (void)
       std::cout << GetName () << "min remove time: t"
 		<< j          << ": "
 		<< std::setw (8) << rmn[j]     << " ticks"
-                << std::endl;
+                << "\n";
     }
   }  // Timing
     

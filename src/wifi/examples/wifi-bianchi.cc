@@ -465,7 +465,7 @@ CwTrace (std::string context, uint32_t oldVal, uint32_t newVal)
   NS_LOG_INFO ("CW time=" << Simulator::Now () << " node=" << ContextToNodeId (context) << " val=" << newVal);
   if (tracing)
     {
-      cwTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << newVal << std::endl;
+      cwTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << newVal << "\n";
     }
 }
 
@@ -475,7 +475,7 @@ BackoffTrace (std::string context, uint32_t newVal)
   NS_LOG_INFO ("Backoff time=" << Simulator::Now () << " node=" << ContextToNodeId (context) << " val=" << newVal);
   if (tracing)
     {
-      backoffTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << newVal << std::endl;
+      backoffTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << newVal << "\n";
     }
 }
 
@@ -602,7 +602,7 @@ PhyTxTrace (std::string context, Ptr<const Packet> p, double txPowerW)
   NS_LOG_INFO ("PHY-TX-START time=" << Simulator::Now () << " node=" << ContextToNodeId (context) << " size=" << p->GetSize () << " " << txPowerW);
   if (tracing)
     {
-      phyTxTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " size=" << p->GetSize () << " " << txPowerW << std::endl;
+      phyTxTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " size=" << p->GetSize () << " " << txPowerW << "\n";
     }
   if (p->GetSize () == (pktSize + 36)) // ignore non-data frames
     {
@@ -622,7 +622,7 @@ MacTxTrace (std::string context, Ptr<const Packet> p)
 {
   if (tracing)
     {
-      macTxTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << p->GetSize () << std::endl;
+      macTxTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << p->GetSize () << "\n";
     }
 }
 
@@ -631,7 +631,7 @@ MacRxTrace (std::string context, Ptr<const Packet> p)
 {
   if (tracing)
     {
-      macRxTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << p->GetSize () << std::endl;
+      macRxTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << p->GetSize () << "\n";
     }
 }
 
@@ -640,7 +640,7 @@ SocketSendTrace (std::string context, Ptr<const Packet> p, const Address &addr)
 {
   if (tracing)
     {
-      socketSendTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << p->GetSize () << " " << addr << std::endl;
+      socketSendTraceFile << Simulator::Now ().GetSeconds () << " " << ContextToNodeId (context) << " " << p->GetSize () << " " << addr << "\n";
     }
 }
 
@@ -1044,15 +1044,15 @@ int main (int argc, char *argv[])
           rxEventAbortedByTx.clear ();
           associated.clear ();
           throughput = 0;
-          std::cout << "Trial " << runIndex + 1 << " of " << trials << "; "<< phyRate << " Mbps for " << n << " nodes " << std::endl;
+          std::cout << "Trial " << runIndex + 1 << " of " << trials << "; "<< phyRate << " Mbps for " << n << " nodes " << "\n";
           if (tracing)
             {
-              cwTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; "<< phyRate << " Mbps for " << n << " nodes" << std::endl;
-              backoffTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; "<< phyRate << " Mbps for " << n << " nodes" << std::endl;
-              phyTxTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << std::endl;
-              macTxTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << std::endl;
-              macRxTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << std::endl;
-              socketSendTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << std::endl;
+              cwTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; "<< phyRate << " Mbps for " << n << " nodes" << "\n";
+              backoffTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; "<< phyRate << " Mbps for " << n << " nodes" << "\n";
+              phyTxTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << "\n";
+              macTxTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << "\n";
+              macRxTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << "\n";
+              socketSendTraceFile << "# Trial " << runIndex + 1 << " of " << trials << "; " << phyRate << " Mbps for " << n << " nodes" << "\n";
             }
           experiment.Run (wifi, wifiPhy, wifiMac, wifiChannel, runIndex, n, duration, pcap, infra);
           uint32_t k = 0;
@@ -1094,9 +1094,9 @@ int main (int argc, char *argv[])
                         << "; time first RX " << first
                         << "; time last RX " << last
                         << "; dataTransferDuration " << dataTransferDuration
-                        << "; throughput " << nodeThroughput  << " Mbps" << std::endl;
+                        << "; throughput " << nodeThroughput  << " Mbps" << "\n";
             }
-          std::cout << "Total throughput: " << throughput << " Mbps" << std::endl;
+          std::cout << "Total throughput: " << throughput << " Mbps" << "\n";
           averageThroughput += throughput;
           throughputArray[runIndex] = throughput;
         }
@@ -1113,7 +1113,7 @@ int main (int argc, char *argv[])
           if (it != itDifs->second.end ())
             {
               relativeErrorDifs = (std::abs (averageThroughput - it->second) / it->second);
-              std::cout << "Relative error (DIFS): " << 100 * relativeErrorDifs << "%" << std::endl;
+              std::cout << "Relative error (DIFS): " << 100 * relativeErrorDifs << "%" << "\n";
             }
           else if (validate)
             {
@@ -1128,7 +1128,7 @@ int main (int argc, char *argv[])
           if (it != itEifs->second.end ())
             {
               relativeErrorEifs = (std::abs (averageThroughput - it->second) / it->second);
-              std::cout << "Relative error (EIFS): " << 100 * relativeErrorEifs << "%" << std::endl;
+              std::cout << "Relative error (EIFS): " << 100 * relativeErrorEifs << "%" << "\n";
             }
           else if (validate)
             {

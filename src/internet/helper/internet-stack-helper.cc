@@ -598,7 +598,7 @@ Ipv4L3ProtocolDropSinkWithoutContext (
 
   Ptr<Packet> p = packet->Copy ();
   p->AddHeader (header);
-  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << *p << std::endl;
+  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << *p << "\n";
 }
 
 /**
@@ -622,7 +622,7 @@ Ipv4L3ProtocolTxSinkWithoutContext (
       return;
     }
 
-  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << *packet << std::endl;
+  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << *packet << "\n";
 }
 
 /**
@@ -646,7 +646,7 @@ Ipv4L3ProtocolRxSinkWithoutContext (
       return;
     }
 
-  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << *packet << std::endl;
+  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << *packet << "\n";
 }
 
 /**
@@ -686,9 +686,9 @@ Ipv4L3ProtocolDropSinkWithContext (
   p->AddHeader (header);
 #ifdef INTERFACE_CONTEXT
   *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << context << "(" << interface << ") " 
-                        << *p << std::endl;
+                        << *p << "\n";
 #else
-  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << context << " "  << *p << std::endl;
+  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << context << " "  << *p << "\n";
 #endif
 }
 
@@ -717,9 +717,9 @@ Ipv4L3ProtocolTxSinkWithContext (
 
 #ifdef INTERFACE_CONTEXT
   *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << "(" << interface << ") " 
-                        << *packet << std::endl;
+                        << *packet << "\n";
 #else
-  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << " "  << *packet << std::endl;
+  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << " "  << *packet << "\n";
 #endif
 }
 
@@ -748,9 +748,9 @@ Ipv4L3ProtocolRxSinkWithContext (
 
 #ifdef INTERFACE_CONTEXT
   *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << context << "(" << interface << ") " 
-                        << *packet << std::endl;
+                        << *packet << "\n";
 #else
-  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << context << " "  << *packet << std::endl;
+  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << context << " "  << *packet << "\n";
 #endif
 }
 
@@ -936,7 +936,7 @@ Ipv6L3ProtocolDropSinkWithoutContext (
 
   Ptr<Packet> p = packet->Copy ();
   p->AddHeader (header);
-  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << *p << std::endl;
+  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << *p << "\n";
 }
 
 /**
@@ -960,7 +960,7 @@ Ipv6L3ProtocolTxSinkWithoutContext (
       return;
     }
 
-  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << *packet << std::endl;
+  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << *packet << "\n";
 }
 
 /**
@@ -984,7 +984,7 @@ Ipv6L3ProtocolRxSinkWithoutContext (
       return;
     }
 
-  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << *packet << std::endl;
+  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << *packet << "\n";
 }
 
 /**
@@ -1024,9 +1024,9 @@ Ipv6L3ProtocolDropSinkWithContext (
   p->AddHeader (header);
 #ifdef INTERFACE_CONTEXT
   *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << context << "(" << interface << ") " 
-                        << *p << std::endl;
+                        << *p << "\n";
 #else
-  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << context << " " << *p << std::endl;
+  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << context << " " << *p << "\n";
 #endif
 }
 
@@ -1055,9 +1055,9 @@ Ipv6L3ProtocolTxSinkWithContext (
 
 #ifdef INTERFACE_CONTEXT
   *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << "(" << interface << ") " 
-                        << *packet << std::endl;
+                        << *packet << "\n";
 #else
-  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << " " << *packet << std::endl;
+  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << " " << *packet << "\n";
 #endif
 }
 
@@ -1086,9 +1086,9 @@ Ipv6L3ProtocolRxSinkWithContext (
 
 #ifdef INTERFACE_CONTEXT
   *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << context << "(" << interface << ") " 
-                        << *packet << std::endl;
+                        << *packet << "\n";
 #else
-  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << context << " " << *packet << std::endl;
+  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << context << " " << *packet << "\n";
 #endif
 }
 

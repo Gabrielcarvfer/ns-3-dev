@@ -41,7 +41,7 @@ DevTxTrace (std::string context, Ptr<const Packet> p)
 {
   if (g_verbose)
     {
-      std::cout << " TX p: " << *p << std::endl;
+      std::cout << " TX p: " << *p << "\n";
     }
 }
 void
@@ -49,7 +49,7 @@ DevRxTrace (std::string context, Ptr<const Packet> p)
 {
   if (g_verbose)
     {
-      std::cout << " RX p: " << *p << std::endl;
+      std::cout << " RX p: " << *p << "\n";
     }
 }
 void
@@ -57,7 +57,7 @@ PhyRxOkTrace (std::string context, Ptr<const Packet> packet, double snr, WifiMod
 {
   if (g_verbose)
     {
-      std::cout << "PHYRXOK mode=" << mode << " snr=" << snr << " " << *packet << std::endl;
+      std::cout << "PHYRXOK mode=" << mode << " snr=" << snr << " " << *packet << "\n";
     }
 }
 void
@@ -65,7 +65,7 @@ PhyRxErrorTrace (std::string context, Ptr<const Packet> packet, double snr)
 {
   if (g_verbose)
     {
-      std::cout << "PHYRXERROR snr=" << snr << " " << *packet << std::endl;
+      std::cout << "PHYRXERROR snr=" << snr << " " << *packet << "\n";
     }
 }
 void
@@ -73,7 +73,7 @@ PhyTxTrace (std::string context, Ptr<const Packet> packet, WifiMode mode, WifiPr
 {
   if (g_verbose)
     {
-      std::cout << "PHYTX mode=" << mode << " " << *packet << std::endl;
+      std::cout << "PHYTX mode=" << mode << " " << *packet << "\n";
     }
 }
 void
@@ -81,7 +81,7 @@ PhyStateTrace (std::string context, Time start, Time duration, WifiPhyState stat
 {
   if (g_verbose)
     {
-      std::cout << " state=" << state << " start=" << start << " duration=" << duration << std::endl;
+      std::cout << " state=" << state << " start=" << start << " duration=" << duration << "\n";
     }
 }
 

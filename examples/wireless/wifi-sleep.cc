@@ -74,7 +74,7 @@ void RemainingEnergyTrace (double oldValue, double newValue)
 
   static std::fstream f (ss.str ().c_str (), std::ios::out);
 
-  f << Simulator::Now ().GetSeconds () << "    remaining energy=" << newValue << std::endl;
+  f << Simulator::Now ().GetSeconds () << "    remaining energy=" << newValue << "\n";
 }
 
 template <int node>
@@ -85,7 +85,7 @@ void PhyStateTrace (std::string context, Time start, Time duration, WifiPhyState
 
   static std::fstream f (ss.str ().c_str (), std::ios::out);
 
-  f << Simulator::Now ().GetSeconds () << "    state=" << state << " start=" << start << " duration=" << duration << std::endl;
+  f << Simulator::Now ().GetSeconds () << "    state=" << state << " start=" << start << " duration=" << duration << "\n";
 }
 
 int main (int argc, char *argv[])

@@ -38,7 +38,7 @@ uint32_t bytesReceived = 0;
 void 
 RxEvent (std::string context, Ptr<const Packet> packet)
 {
-  std::cout << Simulator::Now ().GetSeconds () << "s " << context << " packet size " << packet->GetSize () << std::endl;
+  std::cout << Simulator::Now ().GetSeconds () << "s " << context << " packet size " << packet->GetSize () << "\n";
   bytesReceived += packet->GetSize ();
 }
 
@@ -110,13 +110,13 @@ main (int argc, char *argv[])
   Ptr<CsmaNetDevice> csmaNetDevice = d.Get (0)->GetObject<CsmaNetDevice> ();
   UintegerValue val;
   csmaNetDevice->GetAttribute ("Mtu", val);
-  std::cout << "MTU on device 0 before configuration is " << val.Get () << std::endl;
+  std::cout << "MTU on device 0 before configuration is " << val.Get () << "\n";
   
   Config::Set ("/Names/client/eth0/Mtu", UintegerValue (1234));
 
   // Check the attribute again
   csmaNetDevice->GetAttribute ("Mtu", val);
-  std::cout << "MTU on device 0 after configuration is " << val.Get () << std::endl;
+  std::cout << "MTU on device 0 after configuration is " << val.Get () << "\n";
 
   if (val.Get () != 1234)
     {
@@ -196,7 +196,7 @@ main (int argc, char *argv[])
   //
   csma.EnablePcap ("client-device.pcap", d.Get (0), false, true);
 
-  std::cout << "Running simulation..." << std::endl;
+  std::cout << "Running simulation..." << "\n";
   Simulator::Run ();
   Simulator::Destroy ();
 
@@ -209,7 +209,7 @@ main (int argc, char *argv[])
 
   if (outputValidated == false)
     {
-      std::cerr << "Program internal checking failed; returning with error" << std::endl; 
+      std::cerr << "Program internal checking failed; returning with error" << "\n";
       return (1);
     }
 }

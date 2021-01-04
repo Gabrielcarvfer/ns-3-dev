@@ -75,8 +75,8 @@ public:
 
     routing = routingHelper.GetStaticRouting (ipv6);
 
-    std::cout << "Routing table of " << n << " : " << std::endl;
-    std::cout << "Destination\t\t\t\t" << "Gateway\t\t\t\t\t" << "Interface\t" <<  "Prefix to use" << std::endl;
+    std::cout << "Routing table of " << n << " : " << "\n";
+    std::cout << "Destination\t\t\t\t" << "Gateway\t\t\t\t\t" << "Interface\t" <<  "Prefix to use" << "\n";
 
     nbRoutes = routing->GetNRoutes ();
     for (uint32_t i = 0; i < nbRoutes; i++)
@@ -86,7 +86,7 @@ public:
                   << route.GetGateway () << "\t"
                   << route.GetInterface () << "\t"
                   << route.GetPrefixToUse () << "\t"
-                  << std::endl;
+                  << "\n";
       }
   }
 };

@@ -174,7 +174,7 @@ int main (int argc, char *argv[])
 
   if (throughput > 0)
     {
-      std::cout << "Aggregated throughput: " << throughput << " Mbit/s" << std::endl;
+      std::cout << "Aggregated throughput: " << throughput << " Mbit/s" << "\n";
     }
   else
     {

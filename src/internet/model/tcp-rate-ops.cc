@@ -235,31 +235,31 @@ TcpRateLinux::SkbSent (TcpTxItem *skb, bool isStartOfTransmission)
 std::ostream &
 operator<< (std::ostream & os, TcpRateLinux::TcpRateConnection const & rate)
 {
-  os << "m_delivered      = " << rate.m_delivered       << std::endl;
-  os << "m_deliveredTime  = " << rate.m_deliveredTime   << std::endl;
-  os << "m_firstSentTime  = " << rate.m_firstSentTime   << std::endl;
-  os << "m_appLimited     = " << rate.m_appLimited      << std::endl;
-  os << "m_rateDelivered  = " << rate.m_rateDelivered   << std::endl;
-  os << "m_rateInterval   = " << rate.m_rateInterval    << std::endl;
-  os << "m_rateAppLimited = " << rate.m_rateAppLimited  << std::endl;
-  os << "m_txItemDelivered = " << rate.m_txItemDelivered << std::endl;
+  os << "m_delivered      = " << rate.m_delivered       << "\n";
+  os << "m_deliveredTime  = " << rate.m_deliveredTime   << "\n";
+  os << "m_firstSentTime  = " << rate.m_firstSentTime   << "\n";
+  os << "m_appLimited     = " << rate.m_appLimited      << "\n";
+  os << "m_rateDelivered  = " << rate.m_rateDelivered   << "\n";
+  os << "m_rateInterval   = " << rate.m_rateInterval    << "\n";
+  os << "m_rateAppLimited = " << rate.m_rateAppLimited  << "\n";
+  os << "m_txItemDelivered = " << rate.m_txItemDelivered << "\n";
   return os;
 }
 
 std::ostream &
 operator<< (std::ostream & os, TcpRateLinux::TcpRateSample const & sample)
 {
-  os << "m_deliveryRate  = "  << sample.m_deliveryRate   << std::endl;
-  os << " m_isAppLimited = "  << sample.m_isAppLimited   << std::endl;
-  os << " m_interval     = "  << sample.m_interval       << std::endl;
-  os << " m_delivered    = "  << sample.m_delivered      << std::endl;
-  os << " m_priorDelivered = " << sample.m_priorDelivered << std::endl;
-  os << " m_priorTime    = "  << sample.m_priorTime      << std::endl;
-  os << " m_sendElapsed  = "  << sample.m_sendElapsed    << std::endl;
-  os << " m_ackElapsed   = "  << sample.m_ackElapsed     << std::endl;
-  os << " m_bytesLoss    = "  << sample.m_bytesLoss      << std::endl;
-  os << " m_priorInFlight= "  << sample.m_priorInFlight  << std::endl;
-  os << " m_ackedSacked  = "  << sample.m_ackedSacked    << std::endl;
+  os << "m_deliveryRate  = "  << sample.m_deliveryRate   << "\n";
+  os << " m_isAppLimited = "  << sample.m_isAppLimited   << "\n";
+  os << " m_interval     = "  << sample.m_interval       << "\n";
+  os << " m_delivered    = "  << sample.m_delivered      << "\n";
+  os << " m_priorDelivered = " << sample.m_priorDelivered << "\n";
+  os << " m_priorTime    = "  << sample.m_priorTime      << "\n";
+  os << " m_sendElapsed  = "  << sample.m_sendElapsed    << "\n";
+  os << " m_ackElapsed   = "  << sample.m_ackElapsed     << "\n";
+  os << " m_bytesLoss    = "  << sample.m_bytesLoss      << "\n";
+  os << " m_priorInFlight= "  << sample.m_priorInFlight  << "\n";
+  os << " m_ackedSacked  = "  << sample.m_ackedSacked    << "\n";
   return os;
 }
 

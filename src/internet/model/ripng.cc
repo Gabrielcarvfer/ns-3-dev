@@ -477,11 +477,11 @@ void RipNg::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Unit unit)
   *os << "Node: " << m_ipv6->GetObject<Node> ()->GetId ()
       << ", Time: " << Now().As (unit)
       << ", Local time: " << GetObject<Node> ()->GetLocalTime ().As (unit)
-      << ", IPv6 RIPng table" << std::endl;
+      << ", IPv6 RIPng table" << "\n";
 
   if (!m_routes.empty ())
     {
-      *os << "Destination                    Next Hop                   Flag Met Ref Use If" << std::endl;
+      *os << "Destination                    Next Hop                   Flag Met Ref Use If" << "\n";
       for (RoutesCI it = m_routes.begin (); it != m_routes.end (); it++)
         {
           RipNgRoutingTableEntry* route = it->first;
@@ -518,11 +518,11 @@ void RipNg::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Unit unit)
                 {
                   *os << route->GetInterface ();
                 }
-              *os << std::endl;
+              *os << "\n";
             }
         }
     }
-  *os << std::endl;
+  *os << "\n";
 }
 
 void RipNg::DoDispose ()

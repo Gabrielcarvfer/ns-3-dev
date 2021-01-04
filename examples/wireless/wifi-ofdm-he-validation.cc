@@ -68,7 +68,7 @@ int main (int argc, char *argv[])
 
   for (uint32_t i = 0; i < modes.size (); i++)
     {
-      std::cout << modes[i] << std::endl;
+      std::cout << modes[i] << "\n";
       Gnuplot2dDataset yansdataset (modes[i]);
       Gnuplot2dDataset nistdataset (modes[i]);
       Gnuplot2dDataset tabledataset (modes[i]);

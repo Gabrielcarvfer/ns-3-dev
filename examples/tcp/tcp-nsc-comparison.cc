@@ -204,7 +204,7 @@ main (int argc, char *argv[])
       std::cout << "Rx(" << i << ") = " << pktsink->GetTotalRx () <<
       " bytes (" << pktsink->GetTotalRx () * 8 / (stopTime - startTime) << " bps), ";
     }
-  std::cout << std::endl;
+  std::cout << "\n";
 
   Simulator::Destroy ();
   return 0;

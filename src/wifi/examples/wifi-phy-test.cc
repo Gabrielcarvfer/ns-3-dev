@@ -337,7 +337,7 @@ static void PrintPsr (int argc, char *argv[])
   double psr = output.received;
   psr /= input.nPackets;
 
-  std::cout << psr << std::endl;
+  std::cout << psr << "\n";
 }
 
 double CalcPsr (struct PsrExperiment::Output output, struct PsrExperiment::Input input)
@@ -395,7 +395,7 @@ static void PrintPsrVsDistance (int argc, char *argv[])
       output = experiment.Run (input);
       std::cout << " " << CalcPsr (output, input);
 
-      std::cout << std::endl;
+      std::cout << "\n";
     }
 }
 
@@ -432,7 +432,7 @@ static void PrintSizeVsRange (int argc, char *argv[])
               high = middle;
             }
         }
-      std::cout << input.packetSize << " " << input.distance << std::endl;
+      std::cout << input.packetSize << " " << input.distance << "\n";
     }
 }
 
@@ -454,7 +454,7 @@ static void PrintPsrVsCollisionInterval (int argc, char *argv[])
       output = experiment.Run (input);
       double perA = (output.receivedA + 0.0) / (input.nPackets + 0.0);
       double perB = (output.receivedB + 0.0) / (input.nPackets + 0.0);
-      std::cout << i << " " << perA << " " << perB << std::endl;
+      std::cout << i << " " << perA << " " << perB << "\n";
     }
   for (uint32_t i = 100; i < 4000; i += 50)
     {
@@ -464,7 +464,7 @@ static void PrintPsrVsCollisionInterval (int argc, char *argv[])
       output = experiment.Run (input);
       double perA = (output.receivedA + 0.0) / (input.nPackets + 0.0);
       double perB = (output.receivedB + 0.0) / (input.nPackets + 0.0);
-      std::cout << i << " " << perA << " " << perB << std::endl;
+      std::cout << i << " " << perA << " " << perB << "\n";
     }
 }
 
@@ -478,7 +478,7 @@ int main (int argc, char *argv[])
                 << "SizeVsRange "
                 << "PsrVsDistance "
                 << "PsrVsCollisionInterval "
-                << std::endl;
+                << "\n";
       return 0;
     }
   std::string type = argv[1];
@@ -503,7 +503,7 @@ int main (int argc, char *argv[])
     }
   else
     {
-      std::cout << "Wrong arguments!" << std::endl;
+      std::cout << "Wrong arguments!" << "\n";
     }
 
   return 0;

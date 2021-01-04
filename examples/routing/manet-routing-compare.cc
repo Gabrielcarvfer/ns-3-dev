@@ -165,7 +165,7 @@ RoutingExperiment::CheckThroughput ()
       << m_nSinks << ","
       << m_protocolName << ","
       << m_txp << ""
-      << std::endl;
+      << "\n";
 
   out.close ();
   packetsReceived = 0;
@@ -209,7 +209,7 @@ main (int argc, char *argv[])
   "NumberOfSinks," <<
   "RoutingProtocol," <<
   "TransmissionPower" <<
-  std::endl;
+  "\n";
   out.close ();
 
   int nSinks = 10;

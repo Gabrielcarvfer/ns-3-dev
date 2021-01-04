@@ -53,13 +53,13 @@ operator<< (std::ostream& os, const CandidateQueue& q)
   typedef List_t::const_iterator CIter_t;
   const CandidateQueue::CandidateList_t& list = q.m_candidates;
 
-  os << "*** CandidateQueue Begin (<id, distance, LSA-type>) ***" << std::endl;
+  os << "*** CandidateQueue Begin (<id, distance, LSA-type>) ***" << "\n";
   for (CIter_t iter = list.begin (); iter != list.end (); iter++)
     {
       os << "<" 
       << (*iter)->GetVertexId () << ", "
       << (*iter)->GetDistanceFromRoot () << ", "
-      << (*iter)->GetVertexType () << ">" << std::endl;
+      << (*iter)->GetVertexType () << ">" << "\n";
     }
   os << "*** CandidateQueue End ***";
   return os;

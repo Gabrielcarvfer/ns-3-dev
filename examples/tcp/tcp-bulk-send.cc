@@ -132,5 +132,5 @@ main (int argc, char *argv[])
   NS_LOG_INFO ("Done.");
 
   Ptr<PacketSink> sink1 = DynamicCast<PacketSink> (sinkApps.Get (0));
-  std::cout << "Total Bytes Received: " << sink1->GetTotalRx () << std::endl;
+  std::cout << "Total Bytes Received: " << sink1->GetTotalRx () << "\n";
 }

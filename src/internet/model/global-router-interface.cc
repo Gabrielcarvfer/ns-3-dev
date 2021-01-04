@@ -404,8 +404,8 @@ void
 GlobalRoutingLSA::Print (std::ostream &os) const
 {
   NS_LOG_FUNCTION (this << &os);
-  os << std::endl;
-  os << "========== Global Routing LSA ==========" << std::endl;
+  os << "\n";
+  os << "========== Global Routing LSA ==========" << "\n";
   os << "m_lsType = " << m_lsType;
   if (m_lsType == GlobalRoutingLSA::RouterLSA) 
     {
@@ -423,10 +423,10 @@ GlobalRoutingLSA::Print (std::ostream &os) const
     {
       os << "(Unknown LSType)";
     }
-  os << std::endl;
+  os << "\n";
 
-  os << "m_linkStateId = " << m_linkStateId << " (Router ID)" << std::endl;
-  os << "m_advertisingRtr = " << m_advertisingRtr << " (Router ID)" << std::endl;
+  os << "m_linkStateId = " << m_linkStateId << " (Router ID)" << "\n";
+  os << "m_advertisingRtr = " << m_advertisingRtr << " (Router ID)" << "\n";
 
   if (m_lsType == GlobalRoutingLSA::RouterLSA) 
     {
@@ -436,61 +436,61 @@ GlobalRoutingLSA::Print (std::ostream &os) const
         {
           GlobalRoutingLinkRecord *p = *i;
 
-          os << "---------- RouterLSA Link Record ----------" << std::endl;
+          os << "---------- RouterLSA Link Record ----------" << "\n";
           os << "m_linkType = " << p->m_linkType;
           if (p->m_linkType == GlobalRoutingLinkRecord::PointToPoint)
             {
-              os << " (GlobalRoutingLinkRecord::PointToPoint)" << std::endl;
-              os << "m_linkId = " << p->m_linkId << std::endl;
-              os << "m_linkData = " << p->m_linkData << std::endl;
-              os << "m_metric = " << p->m_metric << std::endl;
+              os << " (GlobalRoutingLinkRecord::PointToPoint)" << "\n";
+              os << "m_linkId = " << p->m_linkId << "\n";
+              os << "m_linkData = " << p->m_linkData << "\n";
+              os << "m_metric = " << p->m_metric << "\n";
             }
           else if (p->m_linkType == GlobalRoutingLinkRecord::TransitNetwork)
             {
-              os << " (GlobalRoutingLinkRecord::TransitNetwork)" << std::endl;
-              os << "m_linkId = " << p->m_linkId << " (Designated router for network)" << std::endl;
-              os << "m_linkData = " << p->m_linkData << " (This router's IP address)" << std::endl;
-              os << "m_metric = " << p->m_metric << std::endl;
+              os << " (GlobalRoutingLinkRecord::TransitNetwork)" << "\n";
+              os << "m_linkId = " << p->m_linkId << " (Designated router for network)" << "\n";
+              os << "m_linkData = " << p->m_linkData << " (This router's IP address)" << "\n";
+              os << "m_metric = " << p->m_metric << "\n";
             }
           else if (p->m_linkType == GlobalRoutingLinkRecord::StubNetwork)
             {
-              os << " (GlobalRoutingLinkRecord::StubNetwork)" << std::endl;
-              os << "m_linkId = " << p->m_linkId << " (Network number of attached network)" << std::endl;
-              os << "m_linkData = " << p->m_linkData << " (Network mask of attached network)" << std::endl;
-              os << "m_metric = " << p->m_metric << std::endl;
+              os << " (GlobalRoutingLinkRecord::StubNetwork)" << "\n";
+              os << "m_linkId = " << p->m_linkId << " (Network number of attached network)" << "\n";
+              os << "m_linkData = " << p->m_linkData << " (Network mask of attached network)" << "\n";
+              os << "m_metric = " << p->m_metric << "\n";
             }
           else
             {
-              os << " (Unknown LinkType)" << std::endl;
-              os << "m_linkId = " << p->m_linkId << std::endl;
-              os << "m_linkData = " << p->m_linkData << std::endl;
-              os << "m_metric = " << p->m_metric << std::endl;
+              os << " (Unknown LinkType)" << "\n";
+              os << "m_linkId = " << p->m_linkId << "\n";
+              os << "m_linkData = " << p->m_linkData << "\n";
+              os << "m_metric = " << p->m_metric << "\n";
             }
-          os << "---------- End RouterLSA Link Record ----------" << std::endl;
+          os << "---------- End RouterLSA Link Record ----------" << "\n";
         }
     }
   else if (m_lsType == GlobalRoutingLSA::NetworkLSA) 
     {
-      os << "---------- NetworkLSA Link Record ----------" << std::endl;
-      os << "m_networkLSANetworkMask = " << m_networkLSANetworkMask << std::endl;
+      os << "---------- NetworkLSA Link Record ----------" << "\n";
+      os << "m_networkLSANetworkMask = " << m_networkLSANetworkMask << "\n";
       for ( ListOfAttachedRouters_t::const_iterator i = m_attachedRouters.begin (); i != m_attachedRouters.end (); i++)
         {
           Ipv4Address p = *i;
-          os << "attachedRouter = " << p << std::endl;
+          os << "attachedRouter = " << p << "\n";
         }
-      os << "---------- End NetworkLSA Link Record ----------" << std::endl;
+      os << "---------- End NetworkLSA Link Record ----------" << "\n";
     }
   else if (m_lsType == GlobalRoutingLSA::ASExternalLSAs)
     {
-      os << "---------- ASExternalLSA Link Record --------" << std::endl;
-      os << "m_linkStateId = " << m_linkStateId << std::endl;
-      os << "m_networkLSANetworkMask = " << m_networkLSANetworkMask << std::endl;
+      os << "---------- ASExternalLSA Link Record --------" << "\n";
+      os << "m_linkStateId = " << m_linkStateId << "\n";
+      os << "m_networkLSANetworkMask = " << m_networkLSANetworkMask << "\n";
     }
   else 
     {
       NS_ASSERT_MSG (0, "Illegal LSA LSType: " << m_lsType);
     }
-  os << "========== End Global Routing LSA ==========" << std::endl;
+  os << "========== End Global Routing LSA ==========" << "\n";
 }
 
 std::ostream& operator<< (std::ostream& os, GlobalRoutingLSA& lsa)

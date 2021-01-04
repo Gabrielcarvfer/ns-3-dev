@@ -323,7 +323,7 @@ int main (int argc, char *argv[])
 
   if (steps == 0)
     {
-      std::cout << "Exiting without running simulation; steps value of 0" << std::endl;
+      std::cout << "Exiting without running simulation; steps value of 0" << "\n";
     }
 
   uint32_t simuTime = (steps + 1) * stepsTime;

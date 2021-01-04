@@ -182,7 +182,7 @@ int main (int argc, char *argv[])
 
   for (uint32_t i = 0; i < modes.size (); i++)
     {
-      std::cout << modes[i] << std::endl;
+      std::cout << modes[i] << "\n";
       Gnuplot2dDataset dataset (modes[i]);
 
       for (double rss = -102.0; rss <= -80.0; rss += 0.5)

@@ -1024,7 +1024,7 @@ MinstrelWifiManager::PrintSampleTable (MinstrelWifiRemoteStation *station)
         {
           table << station->m_sampleTable[i][j] << "\t";
         }
-      table << std::endl;
+      table << "\n";
     }
   NS_LOG_DEBUG (table.str ());
 }

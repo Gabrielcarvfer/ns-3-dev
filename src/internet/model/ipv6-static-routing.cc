@@ -87,11 +87,11 @@ Ipv6StaticRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Uni
   *os << "Node: " << m_ipv6->GetObject<Node> ()->GetId ()
       << ", Time: " << Now().As (unit)
       << ", Local time: " << m_ipv6->GetObject<Node> ()->GetLocalTime ().As (unit)
-      << ", Ipv6StaticRouting table" << std::endl;
+      << ", Ipv6StaticRouting table" << "\n";
 
   if (GetNRoutes () > 0)
     {
-      *os << "Destination                    Next Hop                   Flag Met Ref Use If" << std::endl;
+      *os << "Destination                    Next Hop                   Flag Met Ref Use If" << "\n";
       for (uint32_t j = 0; j < GetNRoutes (); j++)
         {
           std::ostringstream dest, gw, mask, flags;
@@ -123,10 +123,10 @@ Ipv6StaticRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Uni
             {
               *os << route.GetInterface ();
             }
-          *os << std::endl;
+          *os << "\n";
         }
     }
-  *os << std::endl;
+  *os << "\n";
 }
 
 void Ipv6StaticRouting::AddHostRouteTo (Ipv6Address dst, Ipv6Address nextHop, uint32_t interface, Ipv6Address prefixToUse, uint32_t metric)

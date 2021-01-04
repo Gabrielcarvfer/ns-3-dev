@@ -406,11 +406,11 @@ Ipv4GlobalRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Uni
   *os << "Node: " << m_ipv4->GetObject<Node> ()->GetId ()
       << ", Time: " << Now().As (unit)
       << ", Local time: " << m_ipv4->GetObject<Node> ()->GetLocalTime ().As (unit)
-      << ", Ipv4GlobalRouting table" << std::endl;
+      << ", Ipv4GlobalRouting table" << "\n";
 
   if (GetNRoutes () > 0)
     {
-      *os << "Destination     Gateway         Genmask         Flags Metric Ref    Use Iface" << std::endl;
+      *os << "Destination     Gateway         Genmask         Flags Metric Ref    Use Iface" << "\n";
       for (uint32_t j = 0; j < GetNRoutes (); j++)
         {
           std::ostringstream dest, gw, mask, flags;
@@ -445,10 +445,10 @@ Ipv4GlobalRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Uni
             {
               *os << route.GetInterface ();
             }
-          *os << std::endl;
+          *os << "\n";
         }
     }
-  *os << std::endl;
+  *os << "\n";
 }
 
 Ptr<Ipv4Route>

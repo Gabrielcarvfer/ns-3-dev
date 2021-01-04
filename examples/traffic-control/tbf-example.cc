@@ -54,13 +54,13 @@ NS_LOG_COMPONENT_DEFINE ("TbfExample");
 void
 FirstBucketTokensTrace (uint32_t oldValue, uint32_t newValue)
 {
-  std::cout << "FirstBucketTokens " << oldValue << " to " << newValue << std::endl;
+  std::cout << "FirstBucketTokens " << oldValue << " to " << newValue << "\n";
 }
 
 void
 SecondBucketTokensTrace (uint32_t oldValue, uint32_t newValue)
 {
-  std::cout << "SecondBucketTokens " << oldValue << " to " << newValue << std::endl;
+  std::cout << "SecondBucketTokens " << oldValue << " to " << newValue << "\n";
 }
 
 int
@@ -143,7 +143,7 @@ main (int argc, char *argv[])
 
   Simulator::Destroy ();
 
-  std::cout << std::endl << "*** TC Layer statistics ***" << std::endl;
-  std::cout << q->GetStats () << std::endl;
+  std::cout << "\n" << "*** TC Layer statistics ***" << "\n";
+  std::cout << q->GetStats () << "\n";
   return 0;
 }

@@ -57,7 +57,7 @@ int main (int argc, char *argv[])
 
   if (MaxNodes < 2)
     {
-      std::cerr << "--nodes: must be >= 2" << std::endl;
+      std::cerr << "--nodes: must be >= 2" << "\n";
       return 1;
     }
   csma.SetChannelAttribute ("DataRate", DataRateValue (DataRate (100 * 1000 * 1000)));

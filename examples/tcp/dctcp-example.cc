@@ -118,7 +118,7 @@ std::vector<uint64_t> rxS3R1Bytes;
 void
 PrintProgress (Time interval)
 {
-  std::cout << "Progress to " << std::fixed << std::setprecision (1) << Simulator::Now ().GetSeconds () << " seconds simulation time" << std::endl;
+  std::cout << "Progress to " << std::fixed << std::setprecision (1) << Simulator::Now ().GetSeconds () << " seconds simulation time" << "\n";
   Simulator::Schedule (interval, &PrintProgress, interval);
 }
 
@@ -162,15 +162,15 @@ PrintThroughput (Time measurementWindow)
 {
   for (std::size_t i = 0; i < 10; i++)
     {
-      rxS1R1Throughput << measurementWindow.GetSeconds () << "s " << i << " " << (rxS1R1Bytes[i] * 8) / (measurementWindow.GetSeconds ()) / 1e6 << std::endl;
+      rxS1R1Throughput << measurementWindow.GetSeconds () << "s " << i << " " << (rxS1R1Bytes[i] * 8) / (measurementWindow.GetSeconds ()) / 1e6 << "\n";
     }
   for (std::size_t i = 0; i < 20; i++)
     {
-      rxS2R2Throughput << Simulator::Now ().GetSeconds () << "s " << i << " " << (rxS2R2Bytes[i] * 8) / (measurementWindow.GetSeconds ()) / 1e6 << std::endl;
+      rxS2R2Throughput << Simulator::Now ().GetSeconds () << "s " << i << " " << (rxS2R2Bytes[i] * 8) / (measurementWindow.GetSeconds ()) / 1e6 << "\n";
     }
   for (std::size_t i = 0; i < 10; i++)
     {
-      rxS3R1Throughput << Simulator::Now ().GetSeconds () << "s " << i << " " << (rxS3R1Bytes[i] * 8) / (measurementWindow.GetSeconds ()) / 1e6 << std::endl;
+      rxS3R1Throughput << Simulator::Now ().GetSeconds () << "s " << i << " " << (rxS3R1Bytes[i] * 8) / (measurementWindow.GetSeconds ()) / 1e6 << "\n";
     }
 }
 
@@ -191,7 +191,7 @@ PrintFairness (Time measurementWindow)
   fairness = static_cast<double> (sum * sum) / (10 * sumSquares);
   fairnessIndex << "Average throughput for S1-R1 flows: "
                 << std::fixed << std::setprecision (2) << average << " Mbps; fairness: "
-                << std::fixed << std::setprecision (3) << fairness << std::endl;
+                << std::fixed << std::setprecision (3) << fairness << "\n";
   average = 0;
   sumSquares = 0;
   sum = 0;
@@ -205,7 +205,7 @@ PrintFairness (Time measurementWindow)
   fairness = static_cast<double> (sum * sum) / (20 * sumSquares);
   fairnessIndex << "Average throughput for S2-R2 flows: "
                 << std::fixed << std::setprecision (2) << average << " Mbps; fairness: "
-                << std::fixed << std::setprecision (3) << fairness << std::endl;
+                << std::fixed << std::setprecision (3) << fairness << "\n";
   average = 0;
   sumSquares = 0;
   sum = 0;
@@ -219,7 +219,7 @@ PrintFairness (Time measurementWindow)
   fairness = static_cast<double> (sum * sum) / (10 * sumSquares);
   fairnessIndex << "Average throughput for S3-R1 flows: "
                 << std::fixed << std::setprecision (2) << average << " Mbps; fairness: "
-                << std::fixed << std::setprecision (3) << fairness << std::endl;
+                << std::fixed << std::setprecision (3) << fairness << "\n";
   sum = 0;
   for (std::size_t i = 0; i < 10; i++)
     {
@@ -229,7 +229,7 @@ PrintFairness (Time measurementWindow)
     {
       sum += rxS2R2Bytes[i];
     }
-  fairnessIndex << "Aggregate user-level throughput for flows through T1: " << static_cast<double> (sum * 8) / 1e9 << " Gbps" << std::endl;
+  fairnessIndex << "Aggregate user-level throughput for flows through T1: " << static_cast<double> (sum * 8) / 1e9 << " Gbps" << "\n";
   sum = 0;
   for (std::size_t i = 0; i < 10; i++)
     {
@@ -239,7 +239,7 @@ PrintFairness (Time measurementWindow)
     {
       sum += rxS1R1Bytes[i];
     }
-  fairnessIndex << "Aggregate user-level throughput for flows to R1: " << static_cast<double> (sum * 8) / 1e9 << " Gbps" << std::endl;
+  fairnessIndex << "Aggregate user-level throughput for flows to R1: " << static_cast<double> (sum * 8) / 1e9 << " Gbps" << "\n";
 }
 
 void
@@ -249,7 +249,7 @@ CheckT1QueueSize (Ptr<QueueDisc> queue)
   uint32_t qSize = queue->GetNPackets ();
   Time backlog = Seconds (static_cast<double> (qSize * 1500 * 8) / 1e10); // 10 Gb/s
   // report size in units of packets and ms
-  t1QueueLength << std::fixed << std::setprecision (2) << Simulator::Now ().GetSeconds () << " " << qSize << " " << backlog.GetMicroSeconds () << std::endl;
+  t1QueueLength << std::fixed << std::setprecision (2) << Simulator::Now ().GetSeconds () << " " << qSize << " " << backlog.GetMicroSeconds () << "\n";
   // check queue size every 1/100 of a second
   Simulator::Schedule (MilliSeconds (10), &CheckT1QueueSize, queue);
 }
@@ -260,7 +260,7 @@ CheckT2QueueSize (Ptr<QueueDisc> queue)
   uint32_t qSize = queue->GetNPackets ();
   Time backlog = Seconds (static_cast<double> (qSize * 1500 * 8) / 1e9); // 1 Gb/s
   // report size in units of packets and ms
-  t2QueueLength << std::fixed << std::setprecision (2) << Simulator::Now ().GetSeconds () << " " << qSize << " " << backlog.GetMicroSeconds () << std::endl;
+  t2QueueLength << std::fixed << std::setprecision (2) << Simulator::Now ().GetSeconds () << " " << qSize << " " << backlog.GetMicroSeconds () << "\n";
   // check queue size every 1/100 of a second
   Simulator::Schedule (MilliSeconds (10), &CheckT2QueueSize, queue);
 }
@@ -519,16 +519,16 @@ int main (int argc, char *argv[])
     }
 
   rxS1R1Throughput.open ("dctcp-example-s1-r1-throughput.dat", std::ios::out);
-  rxS1R1Throughput << "#Time(s) flow thruput(Mb/s)" << std::endl;
+  rxS1R1Throughput << "#Time(s) flow thruput(Mb/s)" << "\n";
   rxS2R2Throughput.open ("dctcp-example-s2-r2-throughput.dat", std::ios::out);
-  rxS2R2Throughput << "#Time(s) flow thruput(Mb/s)" << std::endl;
+  rxS2R2Throughput << "#Time(s) flow thruput(Mb/s)" << "\n";
   rxS3R1Throughput.open ("dctcp-example-s3-r1-throughput.dat", std::ios::out);
-  rxS3R1Throughput << "#Time(s) flow thruput(Mb/s)" << std::endl;
+  rxS3R1Throughput << "#Time(s) flow thruput(Mb/s)" << "\n";
   fairnessIndex.open ("dctcp-example-fairness.dat", std::ios::out);
   t1QueueLength.open ("dctcp-example-t1-length.dat", std::ios::out);
-  t1QueueLength << "#Time(s) qlen(pkts) qlen(us)" << std::endl;
+  t1QueueLength << "#Time(s) qlen(pkts) qlen(us)" << "\n";
   t2QueueLength.open ("dctcp-example-t2-length.dat", std::ios::out);
-  t2QueueLength << "#Time(s) qlen(pkts) qlen(us)" << std::endl;
+  t2QueueLength << "#Time(s) qlen(pkts) qlen(us)" << "\n";
   for (std::size_t i = 0; i < 10; i++)
     {
       s1r1Sinks[i]->TraceConnectWithoutContext ("Rx", MakeBoundCallback (&TraceS1R1Sink, i));

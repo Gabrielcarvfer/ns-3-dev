@@ -497,11 +497,11 @@ void Rip::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Unit unit) c
   *os << "Node: " << m_ipv4->GetObject<Node> ()->GetId ()
       << ", Time: " << Now().As (unit)
       << ", Local time: " << GetObject<Node> ()->GetLocalTime ().As (unit)
-      << ", IPv4 RIP table" << std::endl;
+      << ", IPv4 RIP table" << "\n";
 
   if (!m_routes.empty ())
     {
-      *os << "Destination     Gateway         Genmask         Flags Metric Ref    Use Iface" << std::endl;
+      *os << "Destination     Gateway         Genmask         Flags Metric Ref    Use Iface" << "\n";
       for (RoutesCI it = m_routes.begin (); it != m_routes.end (); it++)
         {
           RipRoutingTableEntry* route = it->first;
@@ -539,11 +539,11 @@ void Rip::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Unit unit) c
                 {
                   *os << route->GetInterface ();
                 }
-              *os << std::endl;
+              *os << "\n";
             }
         }
     }
-  *os << std::endl;
+  *os << "\n";
 }
 
 void Rip::DoDispose ()

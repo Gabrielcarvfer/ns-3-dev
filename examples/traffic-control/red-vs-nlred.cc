@@ -65,7 +65,7 @@ int main (int argc, char *argv[])
 
   if ((queueDiscType != "RED") && (queueDiscType != "NLRED"))
     {
-      std::cout << "Invalid queue disc type: Use --queueDiscType=RED or --queueDiscType=NLRED" << std::endl;
+      std::cout << "Invalid queue disc type: Use --queueDiscType=RED or --queueDiscType=NLRED" << "\n";
       exit (1);
     }
 
@@ -164,26 +164,26 @@ int main (int argc, char *argv[])
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
-  std::cout << "Running the simulation" << std::endl;
+  std::cout << "Running the simulation" << "\n";
   Simulator::Run ();
 
   QueueDisc::Stats st = queueDiscs.Get (0)->GetStats ();
 
   if (st.GetNDroppedPackets (RedQueueDisc::UNFORCED_DROP) == 0)
     {
-      std::cout << "There should be some unforced drops" << std::endl;
+      std::cout << "There should be some unforced drops" << "\n";
       exit (1);
     }
 
   if (st.GetNDroppedPackets (QueueDisc::INTERNAL_QUEUE_DROP) != 0)
     {
-      std::cout << "There should be zero drops due to queue full" << std::endl;
+      std::cout << "There should be zero drops due to queue full" << "\n";
       exit (1);
     }
 
-  std::cout << "*** Stats from the bottleneck queue disc ***" << std::endl;
-  std::cout << st << std::endl;
-  std::cout << "Destroying the simulation" << std::endl;
+  std::cout << "*** Stats from the bottleneck queue disc ***" << "\n";
+  std::cout << st << "\n";
+  std::cout << "Destroying the simulation" << "\n";
 
   Simulator::Destroy ();
   return 0;

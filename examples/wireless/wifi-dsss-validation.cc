@@ -56,7 +56,7 @@ int main (int argc, char *argv[])
 
   for (uint32_t i = 0; i < modes.size (); i++)
     {
-      std::cout << modes[i] << std::endl;
+      std::cout << modes[i] << "\n";
       Gnuplot2dDataset dataset (modes[i]);
       txVector.SetMode (modes[i]);
 
@@ -71,7 +71,7 @@ int main (int argc, char *argv[])
           double psNist = nist->GetChunkSuccessRate (WifiMode (modes[i]), txVector, std::pow (10.0, snr / 10.0), FrameSize * 8);
           if (psNist < 0.0 || psNist > 1.0)
             {
-              std::cout<<psNist<<std::endl;
+              std::cout<<psNist<<"\n";
               //error
               exit (1);
             }

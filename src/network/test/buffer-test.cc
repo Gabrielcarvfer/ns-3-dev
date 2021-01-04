@@ -89,7 +89,7 @@ BufferTest::EnsureWrittenBytes (Buffer b, uint32_t n, uint8_t array[], const cha
         {
           failure << (uint16_t)got[j] << " ";
         }
-      failure << std::endl;
+      failure << "\n";
       NS_TEST_ASSERT_MSG_EQ_INTERNAL (true, false, failure.str (), file, line);
     }
 }

@@ -150,7 +150,7 @@ TxDurationTest::CheckPayloadDuration (uint32_t size, WifiMode payloadMode, uint1
                 << " datarate=" << payloadMode.GetDataRate (channelWidth, guardInterval, 1)
                 << " known=" << knownDuration
                 << " calculated=" << calculatedDuration
-                << std::endl;
+                << "\n";
       return false;
     }
   if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_HT || payloadMode.GetModulationClass () == WIFI_MOD_CLASS_HE)
@@ -168,7 +168,7 @@ TxDurationTest::CheckPayloadDuration (uint32_t size, WifiMode payloadMode, uint1
                     << " datarate=" << payloadMode.GetDataRate (channelWidth, guardInterval, 1)
                     << " known=" << knownDuration
                     << " calculated=" << calculatedDuration
-                    << std::endl;
+                    << "\n";
           return false;
         }
     }
@@ -209,7 +209,7 @@ TxDurationTest::CheckTxDuration (uint32_t size, WifiMode payloadMode, uint16_t c
                 << " known=" << knownDuration
                 << " calculated=" << calculatedDuration
                 << " calculatedUsingList=" << calculatedDurationUsingList
-                << std::endl;
+                << "\n";
       return false;
     }
   if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_HT || payloadMode.GetModulationClass () == WIFI_MOD_CLASS_HE)
@@ -231,7 +231,7 @@ TxDurationTest::CheckTxDuration (uint32_t size, WifiMode payloadMode, uint16_t c
                     << " known=" << knownDuration
                     << " calculated=" << calculatedDuration
                     << " calculatedUsingList=" << calculatedDurationUsingList
-                    << std::endl;
+                    << "\n";
           return false;
         }
     }

@@ -336,7 +336,7 @@ int main (int argc, char *argv[])
 
   if (input.xA >= 0 || input.xB <= 0)
     {
-      std::cout << "Value of xA must be smaller than 0 and value of xB must be bigger than 0!" << std::endl;
+      std::cout << "Value of xA must be smaller than 0 and value of xB must be bigger than 0!" << "\n";
       return 0;
     }
 
@@ -407,7 +407,7 @@ int main (int argc, char *argv[])
     }
   else
     {
-      std::cout << "Preamble does not exist or is not compatible with the selected standard!" << std::endl;
+      std::cout << "Preamble does not exist or is not compatible with the selected standard!" << "\n";
       return 0;
     }
 

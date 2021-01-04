@@ -80,7 +80,7 @@ int main (int argc, char** argv)
       freq = 5180;
       if (bw != 20)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
@@ -94,7 +94,7 @@ int main (int argc, char** argv)
       dataDuration = MicroSeconds (600);
       if (bw != 10)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
@@ -108,7 +108,7 @@ int main (int argc, char** argv)
       dataDuration = MicroSeconds (1200);
       if (bw != 5)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
@@ -122,7 +122,7 @@ int main (int argc, char** argv)
       dataDuration = MicroSeconds (400);
       if (bw != 20 && bw != 40)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
@@ -135,7 +135,7 @@ int main (int argc, char** argv)
       dataStartTime = MicroSeconds (1000);
       if (bw != 20 && bw != 40)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
@@ -149,7 +149,7 @@ int main (int argc, char** argv)
       dataDuration += MicroSeconds (400); //account for ADDBA procedure
       if (bw != 20 && bw != 40 && bw != 80 && bw != 160)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
@@ -163,7 +163,7 @@ int main (int argc, char** argv)
       dataDuration += MicroSeconds (2000); //account for ADDBA procedure
       if (bw != 20 && bw != 40 && bw != 80)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
@@ -177,13 +177,13 @@ int main (int argc, char** argv)
       dataDuration += MicroSeconds (500); //account for ADDBA procedure
       if (bw != 20 && bw != 40 && bw != 80 && bw != 160)
         {
-          std::cout << "Bandwidth is not compatible with standard" << std::endl;
+          std::cout << "Bandwidth is not compatible with standard" << "\n";
           return 1;
         }
     }
   else
     {
-      std::cout << "Unknown OFDM standard (please refer to the listed possible values)" << std::endl;
+      std::cout << "Unknown OFDM standard (please refer to the listed possible values)" << "\n";
       return 1;
     }
 
@@ -321,9 +321,9 @@ int main (int argc, char** argv)
 
   Simulator::Destroy ();
 
-  std::cout << "Simulation done!" << std::endl;
-  std::cout << "See spectrum analyzer output file: " << ossFileName.str () << ".tr" << std::endl;
-  std::cout << "To generate plot simply execute the following command: gnuplot " << ossFileName.str () << ".plt" << std::endl;
+  std::cout << "Simulation done!" << "\n";
+  std::cout << "See spectrum analyzer output file: " << ossFileName.str () << ".tr" << "\n";
+  std::cout << "To generate plot simply execute the following command: gnuplot " << ossFileName.str () << ".plt" << "\n";
 
   return 0;
 }

@@ -66,17 +66,17 @@ public:
 
     std::cout << "Node: " << ipv6->GetObject<Node> ()->GetId ()
         << " Time: " << Simulator::Now ().GetSeconds () << "s "
-        << "IPv6 addresses" << std::endl;
-    std::cout << "(Interface index, Address index)\t" << "IPv6 Address" << std::endl;
+        << "IPv6 addresses" << "\n";
+    std::cout << "(Interface index, Address index)\t" << "IPv6 Address" << "\n";
 
     for (uint32_t i = 0; i < nInterfaces; i++)
       {
         for (uint32_t j = 0; j < ipv6->GetNAddresses(i); j++)
           {
-            std::cout << "(" << int(i) << "," << int(j) << ")\t" << ipv6->GetAddress(i,j) << std::endl;
+            std::cout << "(" << int(i) << "," << int(j) << ")\t" << ipv6->GetAddress(i,j) << "\n";
           }
       }
-    std::cout << std::endl;
+    std::cout << "\n";
   }
 };
 

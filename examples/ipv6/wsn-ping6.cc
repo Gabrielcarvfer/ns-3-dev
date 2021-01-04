@@ -89,8 +89,8 @@ int main (int argc, char **argv)
   NetDeviceContainer devContainer = lrWpanHelper.Install(nodes);
   lrWpanHelper.AssociateToPan (devContainer, 10);
 
-  std::cout << "Created " << devContainer.GetN() << " devices" << std::endl;
-  std::cout << "There are " << nodes.GetN() << " nodes" << std::endl;
+  std::cout << "Created " << devContainer.GetN() << " devices" << "\n";
+  std::cout << "There are " << nodes.GetN() << " nodes" << "\n";
 
   /* Install IPv4/IPv6 stack */
   NS_LOG_INFO ("Install Internet stack.");

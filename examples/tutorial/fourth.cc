@@ -51,7 +51,7 @@ public:
 void
 IntTrace (int32_t oldValue, int32_t newValue)
 {
-  std::cout << "Traced " << oldValue << " to " << newValue << std::endl;
+  std::cout << "Traced " << oldValue << " to " << newValue << "\n";
 }
 
 int

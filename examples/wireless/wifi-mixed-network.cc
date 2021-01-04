@@ -126,7 +126,7 @@ Experiment::Run (Parameters params)
             << "\n\t nNonGreenfieldHasTraffic=" << params.nNonGreenfieldHasTraffic
             << "\n\t nWifiNGreenfield=" << params.nWifiNGreenfield
             << "\n\t nGreenfieldHasTraffic=" << params.nGreenfieldHasTraffic
-            << std::endl;
+            << "\n";
 
   Config::SetDefault ("ns3::WifiRemoteStationManager::ErpProtectionMode", StringValue (params.erpProtectionMode));
 
@@ -421,7 +421,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "g only with short slot time enabled";
   params.enableErpProtection = false;
@@ -434,7 +434,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed b/g with all g features disabled";
   params.enableErpProtection = false;
@@ -447,7 +447,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed b/g with short plcp preamble enabled";
   params.enableErpProtection = false;
@@ -460,7 +460,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed b/g with short slot time enabled using RTS-CTS protection";
   params.enableErpProtection = true;
@@ -474,7 +474,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed b/g with short plcp preamble enabled using RTS-CTS protection";
   params.enableErpProtection = true;
@@ -487,7 +487,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed b/g with short slot time enabled using CTS-TO-SELF protection";
   params.enableErpProtection = true;
@@ -501,7 +501,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed b/g with short plcp preamble enabled using CTS-TO-SELF protection";
   params.enableErpProtection = true;
@@ -514,7 +514,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "HT GF not supported";
   params.enableErpProtection = false;
@@ -536,7 +536,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "HT only with GF used";
   params.enableErpProtection = false;
@@ -558,7 +558,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "HT only with GF allowed but disabled by protection";
   params.enableErpProtection = false;
@@ -580,7 +580,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "HT only with GF not supported by the receiver";
   params.enableErpProtection = false;
@@ -602,7 +602,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed HT/non-HT with GF enabled";
   params.enableErpProtection = false;
@@ -624,7 +624,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "HT only";
   params.enableErpProtection = false;
@@ -646,7 +646,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   params.testName = "Mixed HT/non-HT";
   params.enableErpProtection = false;
@@ -668,7 +668,7 @@ int main (int argc, char *argv[])
       NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
       exit (1);
     }
-  std::cout << "Throughput: " << throughput << " Mbit/s \n" << std::endl;
+  std::cout << "Throughput: " << throughput << " Mbit/s \n" << "\n";
 
   return 0;
 }

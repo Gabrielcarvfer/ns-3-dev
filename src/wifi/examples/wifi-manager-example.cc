@@ -192,11 +192,11 @@ int main (int argc, char *argv[])
   cmd.Parse (argc,argv);
 
   // Print out some explanation of what this program does
-  std::cout << std::endl << "This program demonstrates and plots the operation of different " << std::endl;
-  std::cout << "Wi-Fi rate controls on different station configurations," << std::endl;
-  std::cout << "by stepping down the received signal strength across a wide range" << std::endl;
-  std::cout << "and observing the adjustment of the rate." << std::endl;
-  std::cout << "Run 'wifi-manager-example --PrintHelp' to show program options." << std::endl << std::endl;
+  std::cout << "\n" << "This program demonstrates and plots the operation of different " << "\n";
+  std::cout << "Wi-Fi rate controls on different station configurations," << "\n";
+  std::cout << "by stepping down the received signal strength across a wide range" << "\n";
+  std::cout << "and observing the adjustment of the rate." << "\n";
+  std::cout << "Run 'wifi-manager-example --PrintHelp' to show program options." << "\n" << "\n";
 
   if (infrastructure == false)
     {
@@ -287,7 +287,7 @@ int main (int argc, char *argv[])
 
   NS_ABORT_MSG_IF (serverSelectedStandard.m_name == "none", "Standard " << standard << " not found");
   NS_ABORT_MSG_IF (clientSelectedStandard.m_name == "none", "Standard " << standard << " not found");
-  std::cout << "Testing " << serverSelectedStandard.m_name << " with " << wifiManager << " ..." << std::endl;
+  std::cout << "Testing " << serverSelectedStandard.m_name << " with " << wifiManager << " ..." << "\n";
   NS_ABORT_MSG_IF (clientSelectedStandard.m_snrLow >= clientSelectedStandard.m_snrHigh, "SNR values in wrong order");
   steps = static_cast<uint32_t> (std::abs (static_cast<double> (clientSelectedStandard.m_snrHigh - clientSelectedStandard.m_snrLow ) / stepSize) + 1);
   NS_LOG_DEBUG ("Using " << steps << " steps for SNR range " << clientSelectedStandard.m_snrLow << ":" << clientSelectedStandard.m_snrHigh);

@@ -75,15 +75,15 @@ CwndTracer (uint32_t oldval, uint32_t newval)
 {
   if (firstCwnd)
     {
-      *cWndStream->GetStream () << "0.0 " << oldval << std::endl;
+      *cWndStream->GetStream () << "0.0 " << oldval << "\n";
       firstCwnd = false;
     }
-  *cWndStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval << std::endl;
+  *cWndStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval << "\n";
   cWndValue = newval;
 
   if (!firstSshThr)
     {
-      *ssThreshStream->GetStream () << Simulator::Now ().GetSeconds () << " " << ssThreshValue << std::endl;
+      *ssThreshStream->GetStream () << Simulator::Now ().GetSeconds () << " " << ssThreshValue << "\n";
     }
 }
 
@@ -92,15 +92,15 @@ SsThreshTracer (uint32_t oldval, uint32_t newval)
 {
   if (firstSshThr)
     {
-      *ssThreshStream->GetStream () << "0.0 " << oldval << std::endl;
+      *ssThreshStream->GetStream () << "0.0 " << oldval << "\n";
       firstSshThr = false;
     }
-  *ssThreshStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval << std::endl;
+  *ssThreshStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval << "\n";
   ssThreshValue = newval;
 
   if (!firstCwnd)
     {
-      *cWndStream->GetStream () << Simulator::Now ().GetSeconds () << " " << cWndValue << std::endl;
+      *cWndStream->GetStream () << Simulator::Now ().GetSeconds () << " " << cWndValue << "\n";
     }
 }
 
@@ -109,10 +109,10 @@ RttTracer (Time oldval, Time newval)
 {
   if (firstRtt)
     {
-      *rttStream->GetStream () << "0.0 " << oldval.GetSeconds () << std::endl;
+      *rttStream->GetStream () << "0.0 " << oldval.GetSeconds () << "\n";
       firstRtt = false;
     }
-  *rttStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval.GetSeconds () << std::endl;
+  *rttStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval.GetSeconds () << "\n";
 }
 
 static void
@@ -120,31 +120,31 @@ RtoTracer (Time oldval, Time newval)
 {
   if (firstRto)
     {
-      *rtoStream->GetStream () << "0.0 " << oldval.GetSeconds () << std::endl;
+      *rtoStream->GetStream () << "0.0 " << oldval.GetSeconds () << "\n";
       firstRto = false;
     }
-  *rtoStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval.GetSeconds () << std::endl;
+  *rtoStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval.GetSeconds () << "\n";
 }
 
 static void
 NextTxTracer (SequenceNumber32 old, SequenceNumber32 nextTx)
 {
   NS_UNUSED (old);
-  *nextTxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextTx << std::endl;
+  *nextTxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextTx << "\n";
 }
 
 static void
 InFlightTracer (uint32_t old, uint32_t inFlight)
 {
   NS_UNUSED (old);
-  *inFlightStream->GetStream () << Simulator::Now ().GetSeconds () << " " << inFlight << std::endl;
+  *inFlightStream->GetStream () << Simulator::Now ().GetSeconds () << " " << inFlight << "\n";
 }
 
 static void
 NextRxTracer (SequenceNumber32 old, SequenceNumber32 nextRx)
 {
   NS_UNUSED (old);
-  *nextRxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextRx << std::endl;
+  *nextRxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextRx << "\n";
 }
 
 static void

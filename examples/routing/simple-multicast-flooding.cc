@@ -189,14 +189,14 @@ main (int argc, char *argv[])
   // run simulation
   Simulator::Run ();
   
-  std::cout << "Node A sent " << 10 * 1024 << " bytes" << std::endl;
+  std::cout << "Node A sent " << 10 * 1024 << " bytes" << "\n";
   for (auto end = sinks.End (),
            iter = sinks.Begin (); iter != end; ++iter)
     {
       auto node = (*iter)->GetNode ();
       auto sink = (*iter)->GetObject <PacketSink> ();
       std::cout << "Node " << Names::FindName (node) 
-                << " received " << sink->GetTotalRx () << " bytes" << std::endl;
+                << " received " << sink->GetTotalRx () << " bytes" << "\n";
     }
 
   Simulator::Destroy ();

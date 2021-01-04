@@ -61,7 +61,7 @@ CheckQueueSize (Ptr<QueueDisc> queue)
   // Check queue size every 1/100 of a second
   Simulator::Schedule (Seconds (0.001), &CheckQueueSize, queue);
   std::ofstream fPlotQueue (std::stringstream (dir + "queue-size.dat").str ().c_str (), std::ios::out | std::ios::app);
-  fPlotQueue << Simulator::Now ().GetSeconds () << " " << qSize << std::endl;
+  fPlotQueue << Simulator::Now ().GetSeconds () << " " << qSize << "\n";
   fPlotQueue.close ();
 }
 
@@ -70,7 +70,7 @@ static void
 CwndChange (uint32_t oldCwnd, uint32_t newCwnd)
 {
   std::ofstream fPlotQueue (dir + "cwndTraces/n0.dat", std::ios::out | std::ios::app);
-  fPlotQueue << Simulator::Now ().GetSeconds () << " " << newCwnd / segmentSize << std::endl;
+  fPlotQueue << Simulator::Now ().GetSeconds () << " " << newCwnd / segmentSize << "\n";
   fPlotQueue.close ();
 }
 
@@ -78,7 +78,7 @@ CwndChange (uint32_t oldCwnd, uint32_t newCwnd)
 static void
 DropAtQueue (Ptr<OutputStreamWrapper> stream, Ptr<const QueueDiscItem> item)
 {
-  *stream->GetStream () << Simulator::Now ().GetSeconds () << " 1" << std::endl;
+  *stream->GetStream () << Simulator::Now ().GetSeconds () << " 1" << "\n";
 }
 
 // Trace Function for cwnd
@@ -268,7 +268,7 @@ int main (int argc, char *argv[])
   // Store queue stats in a file
   std::ofstream myfile;
   myfile.open (dir + "queueStats.txt", std::fstream::in | std::fstream::out | std::fstream::app);
-  myfile << std::endl;
+  myfile << "\n";
   myfile << "Stat for Queue 1";
   myfile << qd.Get (0)->GetStats ();
   myfile.close ();

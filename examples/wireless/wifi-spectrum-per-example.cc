@@ -141,7 +141,7 @@ int main (int argc, char *argv[])
       stopIndex = index;
     }
 
-  std::cout << "wifiType: " << wifiType << " distance: " << distance << "m; time: " << simulationTime << "; TxPower: 1 dBm (1.3 mW)" << std::endl;
+  std::cout << "wifiType: " << wifiType << " distance: " << distance << "m; time: " << simulationTime << "; TxPower: 1 dBm (1.3 mW)" << "\n";
   std::cout << std::setw (5) << "index" <<
     std::setw (6) << "MCS" <<
     std::setw (13) << "Rate (Mb/s)" <<
@@ -150,7 +150,7 @@ int main (int argc, char *argv[])
     std::setw (12) << "Signal (dBm)" <<
     std::setw (12) << "Noise (dBm)" <<
     std::setw (9) << "SNR (dB)" <<
-    std::endl;
+    "\n";
   for (uint16_t i = startIndex; i <= stopIndex; i++)
     {
       uint32_t payloadSize;
@@ -531,14 +531,14 @@ int main (int argc, char *argv[])
           std::cout << std::setw (12) << g_signalDbmAvg <<
             std::setw (12) << g_noiseDbmAvg <<
             std::setw (12) << (g_signalDbmAvg - g_noiseDbmAvg) <<
-            std::endl;
+            "\n";
         }
       else
         {
           std::cout << std::setw (12) << "N/A" <<
             std::setw (12) << "N/A" <<
             std::setw (12) << "N/A" <<
-            std::endl;
+            "\n";
         }
       Simulator::Destroy ();
     }

@@ -110,11 +110,11 @@ int main (int argc, char *argv[])
 
   for (uint32_t i = 0; i < modes.size (); i++) //MCS
     {
-      std::cout << modes[i] << std::endl;
+      std::cout << modes[i] << "\n";
       Gnuplot2dDataset dataset (modes[i]);
       for (double d = 0; d <= 100; ) //distance
         {
-          std::cout << "Distance = " << d << "m: " << std::endl;
+          std::cout << "Distance = " << d << "m: " << "\n";
           uint32_t payloadSize; //1500 byte IP packet
           if (udp)
             {
@@ -155,7 +155,7 @@ int main (int argc, char *argv[])
             }
           else
             {
-              std::cout << "Wrong frequency value!" << std::endl;
+              std::cout << "Wrong frequency value!" << "\n";
               return 0;
             }
 
@@ -281,7 +281,7 @@ int main (int argc, char *argv[])
               throughput = totalPacketsThrough * 8 / (simulationTime * 1000000.0); //Mbit/s
             }
           dataset.Add (d, throughput);
-          std::cout << throughput << " Mbit/s" << std::endl;
+          std::cout << throughput << " Mbit/s" << "\n";
           d += step;
           Simulator::Destroy ();
         }

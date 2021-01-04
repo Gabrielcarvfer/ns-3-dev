@@ -88,7 +88,7 @@ static void
 CourseChangeCallback (std::string path, Ptr<const MobilityModel> model)
 {
   Vector position = model->GetPosition ();
-  std::cout << "CourseChange " << path << " x=" << position.x << ", y=" << position.y << ", z=" << position.z << std::endl;
+  std::cout << "CourseChange " << path << " x=" << position.x << ", y=" << position.y << ", z=" << position.z << "\n";
 }
 
 int
@@ -131,7 +131,7 @@ main (int argc, char *argv[])
 
   if (stopTime < 10)
     {
-      std::cout << "Use a simulation stop time >= 10 seconds" << std::endl;
+      std::cout << "Use a simulation stop time >= 10 seconds" << "\n";
       exit (1);
     }
   ///////////////////////////////////////////////////////////////////////////

@@ -76,11 +76,11 @@ Ipv4ListRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Unit 
   *stream->GetStream () << "Node: " << m_ipv4->GetObject<Node> ()->GetId () 
                         << ", Time: " << Now().As (unit)
                         << ", Local time: " << m_ipv4->GetObject<Node> ()->GetLocalTime ().As (unit)
-                        << ", Ipv4ListRouting table" << std::endl;
+                        << ", Ipv4ListRouting table" << "\n";
   for (Ipv4RoutingProtocolList::const_iterator i = m_routingProtocols.begin ();
        i != m_routingProtocols.end (); i++)
     {
-      *stream->GetStream () << "  Priority: " << (*i).first << " Protocol: " << (*i).second->GetInstanceTypeId () << std::endl;
+      *stream->GetStream () << "  Priority: " << (*i).first << " Protocol: " << (*i).second->GetInstanceTypeId () << "\n";
       (*i).second->PrintRoutingTable (stream, unit);
     }
 }

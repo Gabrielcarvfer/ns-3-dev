@@ -146,7 +146,7 @@ int main (int argc, char *argv[])
                 }
               else
                 {
-                  std::cout << "Wrong frequency value!" << std::endl;
+                  std::cout << "Wrong frequency value!" << "\n";
                   return 0;
                 }
 
@@ -260,7 +260,7 @@ int main (int argc, char *argv[])
 
               Simulator::Destroy ();
 
-              std::cout << mcs << "\t\t\t" << channelWidth << " MHz\t\t\t" << gi << " ns\t\t\t" << throughput << " Mbit/s" << std::endl;
+              std::cout << mcs << "\t\t\t" << channelWidth << " MHz\t\t\t" << gi << " ns\t\t\t" << throughput << " Mbit/s" << "\n";
 
               //test first element
               if (mcs == 0 && channelWidth == 20 && gi == 3200)

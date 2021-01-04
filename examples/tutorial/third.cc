@@ -60,7 +60,7 @@ main (int argc, char *argv[])
   // bounding box if more than 18 nodes are provided.
   if (nWifi > 18)
     {
-      std::cout << "nWifi should be 18 or less; otherwise grid layout exceeds the bounding box" << std::endl;
+      std::cout << "nWifi should be 18 or less; otherwise grid layout exceeds the bounding box" << "\n";
       return 1;
     }
 

@@ -259,17 +259,17 @@ PbbTlvBlock::Print (std::ostream &os, int level) const
       prefix.append ("\t");
     }
 
-  os << prefix << "TLV Block {" << std::endl;
-  os << prefix << "\tsize = " << Size () << std::endl;
-  os << prefix << "\tmembers [" << std::endl;
+  os << prefix << "TLV Block {" << "\n";
+  os << prefix << "\tsize = " << Size () << "\n";
+  os << prefix << "\tmembers [" << "\n";
 
   for (ConstIterator iter = Begin (); iter != End (); iter++)
     {
       (*iter)->Print (os, level+2);
     }
 
-  os << prefix << "\t]" << std::endl;
-  os << prefix << "}" << std::endl;
+  os << prefix << "\t]" << "\n";
+  os << prefix << "}" << "\n";
 }
 
 bool
@@ -500,17 +500,17 @@ PbbAddressTlvBlock::Print (std::ostream &os, int level) const
       prefix.append ("\t");
     }
 
-  os << prefix << "TLV Block {" << std::endl;
-  os << prefix << "\tsize = " << Size () << std::endl;
-  os << prefix << "\tmembers [" << std::endl;
+  os << prefix << "TLV Block {" << "\n";
+  os << prefix << "\tsize = " << Size () << "\n";
+  os << prefix << "\tmembers [" << "\n";
 
   for (ConstIterator iter = Begin (); iter != End (); iter++)
     {
       (*iter)->Print (os, level+2);
     }
 
-  os << prefix << "\t]" << std::endl;
-  os << prefix << "}" << std::endl;
+  os << prefix << "\t]" << "\n";
+  os << prefix << "}" << "\n";
 }
 
 bool
@@ -951,14 +951,14 @@ void
 PbbPacket::Print (std::ostream &os) const
 {
   NS_LOG_FUNCTION (this << &os);
-  os << "PbbPacket {" << std::endl;
+  os << "PbbPacket {" << "\n";
 
   if (HasSequenceNumber ())
     {
       os << "\tsequence number = " << GetSequenceNumber ();
     }
 
-  os << std::endl;
+  os << "\n";
 
   m_tlvList.Print (os, 1);
 
@@ -969,7 +969,7 @@ PbbPacket::Print (std::ostream &os) const
       (*iter)->Print (os, 1);
     }
 
-  os << "}" << std::endl;
+  os << "}" << "\n";
 }
 
 bool
@@ -1589,31 +1589,31 @@ PbbMessage::Print (std::ostream &os, int level) const
       prefix.append ("\t");
     }
 
-  os << prefix << "PbbMessage {" << std::endl;
+  os << prefix << "PbbMessage {" << "\n";
 
-  os << prefix << "\tmessage type = " << (int)GetType () << std::endl;
-  os << prefix << "\taddress size = " << GetAddressLength () << std::endl;
+  os << prefix << "\tmessage type = " << (int)GetType () << "\n";
+  os << prefix << "\taddress size = " << GetAddressLength () << "\n";
 
   if (HasOriginatorAddress ())
     {
       os << prefix << "\toriginator address = ";
       PrintOriginatorAddress (os);
-      os << std::endl;
+      os << "\n";
     }
 
   if (HasHopLimit ())
     {
-      os << prefix << "\thop limit = " << (int)GetHopLimit () << std::endl;
+      os << prefix << "\thop limit = " << (int)GetHopLimit () << "\n";
     }
 
   if (HasHopCount ())
     {
-      os << prefix << "\thop count = " << (int)GetHopCount () << std::endl;
+      os << prefix << "\thop count = " << (int)GetHopCount () << "\n";
     }
 
   if (HasSequenceNumber ())
     {
-      os << prefix << "\tseqnum = " << GetSequenceNumber () << std::endl;
+      os << prefix << "\tseqnum = " << GetSequenceNumber () << "\n";
     }
 
   m_tlvList.Print (os, level+1);
@@ -1624,7 +1624,7 @@ PbbMessage::Print (std::ostream &os, int level) const
     {
       (*iter)->Print (os, level+1);
     }
-  os << prefix << "}" << std::endl;
+  os << prefix << "}" << "\n";
 }
 
 bool
@@ -2391,23 +2391,23 @@ PbbAddressBlock::Print (std::ostream &os, int level) const
       prefix.append ("\t");
     }
 
-  os << prefix << "PbbAddressBlock {" << std::endl;
-  os << prefix << "\taddresses = " << std::endl;
+  os << prefix << "PbbAddressBlock {" << "\n";
+  os << prefix << "\taddresses = " << "\n";
   for (ConstAddressIterator iter = AddressBegin ();
        iter != AddressEnd ();
        iter++)
     {
       os << prefix << "\t\t";
       PrintAddress (os, iter);
-      os << std::endl;
+      os << "\n";
     }
 
-  os << prefix << "\tprefixes = " << std::endl;
+  os << prefix << "\tprefixes = " << "\n";
   for (ConstPrefixIterator iter = PrefixBegin ();
        iter != PrefixEnd ();
        iter++)
     {
-      os << prefix << "\t\t" << (int)(*iter) << std::endl;
+      os << prefix << "\t\t" << (int)(*iter) << "\n";
     }
 
   m_addressTlvList.Print (os, level+1);
@@ -2947,32 +2947,32 @@ PbbTlv::Print (std::ostream &os, int level) const
       prefix.append ("\t");
     }
 
-  os << prefix << "PbbTlv {" << std::endl;
-  os << prefix << "\ttype = " << (int)GetType () << std::endl;
+  os << prefix << "PbbTlv {" << "\n";
+  os << prefix << "\ttype = " << (int)GetType () << "\n";
 
   if (HasTypeExt ())
     {
-      os << prefix << "\ttypeext = " << (int)GetTypeExt () << std::endl;
+      os << prefix << "\ttypeext = " << (int)GetTypeExt () << "\n";
     }
 
   if (HasIndexStart ())
     {
-      os << prefix << "\tindexStart = " << (int)GetIndexStart () << std::endl;
+      os << prefix << "\tindexStart = " << (int)GetIndexStart () << "\n";
     }
 
   if (HasIndexStop ())
     {
-      os << prefix << "\tindexStop = " << (int)GetIndexStop () << std::endl;
+      os << prefix << "\tindexStop = " << (int)GetIndexStop () << "\n";
     }
 
-  os << prefix << "\tisMultivalue = " << IsMultivalue () << std::endl;
+  os << prefix << "\tisMultivalue = " << IsMultivalue () << "\n";
 
   if (HasValue ())
     {
-      os << prefix << "\thas value; size = " << GetValue ().GetSize () << std::endl;
+      os << prefix << "\thas value; size = " << GetValue ().GetSize () << "\n";
     }
 
-  os << prefix << "}" << std::endl;
+  os << prefix << "}" << "\n";
 }
 
 bool

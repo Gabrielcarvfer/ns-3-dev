@@ -222,7 +222,7 @@ int main (int argc, char *argv[])
     {
       rxBytes = payloadSize * DynamicCast<UdpServer> (staServerApp.Get (0))->GetReceived ();
       throughput = (rxBytes * 8) / (simulationTime * 1000000.0); //Mbit/s
-      std::cout << "AP Throughput: " << throughput << " Mbit/s" << std::endl;
+      std::cout << "AP Throughput: " << throughput << " Mbit/s" << "\n";
       if (throughput == 0)
       {
         error = true;
@@ -232,7 +232,7 @@ int main (int argc, char *argv[])
     {
       rxBytes = payloadSize * DynamicCast<UdpServer> (apServerApp.Get (0))->GetReceived ();
       throughput = (rxBytes * 8) / (simulationTime * 1000000.0); //Mbit/s
-      std::cout << "STA Throughput: " << throughput << " Mbit/s" << std::endl;
+      std::cout << "STA Throughput: " << throughput << " Mbit/s" << "\n";
       if (throughput == 0)
       {
         error = true;

@@ -69,13 +69,13 @@ NS_LOG_COMPONENT_DEFINE ("BenchmarkQueueDiscs");
 void
 LimitsTrace (Ptr<OutputStreamWrapper> stream, uint32_t oldVal, uint32_t newVal)
 {
-  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << newVal << std::endl;
+  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << newVal << "\n";
 }
 
 void
 BytesInQueueTrace (Ptr<OutputStreamWrapper> stream, uint32_t oldVal, uint32_t newVal)
 {
-  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << newVal << std::endl;
+  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << newVal << "\n";
 }
 
 static void
@@ -85,12 +85,12 @@ GoodputSampling (std::string fileName, ApplicationContainer app, Ptr<OutputStrea
   double goodput;
   uint64_t totalPackets = DynamicCast<PacketSink> (app.Get (0))->GetTotalRx ();
   goodput = totalPackets * 8 / (Simulator::Now ().GetSeconds () * 1024); // Kbit/s
-  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << goodput << std::endl;
+  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << goodput << "\n";
 }
 
 static void PingRtt (std::string context, Time rtt)
 {
-  std::cout << context << "=" << rtt.GetMilliSeconds () << " ms" << std::endl;
+  std::cout << context << "=" << rtt.GetMilliSeconds () << " ms" << "\n";
 }
 
 int main (int argc, char *argv[])

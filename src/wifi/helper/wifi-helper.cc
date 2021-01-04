@@ -64,7 +64,7 @@ AsciiPhyTransmitSinkWithContext (
   uint8_t txLevel)
 {
   NS_LOG_FUNCTION (stream << context << p << mode << preamble << txLevel);
-  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << " " << mode << " " << *p << std::endl;
+  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << context << " " << mode << " " << *p << "\n";
 }
 
 /**
@@ -84,7 +84,7 @@ AsciiPhyTransmitSinkWithoutContext (
   uint8_t txLevel)
 {
   NS_LOG_FUNCTION (stream << p << mode << preamble << txLevel);
-  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << mode << " " << *p << std::endl;
+  *stream->GetStream () << "t " << Simulator::Now ().GetSeconds () << " " << mode << " " << *p << "\n";
 }
 
 /**
@@ -106,7 +106,7 @@ AsciiPhyReceiveSinkWithContext (
   WifiPreamble preamble)
 {
   NS_LOG_FUNCTION (stream << context << p << snr << mode << preamble);
-  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << mode << "" << context << " " << *p << std::endl;
+  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << mode << "" << context << " " << *p << "\n";
 }
 
 /**
@@ -126,7 +126,7 @@ AsciiPhyReceiveSinkWithoutContext (
   WifiPreamble preamble)
 {
   NS_LOG_FUNCTION (stream << p << snr << mode << preamble);
-  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << mode << " " << *p << std::endl;
+  *stream->GetStream () << "r " << Simulator::Now ().GetSeconds () << " " << mode << " " << *p << "\n";
 }
 
 WifiPhyHelper::WifiPhyHelper ()

@@ -66,7 +66,7 @@ JakesPropagationExample::~JakesPropagationExample ()
 void JakesPropagationExample::Next ()
 {
   m_nextEvent = Simulator::Schedule (m_step, &JakesPropagationExample::Next, this);
-  std::cout << Simulator::Now ().As (Time::MS) << " " << m_loss->CalcRxPower (0, m_firstMobility, m_secondMobility) << std::endl;
+  std::cout << Simulator::Now ().As (Time::MS) << " " << m_loss->CalcRxPower (0, m_firstMobility, m_secondMobility) << "\n";
 }
 
 int main (int argc, char *argv[])
