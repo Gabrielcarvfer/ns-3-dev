@@ -145,18 +145,18 @@ WifiMacQueue::Insert (ConstIterator pos, Ptr<WifiMacQueueItem> item)
   // the queue is full; scan the list in the attempt to remove stale packets
   ConstIterator it = begin ();
   const Time now = Simulator::Now();
+  bool removedStale = false;
   while (it != end ())
     {
-      if (it == pos && TtlExceeded (it, now))
-        {
-          return DoEnqueue (it, item);
-        }
       if (TtlExceeded (it, now))
-        {
-          return DoEnqueue (pos, item);
-        }
+          removedStale = true;
+      else
+        break;
       it++;
     }
+
+  if (removedStale)
+    return DoEnqueue (pos, item);
 
   // the queue is still full, remove the oldest item if the policy is drop oldest
   if (m_dropPolicy == DROP_OLDEST)
