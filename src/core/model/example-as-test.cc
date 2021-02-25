@@ -38,9 +38,8 @@ namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("ExampleAsTestCase");
 
-// Running tests as examples currently requires bash shell; uses Unix
-// piping that does not work on Windows.
-#if defined(NS3_ENABLE_EXAMPLES) && !defined (__win32__)
+// Running tests as examples currently requires Python.
+#if defined(NS3_ENABLE_EXAMPLES)
 
 ExampleAsTestCase::ExampleAsTestCase (const std::string name,
                                       const std::string program,
@@ -145,6 +144,6 @@ ExampleAsTestSuite::ExampleAsTestSuite (const std::string name,
   AddTestCase (new ExampleAsTestCase (name, program, dataDir, args), duration);
 }
 
-#endif // NS3_ENABLE_EXAMPLES && !defined (__win32__)
+#endif // NS3_ENABLE_EXAMPLES
 
 }  // namespace ns3
