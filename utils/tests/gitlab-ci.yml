@@ -37,9 +37,11 @@ stages:
     - mkdir -p $CCACHE_BASEDIR_VALUE
     - export CCACHE_BASEDIR=${PWD}
     - export CCACHE_DIR=${PWD}/$CCACHE_BASEDIR_VALUE
+    - ccache -z
     - CXX="ccache $COMPILER" ./waf configure --enable-examples --enable-tests --enable-asserts -d $MODE
     - ./waf
-    - if [ "$MODE" != "debug" ]; then ./test.py --nowaf; fi
+    - python3 -c "import re; print(re.findall('.* (.*) %', '`ccache -s | grep "cache hit rate"`')[0])" > cache_hit_rate
+    - if [ "$MODE" != "debug" ] && [ "`cat cache_hit_rate`" != "100.00" ]; then ./test.py --nowaf; fi
   cache:
     # Use separate key for each (debug/optimized/release) jobs because
     # they run in parallel and will otherwise overwrite each other
