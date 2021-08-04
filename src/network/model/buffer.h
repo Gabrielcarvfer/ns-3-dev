@@ -529,6 +529,17 @@ private:
    * pointing to this Buffer.
    */
   void AddAtEnd (const Buffer &o);
+
+  /**
+   * \param o the buffer to append to the end of this buffer.
+   * \param offset offset from the end to the place where the buffer should be copied
+   *
+   * Add bytes at the end of the Buffer.
+   * Any call to this method invalidates any Iterator
+   * pointing to this Buffer.
+   */
+  void AddAtEndPreallocated (const Buffer &o, uint32_t offset);
+
   /**
    * \param start size to remove
    *

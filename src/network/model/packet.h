@@ -395,6 +395,25 @@ public:
    * \param packet packet to concatenate
    */
   void AddAtEnd (Ptr<const Packet> packet);
+
+
+
+  /**
+   * \brief Enqueue packet to be concatenated to the end of the current packet.
+   *
+   * This does not alter the uid of either packet.
+   *
+   * \param packet packet to concatenate
+   */
+  void AddAtEndTransaction (Ptr<const Packet> packet);
+
+  /**
+   * \brief Commit pending AddAtEnd transactions by concatenating the packets.
+   *
+   * This does not alter the uid of either packet.
+   */
+  void AddAtEndCommit();
+
   /**
    * \brief Add a zero-filled padding to the packet.
    *
@@ -779,6 +798,16 @@ private:
    */
   uint32_t Deserialize (uint8_t const*buffer, uint32_t size);
 
+  /**
+   * \param packet the buffer to append to the end of this buffer.
+   * \param offset offset from the end to the place where the buffer should be copied
+   *
+   * Add bytes at the end of the Buffer.
+   * Any call to this method invalidates any Iterator
+   * pointing to this Buffer.
+   */
+  void AddAtEndPreallocated (Ptr<const Packet> packet, uint32_t offset);
+
   Buffer m_buffer;                //!< the packet buffer (it's actual contents)
   ByteTagList m_byteTagList;      //!< the ByteTag list
   PacketTagList m_packetTagList;  //!< the packet's Tag list
@@ -788,6 +817,8 @@ private:
   Ptr<NixVector> m_nixVector; //!< the packet's Nix vector
 
   static uint32_t m_globalUid; //!< Global counter of packets Uid
+
+  std::vector<Ptr<const Packet>> m_addAtEndTransactionQueue;  //!< queue of packets to append
 };
 
 /**

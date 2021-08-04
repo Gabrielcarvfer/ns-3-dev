@@ -343,6 +343,43 @@ Packet::AddAtEnd (Ptr<const Packet> packet)
   m_buffer.AddAtEnd (packet->m_buffer);
   m_metadata.AddAtEnd (packet->m_metadata);
 }
+
+void
+Packet::AddAtEndPreallocated (Ptr<const Packet> packet, uint32_t offset)
+{
+  NS_LOG_FUNCTION (this << packet << packet->GetSize ());
+  m_byteTagList.AddAtEnd (GetSize ());
+  ByteTagList copy = packet->m_byteTagList;
+  copy.AddAtStart (0);
+  copy.Adjust (GetSize ());
+  m_byteTagList.Add (copy);
+  m_buffer.AddAtEndPreallocated (packet->m_buffer, offset);
+  m_metadata.AddAtEnd (packet->m_metadata);
+}
+
+void
+Packet::AddAtEndTransaction (Ptr<const Packet> packet)
+{
+  NS_LOG_FUNCTION (this << packet << packet->GetSize ());
+  m_addAtEndTransactionQueue.push_back(packet);
+}
+
+void
+Packet::AddAtEndCommit ()
+{
+  NS_LOG_FUNCTION (this);
+  uint32_t size = 0;
+  for (auto packet: m_addAtEndTransactionQueue)
+    size += packet->GetSize ();
+  m_buffer.AddAtEnd(size);
+  for (auto packet: m_addAtEndTransactionQueue)
+  {
+    AddAtEndPreallocated (packet, size);
+    size -= packet->GetSize ();
+  }
+  m_addAtEndTransactionQueue.clear();
+}
+
 void
 Packet::AddPaddingAtEnd (uint32_t size)
 {

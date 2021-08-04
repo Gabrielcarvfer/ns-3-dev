@@ -434,6 +434,16 @@ Buffer::AddAtEnd (const Buffer &o)
   NS_ASSERT (CheckInternalState ());
 }
 
+void
+Buffer::AddAtEndPreallocated (const Buffer &o, uint32_t offset)
+{
+  NS_LOG_FUNCTION (this << &o);
+  Buffer::Iterator destStart = End ();
+  destStart.Prev (offset);
+  destStart.Write (o.Begin (), o.End ());
+  NS_ASSERT (CheckInternalState ());
+}
+
 void 
 Buffer::RemoveAtStart (uint32_t start)
 {
