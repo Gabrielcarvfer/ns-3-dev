@@ -96,6 +96,7 @@ WifiPsdu::GetPacket (void) const
   else if (m_isSingle)
     {
       MpduAggregator::Aggregate (m_mpduList.at (0), packet, true);
+      packet->AddAtEndCommit ();
     }
   else
     {
@@ -103,6 +104,7 @@ WifiPsdu::GetPacket (void) const
         {
           MpduAggregator::Aggregate (mpdu, packet, false);
         }
+      packet->AddAtEndCommit ();
     }
   return packet;
 }

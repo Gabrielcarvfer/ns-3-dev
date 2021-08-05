@@ -93,7 +93,7 @@ MpduAggregator::Aggregate (Ptr<const WifiMacQueueItem> mpdu, Ptr<Packet> ampdu, 
       if (padding)
         {
           Ptr<Packet> pad = Create<Packet> (padding);
-          ampdu->AddAtEnd (pad);
+          ampdu->AddAtEndTransaction(pad);
         }
     }
 
@@ -106,7 +106,7 @@ MpduAggregator::Aggregate (Ptr<const WifiMacQueueItem> mpdu, Ptr<Packet> ampdu, 
   AmpduSubframeHeader hdr = GetAmpduSubframeHeader (static_cast<uint16_t> (tmp->GetSize ()), isSingle);
 
   tmp->AddHeader (hdr);
-  ampdu->AddAtEnd (tmp);
+  ampdu->AddAtEndTransaction(tmp);
 }
 
 uint32_t
