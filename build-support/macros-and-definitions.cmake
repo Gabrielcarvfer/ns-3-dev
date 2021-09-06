@@ -312,6 +312,11 @@ macro(process_options)
   set(build_profile "${cmakeBuildType}" CACHE INTERNAL "")
   if(${cmakeBuildType} STREQUAL "debug")
     add_definitions(-DNS3_BUILD_PROFILE_DEBUG)
+
+    # Check if we forcefully inline functions
+    if(${NS3_FORCE_INLINE})
+      add_definitions(-DNS3_ENABLE_FORCE_INLINE)
+    endif()
   elseif(${cmakeBuildType} STREQUAL "relwithdebinfo" OR ${cmakeBuildType}
                                                         STREQUAL "default"
   )

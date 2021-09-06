@@ -252,6 +252,7 @@ set(header_files
     model/event-impl.h
     model/fatal-error.h
     model/fatal-impl.h
+    model/force-inline.h
     model/global-value.h
     model/hash-fnv.h
     model/hash-function.h

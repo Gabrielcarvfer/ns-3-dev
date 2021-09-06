@@ -67,6 +67,9 @@ option(NS3_NETANIM "Build netanim" OFF)
 
 # other options
 option(NS3_ENABLE_BUILD_VERSION "Embed version info into libraries" OFF)
+option(NS3_FORCE_INLINE
+       "Forcefully inline NS3_INLINE'd functions in debug builds" ON
+)
 option(NS3_GNUPLOT "Build with Gnuplot support" OFF)
 option(NS3_GSL "Build with GSL support" ON)
 option(NS3_GTK3 "Build with GTK3 support" ON)
