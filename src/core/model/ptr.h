@@ -24,6 +24,7 @@
 #include <iostream>
 #include <stdint.h>
 #include "assert.h"
+#include "force-inline.h"
 
 /**
  * \file
@@ -116,7 +117,7 @@ private:
   friend U * PeekPointer (const Ptr<U> &p);
 
   /** Mark this as a a reference by incrementing the reference count. */
-  inline void Acquire (void) const;
+ NS3_INLINE void Acquire (void) const;
 
 public:
   /** Create an empty smart pointer */
@@ -406,19 +407,19 @@ namespace ns3 {
  ************************************************/
 
 template <typename T, typename... Ts>
-Ptr<T> Create (Ts&&... args)
+NS3_INLINE Ptr<T> Create (Ts&&... args)
 {
   return Ptr<T> (new T (std::forward<Ts> (args)...), false);
 }
 
 template <typename U>
-U * PeekPointer (const Ptr<U> &p)
+NS3_INLINE U * PeekPointer (const Ptr<U> &p)
 {
   return p.m_ptr;
 }
 
 template <typename U>
-U * GetPointer (const Ptr<U> &p)
+NS3_INLINE U * GetPointer (const Ptr<U> &p)
 {
   p.Acquire ();
   return p.m_ptr;
@@ -522,21 +523,21 @@ bool operator >= (const Ptr<T> &lhs, const Ptr<T> &rhs)
  */
 /** @{ */
 template <typename T1, typename T2>
-Ptr<T1>
+NS3_INLINE Ptr<T1>
 ConstCast (Ptr<T2> const&p)
 {
   return Ptr<T1> (const_cast<T1 *> (PeekPointer (p)));
 }
 
 template <typename T1, typename T2>
-Ptr<T1>
+NS3_INLINE Ptr<T1>
 DynamicCast (Ptr<T2> const&p)
 {
   return Ptr<T1> (dynamic_cast<T1 *> (PeekPointer (p)));
 }
 
 template <typename T1, typename T2>
-Ptr<T1>
+NS3_INLINE Ptr<T1>
 StaticCast (Ptr<T2> const&p)
 {
   return Ptr<T1> (static_cast<T1 *> (PeekPointer (p)));
@@ -552,14 +553,14 @@ StaticCast (Ptr<T2> const&p)
  */
 /** @{ */
 template <typename T>
-Ptr<T> Copy (Ptr<T> object)
+NS3_INLINE Ptr<T> Copy (Ptr<T> object)
 {
   Ptr<T> p = Ptr<T> (new T (*PeekPointer (object)), false);
   return p;
 }
 
 template <typename T>
-Ptr<T> Copy (Ptr<const T> object)
+NS3_INLINE Ptr<T> Copy (Ptr<const T> object)
 {
   Ptr<T> p = Ptr<T> (new T (*PeekPointer (object)), false);
   return p;
@@ -571,7 +572,7 @@ Ptr<T> Copy (Ptr<const T> object)
  ***************************************************/
 
 template <typename T>
-void
+NS3_INLINE void
 Ptr<T>::Acquire (void) const
 {
   if (m_ptr != 0)
@@ -581,19 +582,19 @@ Ptr<T>::Acquire (void) const
 }
 
 template <typename T>
-Ptr<T>::Ptr ()
+NS3_INLINE Ptr<T>::Ptr ()
   : m_ptr (0)
 {}
 
 template <typename T>
-Ptr<T>::Ptr (T *ptr)
+NS3_INLINE Ptr<T>::Ptr (T *ptr)
   : m_ptr (ptr)
 {
   Acquire ();
 }
 
 template <typename T>
-Ptr<T>::Ptr (T *ptr, bool ref)
+NS3_INLINE Ptr<T>::Ptr (T *ptr, bool ref)
   : m_ptr (ptr)
 {
   if (ref)
@@ -603,7 +604,7 @@ Ptr<T>::Ptr (T *ptr, bool ref)
 }
 
 template <typename T>
-Ptr<T>::Ptr (Ptr const&o)
+NS3_INLINE Ptr<T>::Ptr (Ptr const&o)
   : m_ptr (PeekPointer (o))
 {
   Acquire ();
@@ -617,7 +618,7 @@ Ptr<T>::Ptr (Ptr<U> const &o)
 }
 
 template <typename T>
-Ptr<T>::~Ptr ()
+NS3_INLINE Ptr<T>::~Ptr ()
 {
   if (m_ptr != 0)
     {
@@ -626,7 +627,7 @@ Ptr<T>::~Ptr ()
 }
 
 template <typename T>
-Ptr<T> &
+NS3_INLINE Ptr<T> &
 Ptr<T>::operator = (Ptr const& o)
 {
   if (&o == this)
@@ -643,7 +644,7 @@ Ptr<T>::operator = (Ptr const& o)
 }
 
 template <typename T>
-T *
+NS3_INLINE T *
 Ptr<T>::operator -> ()
 {
   NS_ASSERT_MSG (m_ptr, "Attempted to dereference zero pointer");
@@ -651,7 +652,7 @@ Ptr<T>::operator -> ()
 }
 
 template <typename T>
-T *
+NS3_INLINE T *
 Ptr<T>::operator -> () const
 {
   NS_ASSERT_MSG (m_ptr, "Attempted to dereference zero pointer");
@@ -659,7 +660,7 @@ Ptr<T>::operator -> () const
 }
 
 template <typename T>
-T &
+NS3_INLINE T &
 Ptr<T>::operator * () const
 {
   NS_ASSERT_MSG (m_ptr, "Attempted to dereference zero pointer");
@@ -667,7 +668,7 @@ Ptr<T>::operator * () const
 }
 
 template <typename T>
-T &
+NS3_INLINE T &
 Ptr<T>::operator * ()
 {
   NS_ASSERT_MSG (m_ptr, "Attempted to dereference zero pointer");
@@ -675,14 +676,14 @@ Ptr<T>::operator * ()
 }
 
 template <typename T>
-bool
+NS3_INLINE bool
 Ptr<T>::operator! ()
 {
   return m_ptr == 0;
 }
 
 template <typename T>
-Ptr<T>::operator Tester * () const
+NS3_INLINE Ptr<T>::operator Tester * () const
 {
   if (m_ptr == 0)
     {

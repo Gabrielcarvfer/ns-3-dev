@@ -25,6 +25,7 @@
 #include "empty.h"
 #include "default-deleter.h"
 #include "assert.h"
+#include "force-inline.h"
 #include <stdint.h>
 #include <limits>
 
@@ -80,7 +81,7 @@ public:
    * Copy constructor
    * \param [in] o The object to copy into this one.
    */
-  SimpleRefCount (const SimpleRefCount & o [[maybe_unused]])
+  SimpleRefCount ([[maybe_unused]] const SimpleRefCount & o)
     : m_count (1)
   {
   }
@@ -99,7 +100,7 @@ public:
    * conjunction with the Ptr template which would make calling Ref
    * unnecessary and dangerous.
    */
-  inline void Ref (void) const
+  NS3_INLINE void Ref (void) const
   {
     NS_ASSERT (m_count < std::numeric_limits<uint32_t>::max ());
     m_count++;
@@ -110,7 +111,7 @@ public:
    * conjunction with the Ptr template which would make calling Ref
    * unnecessary and dangerous.
    */
-  inline void Unref (void) const
+  NS3_INLINE void Unref (void) const
   {
     m_count--;
     if (m_count == 0)
@@ -125,7 +126,7 @@ public:
    *
    * \return The reference count.
    */
-  inline uint32_t GetReferenceCount (void) const
+  NS3_INLINE uint32_t GetReferenceCount (void) const
   {
     return m_count;
   }

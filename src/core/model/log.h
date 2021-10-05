@@ -27,6 +27,7 @@
 #include <map>
 #include <vector>
 
+#include "force-inline.h"
 #include "node-printer.h"
 #include "time-printer.h"
 #include "log-macros-enabled.h"
@@ -354,7 +355,10 @@ public:
    * \param [in] level The level to check for.
    * \return \c true if we are enabled at \c level.
    */
-  bool IsEnabled (const enum LogLevel level) const;
+  NS3_INLINE bool IsEnabled (const enum LogLevel level) const {
+      //  LogComponentEnableEnvVar ();
+      return (level & m_levels) ? 1 : 0;
+  };
   /**
    * Check if all levels are disabled.
    *

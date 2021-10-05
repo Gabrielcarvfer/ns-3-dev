@@ -20,6 +20,8 @@
 #ifndef DEFAULT_DELETER_H
 #define DEFAULT_DELETER_H
 
+#include "force-inline.h"
+
 /**
  * \file
  * \ingroup ptr
@@ -50,7 +52,7 @@ struct DefaultDeleter
    * \tparam T \deduced The object type being deleted.
    * \param [in] object The object to delete.
    */
-  inline static void Delete (T *object)
+  NS3_INLINE static void Delete (T *object)
   {
     delete object;
   }
