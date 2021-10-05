@@ -24,6 +24,7 @@
 #include <vector>
 #include <ostream>
 #include "ns3/assert.h"
+#include "ns3/force-inline.h"
 
 #define BUFFER_FREE_LIST 1
 
@@ -98,23 +99,23 @@ public:
   class Iterator
   {
 public:
-    inline Iterator ();
+    NS3_INLINE Iterator ();
     /**
      * go forward by one byte
      */
-    inline void Next (void);
+    NS3_INLINE void Next (void);
     /**
      * go backward by one byte
      */
-    inline void Prev (void);
+    NS3_INLINE void Prev (void);
     /**
      * \param delta number of bytes to go forward
      */
-    inline void Next (uint32_t delta);
+    NS3_INLINE void Next (uint32_t delta);
     /**
      * \param delta number of bytes to go backward
      */
-    inline void Prev (uint32_t delta);
+    NS3_INLINE void Prev (uint32_t delta);
     /**
      * \param o the second iterator
      * \return number of bytes included between the two iterators
@@ -142,7 +143,7 @@ public:
      * Write the data in buffer and advance the iterator position
      * by one byte.
      */
-    inline void WriteU8 (uint8_t  data);
+    NS3_INLINE void WriteU8 (uint8_t  data);
     /**
      * \param data data to write in buffer
      * \param len number of times data must be written in buffer
@@ -150,7 +151,7 @@ public:
      * Write the data in buffer len times and advance the iterator position
      * by len byte.
      */
-    inline void WriteU8 (uint8_t data, uint32_t len);
+    NS3_INLINE void WriteU8 (uint8_t data, uint32_t len);
     /**
      * \param data data to write in buffer
      *
@@ -212,7 +213,7 @@ public:
      * by two bytes. The data is written in network order and the
      * input data is expected to be in host order.
      */
-    inline void WriteHtonU16 (uint16_t data);
+    NS3_INLINE void WriteHtonU16 (uint16_t data);
     /**
      * \param data data to write in buffer
      *
@@ -220,7 +221,7 @@ public:
      * by four bytes. The data is written in network order and the
      * input data is expected to be in host order.
      */
-    inline void WriteHtonU32 (uint32_t data);
+    NS3_INLINE void WriteHtonU32 (uint32_t data);
     /**
      * \param data data to write in buffer
      *
@@ -255,7 +256,7 @@ public:
      *
      * Read data, but do not advance the Iterator read.
      */
-    inline uint8_t  PeekU8 (void);
+    NS3_INLINE uint8_t  PeekU8 (void);
 
     /**
      * \return the byte read in the buffer.
@@ -263,7 +264,7 @@ public:
      * Read data and advance the Iterator by the number of bytes
      * read.
      */
-    inline uint8_t  ReadU8 (void);
+    NS3_INLINE uint8_t  ReadU8 (void);
     /**
      * \return the two bytes read in the buffer.
      *
@@ -271,7 +272,7 @@ public:
      * read.
      * The data is read in the format written by writeU16.
      */
-    inline uint16_t ReadU16 (void);
+    NS3_INLINE uint16_t ReadU16 (void);
     /**
      * \return the four bytes read in the buffer.
      *
@@ -295,7 +296,7 @@ public:
      * read.
      * The data is read in network format and returned in host format.
      */
-    inline uint16_t ReadNtohU16 (void);
+    NS3_INLINE uint16_t ReadNtohU16 (void);
     /**
      * \return the four bytes read in the buffer.
      *
@@ -303,7 +304,7 @@ public:
      * read.
      * The data is read in network format and returned in host format.
      */
-    inline uint32_t ReadNtohU32 (void);
+    NS3_INLINE uint32_t ReadNtohU32 (void);
     /**
      * \return the eight bytes read in the buffer.
      *
@@ -354,7 +355,7 @@ public:
      * the provided iterator and advance the Iterator by the number of bytes
      * read.
      */
-    inline void Read (Iterator start, uint32_t size);
+    NS3_INLINE void Read (Iterator start, uint32_t size);
 
     /**
      * \brief Calculate the checksum.
@@ -389,20 +390,20 @@ private:
      *
      * \param buffer the buffer this iterator refers to
      */
-    inline Iterator (Buffer const*buffer);
+    NS3_INLINE Iterator (Buffer const*buffer);
     /**
      * Constructor - initializes the iterator to point to the buffer end
      *
      * \param buffer the buffer this iterator refers to
      * \param dummy not used param
      */
-    inline Iterator (Buffer const*buffer, bool dummy);
+    NS3_INLINE Iterator (Buffer const*buffer, bool dummy);
     /**
      * Initializes the iterator values
      *
      * \param buffer the buffer this iterator refers to
      */
-    inline void Construct (const Buffer *buffer);
+    NS3_INLINE void Construct (const Buffer *buffer);
     /**
      * Checks that the [start, end) is not in the "virtual zero area".
      *
@@ -487,7 +488,7 @@ private:
   /**
    * \return the number of bytes stored in this buffer.
    */
-  inline uint32_t GetSize (void) const;
+  NS3_INLINE uint32_t GetSize (void) const;
 
   /**
    * \return a pointer to the start of the internal
@@ -559,12 +560,12 @@ private:
    * \return an Iterator which points to the
    * start of this Buffer.
    */
-  inline Buffer::Iterator Begin (void) const;
+  NS3_INLINE Buffer::Iterator Begin (void) const;
   /**
    * \return an Iterator which points to the
    * end of this Buffer.
    */
-  inline Buffer::Iterator End (void) const;
+  NS3_INLINE Buffer::Iterator End (void) const;
 
   /**
    * \brief Return the number of bytes required for serialization.
@@ -615,7 +616,7 @@ private:
    * \brief Copy constructor
    * \param o the buffer to copy
    */
-  inline Buffer (Buffer const &o);
+  NS3_INLINE Buffer (Buffer const &o);
   /**
    * \brief Assignment operator
    * \param o the buffer to copy
