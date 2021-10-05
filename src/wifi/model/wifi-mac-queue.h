@@ -25,6 +25,7 @@
 #define WIFI_MAC_QUEUE_H
 
 #include "wifi-mac-queue-item.h"
+#include "ns3/force-inline.h"
 #include "ns3/queue.h"
 #include <unordered_map>
 #include "qos-utils.h"
@@ -331,7 +332,7 @@ private:
    * \param now a copy of Simulator::Now()
    * \return true if the item is removed, false otherwise
    */
-  inline bool TtlExceeded (ConstIterator &it, const Time& now);
+  NS3_INLINE bool TtlExceeded (ConstIterator &it, const Time& now);
 
   /**
    * Enqueue the given Wifi MAC queue item before the given position.
