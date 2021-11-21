@@ -25,32 +25,9 @@
 
 #include <algorithm>
 #include <cstdlib>  // getenv
-#include <cerrno>
 #include <cstring>  // strlen
+#include <filesystem>
 #include <tuple>
-
-#if defined (HAVE_DIRENT_H) && defined (HAVE_SYS_TYPES_H)
-/** Do we have an \c opendir function? */
-#define HAVE_OPENDIR
-#include <sys/types.h>
-#include <dirent.h>
-#endif
-
-#ifdef HAVE_OPENDIR
-    #include <sys/types.h>
-#endif
-
-#if defined (HAVE_SYS_STAT_H) and defined (HAVE_SYS_TYPES_H)
-    /** Do we have a \c makedir function? */
-    #define HAVE_MKDIR_H
-    #ifdef __WIN32__
-        #define WIN32_LEAN_AND_MEAN
-        #include <windows.h>
-    #endif
-    #include <sys/types.h>
-    #include <sys/stat.h>
-#endif
-
 #include <sstream>
 #include <ctime>
 
@@ -66,6 +43,11 @@
 
 #ifdef __linux__
 #include <unistd.h>
+#endif
+
+#ifdef __WIN32__
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #endif
 
 /**
@@ -101,39 +83,17 @@ std::tuple<std::list<std::string>, bool> ReadFilesNoThrow (std::string path)
 {
   NS_LOG_FUNCTION (path);
   std::list<std::string> files;
-
-#if defined HAVE_OPENDIR
-  DIR *dp = opendir (path.c_str ());
-  if (dp == NULL)
+  if (!std::filesystem::exists (path))
     {
-      return std::make_tuple (files, true);
+      return std::make_tuple(files, true);
     }
-  struct dirent *de = readdir (dp);
-  while (de != 0)
+  for(auto& it: std::filesystem::directory_iterator(path))
     {
-      files.push_back (de->d_name);
-      de = readdir (dp);
+      if (!it.is_directory())
+        {
+          files.push_back(it.path().filename().string());
+        }
     }
-  closedir (dp);
-#elif defined (HAVE_FIND_FIRST_FILE)
-  /** \todo untested */
-  HANDLE hFind;
-  WIN32_FIND_DATA fileData;
-
-  hFind = FindFirstFile (path.c_str (), &FindFileData);
-  if (hFind == INVALID_HANDLE_VALUE)
-    {
-      return std::make_tuple (files, true);
-    }
-  do
-    {
-      files.push_back (fileData.cFileName);
-    }
-  while (FindNextFile (hFind, &fileData));
-  FindClose (hFind);
-#else
-#error "No support for reading a directory on this platform"
-#endif
   return std::make_tuple (files, false);
 }
 
@@ -313,23 +273,13 @@ std::string Join (std::list<std::string>::const_iterator begin,
 std::list<std::string> ReadFiles (std::string path)
 {
   NS_LOG_FUNCTION (path);
-#if defined HAVE_OPENDIR
-    std::list<std::string> files;
-  DIR *dp = opendir (path.c_str ());
-  if (dp == NULL)
+  bool err;
+  std::list<std::string> files;
+  std::tie (files, err) = ReadFilesNoThrow (path);
+  if (err)
     {
       NS_FATAL_ERROR ("Could not open directory=" << path);
     }
-  struct dirent *de = readdir (dp);
-  while (de != 0)
-    {
-      files.push_back (de->d_name);
-      de = readdir (dp);
-    }
-  closedir (dp);
-#else
-#error "No support for reading a directory on this platform"
-#endif
   return files;
 }
 
@@ -385,34 +335,16 @@ MakeDirectories (std::string path)
 {
   NS_LOG_FUNCTION (path);
 
-  // Make sure all directories on the path exist
-  std::list<std::string> elements = Split (path);
-  auto i = elements.begin ();
-  while (i != elements.end ())
+  bool makeDirErr = false;
+
+  if (!std::filesystem::exists (path))
     {
-      if (*i == "")
-        {
-          NS_LOG_LOGIC ("skipping empty directory name");
-          ++i;
-          continue;
-        }
-      NS_LOG_LOGIC ("creating directory " << *i);
-      ++i;  // Now points to one past the directory we want to create
-      std::string tmp = Join (elements.begin (), i);
-      bool makeDirErr = false;
+      makeDirErr = !std::filesystem::create_directories (path);
+    }
 
-#if defined(HAVE_MKDIR_H)
-    #ifdef __WIN32__
-          makeDirErr = mkdir (tmp.c_str ());
-    #else
-          makeDirErr = mkdir (tmp.c_str (), S_IRWXU);
-    #endif
-#endif
-
-      if (makeDirErr)
-        {
-          NS_LOG_ERROR ("failed creating directory " << tmp);
-        }
+  if (makeDirErr)
+    {
+      NS_LOG_ERROR ("failed creating directory " << path);
     }
 }
 
