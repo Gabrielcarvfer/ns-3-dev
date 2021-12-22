@@ -5,8 +5,11 @@
   stage: documentation
   before_script:
     - pacman -Syu --noconfirm
-    - pacman -Sy base-devel python ccache gsl libgcrypt gtk3 boost --noconfirm
+    - pacman -Sy base-devel python python-pip ccache gsl libgcrypt gtk3 boost --noconfirm
     - pacman -Sy git doxygen graphviz imagemagick dia texlive-core texlive-bin texlive-latexextra python-sphinx --noconfirm
+    - pip install sphinxcontrib-mermaid
+    - pacman -Sy npm --noconfirm
+    - npm install @mermaid-js/mermaid-cli
     # no policy is a good policy.
     - mv /etc/ImageMagick-7/policy.xml /etc/ImageMagick-7/policy.xml.bak
 #    - sed -i "s/EPS,PDF,//g" /etc/ImageMagick-7/policy.xml

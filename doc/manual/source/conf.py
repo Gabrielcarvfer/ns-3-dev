@@ -45,7 +45,9 @@ import sys, os
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.imgmath']
+extensions = ['sphinx.ext.imgmath',
+              'sphinxcontrib.mermaid'
+              ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -356,3 +358,7 @@ man_pages = [
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #
 # texinfo_no_detailmenu = False
+
+# Set path to mermaid-cli used by sphinxcontrib-mermaid
+mermaid_cmd = "npx -p @mermaid-js/mermaid-cli mmdc"
+mermaid_pdfcrop = "pdfcrop"
