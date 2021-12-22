@@ -1216,7 +1216,7 @@ You can run the unit tests of the |ns3| distribution by running the
 
 .. sourcecode:: bash
 
-  $ ./test.py
+  $ ./test.py --nowaf
 
 These tests are run in parallel by ns3. You should eventually
 see a report saying that
