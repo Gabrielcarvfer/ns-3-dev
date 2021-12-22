@@ -15,14 +15,39 @@ Working with CMake
 
 The ns-3 project used Waf build system in the past, but it has moved to CMake in late 2021.
 
-The steps performed on a typical workflow are the following: 
+A top-level view of the workflow is shown in the diagram below.
 
-1. Fetch sources
-2. Configure the CMake project
-3. Modify files
-4. Manually refresh the CMake cache (only needed if adding new modules)
-5. CMake cache gets automatically refreshed (after changes to CMakeLists.txt, .cmake and .h files)
-6. Build and debug targets
+.. mermaid::
+
+    flowchart LR
+    %% Define node labels
+    Fetch[Fetch sources\n\n]
+    Configure[Configure the\n CMake project]
+    Modify[Modify files\n\n]
+    ManualRefresh[Manually refresh\n the CMake cache]
+    AutoRefresh[CMake cache gets\n automatically refreshed]
+    Build[Build and debug\n targets]
+
+    %% Define links between nodes
+    Fetch --> Configure
+    Configure --> Modify
+    Configure --"Build unchanged project\n\n"--> Build
+    Modify --"Added new modules\n\n"--> ManualRefresh
+    ManualRefresh --"Fix issues in\n the new module"--> Modify
+    Modify --"CMake (CMakeLists.txt, .cmake)\n or header files (.h)"--> AutoRefresh
+    Modify --"Source files (.cc)\n\n"--> Build
+    ManualRefresh --> Build
+    AutoRefresh --> Build
+    Build --"Change settings\n\n"--> Configure
+    Build --"Work on the project\n\n"--> Modify
+
+    %% Define node colors
+    style Fetch fill:#eeffcc,stroke:#000
+    style Configure fill:#eeffcc,stroke:#000
+    style Modify fill:#eeffcc,stroke:#000
+    style ManualRefresh fill:#eeffcc,stroke:#000
+    style AutoRefresh fill:#e3e3e3,stroke:#000
+    style Build fill:#eeffcc,stroke:#000
 
 Fetch sources
 *************
