@@ -198,6 +198,24 @@ if(${CLANG} AND APPLE)
   set(LIB_AS_NEEDED_POST)
 endif()
 
+# Search for faster linkers mold and lld, and use them if available
+mark_as_advanced(MOLD LLD)
+find_program(MOLD mold)
+find_program(LLD ld.lld)
+
+if(LLD AND (GCC OR CLANG))
+  add_link_options("-fuse-ld=lld")
+endif()
+
+# Mold support was added in GCC 12.1.0
+if(MOLD
+   AND LINUX
+   AND GCC
+   AND (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.1.0)
+)
+  add_link_options("-fuse-ld=mold")
+endif()
+
 macro(SUBDIRLIST result curdir)
   file(GLOB children RELATIVE ${curdir} ${curdir}/*)
   set(dirlist "")
