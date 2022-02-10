@@ -144,10 +144,6 @@ WifiMacQueue::Insert (ConstIterator pos, Ptr<WifiMacQueueItem> item)
   const Time now = Simulator::Now ();
   while (it != GetContainer ().cend ())
     {
-      if (it == pos && TtlExceeded (it, now))
-        {
-          return DoEnqueue (it, item);
-        }
       if (TtlExceeded (it, now))
         {
           return DoEnqueue (pos, item);
