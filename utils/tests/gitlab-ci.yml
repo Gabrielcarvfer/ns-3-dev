@@ -103,36 +103,43 @@ per-commit-compile-optimized:
     - pacman -Syu --noconfirm
     - pacman -Sy base-devel python ccache gsl gtk3 boost ninja cmake --noconfirm
 
-# .cmake-build:
-#   stage: build
-#   script:
-#     - mkdir -p $CCACHE_BASEDIR_VALUE
-#     - export CCACHE_BASEDIR=${PWD}
-#     - export CCACHE_DIR=${PWD}/$CCACHE_BASEDIR_VALUE
-#     - ./ns3 configure -d $MODE -GNinja --enable-examples --enable-tests
-#     - ./ns3 build
-#     - ./test.py -n
-#   cache:
-#     paths:
-#       - $CCACHE_BASEDIR_VALUE/
-#   timeout: 9h
-#   variables:
-#     CCACHE_BASEDIR_VALUE: ns-3-ccache-storage
-    
-# per-commit-compile-release-cmake:
-#   extends: .cmake-build
-#   except:
-#     variables:
-#       - $PYBINDGEN == "True"
-#       - $RELEASE == "weekly"
-#       - $RELEASE == "daily"
-#   image: archlinux
-#   variables:
-#     COMPILER: g++
-#     MODE: release
-#   before_script:
-#     - pacman -Syu --noconfirm
-#     - pacman -Sy base-devel python ccache gsl gtk3 boost ninja cmake --noconfirm
+per-commit-compile-release-coverage:
+  image: archlinux
+  before_script:
+    - pacman -Syu --noconfirm
+    - pacman -Sy base-devel python python-pip ccache gsl gtk3 boost ninja cmake lcov --noconfirm
+    - pip install gcovr
+  script:
+    - mkdir -p $CCACHE_BASEDIR_VALUE
+    - export CCACHE_BASEDIR=${PWD}
+    - export CCACHE_DIR=${PWD}/$CCACHE_BASEDIR_VALUE
+    - export MPI_CI=1
+    - ./ns3 configure -d release --enable-gcov -GNinja --enable-examples --enable-tests --enable-asserts --enable-mpi
+    - ./ns3 build
+    - ./test.py -n
+    - gcovr --xml-pretty --print-summary -o coverage.xml --root ${CI_PROJECT_DIR}
+  coverage: /^\s*lines:\s*\d+.\d+\%/
+  artifacts:
+    name: ${CI_JOB_NAME}-${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHA}
+    expire_in: 2 days
+    paths:
+      - coverage.xml
+    reports:
+      cobertura: coverage.xml
+  variables:
+    CCACHE_BASEDIR_VALUE: ns-3-ccache-storage
+  cache:
+    # Use separate key for each (debug/optimized/release) jobs because
+    # they run in parallel and will otherwise overwrite each other
+    # cache when they upload the cache archive at the end of the job,
+    # resulting in only the cache for the last finished configuration
+    # being stored.
+    #
+    # Do not distinguish between branches though to avoid
+    # recompilation of all the files when a new branch is created.
+    key: "ccache-$CI_JOB_NAME"
+    paths:
+      - $CCACHE_BASEDIR_VALUE/
 
 # Weekly jobs for other distribution and compilers
 include:
