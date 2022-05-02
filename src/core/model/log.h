@@ -354,7 +354,7 @@ public:
    * \param [in] level The level to check for.
    * \return \c true if we are enabled at \c level.
    */
-  bool IsEnabled (const enum LogLevel level) const;
+  inline bool IsEnabled (const enum LogLevel level) const { return (level & m_levels); };
   /**
    * Check if all levels are disabled.
    *
