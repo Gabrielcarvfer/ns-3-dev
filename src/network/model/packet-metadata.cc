@@ -138,25 +138,17 @@ PacketMetadata::IsStateOk (void) const
   ok &= IsPointerOk (m_head);
   ok &= IsPointerOk (m_tail);
   uint16_t current = m_head;
-  while (ok && current != 0xffff)
+  bool is_tail = false;
+  while (ok & (current != 0xffff) & !is_tail)
     {
       struct PacketMetadata::SmallItem item;
       PacketMetadata::ExtraItem extraItem;
       ReadItems (current, &item, &extraItem);
       ok &= IsSharedPointerOk (item.next);
       ok &= IsSharedPointerOk (item.prev);
-      if (current != m_head)
-        {
-          ok &= IsPointerOk (item.prev);
-        }
-      if (current != m_tail)
-        {
-          ok &= IsPointerOk (item.next);
-        }
-      if (current == m_tail)
-        {
-          break;
-        }
+      ok &= IsPointerOk (item.prev) | (current == m_head);
+      ok &= IsPointerOk (item.next) | (current == m_tail);
+      is_tail = current == m_tail;
       current = item.next;
     }
   return ok;
