@@ -117,14 +117,15 @@ PacketMetadata::Reserve (uint32_t size)
 bool
 PacketMetadata::IsSharedPointerOk (uint16_t pointer) const
 {
-  NS_LOG_FUNCTION (this << pointer);
+  //NS_LOG_FUNCTION (this << pointer);
   bool ok = pointer == 0xffff || pointer <= m_data->m_size;
   return ok;
 }
+
 bool
 PacketMetadata::IsPointerOk (uint16_t pointer) const
 {
-  NS_LOG_FUNCTION (this << pointer);
+  //NS_LOG_FUNCTION (this << pointer);
   bool ok = pointer == 0xffff || pointer <= m_used;
   return ok;
 }
