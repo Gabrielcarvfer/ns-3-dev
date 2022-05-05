@@ -36,7 +36,7 @@ function(build_lib)
   set(options IGNORE_PCH)
   set(oneValueArgs LIBNAME)
   set(multiValueArgs SOURCE_FILES HEADER_FILES LIBRARIES_TO_LINK TEST_SOURCES
-                     DEPRECATED_HEADER_FILES MODULE_ENABLED_FEATURES
+                     DEPRECATED_HEADER_FILES MODULE_ENABLED_FEATURES PRIVATE_HEADER_FILES
   )
   cmake_parse_arguments(
     "BLIB" "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN}
@@ -116,6 +116,8 @@ function(build_lib)
     PROPERTIES
       PUBLIC_HEADER
       "${BLIB_HEADER_FILES};${BLIB_DEPRECATED_HEADER_FILES};${config_headers};${CMAKE_HEADER_OUTPUT_DIRECTORY}/${BLIB_LIBNAME}-module.h"
+      PRIVATE_HEADER
+      "${BLIB_PRIVATE_HEADER_FILES}"
   )
 
   if(${NS3_CLANG_TIMETRACE})
@@ -224,6 +226,13 @@ function(build_lib)
     )
   endif()
 
+  if(BLIB_PRIVATE_HEADER_FILES)
+    copy_headers_before_building_lib(
+            ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}/private
+            "${BLIB_PRIVATE_HEADER_FILES}" private
+    )
+  endif()
+
   # Build tests if requested
   if(${ENABLE_TESTS})
     list(LENGTH BLIB_TEST_SOURCES test_source_len)
@@ -283,6 +292,7 @@ function(build_lib)
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/
     PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ns3"
+    PRIVATE_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ns3/private"
   )
   if(${NS3_VERBOSE})
     message(STATUS "Processed ${FOLDER}")
