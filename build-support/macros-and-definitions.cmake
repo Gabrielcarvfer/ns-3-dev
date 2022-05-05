@@ -960,6 +960,7 @@ macro(process_options)
         ${PROJECT_SOURCE_DIR}/doc/introspected-command-line.h 2> NULL
       DEPENDS run-introspected-command-line
     )
+
     add_custom_target(
       update_doxygen_version
       COMMAND bash ${PROJECT_SOURCE_DIR}/doc/ns3_html_theme/get_version.sh
@@ -1393,8 +1394,11 @@ function(copy_headers_before_building_lib libname outputdir headers visibility)
 
     # Create a stub header in the output directory, including the real header
     # inside their respective module
+    get_filename_component(
+      ABSOLUTE_HEADER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${header}" ABSOLUTE
+    )
     file(WRITE ${outputdir}/${header_name}
-         "#include \"${CMAKE_CURRENT_SOURCE_DIR}/${header}\"\n"
+         "#include \"${ABSOLUTE_HEADER_PATH}\"\n"
     )
   endforeach()
 endfunction(copy_headers_before_building_lib)
