@@ -61,7 +61,14 @@ if(APPLE)
   add_definitions(-D__APPLE__)
 endif()
 
+if(WIN32)
+  set(NS3_PRECOMPILE_HEADERS OFF
+          CACHE BOOL "Precompile module headers to speed up compilation" FORCE
+          )
+endif()
+
 set(cat_command cat)
+
 
 if(CMAKE_XCODE_BUILD_SYSTEM)
   set(XCODE True)
@@ -670,9 +677,9 @@ macro(process_options)
     mark_as_advanced(LIBRT)
     set(ENABLE_REALTIME FALSE)
     if(${NS3_REALTIME})
-      if(APPLE)
+      if(APPLE OR WIN32)
         message(
-          STATUS "Lib RT is not supported on Mac OS X. Continuing without it."
+          STATUS "Lib RT is not supported on Mac OS X nor on Windows. Continuing without it."
         )
       else()
         find_library(LIBRT rt QUIET)
@@ -987,10 +994,9 @@ macro(process_options)
               > ${PROJECT_SOURCE_DIR}/doc/introspected-command-line.h 2> NULL
       DEPENDS run-introspected-command-line
     )
-
     add_custom_target(
       update_doxygen_version
-      COMMAND ${PROJECT_SOURCE_DIR}/doc/ns3_html_theme/get_version.sh
+      COMMAND bash ${PROJECT_SOURCE_DIR}/doc/ns3_html_theme/get_version.sh
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
 
@@ -1176,7 +1182,7 @@ macro(process_options)
   set(PLATFORM_UNSUPPORTED_POST "features. Continuing without them.")
   # Remove from libs_to_build all incompatible libraries or the ones that
   # dependencies couldn't be installed
-  if(APPLE OR WSLv1)
+  if(APPLE OR WSLv1 OR WIN32)
     set(ENABLE_TAP OFF)
     set(ENABLE_EMU OFF)
     list(REMOVE_ITEM libs_to_build fd-net-device)
@@ -1377,6 +1383,11 @@ function(copy_headers_before_building_lib libname outputdir headers visibility)
       header_name ${CMAKE_CURRENT_SOURCE_DIR}/${header} NAME
     )
 
+    # If output directory does not exist, create it
+    if(NOT (EXISTS ${outputdir}))
+      file(MAKE_DIRECTORY ${outputdir})
+    endif()
+
     # If header already exists, skip symlinking/stub header creation
     if(EXISTS ${outputdir}/${header_name})
       continue()
@@ -1384,7 +1395,9 @@ function(copy_headers_before_building_lib libname outputdir headers visibility)
 
     # CMake 3.13 cannot create symlinks on Windows, so we use stub headers as a
     # fallback
-    if(WIN32 AND (${CMAKE_VERSION} VERSION_LESS "3.13.0"))
+    # And even if it could, the default permissions on windows prevent
+    # non-administrative users from creating symlinks
+    if(WIN32)# OR (${CMAKE_VERSION} VERSION_LESS "3.13.0"))
       # Create a stub header in the output directory, including the real header
       # inside their respective module
 
