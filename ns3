@@ -16,7 +16,10 @@ lock_file = os.sep.join([ns3_path, ".lock-ns3_%s_build" % sys.platform])
 max_cpu_threads = max(1, os.cpu_count() - 1)
 print_buffer = ""
 run_verbose = True
-path_sep = ";" if sys.platform == "win32" else ":"
+# Windows uses ; as a PATH entry separator,
+# but msys shell uses : just like most Unix-like systems
+path_sep = ";" if ";" in os.environ["PATH"] else ":"
+path_variable = "$PATH" if path_sep == ":" else "%PATH%"
 
 # Prints everything in the print_buffer on exit
 def exit_handler(dry_run):
@@ -666,9 +669,20 @@ def get_program_shortcuts(build_profile, ns3_version):
                 longest_shortcut_map[shortcut_path].append(longest_shortcut)
 
             ns3_program_map[shortcut_path] = [program]
+
+            # Add an additional shortcut with .exe suffix when running on Windows
+            if sys.platform == "win32":
+                ns3_program_map[shortcut_path.replace("\\","/")] = [program]
+                ns3_program_map[shortcut_path+".exe"] = [program]
+                ns3_program_map[shortcut_path.replace("\\","/")+".exe"] = [program]
+
+
             if source_shortcut:
                 cc_shortcut_path = shortcut_path + ".cc"
                 ns3_program_map[cc_shortcut_path] = [program]
+                if sys.platform == "win32":
+                    ns3_program_map[cc_shortcut_path] = [program]
+                    ns3_program_map[cc_shortcut_path.replace("\\","/")] = [program]
 
                 # Store longest shortcut path for collisions
                 if cc_shortcut_path not in longest_shortcut_map:
@@ -706,7 +720,7 @@ def cmake_check_version():
     # Check CMake version
     cmake = shutil.which("cmake")
     if not cmake:
-        print("Error:  CMake not found; please install version 3.10 or greater, or modify $PATH")
+        print("Error:  CMake not found; please install version 3.10 or greater, or modify", path_variable)
         exit(1)
     cmake_output = subprocess.check_output([cmake, "--version"]).decode("utf-8")
     version = re.findall("version (.*)", cmake_output)[0]
@@ -956,7 +970,7 @@ def build_step(args,
 def run_step(args, target_to_run, target_args):
     libdir = "%s/lib" % out_dir
 
-    custom_env = {"PATH": libdir,
+    custom_env = {"PATH": libdir + path_sep + out_dir,
                   "PYTHONPATH": "%s/bindings/python" % out_dir,
                   }
     if sys.platform != "win32":
@@ -1021,7 +1035,7 @@ def run_step(args, target_to_run, target_args):
         exported_variables = "export "
         for (variable, value) in custom_env.items():
             if variable == "PATH":
-                value = "$PATH" + path_sep + libdir
+                value = path_variable + path_sep + libdir
             exported_variables += "%s=%s " % (variable, value)
         print_and_buffer("cd %s; %s; %s" % (os.path.relpath(ns3_path, working_dir),
                                             exported_variables,
@@ -1317,6 +1331,8 @@ def main():
                 if os.path.exists(os.sep.join([out_dir, waf_target_to_run])):
                     target_to_run = waf_target_to_run
         target_to_run = os.sep.join([out_dir, target_to_run])
+        if sys.platform == "win32":
+            target_to_run += ".exe"
 
         # If we're only trying to run the target, we need to check if it actually exists first
         if (run_only or build_and_run) and ".py" not in target_to_run and not os.path.exists(target_to_run):
