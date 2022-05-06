@@ -88,21 +88,27 @@ ExampleAsTestCase::DoRun (void)
   std::stringstream ss;
 
   // Use bash as shell to allow use of PIPESTATUS
-  ss << "bash -c './ns3 run " << m_program
-     << " --no-build --command-template=\"" << GetCommandTemplate () << "\""
+  #ifdef __WIN32__
+    ss << "python3 ./ns3 run " << m_program;
+  #else
+    ss << "bash -c './ns3 run " << m_program;
+  #endif
+  ss   << " --no-build --command-template=\"" << GetCommandTemplate () << "\""
 
     // redirect std::clog, std::cerr to std::cout
      << " 2>&1 "
-
     // Suppress the waf lines from output; waf output contains directory paths which will
     // obviously differ during a test run
-     << " | grep -v 'Waf:' "
+     << " "
      << GetPostProcessingCommand ()
-     << " > " << testFile
+     << " > " << testFile;
 
     // Get the status of ns3
-     << "; exit ${PIPESTATUS[0]}'";
-
+  #ifdef __WIN32__
+     ss << " && exit %ErrorLevel%";
+  #else
+     ss << " && exit ${PIPESTATUS[0]}'";
+  #endif
   int status = std::system (ss.str ().c_str ());
 
   std::cout << "command:  " << ss.str () << "\n"
