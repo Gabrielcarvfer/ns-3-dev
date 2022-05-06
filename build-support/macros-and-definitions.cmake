@@ -93,6 +93,11 @@ else()
         "${PROJECT_SOURCE_DIR}/${NS3_OUTPUT_DIRECTORY}"
     )
   endif()
+
+  # Transform backward slash into forward slash
+  # Not the best way to do it since \ is a scape thing and can be used before whitespaces
+  string(REPLACE "\\" "/" absolute_ns3_output_directory "${absolute_ns3_output_directory}")
+
   if(NOT (EXISTS ${absolute_ns3_output_directory}))
     message(
       STATUS
@@ -124,8 +129,8 @@ else()
   set(CMAKE_OUTPUT_DIRECTORY ${absolute_ns3_output_directory})
 endif()
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib) # .dylib/.so/.dll.a
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib) # .dll
 set(CMAKE_HEADER_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/include/ns3)
 set(THIRD_PARTY_DIRECTORY ${PROJECT_SOURCE_DIR}/3rd-party)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -140,8 +145,8 @@ if(${XCODE})
   # targets to a Debug/Release subfolder? Why?
   foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
     string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG}
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    set(CMAKE_OUTPUT_DIRECTORY_${OUTPUTCONFIG}
+        ${CMAKE_OUTPUT_DIRECTORY}
     )
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG}
         ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
@@ -1336,7 +1341,7 @@ function(set_runtime_outputdirectory target_name output_directory target_prefix)
         NAME ctest-${target_prefix}${target_name}
         COMMAND
           ${CMAKE_COMMAND} -E env
-          "PATH=$ENV{PATH};${CMAKE_RUNTIME_OUTPUT_DIRECTORY};${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+          "PATH=$ENV{PATH};${CMAKE_OUTPUT_DIRECTORY};${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
           ${ns3-exec-outputname}
         WORKING_DIRECTORY ${output_directory}
       )
@@ -1519,7 +1524,7 @@ macro(build_example)
 
     set_runtime_outputdirectory(
       ${EXAMPLE_NAME}
-      ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/examples/${examplefolder}/ ""
+      ${CMAKE_OUTPUT_DIRECTORY}/examples/${examplefolder}/ ""
     )
   endif()
 endmacro()

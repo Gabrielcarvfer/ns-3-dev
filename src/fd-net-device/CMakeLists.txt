@@ -159,11 +159,11 @@ if(${ENABLE_FDNETDEV})
       helper/raw-sock-creator.cc
     )
     add_definitions(
-      -DRAW_SOCK_CREATOR="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-raw-sock-creator${build_profile_suffix}"
+      -DRAW_SOCK_CREATOR="${CMAKE_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-raw-sock-creator${build_profile_suffix}"
     )
     set_runtime_outputdirectory(
       raw-sock-creator
-      ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/
+      ${CMAKE_OUTPUT_DIRECTORY}/src/fd-net-device/
       ""
     )
 
@@ -194,11 +194,11 @@ if(${ENABLE_FDNETDEV})
       helper/tap-device-creator.cc
     )
     add_definitions(
-      -DTAP_DEV_CREATOR="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-tap-device-creator${build_profile_suffix}"
+      -DTAP_DEV_CREATOR="${CMAKE_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-tap-device-creator${build_profile_suffix}"
     )
     set_runtime_outputdirectory(
       tap-device-creator
-      ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/
+      ${CMAKE_OUTPUT_DIRECTORY}/src/fd-net-device/
       ""
     )
 
@@ -231,11 +231,11 @@ if(${ENABLE_FDNETDEV})
       helper/netmap-device-creator.cc
     )
     add_definitions(
-      -DNETMAP_DEV_CREATOR="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-netmap-device-creator${build_profile_suffix}"
+      -DNETMAP_DEV_CREATOR="${CMAKE_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-netmap-device-creator${build_profile_suffix}"
     )
     set_runtime_outputdirectory(
       netmap-device-creator
-      ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/
+      ${CMAKE_OUTPUT_DIRECTORY}/src/fd-net-device/
       ""
     )
 

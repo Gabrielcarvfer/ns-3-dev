@@ -158,7 +158,7 @@ function(build_lib)
     string(REPLACE "-I" "" exported_include_directories
                    "${exported_include_directories}"
     )
-    string(REPLACE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/include" ""
+    string(REPLACE "${CMAKE_OUTPUT_DIRECTORY}/include" ""
                    exported_include_directories
                    "${exported_include_directories}"
     )
@@ -477,6 +477,7 @@ function(build_lib)
     EXPORT ns3ExportTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/
     PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ns3"
     PRIVATE_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ns3/private"
   )

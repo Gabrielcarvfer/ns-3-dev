@@ -974,7 +974,7 @@ def build_step(args,
 def run_step(args, target_to_run, target_args):
     libdir = "%s/lib" % out_dir
 
-    custom_env = {"PATH": libdir + path_sep + out_dir,
+    custom_env = {"PATH": libdir,
                   "PYTHONPATH": "%s/bindings/python" % out_dir,
                   }
     if sys.platform != "win32":

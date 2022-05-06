@@ -47,12 +47,9 @@ cmake_build_project_command = "cmake --build . -j".format(ns3_path=ns3_path)
 cmake_build_target_command = partial("cmake --build . -j {jobs} --target {target}".format,
                                      jobs=max(1, os.cpu_count() - 1)
                                      )
-
-if sys.platform == "win32":
-    platform_makefiles = "MinGW Makefiles"
-else:
-    platform_makefiles = "Unix Makefiles"
-
+win32 = sys.platform == "win32"
+platform_makefiles = "MinGW Makefiles" if win32 else "Unix Makefiles"
+ext = ".exe" if win32 else ""
 
 
 def run_ns3(args, env=None):
@@ -124,7 +121,13 @@ def get_programs_list():
     values = {}
     with open(ns3_lock_filename) as f:
         exec(f.read(), globals(), values)
-    return values["ns3_runnable_programs"]
+
+    programs_list = values["ns3_runnable_programs"]
+
+    # Add .exe suffix to programs if on Windows
+    if win32:
+        programs_list = list(map(lambda x: x + ext, programs_list))
+    return programs_list
 
 
 def get_libraries_list(lib_outdir=usual_lib_outdir):
@@ -837,7 +840,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
                     }
                     """)
         return_code, stdout, stderr = run_ns3("run sigsegv")
-        if sys.platform == "win32":
+        if win32:
             self.assertEqual(return_code, 4294967295) # unsigned -1
             self.assertIn("sigsegv-default.exe' returned non-zero exit status", stdout)
         else:
@@ -858,7 +861,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
                     }
                     """)
         return_code, stdout, stderr = run_ns3("run abort")
-        if sys.platform == "win32":
+        if win32:
             self.assertEqual(return_code, 3)
             self.assertIn("abort-default.exe' returned non-zero exit status", stdout)
         else:
@@ -1157,7 +1160,10 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
         """
         return_code, stdout, stderr = run_ns3("configure --trace-performance")
         self.assertEqual(return_code, 0)
-        self.assertIn("--profiling-format=google-trace --profiling-output=../cmake_performance_trace.log", stdout)
+        if win32:
+            self.assertIn("--profiling-format=google-trace --profiling-output=", stdout)
+        else:
+            self.assertIn("--profiling-format=google-trace --profiling-output=../cmake_performance_trace.log", stdout)
         self.assertTrue(os.path.exists(os.path.join(ns3_path, "cmake_performance_trace.log")))
 
 
@@ -1209,7 +1215,7 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         self.assertEqual(return_code, 0)
         self.assertIn("Built target", stdout)
         for program in get_programs_list():
-            self.assertTrue(os.path.exists(program))
+            self.assertTrue(os.path.exists(program), program)
         self.assertIn(cmake_build_project_command, stdout)
 
     def test_04_BuildProjectNoTaskLines(self):
@@ -1313,7 +1319,7 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         for different_out_dir in [absolute_path, relative_path]:
             return_code, stdout, stderr = run_ns3("configure -G \"" + platform_makefiles + "\" --out=%s" % different_out_dir)
             self.config_ok(return_code, stdout)
-            self.assertIn("Build directory               : %s" % absolute_path, stdout)
+            self.assertIn("Build directory               : %s" % absolute_path.replace(os.sep, '/'), stdout)
 
             # Build
             run_ns3("build")
@@ -1337,7 +1343,7 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         # Restore original output directory.
         return_code, stdout, stderr = run_ns3("configure -G \"" + platform_makefiles + "\" --out=''")
         self.config_ok(return_code, stdout)
-        self.assertIn("Build directory               : %s" % usual_outdir, stdout)
+        self.assertIn("Build directory               : %s" % usual_outdir.replace(os.sep, '/'), stdout)
 
         # Try re-building.
         run_ns3("build")
@@ -1460,7 +1466,7 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
                 # Configure the test project
                 cmake = shutil.which("cmake")
                 return_code, stdout, stderr = run_program(cmake,
-                                                          "-DCMAKE_BUILD_TYPE=debug .",
+                                                          "-DCMAKE_BUILD_TYPE=debug -G\"" + platform_makefiles + "\" .",
                                                           cwd=install_prefix)
                 if version == "3.00":
                     self.assertEqual(return_code, 1)
@@ -1487,7 +1493,14 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
                     self.assertIn("Built target", stdout)
 
                     # Try running the test program that imports ns-3
-                    return_code, stdout, stderr = run_program("./test", "", cwd=install_prefix)
+                    if win32:
+                        test_program = os.path.join(install_prefix, "test.exe")
+                        env_sep = ";" if ";" in os.environ["PATH"] else ":"
+                        env = {"PATH": env_sep.join([os.environ["PATH"], os.path.join(install_prefix, "lib")])}
+                    else:
+                        test_program = "./test"
+                        env=None
+                    return_code, stdout, stderr = run_program(test_program, "", cwd=install_prefix, env=env)
                     self.assertEqual(return_code, 0)
 
         # Uninstall
@@ -1661,7 +1674,7 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         self.assertEqual(return_code, 1)
         self.assertIn(
             'Build target "second" is ambiguous. Try one of these: "scratch/second", "examples/tutorial/second"',
-            stdout
+            stdout.replace(os.sep, '/')
         )
 
         # Try to run scratch/second and succeed
@@ -1679,7 +1692,7 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         self.assertEqual(return_code, 1)
         self.assertIn(
             'Run target "second" is ambiguous. Try one of these: "scratch/second", "examples/tutorial/second"',
-            stdout
+            stdout.replace(os.sep, '/')
         )
 
         # Try to run scratch/second and succeed
@@ -1735,7 +1748,7 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
             super().setUp()
 
             # On top of the release build configured by NS3ConfigureTestCase, also enable examples, tests and docs.
-            return_code, stdout, stderr = run_ns3("configure -G \"" + platform_makefiles + "\" --enable-examples --enable-tests")
+            return_code, stdout, stderr = run_ns3("configure -d release -G \"" + platform_makefiles + "\" --enable-examples --enable-tests")
             self.config_ok(return_code, stdout)
 
         # Check if .lock-ns3 exists, then read to get list of executables.
@@ -1832,7 +1845,10 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
         return_code, stdout, stderr = run_ns3("run scratch-simulator --gdb --verbose --no-build", env={"gdb_eval":"1"})
         self.assertEqual(return_code, 0)
         self.assertIn("scratch-simulator", stdout)
-        self.assertIn("No debugging symbols found", stdout)
+        if win32:
+            self.assertIn("GNU gdb", stdout)
+        else:
+            self.assertIn("No debugging symbols found", stdout)
 
     def test_09_RunNoBuildValgrind(self):
         """!
@@ -2000,7 +2016,7 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
         likely_fuse_mount = ((prev_fstat.st_mode & stat.S_ISUID) == (fstat.st_mode & stat.S_ISUID)) and \
                             prev_fstat.st_uid == 0
 
-        if sys.platform == "win32" or likely_fuse_mount:
+        if win32 or likely_fuse_mount:
             self.skipTest("Windows or likely a FUSE mount")
 
         # If this is a valid platform, we can continue
@@ -2058,8 +2074,9 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
         return_code4, stdout4, _ = run_ns3('run sample-simulator --command-template "%s --PrintVersion" --verbose')
         return_code5, stdout5, _ = run_ns3('run sample-simulator --command-template="%s --PrintVersion" --verbose')
         self.assertEqual((return_code4, return_code5), (0, 0))
-        self.assertIn("sample-simulator --PrintVersion", stdout4)
-        self.assertIn("sample-simulator --PrintVersion", stdout5)
+
+        self.assertIn("sample-simulator{ext} --PrintVersion".format(ext=ext), stdout4)
+        self.assertIn("sample-simulator{ext} --PrintVersion".format(ext=ext), stdout5)
 
     def test_16_ForwardArgumentsToRunTargets(self):
         """!
@@ -2074,9 +2091,9 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
         return_code2, stdout2, stderr2 = run_ns3('run sample-simulator --verbose -- --help')
 
         self.assertEqual((return_code0, return_code1, return_code2), (0, 0, 0))
-        self.assertIn("sample-simulator --help", stdout0)
-        self.assertIn("sample-simulator --help", stdout1)
-        self.assertIn("sample-simulator --help", stdout2)
+        self.assertIn("sample-simulator{ext} --help".format(ext=ext), stdout0)
+        self.assertIn("sample-simulator{ext} --help".format(ext=ext), stdout1)
+        self.assertIn("sample-simulator{ext} --help".format(ext=ext), stdout2)
 
         # Test if the same thing happens with an additional run argument (e.g. --no-build)
         return_code0, stdout0, stderr0 = run_ns3('run "sample-simulator --help" --no-build')
@@ -2094,9 +2111,9 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
         return_code2, stdout2, stderr2 = run_ns3('run "sample-simulator --PrintTypeIds" --verbose')
 
         self.assertEqual((return_code0, return_code1, return_code2), (0, 0, 0))
-        self.assertIn("sample-simulator --PrintGlobals", stdout0)
-        self.assertIn("sample-simulator --PrintGroups", stdout1)
-        self.assertIn("sample-simulator --PrintTypeIds", stdout2)
+        self.assertIn("sample-simulator{ext} --PrintGlobals".format(ext=ext), stdout0)
+        self.assertIn("sample-simulator{ext} --PrintGroups".format(ext=ext), stdout1)
+        self.assertIn("sample-simulator{ext} --PrintTypeIds".format(ext=ext), stdout2)
 
         # Then check if all the arguments are correctly merged by checking the outputs
         cmd = 'run "sample-simulator --PrintGlobals" --command-template="%s --PrintGroups" --verbose -- --PrintTypeIds'
@@ -2106,7 +2123,7 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
         # The order of the arguments is command template,
         # arguments passed with the target itself
         # and forwarded arguments after the -- separator
-        self.assertIn("sample-simulator --PrintGroups --PrintGlobals --PrintTypeIds", stdout)
+        self.assertIn("sample-simulator{ext} --PrintGroups --PrintGlobals --PrintTypeIds".format(ext=ext), stdout)
 
         # Check if it complains about the missing -- separator
         cmd0 = 'run sample-simulator --command-template="%s " --PrintTypeIds'
