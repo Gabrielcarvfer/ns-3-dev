@@ -28,7 +28,7 @@ if(${ENABLE_TESTS} AND (test IN_LIST libs_to_build))
     endif()
   endif()
   set_runtime_outputdirectory(
-    test-runner ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/utils/ ""
+    test-runner ${CMAKE_OUTPUT_DIRECTORY}/utils/ ""
   )
   add_dependencies(all-test-targets test-runner)
 endif()
@@ -36,14 +36,14 @@ endif()
 add_executable(bench-scheduler bench-scheduler.cc)
 target_link_libraries(bench-scheduler ${libcore})
 set_runtime_outputdirectory(
-  bench-scheduler ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/utils/ ""
+  bench-scheduler ${CMAKE_OUTPUT_DIRECTORY}/utils/ ""
 )
 
 if(network IN_LIST libs_to_build)
   add_executable(bench-packets bench-packets.cc)
   target_link_libraries(bench-packets ${libnetwork})
   set_runtime_outputdirectory(
-    bench-packets ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/utils/ ""
+    bench-packets ${CMAKE_OUTPUT_DIRECTORY}/utils/ ""
   )
 
   add_executable(print-introspected-doxygen print-introspected-doxygen.cc)
@@ -53,12 +53,12 @@ if(network IN_LIST libs_to_build)
             ${LIB_AS_NEEDED_POST}
   )
   set_runtime_outputdirectory(
-    print-introspected-doxygen ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/utils/ ""
+    print-introspected-doxygen ${CMAKE_OUTPUT_DIRECTORY}/utils/ ""
   )
 endif()
 
 if(core IN_LIST ns3-all-enabled-modules)
   add_executable(perf-io perf/perf-io.cc)
   target_link_libraries(perf-io PRIVATE ${libcore})
-  set_runtime_outputdirectory(perf-io ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/utils/perf/ "")
+  set_runtime_outputdirectory(perf-io ${CMAKE_OUTPUT_DIRECTORY}/utils/perf/ "")
 endif()
