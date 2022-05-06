@@ -29,6 +29,7 @@ def exit_handler(dry_run):
         return
     if print_buffer == "":
         return
+    print_buffer = print_buffer.replace('\\','/').replace('//','/').replace('/', os.sep)
     if dry_run:
         print("The following commands would be executed:")
     elif run_verbose:
@@ -1010,7 +1011,10 @@ def run_step(args, target_to_run, target_args):
 
         # running gdb?
         if args.gdb:
-            debugging_software.extend([shutil.which("gdb"), "--args"])
+            gdb_eval_command = []
+            if os.getenv("gdb_eval"):
+                gdb_eval_command.append("--eval-command=quit")
+            debugging_software.extend([shutil.which("gdb"), *gdb_eval_command, "--args"])
 
         # running lldb?
         if args.lldb:
