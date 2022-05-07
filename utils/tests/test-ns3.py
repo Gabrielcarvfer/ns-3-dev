@@ -2092,6 +2092,9 @@ class NS3ExpectedUseTestCase(NS3BaseTestCase):
         if shutil.which("doxygen") is None:
             self.skipTest("Missing doxygen")
 
+        if shutil.which("bash") is None:
+            self.skipTest("Missing bash")
+
         doc_folder = os.path.abspath(os.sep.join([".", "doc"]))
 
         doxygen_files = ["introspected-command-line.h", "introspected-doxygen.h"]
