@@ -1055,12 +1055,37 @@ macro(process_options)
     add_custom_target(sphinx_contributing COMMAND ${sphinx_missing_msg})
   else()
     add_custom_target(sphinx COMMENT "Building sphinx documents")
+    mark_as_advanced(MAKE)
+    find_program(MAKE NAMES make mingw32-make)
+    if(${MAKE} STREQUAL "MAKE-NOTFOUND")
+      message(FATAL_ERROR "Make was not found but is required by Sphinx docs")
+    elseif(${MAKE} MATCHES "mingw32-make")
+      # This is a super wild hack for MinGW
+      #
+      # For some reason make is shipped as mingw32-make instead of make, but
+      # tons of software rely on it being called make
+      #
+      # We could technically create an alias, using doskey make=mingw32-make,
+      # but we need to redefine that for every new shell or make registry changes
+      # to make it permanent
+      #
+      # Symlinking requires administrative permissions for some reason,
+      # so we just copy the entire thing
+      get_filename_component(make_directory ${MAKE} DIRECTORY)
+      get_filename_component(make_parent_directory ${make_directory} DIRECTORY)
+      if(NOT (EXISTS ${make_directory}/make.exe))
+        file(COPY ${MAKE} DESTINATION ${make_parent_directory})
+        file(RENAME ${make_parent_directory}/mingw32-make.exe ${make_directory}/make.exe)
+      endif()
+      set(MAKE ${make_directory}/make.exe)
+    else()
+    endif()
 
     function(sphinx_target targetname)
       # cmake-format: off
       add_custom_target(
         sphinx_${targetname}
-        COMMAND make SPHINXOPTS=-N -k html singlehtml latexpdf
+        COMMAND ${MAKE} SPHINXOPTS=-N -k html singlehtml latexpdf
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/doc/${targetname}
       )
       # cmake-format: on
