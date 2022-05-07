@@ -931,7 +931,7 @@ macro(process_options)
 
   # First we check for doxygen dependencies
   mark_as_advanced(DOXYGEN)
-  check_deps("" "doxygen;dot;dia" doxygen_docs_missing_deps)
+  check_deps("" "doxygen;dot;dia;python3" doxygen_docs_missing_deps)
   if(doxygen_docs_missing_deps)
     message(
       ${HIGHLIGHTED_STATUS}
@@ -965,11 +965,12 @@ macro(process_options)
     add_custom_target(
       run-print-introspected-doxygen
       COMMAND
-        ${CMAKE_OUTPUT_DIRECTORY}/utils/ns${NS3_VER}-print-introspected-doxygen${build_profile_suffix}
+        ${Python3_EXECUTABLE} ./ns3 run print-introspected-doxygen --no-build
         > ${PROJECT_SOURCE_DIR}/doc/introspected-doxygen.h
       COMMAND
-        ${CMAKE_OUTPUT_DIRECTORY}/utils/ns${NS3_VER}-print-introspected-doxygen${build_profile_suffix}
-        --output-text > ${PROJECT_SOURCE_DIR}/doc/ns3-object.txt
+        ${Python3_EXECUTABLE} ./ns3 run "print-introspected-doxygen --output-text" --no-build
+        > ${PROJECT_SOURCE_DIR}/doc/ns3-object.txt
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
       DEPENDS print-introspected-doxygen
     )
     add_custom_target(
