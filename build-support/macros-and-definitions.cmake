@@ -63,12 +63,11 @@ endif()
 
 if(WIN32)
   set(NS3_PRECOMPILE_HEADERS OFF
-          CACHE BOOL "Precompile module headers to speed up compilation" FORCE
-          )
+      CACHE BOOL "Precompile module headers to speed up compilation" FORCE
+  )
 endif()
 
 set(cat_command cat)
-
 
 if(CMAKE_XCODE_BUILD_SYSTEM)
   set(XCODE True)
@@ -94,9 +93,11 @@ else()
     )
   endif()
 
-  # Transform backward slash into forward slash
-  # Not the best way to do it since \ is a scape thing and can be used before whitespaces
-  string(REPLACE "\\" "/" absolute_ns3_output_directory "${absolute_ns3_output_directory}")
+  # Transform backward slash into forward slash Not the best way to do it since
+  # \ is a scape thing and can be used before whitespaces
+  string(REPLACE "\\" "/" absolute_ns3_output_directory
+                 "${absolute_ns3_output_directory}"
+  )
 
   if(NOT (EXISTS ${absolute_ns3_output_directory}))
     message(
@@ -129,7 +130,8 @@ else()
   set(CMAKE_OUTPUT_DIRECTORY ${absolute_ns3_output_directory})
 endif()
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib) # .dylib/.so/.dll.a
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib
+)# .dylib/.so/.dll.a
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib) # .dll
 set(CMAKE_HEADER_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/include/ns3)
 set(THIRD_PARTY_DIRECTORY ${PROJECT_SOURCE_DIR}/3rd-party)
@@ -145,9 +147,7 @@ if(${XCODE})
   # targets to a Debug/Release subfolder? Why?
   foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
     string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
-    set(CMAKE_OUTPUT_DIRECTORY_${OUTPUTCONFIG}
-        ${CMAKE_OUTPUT_DIRECTORY}
-    )
+    set(CMAKE_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_OUTPUT_DIRECTORY})
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG}
         ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     )
@@ -684,7 +684,8 @@ macro(process_options)
     if(${NS3_REALTIME})
       if(APPLE OR WIN32)
         message(
-          STATUS "Lib RT is not supported on Mac OS X nor on Windows. Continuing without it."
+          STATUS
+            "Lib RT is not supported on Mac OS X nor on Windows. Continuing without it."
         )
       else()
         find_library(LIBRT rt QUIET)
@@ -964,12 +965,12 @@ macro(process_options)
     # Get introspected doxygen
     add_custom_target(
       run-print-introspected-doxygen
+      COMMAND ${Python3_EXECUTABLE} ./ns3 run print-introspected-doxygen
+              --no-build > ${PROJECT_SOURCE_DIR}/doc/introspected-doxygen.h
       COMMAND
-        ${Python3_EXECUTABLE} ./ns3 run print-introspected-doxygen --no-build
-        > ${PROJECT_SOURCE_DIR}/doc/introspected-doxygen.h
-      COMMAND
-        ${Python3_EXECUTABLE} ./ns3 run "print-introspected-doxygen --output-text" --no-build
-        > ${PROJECT_SOURCE_DIR}/doc/ns3-object.txt
+        ${Python3_EXECUTABLE} ./ns3 run
+        "print-introspected-doxygen --output-text" --no-build >
+        ${PROJECT_SOURCE_DIR}/doc/ns3-object.txt
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
       DEPENDS print-introspected-doxygen
     )
@@ -1067,19 +1068,22 @@ macro(process_options)
       # tons of software rely on it being called make
       #
       # We could technically create an alias, using doskey make=mingw32-make,
-      # but we need to redefine that for every new shell or make registry changes
-      # to make it permanent
+      # but we need to redefine that for every new shell or make registry
+      # changes to make it permanent
       #
-      # Symlinking requires administrative permissions for some reason,
-      # so we just copy the entire thing
+      # Symlinking requires administrative permissions for some reason, so we
+      # just copy the entire thing
       get_filename_component(make_directory ${MAKE} DIRECTORY)
       get_filename_component(make_parent_directory ${make_directory} DIRECTORY)
       if(NOT (EXISTS ${make_directory}/make.exe))
         file(COPY ${MAKE} DESTINATION ${make_parent_directory})
-        file(RENAME ${make_parent_directory}/mingw32-make.exe ${make_directory}/make.exe)
+        file(RENAME ${make_parent_directory}/mingw32-make.exe
+             ${make_directory}/make.exe
+        )
       endif()
       set(MAKE ${make_directory}/make.exe)
     else()
+
     endif()
 
     function(sphinx_target targetname)
@@ -1549,8 +1553,7 @@ macro(build_example)
     endif()
 
     set_runtime_outputdirectory(
-      ${EXAMPLE_NAME}
-      ${CMAKE_OUTPUT_DIRECTORY}/examples/${examplefolder}/ ""
+      ${EXAMPLE_NAME} ${CMAKE_OUTPUT_DIRECTORY}/examples/${examplefolder}/ ""
     )
   endif()
 endmacro()
