@@ -1043,6 +1043,7 @@ macro(process_options)
       endif()
       set(MAKE ${make_directory}/make.exe)
     else()
+
     endif()
 
     function(sphinx_target targetname)

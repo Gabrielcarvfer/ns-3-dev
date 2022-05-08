@@ -35,8 +35,14 @@ function(build_lib)
   # Argument parsing
   set(options IGNORE_PCH)
   set(oneValueArgs LIBNAME)
-  set(multiValueArgs SOURCE_FILES HEADER_FILES LIBRARIES_TO_LINK TEST_SOURCES
-                     DEPRECATED_HEADER_FILES MODULE_ENABLED_FEATURES PRIVATE_HEADER_FILES
+  set(multiValueArgs
+      SOURCE_FILES
+      HEADER_FILES
+      LIBRARIES_TO_LINK
+      TEST_SOURCES
+      DEPRECATED_HEADER_FILES
+      MODULE_ENABLED_FEATURES
+      PRIVATE_HEADER_FILES
   )
   cmake_parse_arguments(
     "BLIB" "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN}
@@ -116,8 +122,7 @@ function(build_lib)
     PROPERTIES
       PUBLIC_HEADER
       "${BLIB_HEADER_FILES};${BLIB_DEPRECATED_HEADER_FILES};${config_headers};${CMAKE_HEADER_OUTPUT_DIRECTORY}/${BLIB_LIBNAME}-module.h"
-      PRIVATE_HEADER
-      "${BLIB_PRIVATE_HEADER_FILES}"
+      PRIVATE_HEADER "${BLIB_PRIVATE_HEADER_FILES}"
   )
 
   if(${NS3_CLANG_TIMETRACE})
@@ -228,8 +233,8 @@ function(build_lib)
 
   if(BLIB_PRIVATE_HEADER_FILES)
     copy_headers_before_building_lib(
-            ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}/private
-            "${BLIB_PRIVATE_HEADER_FILES}" private
+      ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}/private
+      "${BLIB_PRIVATE_HEADER_FILES}" private
     )
   endif()
 
@@ -240,17 +245,18 @@ function(build_lib)
       # Create BLIB_LIBNAME of output library test of module
       set(test${BLIB_LIBNAME} lib${BLIB_LIBNAME}-test CACHE INTERNAL "")
 
-      # Create shared library containing tests of the module on UNIX
-      # and just the object file that will be part of test-runner on Windows
+      # Create shared library containing tests of the module on UNIX and just
+      # the object file that will be part of test-runner on Windows
       if(WIN32)
-        set(ns3-libs-tests "$<TARGET_OBJECTS:${test${BLIB_LIBNAME}}>;${ns3-libs-tests}"
-                CACHE INTERNAL "list of test libraries"
-                )
+        set(ns3-libs-tests
+            "$<TARGET_OBJECTS:${test${BLIB_LIBNAME}}>;${ns3-libs-tests}"
+            CACHE INTERNAL "list of test libraries"
+        )
         add_library(${test${BLIB_LIBNAME}} OBJECT "${BLIB_TEST_SOURCES}")
       else()
         set(ns3-libs-tests "${test${BLIB_LIBNAME}};${ns3-libs-tests}"
-                CACHE INTERNAL "list of test libraries"
-                )
+            CACHE INTERNAL "list of test libraries"
+        )
         add_library(${test${BLIB_LIBNAME}} SHARED "${BLIB_TEST_SOURCES}")
 
         # Link test library to the module library
@@ -361,7 +367,7 @@ function(build_lib_example)
     endif()
 
     set_runtime_outputdirectory(
-      ${BLIB_EXAMPLE_NAME} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${FOLDER}/ ""
+      ${BLIB_EXAMPLE_NAME} ${CMAKE_OUTPUT_DIRECTORY}/${FOLDER}/ ""
     )
   endif()
 endfunction()
