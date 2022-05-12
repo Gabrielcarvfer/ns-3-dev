@@ -988,7 +988,7 @@ confusing to newcomers, and when done poorly it leads to subtle build
 errors.  The solutions above are the way to go.
 
 Building with CMake
-+++++++++++++++++++++++
++++++++++++++++++++
 
 The ns3 wrapper script calls CMake directly, mapping Waf-like options
 to the verbose settings used by CMake. Calling ``./ns3`` will execute
@@ -1062,6 +1062,33 @@ Corresponds to:
 
 Note: the command above would fail if ``./ns3 build`` was not executed first,
 since the examples won't be built by the test-runner target.
+
+On Windows, the Msys2/MinGW64/bin directory path must be on the PATH environment variable,
+otherwise the dll's required by the C++ runtime will not be found, resulting in crashes
+without any explicit reasoning. 
+
+Note: The ns-3 script adds only the ns-3 lib directory path to the PATH,
+ensuring the ns-3 dlls will be found by running programs. If you are using CMake directly or
+an IDE, make sure to also include the path to ns-3-dev/build/lib in the PATH variable.
+
+If you are using one of Windows's terminals (CMD, PowerShell or Terminal), you can use the 
+`setx<https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/setx/>__` 
+command to change environment variables permanently or `set` to set them temporarily for that shell:
+
+.. sourcecode:: console
+
+  C:\\Windows\\system32>echo %PATH%
+  C:\\Windows\\system32;C:\\Windows;D:\\tools\\msys64\\mingw64\\bin;
+
+  C:\\Windows\\system32>setx PATH "%PATH%;D:\\tools\\msys64\\usr\\bin;" /m
+
+  C:\\Windows\\system32>echo %PATH%
+  C:\\Windows\\system32;C:\\Windows;D:\\tools\\msys64\\mingw64\\bin;
+  D:\\tools\\msys64\\usr\\bin;
+
+Note: running on an administrator terminal will change the system PATH,
+while the user terminal will change the user PATH, unless the `/m` flag is added.
+
 
 Building with IDEs
 ++++++++++++++++++
