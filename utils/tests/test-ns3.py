@@ -701,7 +701,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
             f.write(ns3rc_template.format(modules="'core','network'", examples="True", tests="False"))
 
         # Reconfigure
-        return_code, stdout, stderr = run_ns3("configure -G \"Unix Makefiles\"")
+        return_code, stdout, stderr = run_ns3("configure -G \"" + platform_makefiles + "\"")
         self.config_ok(return_code, stdout)
 
         # Check
@@ -722,7 +722,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
             'network', 'internet','wimax'""", examples="True", tests="True"))
 
         # Reconfigure
-        return_code, stdout, stderr = run_ns3("configure -G \"Unix Makefiles\"")
+        return_code, stdout, stderr = run_ns3("configure -G \"" + platform_makefiles + "\"")
         self.config_ok(return_code, stdout)
 
         # Check
@@ -1713,16 +1713,23 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         Test if we can build a static ns-3 library and link it to static programs
         @return None
         """
+
         # First enable examples and static build
-        return_code, stdout, stderr = run_ns3("configure -G \"Unix Makefiles\" --enable-examples --disable-gtk --enable-static")
+        return_code, stdout, stderr = run_ns3("configure -G \"" + platform_makefiles + "\" --enable-examples --disable-gtk --enable-static")
 
-        # If configuration passes, we are half way done
-        self.assertEqual(return_code, 0)
+        if sys.platform == "win32":
+            # Configuration should fail explaining Windows
+            # socket libraries cannot be statically linked
+            self.assertEqual(return_code, 1)
+            self.assertIn("Static builds are unsupported on Windows", stderr)
+        else:
+            # If configuration passes, we are half way done
+            self.assertEqual(return_code, 0)
 
-        # Then try to build one example
-        return_code, stdout, stderr = run_ns3('build sample-simulator')
-        self.assertEqual(return_code, 0)
-        self.assertIn("Built target", stdout)
+            # Then try to build one example
+            return_code, stdout, stderr = run_ns3('build sample-simulator')
+            self.assertEqual(return_code, 0)
+            self.assertIn("Built target", stdout)
 
         # Maybe check the built binary for shared library references? Using objdump, otool, etc
         NS3BuildBaseTestCase.cleaned_once = False

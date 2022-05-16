@@ -666,6 +666,11 @@ macro(process_options)
               "Disable Brite, Click, Gtk, GSL, Mpi, Openflow and SQLite"
               " if you want a standalone static ns-3 library."
     )
+    if(WIN32)
+      message(FATAL_ERROR "Static builds are unsupported on Windows"
+                          "\nSocket libraries cannot be linked statically"
+              )
+    endif()
   else()
     find_package(LibXml2 QUIET)
     if(NOT ${LIBXML2_FOUND})
