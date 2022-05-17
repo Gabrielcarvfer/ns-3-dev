@@ -147,6 +147,15 @@ void MakeDirectories (std::string path);
  */
 bool Exists (const std::string path);
 
+/**
+ * \ingroup systempath
+ * Check if a path is in a Windows file system.
+ * Path can be a file or directory.
+ * \param [in] path The path to check.
+ * \returns \c true if the \pname{path} is in a Windows filesystem.
+ */
+bool IsWindowsFilesystem(const std::string path);
+
 } // namespace SystemPath
 
 

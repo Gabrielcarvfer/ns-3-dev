@@ -336,15 +336,16 @@ MakeDirectories (std::string path)
   NS_LOG_FUNCTION (path);
 
   bool makeDirErr = false;
+  std::error_code ec;
 
   if (!std::filesystem::exists (path))
     {
-      makeDirErr = !std::filesystem::create_directories (path);
+      makeDirErr = !std::filesystem::create_directories (path, ec);
     }
 
-  if (makeDirErr)
+  if (makeDirErr || ec.value())
     {
-      NS_LOG_ERROR ("failed creating directory " << path);
+      NS_FATAL_ERROR ("failed creating directory " << path);
     }
 }
 
@@ -393,6 +394,36 @@ Exists (const std::string path)
 
 }  // Exists()
 
+bool
+IsWindowsFilesystem(const std::string path)
+{
+  NS_LOG_FUNCTION (path);
+  // Checking if the path is within a Windows file system
+  // just requires trying to create a path with an invalid
+  // name, then checking if it fails
+  //
+  // One of the invalid symbols is
+  std::filesystem::path path_to_check(path);
+  if (exists(path_to_check) and !is_directory(path_to_check))
+    path_to_check = path_to_check.parent_path();
+
+  // If the directory/file does not exist, create it
+  MakeDirectories (path_to_check.string());
+
+  // Now try to create an invalid directory
+  path_to_check.append ("ns3::SystemPath");
+
+  bool makeDirError = false;
+  std::error_code ec;
+  makeDirError = !std::filesystem::create_directories (path_to_check.string(), ec);
+
+  // Remove the test directory if it was created
+  if (makeDirError == 1 && ec.value() == 0)
+    {
+      std::filesystem::remove (path_to_check);
+    }
+  return ec.value() != 0;
+}
 
 } // namespace SystemPath
 
