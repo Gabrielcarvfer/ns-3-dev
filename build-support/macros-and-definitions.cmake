@@ -1414,6 +1414,15 @@ add_custom_target(copy_all_headers)
 function(copy_headers_before_building_lib libname outputdir headers visibility)
   # cmake-format: off
   set(batch_symlinks)
+
+  # Check whether we can create symlinks or not in the target filesystem
+  execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/build-support/empty.cc ${outputdir}/empty.cc
+          RESULT_VARIABLE FAT_LIKE
+          ERROR_QUIET)
+  if(EXISTS ${outputdir}/empty.cc)
+    file(REMOVE ${outputdir}/empty.cc)
+  endif()
+
   foreach(header ${headers})
     # Copy header to output directory on changes -> too darn slow
     # configure_file(${CMAKE_CURRENT_SOURCE_DIR}/${header} ${outputdir}/
@@ -1433,11 +1442,17 @@ function(copy_headers_before_building_lib libname outputdir headers visibility)
       continue()
     endif()
 
-    # CMake 3.13 cannot create symlinks on Windows, so we use stub headers as a
-    # fallback
-    # And even if it could, the default permissions on windows prevent
-    # non-administrative users from creating symlinks
-    if(WIN32)# OR (${CMAKE_VERSION} VERSION_LESS "3.13.0"))
+    # cmake-format: off
+    #
+    # There are two cases in which we can't use symlinks:
+    # 1 - Windows: the default permissions prevent non-administrative
+    # users from creating symlinks
+    # 2 - Unsupported by filesystems: (ex)FAT(12|16|32) and other basic
+    # filesystems do not support symlinks
+    #
+    # cmake-format:on
+
+    if(WIN32 OR ${FAT_LIKE})
       # Create a stub header in the output directory, including the real header
       # inside their respective module
 
@@ -1445,11 +1460,9 @@ function(copy_headers_before_building_lib libname outputdir headers visibility)
            "#include \"${CMAKE_CURRENT_SOURCE_DIR}/${header}\"\n"
       )
     else()
-      # Create a symlink in the output directory to the original header Calling
-      # execute_process for each symlink is too slow too, so we create a batch
-      # with all headers execute_process(COMMAND ${CMAKE_COMMAND} -E
-      # create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/${header}
-      # ${outputdir}/${header_name})
+      # Create a symlink in the output directory to the original header
+      # Calling execute_process for each symlink is too slow too,
+      # so we create a batch with all headers
       set(batch_symlinks
           ${batch_symlinks}
           COMMAND
