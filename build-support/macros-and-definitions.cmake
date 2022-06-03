@@ -1282,6 +1282,9 @@ macro(process_options)
   endif()
 
   if(${PRECOMPILE_HEADERS_ENABLED})
+    if(CLANG)
+      add_definitions(-Xclang -fno-pch-timestamp)
+    endif()
     set(precompiled_header_libraries
         <algorithm>
         <cstdlib>
@@ -1293,6 +1296,7 @@ macro(process_options)
         <list>
         <map>
         <math.h>
+        <ostream>
         <set>
         <sstream>
         <stdint.h>
