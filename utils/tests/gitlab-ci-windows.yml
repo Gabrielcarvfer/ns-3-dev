@@ -1,0 +1,50 @@
+# NS3 CI script for Windows
+
+# Any scheduled pipeline for Windows should define a variable, named
+# "RELEASE", that has a value "weekly". Also, the variable "WINDOWS" should be
+# set to True.
+
+# Windows base
+.windows-build-1809:
+  stage: prebuild
+  tags:
+    - shared-windows
+    - windows
+    - windows-1809
+  before_script:
+    - $env:project_dir = "$pwd" # Save source dir (e.g. ns-3-dev)
+    - cd .. # Move to the parent directory and install msys2
+    - wget.exe 'https://github.com/msys2/msys2-installer/releases/download/nightly-x86_64/msys2-base-x86_64-latest.sfx.exe' -O msys2.exe
+    - .\msys2.exe -y # Extract to .\msys64
+    - Remove-Item msys2.exe  # Delete the archive again
+    - $env:path = "$pwd\msys64\mingw64\bin;$pwd\msys64\usr\bin;$env:path" # Export path with mingw64 tools
+    - cd $env:project_dir # Move back to the project source directory (e.g. ns-3-dev)
+    - bash -lc ' ' # Run for the first time
+    - bash -lc 'pacman --noconfirm -Syuu'  # Core update (in case any core packages are outdated)
+    - bash -lc 'pacman --noconfirm -Syuu'  # Normal update
+    - $env:MSYSTEM = "MINGW64"
+    - pacman -S mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-grep mingw-w64-x86_64-sed git mingw-w64-x86_64-gsl mingw-w64-x86_64-libxml2 mingw-w64-x86_64-boost  mingw-w64-x86_64-ccache --noconfirm
+    - pacman -Scc --noconfirm # clean up caches
+  script:
+    - mkdir -p $CCACHE_BASEDIR_VALUE
+    - $env:CCACHE_BASEDIR = "$pwd"
+    - $env:CCACHE_DIR = "$pwd/$CCACHE_BASEDIR_VALUE"
+    - $env:CXX = "$COMPILER"
+    - python3 ns3 configure -d $MODE -GNinja --enable-examples --enable-tests --enable-asserts
+    - python3 ns3 build
+    - python3 test.py -n
+    - taskkill /F /FI "MODULES eq msys-2.0.dll" # Make sure all processes created are killed
+  cache:
+    key: "ccache-$CI_JOB_NAME"
+    paths:
+      - $CCACHE_BASEDIR_VALUE/
+  timeout: 12h
+  variables:
+    CCACHE_BASEDIR_VALUE: ns-3-ccache-storage
+
+weekly-build-windows-1809-default:
+  extends:
+    - .windows-build-1809
+  variables:
+    COMPILER: g++
+    MODE: default

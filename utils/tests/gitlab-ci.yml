@@ -20,6 +20,7 @@
 
 
 stages:
+  - prebuild
   - build
   - test
   - documentation
@@ -113,3 +114,4 @@ include:
   - 'utils/tests/gitlab-ci-test.yml'
   - 'utils/tests/gitlab-ci-doc.yml'
   - 'utils/tests/gitlab-ci-pybindgen.yml'
+  - 'utils/tests/gitlab-ci-windows.yml'
