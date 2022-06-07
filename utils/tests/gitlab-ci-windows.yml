@@ -8,9 +8,7 @@
 .windows-build-1809:
   stage: prebuild
   tags:
-    - shared-windows
     - windows
-    - windows-1809
   before_script:
     - $env:project_dir = "$pwd" # Save source dir (e.g. ns-3-dev)
     - cd .. # Move to the parent directory and install msys2
