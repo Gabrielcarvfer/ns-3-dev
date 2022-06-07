@@ -9,6 +9,7 @@
   stage: prebuild
   tags:
     - windows
+    - private-windows
   before_script:
     - $env:project_dir = "$pwd" # Save source dir (e.g. ns-3-dev)
     - cd .. # Move to the parent directory and install msys2
