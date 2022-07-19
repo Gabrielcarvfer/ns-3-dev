@@ -180,7 +180,7 @@ def trim_file(filename: str, trim: bool) -> bool:
     has_trailing_whitespace = False
 
     try:
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             file_lines = f.readlines()
 
         # Check if there are trailing whitespace and trim them
@@ -199,7 +199,7 @@ def trim_file(filename: str, trim: bool) -> bool:
 
         # Update the file with the trimmed lines
         if trim and has_trailing_whitespace:
-            with open(filename, 'w') as f:
+            with open(filename, 'w', encoding='utf-8') as f:
                 f.writelines(file_lines)
 
     except Exception as e:
