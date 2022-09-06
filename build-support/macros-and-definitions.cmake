@@ -1215,6 +1215,12 @@ macro(process_options)
         <string>
         <unordered_map>
         <vector>
+        <ns3/packet.h>
+        <ns3/object.h>
+        <ns3/node.h>
+        <ns3/simulator.h>
+        <ns3/internet-stack-helper.h>
+        <ns3/assert.h>
     )
     add_library(stdlib_pch OBJECT ${PROJECT_SOURCE_DIR}/build-support/empty.cc)
     target_precompile_headers(
@@ -1227,6 +1233,7 @@ macro(process_options)
     target_precompile_headers(
       stdlib_pch_exec PUBLIC "${precompiled_header_libraries}"
     )
+    target_link_libraries(stdlib_pch_exec PUBLIC ${libcore})
     set_runtime_outputdirectory(stdlib_pch_exec ${CMAKE_BINARY_DIR}/ "")
   endif()
 
