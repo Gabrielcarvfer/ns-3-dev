@@ -17,6 +17,7 @@
  *
  */
 
+#undef NS_LOG_APPEND_CONTEXT
 #define NS_LOG_APPEND_CONTEXT \
   { std::clog << Simulator::Now ().GetSeconds () << " "; }
 

@@ -18,6 +18,7 @@
 // Author: George F. Riley<riley@ece.gatech.edu>
 //         Gustavo Carneiro <gjc@inescporto.pt>
 
+#undef NS_LOG_APPEND_CONTEXT
 #define NS_LOG_APPEND_CONTEXT                                   \
   if (m_ipv4 && m_ipv4->GetObject<Node> ()) { \
       std::clog << Simulator::Now ().GetSeconds () \
