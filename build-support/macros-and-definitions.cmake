@@ -1058,7 +1058,9 @@ macro(process_options)
     mark_as_advanced(MAKE)
     find_program(MAKE NAMES make mingw32-make)
     if(${MAKE} STREQUAL "MAKE-NOTFOUND")
-      message(FATAL_ERROR "Make was not found but it is required by Sphinx docs")
+      message(
+        FATAL_ERROR "Make was not found but it is required by Sphinx docs"
+      )
     elseif(${MAKE} MATCHES "mingw32-make")
       # This is a super wild hack for MinGW
       #
@@ -1253,7 +1255,10 @@ macro(process_options)
   set(PRECOMPILE_HEADERS_ENABLED OFF)
   if(${NS3_PRECOMPILE_HEADERS})
     if(${NS3_CLANG_TIDY})
-      message(${HIGHLIGHTED_STATUS} "Clang-tidy is incompatible with precompiled headers. Continuing without them.")
+      message(
+        ${HIGHLIGHTED_STATUS}
+        "Clang-tidy is incompatible with precompiled headers. Continuing without them."
+      )
     elseif(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
       set(PRECOMPILE_HEADERS_ENABLED ON)
       message(STATUS "Precompiled headers were enabled")
