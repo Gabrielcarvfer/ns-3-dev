@@ -42,3 +42,14 @@ build_lib_example(
     ${libinternet-apps}
     ${libcsma}
 )
+
+build_lib_example(
+  NAME sixlownd-ping-test
+  SOURCE_FILES sixlownd-ping-test.cc
+  LIBRARIES_TO_LINK
+    ${libnetwork}
+    ${libsixlowpan}
+    ${libinternet}
+    ${liblr-wpan}
+    ${libinternet-apps}
+)

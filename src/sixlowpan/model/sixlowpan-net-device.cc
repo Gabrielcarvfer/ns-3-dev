@@ -5,6 +5,7 @@
  *
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  *         Michele Muccio <michelemuccio@virgilio.it>
+ *         Adnan Rashid <adnanrashidpk@gmail.com>
  */
 
 #include "sixlowpan-net-device.h"
@@ -98,10 +99,20 @@ SixLowPanNetDevice::GetTypeId()
                             "SixLoWPanNetDevice Ptr, interface index.",
                             MakeTraceSourceAccessor(&SixLowPanNetDevice::m_txTrace),
                             "ns3::SixLowPanNetDevice::RxTxTracedCallback")
+            .AddTraceSource("TxPre",
+                            "Send - packet (including IPv6 header), "
+                            "SixLoWPanNetDevice Ptr, interface index.",
+                            MakeTraceSourceAccessor(&SixLowPanNetDevice::m_txPreTrace),
+                            "ns3::SixLowPanNetDevice::RxTxTracedCallback")
             .AddTraceSource("Rx",
                             "Receive - packet (including 6LoWPAN header), "
                             "SixLoWPanNetDevice Ptr, interface index.",
                             MakeTraceSourceAccessor(&SixLowPanNetDevice::m_rxTrace),
+                            "ns3::SixLowPanNetDevice::RxTxTracedCallback")
+            .AddTraceSource("RxPost",
+                            "Receive - packet (including IPv6 header), "
+                            "SixLoWPanNetDevice Ptr, interface index.",
+                            MakeTraceSourceAccessor(&SixLowPanNetDevice::m_rxPostTrace),
                             "ns3::SixLowPanNetDevice::RxTxTracedCallback")
             .AddTraceSource("Drop",
                             "Drop - DropReason, packet (including 6LoWPAN header), "
@@ -386,6 +397,7 @@ SixLowPanNetDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
                             packetType);
     }
 
+    m_rxPostTrace(copyPkt, this, GetIfIndex());
     m_rxCallback(this, copyPkt, Ipv6L3Protocol::PROT_NUMBER, realSrc);
 }
 
@@ -568,6 +580,8 @@ SixLowPanNetDevice::DoSend(Ptr<Packet> packet,
 {
     NS_LOG_FUNCTION(this << *packet << src << dest << protocolNumber << doSendFrom);
     NS_ASSERT_MSG(m_netDevice, "Sixlowpan: can't find any lower-layer protocol " << m_netDevice);
+
+    m_txPreTrace(packet, m_node->GetObject<SixLowPanNetDevice>(), GetIfIndex());
 
     Ptr<Packet> origPacket = packet->Copy();
     uint32_t origHdrSize = 0;
@@ -2721,7 +2735,8 @@ void
 SixLowPanNetDevice::AddContext(uint8_t contextId,
                                Ipv6Prefix contextPrefix,
                                bool compressionAllowed,
-                               Time validLifetime)
+                               Time validLifetime,
+                               Ipv6Address source)
 {
     NS_LOG_FUNCTION(this << +contextId << Ipv6Address::GetOnes().CombinePrefix(contextPrefix)
                          << contextPrefix << compressionAllowed << validLifetime.As(Time::S));
@@ -2730,6 +2745,16 @@ SixLowPanNetDevice::AddContext(uint8_t contextId,
     {
         NS_LOG_LOGIC("Invalid context ID (" << +contextId << "), ignoring");
         return;
+    }
+
+    if (m_contextTable.find(contextId) != m_contextTable.end())
+    {
+        if (m_contextTable[contextId].source != source)
+        {
+            NS_ABORT_MSG("Context " << contextId << ") can not be modified. New context is from "
+                                    << source << " old context is from "
+                                    << m_contextTable[contextId].source);
+        }
     }
 
     if (validLifetime.IsZero())
@@ -2742,6 +2767,7 @@ SixLowPanNetDevice::AddContext(uint8_t contextId,
     m_contextTable[contextId].contextPrefix = contextPrefix;
     m_contextTable[contextId].compressionAllowed = compressionAllowed;
     m_contextTable[contextId].validLifetime = Simulator::Now() + validLifetime;
+    m_contextTable[contextId].source = source;
 }
 
 bool

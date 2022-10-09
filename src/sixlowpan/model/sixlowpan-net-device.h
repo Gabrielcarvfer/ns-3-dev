@@ -5,6 +5,7 @@
  *
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  *         Michele Muccio <michelemuccio@virgilio.it>
+ *         Adnan Rashid <adnanrashidpk@gmail.com>
  */
 
 #ifndef SIXLOWPAN_NET_DEVICE_H
@@ -194,17 +195,18 @@ class SixLowPanNetDevice : public NetDevice
      *
      * A context with a zero validLifetime will be immediately removed.
      *
-     * @param [in] contextId context id (most be between 0 and 15 included).
-     * @param [in] contextPrefix context prefix to be used in compression/decompression.
-     * @param [in] compressionAllowed compression and decompression allowed (true), decompression
+     * \param [in] contextId context id (must be between 0 and 15 included).
+     * \param [in] contextPrefix context prefix to be used in compression/decompression.
+     * \param [in] compressionAllowed compression and decompression allowed (true), decompression
      * only (false).
-     * @param [in] validLifetime validity time (relative to the actual time).
-     *
+     * \param [in] validLifetime validity time (relative to the actual time).
+     * \param [in] source source of the context.
      */
     void AddContext(uint8_t contextId,
                     Ipv6Prefix contextPrefix,
                     bool compressionAllowed,
-                    Time validLifetime);
+                    Time validLifetime,
+                    Ipv6Address source = Ipv6Address::GetAny());
 
     /**
      * Get a context used in IPHC stateful compression.
@@ -315,6 +317,32 @@ class SixLowPanNetDevice : public NetDevice
     TracedCallback<Ptr<const Packet>, Ptr<SixLowPanNetDevice>, uint32_t> m_txTrace;
 
     /**
+     * \brief Callback to trace TX (transmission) packets.
+     *
+     * Data passed:
+     * \li Packet received (including 6LoWPAN header)
+     * \li Ptr to SixLowPanNetDevice
+     * \li interface index
+     * \deprecated The non-const \c Ptr<SixLowPanNetDevice> argument
+     * is deprecated and will be changed to \c Ptr<const SixLowPanNetDevice>
+     * in a future release.
+     */
+    TracedCallback<Ptr<const Packet>, Ptr<SixLowPanNetDevice>, uint32_t> m_txPreTrace;
+
+    /**
+     * \brief Callback to trace RX (reception) packets.
+     *
+     * Data passed:
+     * \li Packet received (including 6LoWPAN header)
+     * \li Ptr to SixLowPanNetDevice
+     * \li interface index
+     * \deprecated The non-const \c Ptr<SixLowPanNetDevice> argument
+     * is deprecated and will be changed to \c Ptr<const SixLowPanNetDevice>
+     * in a future release.
+     */
+    TracedCallback<Ptr<const Packet>, Ptr<SixLowPanNetDevice>, uint32_t> m_txPreTrace;
+
+    /**
      * @brief Callback to trace RX (reception) packets.
      *
      * Data passed:
@@ -327,6 +355,32 @@ class SixLowPanNetDevice : public NetDevice
      */
     // NS_DEPRECATED() - tag for future removal
     TracedCallback<Ptr<const Packet>, Ptr<SixLowPanNetDevice>, uint32_t> m_rxTrace;
+
+    /**
+     * \brief Callback to trace RX (reception) packets.
+     *
+     * Data passed:
+     * \li Packet received (including 6LoWPAN header)
+     * \li Ptr to SixLowPanNetDevice
+     * \li interface index
+     * \deprecated The non-const \c Ptr<SixLowPanNetDevice> argument
+     * is deprecated and will be changed to \c Ptr<const SixLowPanNetDevice>
+     * in a future release.
+     */
+    TracedCallback<Ptr<const Packet>, Ptr<SixLowPanNetDevice>, uint32_t> m_rxPostTrace;
+
+    /**
+     * @brief Callback to trace RX (reception) packets.
+     *
+     * Data passed:
+     * \li Packet received (including 6LoWPAN header)
+     * \li Ptr to SixLowPanNetDevice
+     * \li interface index
+     * \deprecated The non-const \c Ptr<SixLowPanNetDevice> argument
+     * is deprecated and will be changed to \c Ptr<const SixLowPanNetDevice>
+     * in a future release.
+     */
+    TracedCallback<Ptr<const Packet>, Ptr<SixLowPanNetDevice>, uint32_t> m_rxPostTrace;
 
     /**
      * @brief Callback to trace drop packets.
@@ -636,6 +690,7 @@ class SixLowPanNetDevice : public NetDevice
         bool compressionAllowed;  //!< compression and decompression allowed (true), decompression
                                   //!< only (false)
         Time validLifetime;       //!< validity period
+        Ipv6Address source;       //!< Source of the context ("::" if from the Helper)
     };
 
     std::map<uint8_t, ContextEntry>
@@ -644,8 +699,8 @@ class SixLowPanNetDevice : public NetDevice
     /**
      * @brief Finds if the given unicast address matches a context for compression
      *
-     * \param[in] address the address to check
-     * \param[out] contextId the context found
+     * @param[in] address the address to check
+     * @param[out] contextId the context found
      * @return true if a valid context has been found
      */
     bool FindUnicastCompressionContext(Ipv6Address address, uint8_t& contextId);
@@ -653,8 +708,8 @@ class SixLowPanNetDevice : public NetDevice
     /**
      * @brief Finds if the given multicast address matches a context for compression
      *
-     * \param[in] address the address to check
-     * \param[out] contextId the context found
+     * @param[in] address the address to check
+     * @param[out] contextId the context found
      * @return true if a valid context has been found
      */
     bool FindMulticastCompressionContext(Ipv6Address address, uint8_t& contextId);

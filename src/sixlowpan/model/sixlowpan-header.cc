@@ -2188,4 +2188,151 @@ operator<<(std::ostream& os, const SixLowPanMesh& h)
     return os;
 }
 
+/*
+ * SixLowPanCio
+ */
+NS_OBJECT_ENSURE_REGISTERED(Icmpv6OptionSixLowPanCapabilityIndication);
+
+Icmpv6OptionSixLowPanCapabilityIndication::Icmpv6OptionSixLowPanCapabilityIndication()
+{
+    SetType(Icmpv6Header::ICMPV6_OPT_CAPABILITY_INDICATION);
+    SetLength(1);
+    m_capabilityOptionField = 0;
+}
+
+TypeId
+Icmpv6OptionSixLowPanCapabilityIndication::GetTypeId(void)
+{
+    static TypeId tid = TypeId("ns3::Icmpv6OptionSixLowPanCapabilityIndication")
+                            .SetParent<Icmpv6Header>()
+                            .SetGroupName("SixLowPan")
+                            .AddConstructor<Icmpv6OptionSixLowPanCapabilityIndication>();
+    return tid;
+}
+
+TypeId
+Icmpv6OptionSixLowPanCapabilityIndication::GetInstanceTypeId(void) const
+{
+    return GetTypeId();
+}
+
+void
+Icmpv6OptionSixLowPanCapabilityIndication::Print(std::ostream& os) const
+{
+    os << "( type = " << (uint32_t)GetType() << " Option field: ";
+
+    if (m_capabilityOptionField & D)
+    {
+        os << "D";
+    }
+    else
+    {
+        os << " ";
+    }
+
+    if (m_capabilityOptionField & L)
+    {
+        os << "L";
+    }
+    else
+    {
+        os << " ";
+    }
+
+    if (m_capabilityOptionField & B)
+    {
+        os << "B";
+    }
+    else
+    {
+        os << " ";
+    }
+
+    if (m_capabilityOptionField & P)
+    {
+        os << "P";
+    }
+    else
+    {
+        os << " ";
+    }
+
+    if (m_capabilityOptionField & E)
+    {
+        os << "E";
+    }
+    else
+    {
+        os << " ";
+    }
+
+    if (m_capabilityOptionField & G)
+    {
+        os << "G";
+    }
+    else
+    {
+        os << " ";
+    }
+    os << " )";
+}
+
+uint32_t
+Icmpv6OptionSixLowPanCapabilityIndication::GetSerializedSize() const
+{
+    return 8;
+}
+
+void
+Icmpv6OptionSixLowPanCapabilityIndication::Serialize(Buffer::Iterator start) const
+{
+    Buffer::Iterator i = start;
+
+    i.WriteU8(GetType());
+    i.WriteU8(GetLength());
+
+    i.WriteU8(0);
+    i.WriteU8(m_capabilityOptionField);
+    i.WriteU32(0);
+}
+
+uint32_t
+Icmpv6OptionSixLowPanCapabilityIndication::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+
+    SetType(i.ReadU8());
+    SetLength(i.ReadU8());
+
+    i.Next();
+    m_capabilityOptionField = i.ReadU8();
+    i.Next(4);
+
+    return GetSerializedSize();
+}
+
+void
+Icmpv6OptionSixLowPanCapabilityIndication::SetOption(SixLowPanCapability_e option)
+{
+    m_capabilityOptionField |= option;
+}
+
+bool
+Icmpv6OptionSixLowPanCapabilityIndication::CheckOption(SixLowPanCapability_e option) const
+{
+    if (m_capabilityOptionField & option)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+std::ostream&
+operator<<(std::ostream& os, const Icmpv6OptionSixLowPanCapabilityIndication& h)
+{
+    h.Print(os);
+    return os;
+}
+
 } // namespace ns3
