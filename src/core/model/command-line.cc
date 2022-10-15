@@ -926,6 +926,12 @@ CommandLineHelper::UserItemParse<uint8_t>(const std::string value, uint8_t& val)
     return true;
 }
 
+void
+CommandLine::AddValue(const std::string& name, const std::string& help, char** value)
+{
+    AddValue(name, help, *value);
+}
+
 std::ostream&
 operator<<(std::ostream& os, const CommandLine& cmd)
 {

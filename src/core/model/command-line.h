@@ -278,6 +278,17 @@ class CommandLine
     void AddValue(const std::string& name, const std::string& help, T& value);
 
     /**
+     * Add a char** program argument
+     *
+     * \param [in] name The name of the program-supplied argument
+     * \param [in] help The help text used by \c \--PrintHelp
+     * \param [out] value A pointer containing the char* variable
+     *        where the value parsed will be stored (if no value
+     *        is parsed, this variable is not modified).
+     */
+    void AddValue(const std::string& name, const std::string& help, char** value);
+
+    /**
      * Callback function signature for
      * AddValue(const std::string&,const std::string&,Callback<bool,const std::string>).
      *
