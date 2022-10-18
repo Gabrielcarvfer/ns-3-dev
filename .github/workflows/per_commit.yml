@@ -34,13 +34,10 @@ jobs:
           ccache -z
       - name: Configure CMake
         run: |
-          mkdir cmake-cache
-          cd cmake-cache
-          cmake -DCMAKE_BUILD_TYPE=release -DNS3_ASSERT=ON -DNS3_EXAMPLES=ON -DNS3_TESTS=ON -DNS3_WARNINGS_AS_ERRORS=OFF -G"Ninja"  ..
+          ./ns3 configure -d release --enable-asserts --enable-examples --enable-tests --disable-werror -G"Ninja"
       - name: Build ns-3
         run: |
-          cd cmake-cache
-          ninja
+          ./ns3 build
       - name: Print ccache statistics
         id: ccache_results
         run: |
@@ -90,13 +87,10 @@ jobs:
           ccache -z
       - name: Configure CMake
         run: |
-          mkdir cmake-cache
-          cd cmake-cache
-          cmake -DCMAKE_BUILD_TYPE=release -DNS3_ASSERT=ON -DNS3_EXAMPLES=ON -DNS3_TESTS=ON -DNS3_WARNINGS_AS_ERRORS=OFF -G"Ninja"  ..
+          ./ns3 configure -d release --enable-asserts --enable-examples --enable-tests --disable-werror -G"Ninja"
       - name: Build ns-3
         run: |
-          cd cmake-cache
-          ninja
+          ./ns3 build
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v2
 
@@ -133,13 +127,10 @@ jobs:
           ccache -z
       - name: Configure CMake
         run: |
-          mkdir cmake-cache
-          cd cmake-cache
-          cmake -DCMAKE_BUILD_TYPE=relwithdebinfo  -DNS3_ASSERT=ON -DNS3_EXAMPLES=ON -DNS3_TESTS=ON -DNS3_COVERAGE=ON -DNS3_WARNINGS_AS_ERRORS=OFF -G"Ninja"  ..
+          ./ns3 configure --enable-asserts --enable-examples --enable-tests --disable-werror --enable-gcov -G"Ninja"
       - name: Build ns-3
         run: |
-          cd cmake-cache
-          cmake --build . -j3
+          ./ns3 build
       - name: Print ccache statistics
         id: ccache_results
         run: |
@@ -148,9 +139,8 @@ jobs:
       - name: Generate coverage data and submit to codecov.io
         if: env.cache_misses != '0'
         run: |
-          cd cmake-cache
-          ninja coverage_gcc
-          cd ../build/coverage
+          ./ns3 build coverage_gcc
+          cd ./build/coverage
           bash <(curl -s https://codecov.io/bash) -f ns3.info || echo "Codecov did not collect coverage reports"
 
   Windows_MinGW:
@@ -194,13 +184,10 @@ jobs:
           ccache -z
       - name: Configure CMake
         run: |
-          mkdir cmake-cache
-          cd cmake-cache
-          cmake -DCMAKE_BUILD_TYPE=release -DNS3_ASSERT=ON -DNS3_EXAMPLES=ON -DNS3_TESTS=ON -DNS3_WARNINGS_AS_ERRORS=OFF -G"Ninja" ..
+          python3 ns3 configure -d release --enable-asserts --enable-examples --enable-tests --disable-werror -G"Ninja"
       - name: Build ns-3
         run: |
-          cd cmake-cache
-          ninja
+          python3 ns3 build
       - name: Print ccache statistics
         id: ccache_results
         run: |
@@ -208,7 +195,7 @@ jobs:
           python3 -c "import re, subprocess;print('cache_misses=%d' % int(re.findall('cache_miss(.*)', subprocess.check_output(['ccache', '--print-stats']).decode())[0]))" >> $GITHUB_ENV
       - name: Run tests and examples
         if: env.cache_misses != '0'
-        run: python test.py --no-build
+        run: python3 test.py --no-build
 
   Mac_OS_X:
     runs-on: macos-latest
@@ -237,14 +224,11 @@ jobs:
       - name: Configure CMake
         run: |
           export PATH=/usr/local/bin:$PATH #:/usr/local/opt/qt/bin
-          mkdir cmake-cache
-          cd cmake-cache
-          cmake -DCMAKE_BUILD_TYPE=release -DNS3_ASSERT=ON -DNS3_EXAMPLES=ON -DNS3_TESTS=ON -DNS3_WARNINGS_AS_ERRORS=OFF -G"Ninja" ..
+          ./ns3 configure -d release --enable-asserts --enable-examples --enable-tests --disable-werror -G"Ninja"
       - name: Build ns-3
         run: |
           export PATH="$PATH" #:/usr/local/opt/qt/bin
-          cd cmake-cache
-          ninja
+          ./ns3 build
       - name: Print ccache statistics
         id: ccache_results
         run: |
@@ -252,4 +236,4 @@ jobs:
           python3 -c "import re, subprocess;print('cache_misses=%d' % int(re.findall('cache_miss(.*)', subprocess.check_output(['ccache', '--print-stats']).decode())[0]))" >> $GITHUB_ENV
       - name: Run tests and examples
         if: env.cache_misses != '0'
-        run: python3 test.py --no-build
+        run: ./test.py --no-build
