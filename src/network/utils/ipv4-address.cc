@@ -67,8 +67,7 @@ Ipv4Mask::Ipv4Mask(const char* mask)
     {
         if (inet_pton(AF_INET, mask, &m_mask) <= 0)
         {
-            NS_LOG_LOGIC("Error, can not build an IPv4 mask from an invalid string: " << mask);
-            m_mask = 0;
+            NS_ABORT_MSG("Error, can not build an IPv4 mask from an invalid string: " << mask);
             return;
         }
         m_mask = ntohl(m_mask);

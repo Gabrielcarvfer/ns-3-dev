@@ -817,8 +817,7 @@ Ipv6Prefix::Ipv6Prefix(const char* prefix)
     NS_LOG_FUNCTION(this << prefix);
     if (inet_pton(AF_INET6, prefix, m_prefix) <= 0)
     {
-        memset(m_prefix, 0x00, 16);
-        NS_LOG_LOGIC("Error, can not build an IPv6 prefix from an invalid string: " << prefix);
+        NS_ABORT_MSG("Error, can not build an IPv6 prefix from an invalid string: " << prefix);
     }
     m_prefixLength = GetMinimumPrefixLength();
 }
@@ -835,8 +834,7 @@ Ipv6Prefix::Ipv6Prefix(const char* prefix, uint8_t prefixLength)
     NS_LOG_FUNCTION(this << prefix);
     if (inet_pton(AF_INET6, prefix, m_prefix) <= 0)
     {
-        memset(m_prefix, 0x00, 16);
-        NS_LOG_LOGIC("Error, can not build an IPv6 prefix from an invalid string: " << prefix);
+        NS_ABORT_MSG("Error, can not build an IPv6 prefix from an invalid string: " << prefix);
     }
     uint8_t autoLength = GetMinimumPrefixLength();
     NS_ASSERT_MSG(autoLength <= prefixLength,
