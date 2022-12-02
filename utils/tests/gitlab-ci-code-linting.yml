@@ -14,7 +14,7 @@ check-style-clang-format:
     - python3 utils/check-style-clang-format.py .
   timeout: 3h
 
-clang-tidy:
+.base-clang-tidy:
   stage: code-linting
   image: ubuntu:latest
   before_script:
@@ -28,20 +28,14 @@ clang-tidy:
       gsl-bin libgsl-dev libgsl27
       libopenmpi-dev
       libsqlite3-dev
-      ssh
+      ssh git
     - pip3 install cppyy
-  script:
     - ./ns3 configure -d debug
       --enable-clang-tidy
       --enable-examples --enable-tests
       --enable-asserts
       --enable-mpi
       --enable-python-bindings
-    - run-clang-tidy-14 -p cmake-cache/ -quiet
-      1> clang-tidy-errors.log
-      2> /dev/null
-    - (! egrep -A 3 "error:|warning:|note:" clang-tidy-errors.log)
-    - echo "No clang-tidy errors found"
   variables:
     MPI_CI: 1
   artifacts:
@@ -49,6 +43,43 @@ clang-tidy:
       - clang-tidy-errors.log
     when: on_failure
   timeout: 3h
+
+clang-tidy:
+  extends: .base-clang-tidy
+  only:
+    variables:
+      - $RELEASE == "weekly"
+      - $RELEASE == "daily"
+  script:
+    - run-clang-tidy-14 -p cmake-cache/ -quiet
+      1> clang-tidy-errors.log
+      2> /dev/null
+    - (! egrep -A 3 "error:|warning:|note:" clang-tidy-errors.log)
+    - echo "No clang-tidy errors found"
+
+clang-tidy-diff:
+  extends: .base-clang-tidy
+  except:
+    variables:
+      - $RELEASE == "weekly"
+      - $RELEASE == "daily"
+  script:
+    - git remote add upstream https://gitlab.com/nsnam/ns-3-dev.git
+    - git fetch upstream master
+    - git diff -U0 upstream/master HEAD > patch.txt
+    - if grep -Fq "b/.clang-tidy" patch.txt ; then
+        run-clang-tidy-14 -p cmake-cache/ -quiet
+        1> clang-tidy-errors.log
+        2> /dev/null;
+      else
+        cat patch.txt | /usr/lib/llvm-14/share/clang/clang-tidy-diff.py
+        -clang-tidy-binary=/usr/bin/clang-tidy-14
+        -p1 -path cmake-cache/
+        1> clang-tidy-errors.log
+        2> /dev/null;
+      fi
+    - (! egrep -A 3 "error:|warning:|note:" clang-tidy-errors.log)
+    - echo "No clang-tidy errors found"
 
 emacs-line:
   stage: code-linting
