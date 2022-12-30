@@ -147,6 +147,22 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(GNUInstallDirs)
 include(build-support/custom-modules/ns3-cmake-package.cmake)
 
+# Set RPATH not too need LD_LIBRARY_PATH after installing
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:$ORIGIN/:$ORIGIN/../lib")
+
+# Add the 64 suffix to the library path when manually requested with the
+# -DNS3_USE_LIB64=TRUE flag. May be necessary depending on the target platform.
+# This is used to properly build the manylinux pip wheel.
+if(NS3_USE_LIB64)
+  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib64:$ORIGIN/:$ORIGIN/../lib64")
+endif()
+
+# cmake-format: off
+# You are a wizard, Harry!
+# source: https://gitlab.kitware.com/cmake/community/-/wikis/doc/cmake/RPATH-handling
+# cmake-format: on
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 if(${XCODE})
   # Is that so hard not to break people's CI, AAPL? Why would you output the
   # targets to a Debug/Release subfolder? Why?
@@ -774,7 +790,7 @@ macro(process_options)
       find_package(Python3 COMPONENTS Interpreter Development)
     else()
       # cmake-format: off
-      set(Python_ADDITIONAL_VERSIONS 3.1 3.2 3.3 3.4 3.5 3.6 3.7 3.8 3.9)
+      set(Python_ADDITIONAL_VERSIONS 3.6 3.7 3.8 3.9 3.10 3.11)
       # cmake-format: on
       find_package(PythonInterp)
       find_package(PythonLibs)
@@ -828,10 +844,12 @@ macro(process_options)
       )
     endif()
   else()
-    message(
-      ${HIGHLIGHTED_STATUS}
-      "Python: an incompatible version of Python was found, python bindings will be disabled"
-    )
+    if(${NS3_PYTHON_BINDINGS})
+      message(
+        ${HIGHLIGHTED_STATUS}
+        "Python: an incompatible version of Python was found, python bindings will be disabled"
+      )
+    endif()
   endif()
 
   set(ENABLE_PYTHON_BINDINGS OFF)
@@ -879,6 +897,9 @@ macro(process_options)
           "Set NS3_BINDINGS_INSTALL_DIR=\"${SUGGESTED_BINDINGS_INSTALL_DIR}\" to install it to the default location."
         )
       else()
+        if(${NS3_BINDINGS_INSTALL_DIR} STREQUAL "INSTALL_PREFIX")
+          set(NS3_BINDINGS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
+        endif()
         install(FILES bindings/python/ns__init__.py
                 DESTINATION ${NS3_BINDINGS_INSTALL_DIR}/ns RENAME __init__.py
         )

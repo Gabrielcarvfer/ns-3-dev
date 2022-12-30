@@ -86,3 +86,73 @@ cppyy-18.04:
     - ./ns3 run third.py
     - ./ns3 run ./utils/python-unit-tests.py
   timeout: 9h
+
+.manylinux-pip-wheel:
+  image: quay.io/pypa/manylinux_2_28_x86_64
+  only:
+    variables:
+      - $RELEASE == "manual"
+  script:
+    # Untar libraries (just to make CMake happy, by we are not going to actually link them)
+    # https://github.com/scikit-build/scikit-build/pull/47
+    - tar -xvf /opt/_internal/static-libs-for-embedding-only.tar.xz -C /opt/_internal
+    # Install minimal toolchain
+    - yum install -y libxml2-devel
+    # Create Python venv
+    - python$PYTHON_VERSION -m venv ./venv
+    - . ./venv/bin/activate
+    # Upgrade the pip version to reuse the pre-build cppyy
+    - python$PYTHON_VERSION -m pip install pip --upgrade
+    - python$PYTHON_VERSION -m pip install setuptools --upgrade
+    - python$PYTHON_VERSION -m pip install setuptools_scm --upgrade
+    - python$PYTHON_VERSION -m pip install wheel auditwheel cmake-build-extension cppyy
+    # Configure and build wheel
+    - python$PYTHON_VERSION setup.py bdist_wheel build_ext "-DNS3_USE_LIB64=TRUE"
+    - export EXCLUDE_INTERNAL_LIBRARIES=`python$PYTHON_VERSION ./build-support/pip-wheel/auditwheel-exclude-list.py`
+    #- echo $EXCLUDE_INTERNAL_LIBRARIES
+    # Bundle in shared libraries that were not explicitly packaged or depended upon
+    - python$PYTHON_VERSION -m auditwheel repair ./dist/*whl -L /lib64 $EXCLUDE_INTERNAL_LIBRARIES
+    # Clean the build directory
+    - python$PYTHON_VERSION ./ns3 clean
+    # Clean up the environment
+    - deactivate
+    - rm -R ./venv
+    # Install wheel
+    - python$PYTHON_VERSION -m pip install ./wheelhouse/*whl
+    # Test the bindings
+    - python$PYTHON_VERSION ./utils/python-unit-tests.py
+  timeout: 3h
+  artifacts:
+    paths:
+      - wheelhouse/*.whl
+  when: on_success
+
+manylinux-pip-wheel-py3.6:
+  extends: .manylinux-pip-wheel
+  variables:
+    PYTHON_VERSION: '3.6'
+
+manylinux-pip-wheel-py3.7:
+  extends: .manylinux-pip-wheel
+  variables:
+    PYTHON_VERSION: '3.7'
+
+manylinux-pip-wheel-py3.8:
+  extends: .manylinux-pip-wheel
+  variables:
+    PYTHON_VERSION: '3.8'
+
+manylinux-pip-wheel-py3.9:
+  extends: .manylinux-pip-wheel
+  variables:
+    PYTHON_VERSION: '3.9'
+
+manylinux-pip-wheel-py3.10:
+  extends: .manylinux-pip-wheel
+  variables:
+    PYTHON_VERSION: '3.10'
+
+manylinux-pip-wheel-py3.11:
+  extends: .manylinux-pip-wheel
+  variables:
+    PYTHON_VERSION: '3.11'
