@@ -89,9 +89,9 @@ cppyy-18.04:
 
 .manylinux-pip-wheel:
   image: quay.io/pypa/manylinux_2_28_x86_64
-  only:
-    variables:
-      - $RELEASE == "manual"
+  #only:
+  #  variables:
+  #    - $RELEASE == "manual"
   script:
     # Untar libraries (just to make CMake happy, by we are not going to actually link them)
     # https://github.com/scikit-build/scikit-build/pull/47
