@@ -23,6 +23,55 @@
 #include <cstdlib>  // setenv, unsetenv
 #include <stdlib.h> // getenv
 
+#ifdef __WIN32__
+#include "ns3/abort.h"
+
+#include <cerrno>
+#include <cstring> // strcmp
+
+// setenv and unsetenv are POSIX functions
+// but we can offer the same API by wrapping Windows counterparts
+int
+setenv(const char* var_name, const char* new_value, int change_flag)
+{
+    // In case arguments are null pointers, return invalid error
+    if (var_name == nullptr || new_value == nullptr)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    NS_ABORT_MSG_IF(std::strcmp(new_value, "") == 0,
+                    "Windows does not accept empty environment variables");
+
+    // Change flag equals to zero preserves a pre-existing value
+    if (change_flag == 0)
+    {
+        char* old_value = getenv(var_name);
+        if (old_value != nullptr)
+        {
+            return 0;
+        }
+    }
+
+    // Write new value for the environment variable
+    return _putenv_s(var_name, new_value);
+}
+
+char
+unsetenv(const char* var_name)
+{
+    // In case argument is a null pointer, return invalid error
+    if (var_name == nullptr)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    return _putenv_s(var_name, "");
+}
+
+#endif
+
 namespace ns3
 {
 
@@ -250,7 +299,9 @@ EnvVarTestCase::DoRun()
     NS_TEST_EXPECT_MSG_EQ(value, "", "unset: non-empty value from unset variable");
 
     // Variable set but empty
+#ifndef __WIN32__
     SetCheckAndGet("empty", "", {}, "", {true, ""});
+#endif
 
     // Key not in variable
     SetCheckAndGet("no-key",
