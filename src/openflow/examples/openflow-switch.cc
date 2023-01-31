@@ -37,6 +37,7 @@
 #include "ns3/internet-module.h"
 #include "ns3/log.h"
 #include "ns3/network-module.h"
+#include "ns3/openflow-interface.h"
 #include "ns3/openflow-module.h"
 
 #include <fstream>

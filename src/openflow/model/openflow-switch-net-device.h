@@ -24,7 +24,7 @@
 #ifndef OPENFLOW_SWITCH_NET_DEVICE_H
 #define OPENFLOW_SWITCH_NET_DEVICE_H
 
-#include "openflow-interface.h"
+#include "openflow/openflow.h"
 
 #include "ns3/arp-header.h"
 #include "ns3/arp-l3-protocol.h"
@@ -45,8 +45,21 @@
 #include <map>
 #include <set>
 
+struct sw_chain;
+struct sw_flow_key;
+struct ofpbuf;
+struct sw_flow;
+struct vport_table_t;
+
 namespace ns3
 {
+namespace ofi
+{
+struct Controller;
+struct StatsDumpCallback;
+struct Port;
+struct SwitchPacketMetadata;
+}; // namespace ofi
 
 /**
  * \ingroup openflow
@@ -229,7 +242,7 @@ class OpenFlowSwitchNetDevice : public NetDevice
     /**
      * \return The virtual port table.
      */
-    vport_table_t GetVPortTable();
+    vport_table_t* GetVPortTable();
 
     // From NetDevice
     void SetIfIndex(const uint32_t index) override;
@@ -544,8 +557,8 @@ class OpenFlowSwitchNetDevice : public NetDevice
     uint16_t m_flags;       ///< Flags; configurable by the controller.
     uint16_t m_missSendLen; ///< Flow Table Miss Send Length; configurable by the controller.
 
-    sw_chain* m_chain;          ///< Flow Table; forwarding rules.
-    vport_table_t m_vportTable; ///< Virtual Port Table
+    sw_chain* m_chain;           ///< Flow Table; forwarding rules.
+    vport_table_t* m_vportTable; ///< Virtual Port Table
 };
 
 } // namespace ns3

@@ -314,11 +314,11 @@ int
 Stats::PortTableStatsDump(Ptr<OpenFlowSwitchNetDevice> swtch, void* state, ofpbuf* buffer)
 {
     ofp_vport_table_stats* opts = (ofp_vport_table_stats*)ofpbuf_put_zeros(buffer, sizeof *opts);
-    opts->max_vports = htonl(swtch->GetVPortTable().max_vports);
-    opts->active_vports = htonl(swtch->GetVPortTable().active_vports);
-    opts->lookup_count = htonll(swtch->GetVPortTable().lookup_count);
-    opts->port_match_count = htonll(swtch->GetVPortTable().port_match_count);
-    opts->chain_match_count = htonll(swtch->GetVPortTable().chain_match_count);
+    opts->max_vports = htonl(swtch->GetVPortTable()->max_vports);
+    opts->active_vports = htonl(swtch->GetVPortTable()->active_vports);
+    opts->lookup_count = htonll(swtch->GetVPortTable()->lookup_count);
+    opts->port_match_count = htonll(swtch->GetVPortTable()->port_match_count);
+    opts->chain_match_count = htonll(swtch->GetVPortTable()->chain_match_count);
 
     return 0;
 }
@@ -377,7 +377,7 @@ Stats::PortStatsDump(Ptr<OpenFlowSwitchNetDevice> swtch, PortStatsState* s, ofpb
         else if (port >= OFPP_VP_START && port <= OFPP_VP_END) // virtual port?
         {
             // lookup the virtual port
-            vport_table_t vt = swtch->GetVPortTable();
+            vport_table_t vt = *swtch->GetVPortTable();
             vport_table_entry* vpe = vport_table_lookup(&vt, port);
             if (!vpe)
             {

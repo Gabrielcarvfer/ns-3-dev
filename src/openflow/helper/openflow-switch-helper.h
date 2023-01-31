@@ -21,13 +21,16 @@
 
 #include "ns3/net-device-container.h"
 #include "ns3/object-factory.h"
-#include "ns3/openflow-interface.h"
 
 #include <string>
 
 namespace ns3
 {
-
+namespace ofi
+{
+class Controller;
+class LearningController;
+} // namespace ofi
 class Node;
 class AttributeValue;
 class Controller;

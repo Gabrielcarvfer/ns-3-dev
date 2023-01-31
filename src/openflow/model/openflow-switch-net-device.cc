@@ -18,8 +18,12 @@
 
 #include "openflow-switch-net-device.h"
 
+#include "openflow-interface.h"
+
 #include "ns3/tcp-l4-protocol.h"
 #include "ns3/udp-l4-protocol.h"
+
+#include <cassert>
 
 namespace ns3
 {
@@ -120,12 +124,14 @@ OpenFlowSwitchNetDevice::OpenFlowSwitchNetDevice()
     }
 
     m_ports.reserve(DP_MAX_PORTS);
-    vport_table_init(&m_vportTable);
+    m_vportTable = new vport_table_t();
+    vport_table_init(m_vportTable);
 }
 
 OpenFlowSwitchNetDevice::~OpenFlowSwitchNetDevice()
 {
     NS_LOG_FUNCTION_NOARGS();
+    delete m_vportTable;
 }
 
 void
@@ -143,7 +149,7 @@ OpenFlowSwitchNetDevice::DoDispose()
     m_controller = nullptr;
 
     chain_destroy(m_chain);
-    RBTreeDestroy(m_vportTable.table);
+    RBTreeDestroy(m_vportTable->table);
     m_channel = nullptr;
     m_node = nullptr;
     NetDevice::DoDispose();
@@ -417,7 +423,7 @@ OpenFlowSwitchNetDevice::AddVPort(const ofp_vport_mod* ovpm)
     unsigned int parent_port = ntohl(ovpm->parent_port);
 
     // check whether port table entry exists for specified port number
-    vport_table_entry* vpe = vport_table_lookup(&m_vportTable, vport);
+    vport_table_entry* vpe = vport_table_lookup(m_vportTable, vport);
     if (vpe)
     {
         NS_LOG_ERROR("vport " << vport << " already exists!");
@@ -449,7 +455,7 @@ OpenFlowSwitchNetDevice::AddVPort(const ofp_vport_mod* ovpm)
     vpe->port_acts->actions_len = actions_len;
     memcpy(vpe->port_acts->actions, ovpm->actions, actions_len);
 
-    int error = insert_vport_table_entry(&m_vportTable, vpe);
+    int error = insert_vport_table_entry(m_vportTable, vpe);
     if (error)
     {
         NS_LOG_ERROR("could not insert port table entry for port " << vport);
@@ -942,7 +948,7 @@ OpenFlowSwitchNetDevice::SendVPortTableFeatures()
                                                      OFPT_VPORT_TABLE_FEATURES_REPLY,
                                                      &buffer);
     ovtfr->actions = htonl(OFP_SUPPORTED_VPORT_TABLE_ACTIONS);
-    ovtfr->max_vports = htonl(m_vportTable.max_vports);
+    ovtfr->max_vports = htonl(m_vportTable->max_vports);
     ovtfr->max_chain_depth = htons(-1); // support a chain depth of 2^16
     ovtfr->mixed_chaining = true;
     SendOpenflowBuffer(buffer);
@@ -1121,11 +1127,11 @@ OpenFlowSwitchNetDevice::RunThroughVPortTable(uint32_t packet_uid, int port, uin
     }
 
     // run through the chain of port table entries
-    vport_table_entry* vpe = vport_table_lookup(&m_vportTable, vport);
-    m_vportTable.lookup_count++;
+    vport_table_entry* vpe = vport_table_lookup(m_vportTable, vport);
+    m_vportTable->lookup_count++;
     if (vpe)
     {
-        m_vportTable.port_match_count++;
+        m_vportTable->port_match_count++;
     }
     while (vpe)
     {
@@ -1152,7 +1158,7 @@ OpenFlowSwitchNetDevice::RunThroughVPortTable(uint32_t packet_uid, int port, uin
         }
         else // increment the number of port entries accessed by chaining
         {
-            m_vportTable.chain_match_count++;
+            m_vportTable->chain_match_count++;
         }
         // move to the parent port entry
         vpe = vpe->parent_port_ptr;
@@ -1304,7 +1310,7 @@ OpenFlowSwitchNetDevice::ReceiveVPortMod(const void* msg)
     }
     else if (command == OFPVP_DELETE)
     {
-        if (remove_vport_table_entry(&m_vportTable, ntohl(ovpm->vport)))
+        if (remove_vport_table_entry(m_vportTable, ntohl(ovpm->vport)))
         {
             SendErrorMsg(OFPET_BAD_ACTION,
                          OFPET_VPORT_MOD_FAILED,
@@ -1693,7 +1699,7 @@ OpenFlowSwitchNetDevice::GetSwitchPortIndex(ofi::Port p)
     return -1;
 }
 
-vport_table_t
+vport_table_t*
 OpenFlowSwitchNetDevice::GetVPortTable()
 {
     return m_vportTable;
