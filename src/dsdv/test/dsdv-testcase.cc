@@ -27,21 +27,9 @@
  * NSF grant CNS-1050226 (Multilayer Network Resilience Analysis and Experimentation on GENI),
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
-#include "ns3/boolean.h"
-#include "ns3/double.h"
-#include "ns3/dsdv-helper.h"
 #include "ns3/dsdv-packet.h"
 #include "ns3/dsdv-rtable.h"
-#include "ns3/internet-stack-helper.h"
-#include "ns3/ipv4-address-helper.h"
-#include "ns3/mesh-helper.h"
-#include "ns3/mobility-helper.h"
-#include "ns3/pcap-file.h"
-#include "ns3/simulator.h"
-#include "ns3/string.h"
 #include "ns3/test.h"
-#include "ns3/uinteger.h"
-#include "ns3/v4ping-helper.h"
 
 using namespace ns3;
 

@@ -17,7 +17,6 @@
  * Author: Biljana Bojovic <bbojovic@cttc.es>
  */
 
-#include "ns3/log.h"
 #include "ns3/test.h"
 #include "ns3/val-array.h"
 

@@ -23,35 +23,20 @@
  *   with RFC 6621 de-duplication enabled or disabled.
  */
 
-#include "ns3/boolean.h"
 #include "ns3/config.h"
-#include "ns3/double.h"
-#include "ns3/inet-socket-address.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
-#include "ns3/ipv4-l3-protocol.h"
 #include "ns3/ipv4-list-routing-helper.h"
 #include "ns3/ipv4-static-routing-helper.h"
-#include "ns3/ipv4-static-routing.h"
-#include "ns3/log.h"
 #include "ns3/names.h"
-#include "ns3/node.h"
 #include "ns3/random-variable-stream.h"
-#include "ns3/simple-channel.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simple-net-device.h"
-#include "ns3/simulator.h"
-#include "ns3/socket.h"
 #include "ns3/string.h"
 #include "ns3/test.h"
-#include "ns3/traffic-control-layer.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/udp-socket.h"
-#include "ns3/uinteger.h"
 
-#include <functional>
-#include <limits>
-#include <string>
 
 using namespace ns3;
 

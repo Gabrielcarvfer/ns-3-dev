@@ -19,10 +19,7 @@
 #include "ns3/core-module.h"
 #include "ns3/tcp-option-ts.h"
 #include "ns3/tcp-option-winscale.h"
-#include "ns3/tcp-option.h"
-#include "ns3/test.h"
 
-#include <string.h>
 
 using namespace ns3;
 

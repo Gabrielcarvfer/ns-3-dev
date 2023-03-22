@@ -20,7 +20,7 @@
 #define NET_DEVICE_QUEUE_INTERFACE_H
 
 #include "ns3/callback.h"
-#include "ns3/log.h"
+
 #include "ns3/net-device.h"
 #include "ns3/object-factory.h"
 #include "ns3/object.h"

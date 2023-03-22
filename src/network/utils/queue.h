@@ -22,7 +22,7 @@
 #ifndef QUEUE_H
 #define QUEUE_H
 
-#include "ns3/log.h"
+
 #include "ns3/object.h"
 #include "ns3/packet.h"
 #include "ns3/queue-fwd.h"

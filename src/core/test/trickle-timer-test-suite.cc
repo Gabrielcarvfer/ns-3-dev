@@ -20,9 +20,7 @@
 #include "ns3/test.h"
 #include "ns3/trickle-timer.h"
 
-#include <algorithm>
 #include <numeric>
-#include <vector>
 
 /**
  * \file

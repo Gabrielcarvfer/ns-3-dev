@@ -21,7 +21,6 @@
 #include "ns3/test.h"
 
 #include <iomanip>
-#include <string>
 
 /**
  * \file

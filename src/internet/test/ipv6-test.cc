@@ -19,13 +19,10 @@
  */
 #include "ns3/boolean.h"
 #include "ns3/icmpv6-l4-protocol.h"
-#include "ns3/inet6-socket-address.h"
 #include "ns3/ipv6-interface.h"
 #include "ns3/ipv6-l3-protocol.h"
-#include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/simple-net-device.h"
-#include "ns3/simulator.h"
 #include "ns3/test.h"
 
 using namespace ns3;

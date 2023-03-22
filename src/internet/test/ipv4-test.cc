@@ -18,14 +18,10 @@
  * This is the test code for ipv4-l3-protocol.cc
  */
 
-#include "ns3/arp-l3-protocol.h"
-#include "ns3/inet-socket-address.h"
 #include "ns3/ipv4-interface.h"
 #include "ns3/ipv4-l3-protocol.h"
-#include "ns3/log.h"
 #include "ns3/loopback-net-device.h"
 #include "ns3/node.h"
-#include "ns3/simulator.h"
 #include "ns3/test.h"
 
 using namespace ns3;

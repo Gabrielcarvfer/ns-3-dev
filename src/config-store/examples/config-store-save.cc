@@ -1,7 +1,6 @@
 #include "ns3/config-store-module.h"
 #include "ns3/core-module.h"
 
-#include <iostream>
 
 using namespace ns3;
 

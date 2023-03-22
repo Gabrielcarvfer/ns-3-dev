@@ -18,7 +18,6 @@
 
 #include "ns3/ipv6-list-routing.h"
 #include "ns3/ipv6-route.h"
-#include "ns3/ipv6-routing-protocol.h"
 #include "ns3/test.h"
 
 using namespace ns3;

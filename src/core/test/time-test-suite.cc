@@ -19,16 +19,11 @@
  * TimeStep support by Emmanuelle Laprise <emmanuelle.laprise@bluekazoo.ca>
  */
 
-#include "ns3/int64x64.h"
 #include "ns3/nstime.h"
 #include "ns3/test.h"
 
 #include <array>
 #include <iomanip>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <tuple>
 
 using namespace ns3;
 

@@ -23,7 +23,7 @@
 #include "wimax-connection.h"
 
 #include "ns3/channel.h"
-#include "ns3/log.h"
+
 
 #include <list>
 

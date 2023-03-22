@@ -15,24 +15,16 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/boolean.h"
-#include "ns3/callback.h"
 #include "ns3/config.h"
-#include "ns3/double.h"
-#include "ns3/enum.h"
-#include "ns3/integer.h"
 #include "ns3/nstime.h"
 #include "ns3/object-factory.h"
 #include "ns3/object-map.h"
 #include "ns3/object-vector.h"
-#include "ns3/object.h"
 #include "ns3/pointer.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/string.h"
 #include "ns3/test.h"
-#include "ns3/trace-source-accessor.h"
 #include "ns3/traced-value.h"
-#include "ns3/uinteger.h"
 
 using namespace ns3;
 

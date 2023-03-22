@@ -17,7 +17,6 @@
  */
 
 #include "ns3/ipv4-list-routing.h"
-#include "ns3/ipv4-routing-protocol.h"
 #include "ns3/test.h"
 
 using namespace ns3;

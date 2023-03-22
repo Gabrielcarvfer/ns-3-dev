@@ -18,8 +18,6 @@
  */
 
 #include "ns3/li-ion-energy-source.h"
-#include "ns3/log.h"
-#include "ns3/node.h"
 #include "ns3/simple-device-energy-model.h"
 #include "ns3/simulator.h"
 #include "ns3/test.h"

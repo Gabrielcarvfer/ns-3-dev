@@ -20,31 +20,22 @@
  */
 
 #include "ns3/arp-l3-protocol.h"
-#include "ns3/config.h"
 #include "ns3/icmpv4-l4-protocol.h"
 #include "ns3/icmpv6-l4-protocol.h"
-#include "ns3/inet-socket-address.h"
-#include "ns3/inet6-socket-address.h"
 #include "ns3/ipv4-l3-protocol.h"
 #include "ns3/ipv4-list-routing.h"
 #include "ns3/ipv4-static-routing.h"
 #include "ns3/ipv6-l3-protocol.h"
 #include "ns3/ipv6-list-routing.h"
 #include "ns3/ipv6-static-routing.h"
-#include "ns3/log.h"
-#include "ns3/node.h"
 #include "ns3/simple-channel.h"
 #include "ns3/simple-net-device.h"
-#include "ns3/simulator.h"
-#include "ns3/socket-factory.h"
 #include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/test.h"
 #include "ns3/traffic-control-layer.h"
 #include "ns3/udp-l4-protocol.h"
-#include "ns3/uinteger.h"
 
-#include <string>
 
 using namespace ns3;
 

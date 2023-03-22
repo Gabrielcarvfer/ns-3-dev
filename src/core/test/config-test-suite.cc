@@ -16,20 +16,12 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/callback.h"
 #include "ns3/config.h"
-#include "ns3/integer.h"
-#include "ns3/log.h"
-#include "ns3/names.h"
 #include "ns3/object-vector.h"
-#include "ns3/object.h"
 #include "ns3/pointer.h"
-#include "ns3/singleton.h"
 #include "ns3/test.h"
-#include "ns3/trace-source-accessor.h"
 #include "ns3/traced-value.h"
 
-#include <sstream>
 
 /**
  * \file

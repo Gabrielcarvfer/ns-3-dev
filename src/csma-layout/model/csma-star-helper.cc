@@ -13,15 +13,9 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <iostream>
-#include <sstream>
 
 // ns3 includes
 #include "ns3/csma-star-helper.h"
-#include "ns3/log.h"
-#include "ns3/node-list.h"
-#include "ns3/point-to-point-net-device.h"
-#include "ns3/vector.h"
 
 namespace ns3
 {

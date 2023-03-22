@@ -18,12 +18,9 @@
 
 #include "ns3/int64x64.h"
 #include "ns3/test.h"
-#include "ns3/valgrind.h" // Bug 1882
 
 #include <cfloat> // FLT_RADIX,...
-#include <cmath>  // fabs, round
 #include <iomanip>
-#include <limits> // numeric_limits<>::epsilon ()
 
 #ifdef __WIN32__
 /**

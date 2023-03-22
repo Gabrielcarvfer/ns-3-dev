@@ -18,22 +18,15 @@
  *                              <amine.ismail@udcast.com>
  */
 
-#include "ns3/abort.h"
-#include "ns3/config.h"
-#include "ns3/inet-socket-address.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
-#include "ns3/log.h"
 #include "ns3/simple-channel.h"
 #include "ns3/simple-net-device.h"
-#include "ns3/simulator.h"
-#include "ns3/string.h"
 #include "ns3/test.h"
 #include "ns3/udp-client-server-helper.h"
 #include "ns3/udp-echo-helper.h"
 #include "ns3/uinteger.h"
 
-#include <fstream>
 
 using namespace ns3;
 

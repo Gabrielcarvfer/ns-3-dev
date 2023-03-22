@@ -20,14 +20,9 @@
 #include "ns3/double.h"
 #include "ns3/gnuplot.h"
 #include "ns3/integer.h"
-#include "ns3/ptr.h"
 #include "ns3/random-variable-stream.h"
-#include "ns3/string.h"
 
-#include <cmath>
 #include <fstream>
-#include <iostream>
-#include <map>
 
 /**
  * \file

@@ -26,7 +26,6 @@
 #include "ns3/simulator.h"
 #include "ns3/test.h"
 
-#include <cstdlib> // for rand()
 
 using namespace ns3;
 

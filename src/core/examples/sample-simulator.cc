@@ -19,11 +19,9 @@
 
 #include "ns3/command-line.h"
 #include "ns3/double.h"
-#include "ns3/nstime.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/simulator.h"
 
-#include <iostream>
 
 /**
  * \file

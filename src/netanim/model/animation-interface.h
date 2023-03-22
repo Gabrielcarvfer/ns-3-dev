@@ -26,7 +26,7 @@
 #include "ns3/config.h"
 #include "ns3/ipv4-l3-protocol.h"
 #include "ns3/ipv4.h"
-#include "ns3/log.h"
+
 #include "ns3/lte-enb-net-device.h"
 #include "ns3/lte-ue-net-device.h"
 #include "ns3/mac48-address.h"

@@ -23,10 +23,7 @@
 #include "ns3/application-packet-probe.h"
 
 #include "ns3/config.h"
-#include "ns3/log.h"
 #include "ns3/names.h"
-#include "ns3/object.h"
-#include "ns3/trace-source-accessor.h"
 
 namespace ns3
 {

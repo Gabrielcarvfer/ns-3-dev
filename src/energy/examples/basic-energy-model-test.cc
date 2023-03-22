@@ -20,18 +20,10 @@
 #include "ns3/basic-energy-source-helper.h"
 #include "ns3/basic-energy-source.h"
 #include "ns3/config.h"
-#include "ns3/device-energy-model-container.h"
-#include "ns3/double.h"
-#include "ns3/energy-source-container.h"
-#include "ns3/log.h"
-#include "ns3/node.h"
-#include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/wifi-radio-energy-model-helper.h"
-#include "ns3/wifi-radio-energy-model.h"
 #include "ns3/yans-wifi-helper.h"
 
-#include <cmath>
 
 using namespace ns3;
 

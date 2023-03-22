@@ -18,15 +18,9 @@
  */
 
 #include <ns3/double.h>
-#include <ns3/log.h>
 #include <ns3/parabolic-antenna-model.h>
-#include <ns3/simulator.h>
 #include <ns3/test.h>
 
-#include <cmath>
-#include <iostream>
-#include <sstream>
-#include <string>
 
 using namespace ns3;
 

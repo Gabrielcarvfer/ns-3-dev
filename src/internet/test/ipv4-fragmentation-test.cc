@@ -20,38 +20,18 @@
  * This is the test code for ipv4-l3protocol.cc (only the fragmentation and reassembly part).
  */
 
-#include "ns3/arp-l3-protocol.h"
-#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/error-channel.h"
-#include "ns3/icmpv4-l4-protocol.h"
-#include "ns3/inet-socket-address.h"
 #include "ns3/internet-stack-helper.h"
-#include "ns3/ipv4-l3-protocol.h"
-#include "ns3/ipv4-list-routing.h"
-#include "ns3/ipv4-raw-socket-factory.h"
-#include "ns3/ipv4-static-routing.h"
-#include "ns3/log.h"
-#include "ns3/node.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simple-net-device.h"
-#include "ns3/simulator.h"
-#include "ns3/socket-factory.h"
-#include "ns3/socket.h"
 #include "ns3/test.h"
-#include "ns3/udp-l4-protocol.h"
-#include "ns3/udp-socket-factory.h"
 #include "ns3/udp-socket.h"
-#include "ns3/uinteger.h"
 
 #ifdef __WIN32__
-#include "ns3/win32-internet.h"
 #else
-#include <netinet/in.h>
 #endif
 
-#include <limits>
-#include <string>
 
 using namespace ns3;
 

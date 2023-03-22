@@ -26,7 +26,7 @@
 #include "ns3/assert.h"
 #include "ns3/header.h"
 #include "ns3/ipv4-address.h"
-#include "ns3/log.h"
+
 #include "ns3/uinteger.h"
 
 #include <cstdlib>

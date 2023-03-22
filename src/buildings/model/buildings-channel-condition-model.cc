@@ -21,9 +21,7 @@
 #include "ns3/buildings-channel-condition-model.h"
 
 #include "ns3/building-list.h"
-#include "ns3/log.h"
 #include "ns3/mobility-building-info.h"
-#include "ns3/mobility-model.h"
 
 namespace ns3
 {

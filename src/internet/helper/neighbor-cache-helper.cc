@@ -19,15 +19,8 @@
 
 #include "ns3/neighbor-cache-helper.h"
 
-#include "ns3/assert.h"
 #include "ns3/channel-list.h"
-#include "ns3/ipv4.h"
-#include "ns3/ipv6.h"
-#include "ns3/log.h"
-#include "ns3/net-device.h"
 #include "ns3/node.h"
-#include "ns3/ptr.h"
-#include "ns3/simulator.h"
 
 namespace ns3
 {

@@ -20,13 +20,8 @@
 #include "ns3/ipv4-flow-probe.h"
 
 #include "ns3/config.h"
-#include "ns3/flow-id-tag.h"
 #include "ns3/flow-monitor.h"
-#include "ns3/ipv4-flow-classifier.h"
-#include "ns3/log.h"
 #include "ns3/node.h"
-#include "ns3/packet.h"
-#include "ns3/pointer.h"
 
 namespace ns3
 {

@@ -14,13 +14,10 @@
  *
  */
 
-#include "ns3/log.h"
-#include "ns3/packet.h"
 #include "ns3/simulator.h"
 #include "ns3/tcp-tx-buffer.h"
 #include "ns3/test.h"
 
-#include <limits>
 
 using namespace ns3;
 

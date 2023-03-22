@@ -16,21 +16,9 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/abort.h"
-#include "ns3/boolean.h"
-#include "ns3/buildings-channel-condition-model.h"
 #include "ns3/buildings-module.h"
-#include "ns3/channel-condition-model.h"
-#include "ns3/config.h"
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/core-module.h"
-#include "ns3/double.h"
-#include "ns3/log.h"
-#include "ns3/simulator.h"
-#include "ns3/test.h"
-#include "ns3/three-gpp-v2v-channel-condition-model.h"
-#include "ns3/three-gpp-v2v-propagation-loss-model.h"
-#include "ns3/uinteger.h"
 
 using namespace ns3;
 

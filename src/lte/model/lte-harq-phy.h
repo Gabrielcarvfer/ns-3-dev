@@ -21,7 +21,7 @@
 #define LTE_HARQ_PHY_MODULE_H
 
 #include <ns3/assert.h>
-#include <ns3/log.h>
+
 #include <ns3/simple-ref-count.h>
 
 #include <map>

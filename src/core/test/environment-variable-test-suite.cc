@@ -20,7 +20,6 @@
 #include "ns3/environment-variable.h"
 #include "ns3/test.h"
 
-#include <cstdlib> // getenv
 
 namespace ns3
 {

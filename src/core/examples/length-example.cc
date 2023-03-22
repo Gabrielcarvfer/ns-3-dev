@@ -17,10 +17,8 @@
  * Author: Mathew Bielejeski <bielejeski1@llnl.gov>
  */
 
-#include "ns3/core-module.h"
 #include "ns3/length.h"
 
-#include <iostream>
 
 /**
  * \defgroup length-examples Demonstrates usage of the ns3::Length class

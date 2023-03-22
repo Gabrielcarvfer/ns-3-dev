@@ -26,7 +26,6 @@
 
 #include "ns3/core-module.h"
 
-#include <iostream>
 
 using namespace ns3;
 

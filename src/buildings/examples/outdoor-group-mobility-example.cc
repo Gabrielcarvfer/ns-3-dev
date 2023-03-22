@@ -64,7 +64,6 @@
 #include "ns3/network-module.h"
 #include <ns3/mobility-module.h>
 
-#include <iostream>
 
 using namespace ns3;
 

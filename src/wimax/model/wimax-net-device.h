@@ -31,7 +31,7 @@
 #include "wimax-phy.h"
 
 #include "ns3/event-id.h"
-#include "ns3/log.h"
+
 #include "ns3/mac48-address.h"
 #include "ns3/net-device.h"
 #include "ns3/nstime.h"

@@ -16,12 +16,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/abort.h"
-#include "ns3/buildings-channel-condition-model.h"
 #include "ns3/buildings-module.h"
-#include "ns3/config.h"
 #include "ns3/constant-position-mobility-model.h"
-#include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/test.h"
 

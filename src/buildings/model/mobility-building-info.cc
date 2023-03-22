@@ -18,13 +18,8 @@
  *
  */
 
-#include <ns3/assert.h>
 #include <ns3/building-list.h>
-#include <ns3/log.h>
 #include <ns3/mobility-building-info.h>
-#include <ns3/pointer.h>
-#include <ns3/position-allocator.h>
-#include <ns3/simulator.h>
 
 namespace ns3
 {

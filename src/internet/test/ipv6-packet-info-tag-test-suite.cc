@@ -21,31 +21,14 @@
 // Unit tests
 //-----------------------------------------------------------------------------
 
-#include "ns3/abort.h"
-#include "ns3/attribute.h"
-#include "ns3/boolean.h"
 #include "ns3/icmpv6-l4-protocol.h"
-#include "ns3/inet6-socket-address.h"
 #include "ns3/internet-stack-helper.h"
-#include "ns3/ipv6-address.h"
-#include "ns3/ipv6-interface.h"
-#include "ns3/ipv6-l3-protocol.h"
-#include "ns3/ipv6-list-routing.h"
 #include "ns3/ipv6-packet-info-tag.h"
 #include "ns3/ipv6-raw-socket-factory.h"
-#include "ns3/ipv6-static-routing.h"
-#include "ns3/log.h"
-#include "ns3/node.h"
-#include "ns3/object-factory.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simple-net-device.h"
-#include "ns3/simulator.h"
-#include "ns3/socket-factory.h"
 #include "ns3/test.h"
-#include "ns3/traffic-control-layer.h"
-#include "ns3/udp-socket-factory.h"
 #include "ns3/udp-socket.h"
-#include "ns3/uinteger.h"
 
 using namespace ns3;
 

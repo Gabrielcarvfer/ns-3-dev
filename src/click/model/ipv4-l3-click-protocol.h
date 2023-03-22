@@ -24,7 +24,7 @@
 #include "ns3/ipv4-interface.h"
 #include "ns3/ipv4-routing-protocol.h"
 #include "ns3/ipv4.h"
-#include "ns3/log.h"
+
 #include "ns3/net-device.h"
 #include "ns3/packet.h"
 #include "ns3/traced-callback.h"

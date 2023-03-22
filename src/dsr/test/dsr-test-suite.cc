@@ -28,25 +28,8 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
-#include "ns3/boolean.h"
-#include "ns3/double.h"
-#include "ns3/dsr-fs-header.h"
-#include "ns3/dsr-helper.h"
 #include "ns3/dsr-main-helper.h"
-#include "ns3/dsr-option-header.h"
-#include "ns3/dsr-rcache.h"
-#include "ns3/dsr-rreq-table.h"
-#include "ns3/dsr-rsendbuff.h"
-#include "ns3/ipv4-address-helper.h"
-#include "ns3/ipv4-route.h"
-#include "ns3/mesh-helper.h"
-#include "ns3/ptr.h"
-#include "ns3/simulator.h"
-#include "ns3/string.h"
-#include "ns3/test.h"
-#include "ns3/uinteger.h"
 
-#include <vector>
 
 using namespace ns3;
 using namespace dsr;

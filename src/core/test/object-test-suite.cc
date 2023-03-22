@@ -17,9 +17,7 @@
  * Authors: Gustavo Carneiro <gjcarneiro@gmail.com>,
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "ns3/assert.h"
 #include "ns3/object-factory.h"
-#include "ns3/object.h"
 #include "ns3/test.h"
 
 /**

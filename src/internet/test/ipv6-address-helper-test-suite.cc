@@ -16,12 +16,8 @@
  */
 
 #include "ns3/internet-stack-helper.h"
-#include "ns3/ipv4-address-helper.h"
 #include "ns3/ipv6-address-generator.h"
 #include "ns3/ipv6-address-helper.h"
-#include "ns3/log.h"
-#include "ns3/net-device-container.h"
-#include "ns3/node-container.h"
 #include "ns3/simple-net-device.h"
 #include "ns3/test.h"
 

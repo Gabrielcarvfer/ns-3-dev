@@ -17,13 +17,10 @@
  */
 
 #define __STDC_LIMIT_MACROS
-#include "ns3/buffer.h"
 #include "ns3/core-module.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-option-rfc793.h"
-#include "ns3/test.h"
 
-#include <stdint.h>
 
 using namespace ns3;
 

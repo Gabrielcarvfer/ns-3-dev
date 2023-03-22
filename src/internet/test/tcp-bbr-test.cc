@@ -20,9 +20,7 @@
  *
  */
 
-#include "ns3/log.h"
 #include "ns3/tcp-bbr.h"
-#include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
 

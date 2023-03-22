@@ -33,7 +33,7 @@
 #include "ns3/ethernet-header.h"
 #include "ns3/integer.h"
 #include "ns3/ipv4-l3-protocol.h"
-#include "ns3/log.h"
+
 #include "ns3/mac48-address.h"
 #include "ns3/node.h"
 #include "ns3/simulator.h"

@@ -16,12 +16,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "ns3/abort.h"
 #include "ns3/building-position-allocator.h"
-#include "ns3/building.h"
-#include "ns3/config.h"
 #include "ns3/double.h"
-#include "ns3/log.h"
 #include "ns3/mobility-helper.h"
 #include "ns3/pointer.h"
 #include "ns3/random-walk-2d-outdoor-mobility-model.h"

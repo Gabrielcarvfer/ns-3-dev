@@ -16,20 +16,12 @@
  *
  * Author: Claudio Freire <claudio-daniel.freire@inria.fr>
  */
-#include "ns3/calendar-scheduler.h"
 #include "ns3/config.h"
-#include "ns3/heap-scheduler.h"
-#include "ns3/list-scheduler.h"
-#include "ns3/map-scheduler.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/test.h"
 
-#include <chrono> // seconds, milliseconds
-#include <ctime>
-#include <list>
 #include <thread> // sleep_for
-#include <utility>
 
 using namespace ns3;
 

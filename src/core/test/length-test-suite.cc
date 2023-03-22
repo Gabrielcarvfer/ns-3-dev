@@ -18,26 +18,15 @@
  */
 
 #include "ns3/length.h"
-#include "ns3/log.h"
 #include "ns3/object.h"
 #include "ns3/string.h"
 #include "ns3/test.h"
 
 #ifdef HAVE_BOOST
-#include <boost/units/base_units/us/foot.hpp>
-#include <boost/units/systems/si.hpp>
-#include <boost/units/systems/si/prefixes.hpp>
 #endif
 
-#include <array>
 #include <cmath>
-#include <functional>
-#include <initializer_list>
 #include <iomanip>
-#include <limits>
-#include <map>
-#include <sstream>
-#include <string>
 
 /**
  * \file

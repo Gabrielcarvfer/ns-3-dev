@@ -20,37 +20,18 @@
  * This is the test code for ipv6-raw-socket-impl.cc.
  */
 
-#include "ns3/boolean.h"
 #include "ns3/icmpv6-l4-protocol.h"
-#include "ns3/inet6-socket-address.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv6-address-helper.h"
-#include "ns3/ipv6-l3-protocol.h"
-#include "ns3/ipv6-list-routing.h"
 #include "ns3/ipv6-raw-socket-factory.h"
-#include "ns3/ipv6-static-routing.h"
-#include "ns3/log.h"
-#include "ns3/node-container.h"
-#include "ns3/node.h"
-#include "ns3/simple-channel.h"
 #include "ns3/simple-net-device-helper.h"
-#include "ns3/simple-net-device.h"
-#include "ns3/simulator.h"
-#include "ns3/socket-factory.h"
-#include "ns3/socket.h"
 #include "ns3/test.h"
-#include "ns3/uinteger.h"
 
 #ifdef __WIN32__
 #include "ns3/win32-internet.h"
 #else
-#include <netinet/in.h>
-#include <sys/socket.h>
 #endif
 
-#include <limits>
-#include <string>
-#include <sys/types.h>
 
 using namespace ns3;
 

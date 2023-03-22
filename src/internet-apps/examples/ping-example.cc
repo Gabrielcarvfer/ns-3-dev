@@ -79,7 +79,6 @@
 #include "ns3/nix-vector-routing-module.h"
 #include "ns3/point-to-point-module.h"
 
-#include <fstream>
 
 using namespace ns3;
 

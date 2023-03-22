@@ -18,11 +18,9 @@
  *
  */
 
-#include "ns3/data-rate.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv6-address-helper.h"
 #include "ns3/ipv6-route.h"
-#include "ns3/ipv6-routing-helper.h"
 #include "ns3/ipv6-routing-protocol.h"
 #include "ns3/radvd-helper.h"
 #include "ns3/simple-net-device-helper.h"

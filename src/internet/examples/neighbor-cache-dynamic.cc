@@ -138,7 +138,6 @@
 #include "ns3/core-module.h"
 #include "ns3/csma-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/network-module.h"
 
 using namespace ns3;
 

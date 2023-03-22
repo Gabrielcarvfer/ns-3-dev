@@ -16,16 +16,10 @@
  */
 
 #include "ns3/command-line.h"
-#include "ns3/config.h"
 #include "ns3/global-value.h"
-#include "ns3/log.h"
-#include "ns3/nstime.h"
-#include "ns3/ptr.h"
-#include "ns3/realtime-simulator-impl.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 
-#include <chrono> // seconds, milliseconds
 #include <thread> // sleep_for
 
 /**

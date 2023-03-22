@@ -19,12 +19,9 @@
  *
  */
 
-#include "ns3/data-rate.h"
-#include "ns3/dhcp-client.h"
 #include "ns3/dhcp-helper.h"
 #include "ns3/dhcp-server.h"
 #include "ns3/internet-stack-helper.h"
-#include "ns3/ipv4-address-helper.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simple-net-device.h"
 #include "ns3/test.h"

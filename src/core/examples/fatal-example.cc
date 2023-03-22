@@ -17,11 +17,8 @@
  * Author: Peter D. Barnes, Jr. <pdbarnes@llnl.gov>
  */
 
-#include "ns3/assert.h"
-#include "ns3/fatal-error.h"
 #include "ns3/simulator.h"
 
-#include <iostream>
 
 /**
  * \file
