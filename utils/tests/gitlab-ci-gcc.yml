@@ -38,6 +38,85 @@ weekly-gcc:
   script:
     - echo "Starting GCC jobs"
 
+# GCC 8
+weekly-build-gcc-8-debug:
+  extends: .weekly-gcc-base
+  rules:
+    - if: $RELEASE == "weekly"
+    - if: $UBUNTU == "True"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  needs: ["weekly-gcc"]
+  image: ubuntu:20.04
+  stage: build
+  variables:
+    MODE: debug
+    COMPILER: g++-8
+    LIBGSL: libgsl23
+
+weekly-build-gcc-8-default:
+  extends: .weekly-gcc-base
+  rules:
+    - if: $RELEASE == "weekly"
+    - if: $UBUNTU == "True"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  needs: ["weekly-gcc"]
+  image: ubuntu:20.04
+  stage: build
+  variables:
+    MODE: default
+    COMPILER: g++-8
+    LIBGSL: libgsl23
+
+weekly-build-gcc-8-optimized:
+  extends: .weekly-gcc-base
+  rules:
+    - if: $RELEASE == "weekly"
+    - if: $UBUNTU == "True"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  needs: ["weekly-gcc"]
+  image: ubuntu:20.04
+  stage: build
+  variables:
+    MODE: optimized
+    COMPILER: g++-8
+    LIBGSL: libgsl23
+
+weekly-test-gcc-8-default:
+  extends: .weekly-gcc-base
+  rules:
+    - if: $RELEASE == "weekly"
+    - if: $UBUNTU == "True"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  image: ubuntu:20.04
+  stage: test
+  needs: ["weekly-build-gcc-8-default"]
+  cache:
+    key: "ccache-weekly-build-gcc-8-default"
+    paths:
+      - $CCACHE_BASEDIR_VALUE/
+  variables:
+    MODE: default
+    COMPILER: g++-8
+    LIBGSL: libgsl23
+
+weekly-test-gcc-8-optimized:
+  extends: .weekly-gcc-base
+  rules:
+    - if: $RELEASE == "weekly"
+    - if: $UBUNTU == "True"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  image: ubuntu:20.04
+  stage: test
+  needs: ["weekly-build-gcc-8-optimized"]
+  cache:
+    key: "ccache-weekly-build-gcc-8-optimized"
+    paths:
+      - $CCACHE_BASEDIR_VALUE/
+  variables:
+    MODE: optimized
+    COMPILER: g++-8
+    LIBGSL: libgsl23
+
 # GCC 9
 weekly-build-gcc-9-debug:
   extends: .weekly-gcc-base
