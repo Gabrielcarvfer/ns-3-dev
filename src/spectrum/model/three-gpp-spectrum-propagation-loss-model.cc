@@ -231,20 +231,31 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     // to obtain the beamforming gain
     auto vit = tempPsd->ValuesBegin();      // psd iterator
     auto sbit = tempPsd->ConstBandsBegin(); // band iterator
-    while (vit != tempPsd->ValuesEnd())
+
+    // allocate temporary storage for clusters of each sub-band
+    std::vector<std::complex<double>> temp;
+    temp.resize(numCluster);
+    for (uint32_t i = 0; i < tempPsd->GetValuesN(); i++)
     {
-        if ((*vit) != 0.00)
+        double fsb = (*sbit).fc; // center frequency of the sub-band
+        // calculate cluster gains
+        for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
         {
-            std::complex<double> subsbandGain(0.0, 0.0);
-            double fsb = (*sbit).fc; // center frequency of the sub-band
-            for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
-            {
-                double delay = -2 * M_PI * fsb * (channelParams->m_delay[cIndex]);
-                subsbandGain = subsbandGain + longTerm[cIndex] * doppler[cIndex] *
-                                                  std::complex<double>(cos(delay), sin(delay));
-            }
-            *vit = (*vit) * (norm(subsbandGain));
+            double delay = -2 * M_PI * fsb * (channelParams->m_delay[cIndex]);
+            temp[cIndex] = std::complex<double>(cos(delay), sin(delay));
         }
+        for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
+        {
+            temp[cIndex] *= longTerm[cIndex] * doppler[cIndex];
+        }
+        // aggregate cluster gains into the sub-band gain
+        std::complex<double> subbandsGain(0.0, 0.0);
+        for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
+        {
+            subbandsGain += temp[cIndex];
+        }
+        double gain = norm(subbandsGain);
+        *vit = (*vit) * gain;
         vit++;
         sbit++;
     }
