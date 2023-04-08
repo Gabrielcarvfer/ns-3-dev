@@ -31,7 +31,7 @@
 #include "ns3/pointer.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
-
+#include "fasttrigo.h"
 #include <map>
 
 namespace ns3
@@ -134,6 +134,11 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
     return params->m_channel.MultiplyByLeftAndRightMatrix(uW.Transpose(), sW);
 }
 
+union triggo{
+    __m128 simd;
+    float fl[4];
+};
+
 Ptr<SpectrumValue>
 ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     Ptr<SpectrumValue> txPsd,
@@ -235,14 +240,30 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     // allocate temporary storage for clusters of each sub-band
     std::vector<std::complex<double>> temp;
     temp.resize(numCluster);
+
+
     for (uint32_t i = 0; i < tempPsd->GetValuesN(); i++)
     {
         double fsb = (*sbit).fc; // center frequency of the sub-band
         // calculate cluster gains
-        for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
+        for (uint16_t cIndex = 0; cIndex < numCluster; cIndex+=4)
         {
-            double delay = -2 * M_PI * fsb * (channelParams->m_delay[cIndex]);
-            temp[cIndex] = std::complex<double>(cos(delay), sin(delay));
+            triggo angles;
+            triggo sin;
+            triggo cos;
+            for (uint16_t j = cIndex; j < std::min<uint16_t>(cIndex+4, numCluster); j++)
+            {
+                double delay = -2 * M_PI * fsb * (channelParams->m_delay[j]);
+                angles.fl[j-cIndex] = delay;
+            }
+
+            FT::sincos_ps(angles.simd, &(sin.simd), &(cos.simd));
+
+            for (uint16_t j = cIndex; j < std::min<uint16_t>(cIndex+4, numCluster); j++)
+            {
+                temp[j] = std::complex<double>(cos.fl[j-cIndex], sin.fl[j-cIndex]);
+            }
+
         }
         for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
         {

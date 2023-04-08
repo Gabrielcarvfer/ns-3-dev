@@ -1,4 +1,5 @@
 set(source_files
+        model/fasttrigo.cpp
     helper/adhoc-aloha-noack-ideal-phy-helper.cc
     helper/spectrum-analyzer-helper.cc
     helper/spectrum-helper.cc
