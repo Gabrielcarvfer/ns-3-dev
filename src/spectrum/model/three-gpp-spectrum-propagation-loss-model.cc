@@ -202,6 +202,15 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
         aoa = channelParams->m_angle[MatrixBasedChannelModel::AOD_INDEX];
     }
 
+    // precompute part of the doppler delay per cluster
+    // not to access channelParams->m_delay in the middle of the hot loop
+    std::vector<double> delayPartial;
+    delayPartial.resize(numCluster);
+    for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
+    {
+        delayPartial[cIndex] = -2 * M_PI * channelParams->m_delay[cIndex];
+    }
+
     for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
     {
         // Compute alpha and D as described in 3GPP TR 37.885 v15.3.0, Sec. 6.2.3
@@ -228,6 +237,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
                        cos(zod[cIndex] * M_PI / 180) * sSpeed.z) +
                       2 * alpha * D);
         doppler[cIndex] = std::complex<double>(cos(tempDoppler), sin(tempDoppler));
+        doppler[cIndex] *= longTerm[cIndex];
     }
 
     NS_ASSERT(numCluster <= doppler.GetSize());
@@ -253,7 +263,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
             triggo cos;
             for (uint16_t j = cIndex; j < std::min<uint16_t>(cIndex+4, numCluster); j++)
             {
-                double delay = -2 * M_PI * fsb * (channelParams->m_delay[j]);
+                double delay = delayPartial[cIndex] * fsb
                 angles.fl[j-cIndex] = delay;
             }
 
@@ -267,7 +277,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
         }
         for (uint16_t cIndex = 0; cIndex < numCluster; cIndex++)
         {
-            temp[cIndex] *= longTerm[cIndex] * doppler[cIndex];
+            temp[cIndex] *= doppler[cIndex];
         }
         // aggregate cluster gains into the sub-band gain
         std::complex<double> subbandsGain(0.0, 0.0);
