@@ -112,3 +112,4 @@ include:
   - "utils/tests/gitlab-ci-code-linting.yml"
   - "utils/tests/gitlab-ci-doc.yml"
   - "utils/tests/gitlab-ci-cppyy.yml"
+  - "utils/tests/gitlab-ci-opensuse.yml"

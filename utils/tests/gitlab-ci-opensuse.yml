@@ -1,0 +1,17 @@
+opensuse-gcc14:
+  image: opensuse/tumbleweed:latest
+  only:
+    variables:
+      - $RELEASE == "TRACKING"
+  tags:
+    - nsnam
+    - linux
+  before_script:
+    - zypper --non-interactive addrepo https://download.opensuse.org/repositories/devel:gcc:next/openSUSE_Tumbleweed/devel:gcc:next.repo
+    - zypper --non-interactive --no-gpg-checks refresh
+    - zypper --non-interactive install --force --force-resolution -y gcc14 gcc-c++-14 cmake python3
+  script:
+    - ./ns3 configure --enable-examples --enable-tests
+    - ./ns3 build
+    - ./test.py
+  timeout: 9h
