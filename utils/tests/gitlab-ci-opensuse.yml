@@ -1,11 +1,9 @@
 opensuse-gcc14:
   image: opensuse/tumbleweed:latest
+  stage: build
   only:
     variables:
       - $RELEASE == "TRACKING"
-  tags:
-    - nsnam
-    - linux
   before_script:
     - zypper --non-interactive addrepo https://download.opensuse.org/repositories/devel:gcc:next/openSUSE_Tumbleweed/devel:gcc:next.repo
     - zypper --non-interactive --no-gpg-checks refresh
