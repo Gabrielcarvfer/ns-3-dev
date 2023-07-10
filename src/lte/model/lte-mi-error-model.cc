@@ -1141,7 +1141,7 @@ LteMiErrorModel::GetTbDecodificationStats(const SpectrumValue& sinr,
     if (!miHistory.empty())
     {
         // evaluate R_eff and MI_eff
-        uint16_t codeBitsSum = 0;
+        double codeBitsSum = 0;
         double miSum = 0.0;
         for (std::size_t i = 0; i < miHistory.size(); i++)
         {
@@ -1150,11 +1150,11 @@ LteMiErrorModel::GetTbDecodificationStats(const SpectrumValue& sinr,
             codeBitsSum += miHistory.at(i).m_codeBits;
             miSum += (miHistory.at(i).m_mi * miHistory.at(i).m_codeBits);
         }
-        codeBitsSum += (((double)size * 8.0) / McsEcrTable[mcs]);
-        miSum += (tbMi * (((double)size * 8.0) / McsEcrTable[mcs]));
+        codeBitsSum += (size * 8.0 / McsEcrTable[mcs]);
+        miSum += (tbMi * (size * 8.0 / McsEcrTable[mcs]));
         Reff = miHistory.at(0).m_infoBits /
-               (double)codeBitsSum; // information bits are the size of the first TB
-        MI = miSum / (double)codeBitsSum;
+               codeBitsSum; // information bits are the size of the first TB
+        MI = miSum / codeBitsSum;
     }
     else
     {
