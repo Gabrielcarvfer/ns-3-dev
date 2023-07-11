@@ -194,7 +194,7 @@ macro(process_options)
         add_compile_options(/WX)
       endif()
     else()
-      add_compile_options(-Wall) # -Wextra
+      add_compile_options(-Wall) # -Wextra -Wpedantic
       if(${NS3_WARNINGS_AS_ERRORS})
         add_compile_options(-Werror -Wno-error=deprecated-declarations)
       endif()
@@ -352,7 +352,9 @@ macro(process_options)
   endif()
 
   if(${NS3_SANITIZE})
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,leak,undefined")
+    set(CMAKE_CXX_FLAGS
+        "${CMAKE_CXX_FLAGS} -fsanitize=address,leak,undefined -fno-sanitize-recover=all"
+    )
   endif()
 
   if(${NS3_SANITIZE_MEMORY})
