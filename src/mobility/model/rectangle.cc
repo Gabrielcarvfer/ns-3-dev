@@ -65,6 +65,7 @@ Rectangle::GetClosestSide(const Vector& position) const
         double minY = std::min(yMinDist, yMaxDist);
         if (minX < minY)
         {
+            // Closer to a LEFT or RIGHT
             if (xMinDist < xMaxDist)
             {
                 return LEFT;
@@ -74,8 +75,9 @@ Rectangle::GetClosestSide(const Vector& position) const
                 return RIGHT;
             }
         }
-        else
+        else if (minX > minY)
         {
+            // Closer to a TOP or BOTTOM
             if (yMinDist < yMaxDist)
             {
                 return BOTTOM;
@@ -83,6 +85,26 @@ Rectangle::GetClosestSide(const Vector& position) const
             else
             {
                 return TOP;
+            }
+        }
+        else
+        {
+            // Closer to a corner
+            if ((xMinDist < xMaxDist) && (yMinDist < yMaxDist))
+            {
+                return BOTTOMRIGHT;
+            }
+            else if ((xMinDist < xMaxDist) && (yMinDist > yMaxDist))
+            {
+                return TOPRIGHT;
+            }
+            else if ((xMinDist > xMaxDist) && (yMinDist < yMaxDist))
+            {
+                return BOTTOMLEFT;
+            }
+            else
+            {
+                return TOPLEFT;
             }
         }
     }
@@ -98,9 +120,13 @@ Rectangle::GetClosestSide(const Vector& position) const
                 {
                     return BOTTOM;
                 }
-                else
+                else if (yDiff < xDiff)
                 {
                     return LEFT;
+                }
+                else
+                {
+                    return BOTTOMLEFT;
                 }
             }
             else if (position.y < this->yMax)
@@ -115,9 +141,13 @@ Rectangle::GetClosestSide(const Vector& position) const
                 {
                     return TOP;
                 }
-                else
+                else if (yDiff < xDiff)
                 {
                     return LEFT;
+                }
+                else
+                {
+                    return TOPLEFT;
                 }
             }
         }
@@ -148,9 +178,13 @@ Rectangle::GetClosestSide(const Vector& position) const
                 {
                     return BOTTOM;
                 }
-                else
+                else if (yDiff < xDiff)
                 {
                     return RIGHT;
+                }
+                else
+                {
+                    return BOTTOMRIGHT;
                 }
             }
             else if (position.y < this->yMax)
@@ -165,9 +199,13 @@ Rectangle::GetClosestSide(const Vector& position) const
                 {
                     return TOP;
                 }
-                else
+                else if (yDiff < xDiff)
                 {
                     return RIGHT;
+                }
+                else
+                {
+                    return TOPRIGHT;
                 }
             }
         }

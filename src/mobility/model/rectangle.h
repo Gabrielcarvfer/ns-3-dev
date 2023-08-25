@@ -42,7 +42,11 @@ class Rectangle
         RIGHT,
         LEFT,
         TOP,
-        BOTTOM
+        BOTTOM,
+        TOPRIGHT,
+        TOPLEFT,
+        BOTTOMRIGHT,
+        BOTTOMLEFT
     };
 
     /**
