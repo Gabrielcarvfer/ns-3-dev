@@ -121,19 +121,31 @@ RandomDirection2dMobilityModel::ResetDirectionAndSpeed()
 
     m_helper.UpdateWithBounds(m_bounds);
     Vector position = m_helper.GetCurrentPosition();
-    switch (m_bounds.GetClosestSide(position))
+    switch (m_bounds.GetClosestSideOrCorner(position))
     {
-    case Rectangle::RIGHT:
+    case Rectangle::RIGHTSIDE:
         direction += M_PI / 2;
         break;
-    case Rectangle::LEFT:
+    case Rectangle::LEFTSIDE:
         direction += -M_PI / 2;
         break;
-    case Rectangle::TOP:
+    case Rectangle::TOPSIDE:
         direction += M_PI;
         break;
-    case Rectangle::BOTTOM:
+    case Rectangle::BOTTOMSIDE:
         direction += 0.0;
+        break;
+    case Rectangle::TOPRIGHTCORNER:
+        direction += M_PI + M_PI / 2;
+        break;
+    case Rectangle::TOPLEFTCORNER:
+        direction += M_PI - M_PI / 2;
+        break;
+    case Rectangle::BOTTOMRIGHTCORNER:
+        direction += M_PI / 2;
+        break;
+    case Rectangle::BOTTOMLEFTCORNER:
+        direction += -M_PI / 2;
         break;
     }
     SetDirectionAndSpeed(direction);

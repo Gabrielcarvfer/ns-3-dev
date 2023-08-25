@@ -53,7 +53,7 @@ Rectangle::IsInside(const Vector& position) const
 }
 
 Rectangle::Side
-Rectangle::GetClosestSide(const Vector& position) const
+Rectangle::GetClosestSideOrCorner(const Vector& position) const
 {
     if (IsInside(position))
     {
@@ -68,11 +68,11 @@ Rectangle::GetClosestSide(const Vector& position) const
             // Closer to a LEFT or RIGHT
             if (xMinDist < xMaxDist)
             {
-                return LEFT;
+                return LEFTSIDE;
             }
             else
             {
-                return RIGHT;
+                return RIGHTSIDE;
             }
         }
         else if (minX > minY)
@@ -80,11 +80,11 @@ Rectangle::GetClosestSide(const Vector& position) const
             // Closer to a TOP or BOTTOM
             if (yMinDist < yMaxDist)
             {
-                return BOTTOM;
+                return BOTTOMSIDE;
             }
             else
             {
-                return TOP;
+                return TOPSIDE;
             }
         }
         else
@@ -92,19 +92,19 @@ Rectangle::GetClosestSide(const Vector& position) const
             // Closer to a corner
             if ((xMinDist < xMaxDist) && (yMinDist < yMaxDist))
             {
-                return BOTTOMRIGHT;
+                return BOTTOMRIGHTCORNER;
             }
             else if ((xMinDist < xMaxDist) && (yMinDist > yMaxDist))
             {
-                return TOPRIGHT;
+                return TOPRIGHTCORNER;
             }
             else if ((xMinDist > xMaxDist) && (yMinDist < yMaxDist))
             {
-                return BOTTOMLEFT;
+                return BOTTOMLEFTCORNER;
             }
             else
             {
-                return TOPLEFT;
+                return TOPLEFTCORNER;
             }
         }
     }
@@ -118,20 +118,20 @@ Rectangle::GetClosestSide(const Vector& position) const
                 double xDiff = this->xMin - position.x;
                 if (yDiff > xDiff)
                 {
-                    return BOTTOM;
+                    return BOTTOMSIDE;
                 }
                 else if (yDiff < xDiff)
                 {
-                    return LEFT;
+                    return LEFTSIDE;
                 }
                 else
                 {
-                    return BOTTOMLEFT;
+                    return BOTTOMLEFTCORNER;
                 }
             }
             else if (position.y < this->yMax)
             {
-                return LEFT;
+                return LEFTSIDE;
             }
             else
             {
@@ -139,15 +139,15 @@ Rectangle::GetClosestSide(const Vector& position) const
                 double xDiff = this->xMin - position.x;
                 if (yDiff > xDiff)
                 {
-                    return TOP;
+                    return TOPSIDE;
                 }
                 else if (yDiff < xDiff)
                 {
-                    return LEFT;
+                    return LEFTSIDE;
                 }
                 else
                 {
-                    return TOPLEFT;
+                    return TOPLEFTCORNER;
                 }
             }
         }
@@ -155,17 +155,17 @@ Rectangle::GetClosestSide(const Vector& position) const
         {
             if (position.y < this->yMin)
             {
-                return BOTTOM;
+                return BOTTOMSIDE;
             }
             else if (position.y < this->yMax)
             {
                 NS_FATAL_ERROR(
                     "This region should have been reached if the IsInside check was true");
-                return TOP; // silence compiler warning
+                return TOPSIDE; // silence compiler warning
             }
             else
             {
-                return TOP;
+                return TOPSIDE;
             }
         }
         else
@@ -176,20 +176,20 @@ Rectangle::GetClosestSide(const Vector& position) const
                 double xDiff = position.x - this->xMin;
                 if (yDiff > xDiff)
                 {
-                    return BOTTOM;
+                    return BOTTOMSIDE;
                 }
                 else if (yDiff < xDiff)
                 {
-                    return RIGHT;
+                    return RIGHTSIDE;
                 }
                 else
                 {
-                    return BOTTOMRIGHT;
+                    return BOTTOMRIGHTCORNER;
                 }
             }
             else if (position.y < this->yMax)
             {
-                return RIGHT;
+                return RIGHTSIDE;
             }
             else
             {
@@ -197,15 +197,15 @@ Rectangle::GetClosestSide(const Vector& position) const
                 double xDiff = position.x - this->xMin;
                 if (yDiff > xDiff)
                 {
-                    return TOP;
+                    return TOPSIDE;
                 }
                 else if (yDiff < xDiff)
                 {
-                    return RIGHT;
+                    return RIGHTSIDE;
                 }
                 else
                 {
-                    return TOPRIGHT;
+                    return TOPRIGHTCORNER;
                 }
             }
         }

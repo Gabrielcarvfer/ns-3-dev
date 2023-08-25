@@ -125,7 +125,20 @@ RandomWalk2dMobilityModel::DoWalk(Time delayLeft)
     else
     {
         nextPosition = m_bounds.CalculateIntersection(position, speed);
-        Time delay = Seconds((nextPosition.x - position.x) / speed.x);
+        Time delay;
+        if (speed.x != 0)
+        {
+            delay = Seconds((nextPosition.x - position.x) / speed.x);
+        }
+        else if (speed.y != 0)
+        {
+            delay = Seconds((nextPosition.y - position.y) / speed.y);
+        }
+        else
+        {
+            NS_ABORT_MSG("RandomWalk2dMobilityModel::DoWalk: unable to calculate the rebound time "
+                         "(the node is stationary).");
+        }
         m_event = Simulator::Schedule(delay,
                                       &RandomWalk2dMobilityModel::Rebound,
                                       this,
@@ -140,14 +153,21 @@ RandomWalk2dMobilityModel::Rebound(Time delayLeft)
     m_helper.UpdateWithBounds(m_bounds);
     Vector position = m_helper.GetCurrentPosition();
     Vector speed = m_helper.GetVelocity();
-    switch (m_bounds.GetClosestSide(position))
+    switch (m_bounds.GetClosestSideOrCorner(position))
     {
-    case Rectangle::RIGHT:
-    case Rectangle::LEFT:
+    case Rectangle::RIGHTSIDE:
+    case Rectangle::LEFTSIDE:
         speed.x = -speed.x;
         break;
-    case Rectangle::TOP:
-    case Rectangle::BOTTOM:
+    case Rectangle::TOPSIDE:
+    case Rectangle::BOTTOMSIDE:
+        speed.y = -speed.y;
+        break;
+    case Rectangle::TOPRIGHTCORNER:
+    case Rectangle::BOTTOMRIGHTCORNER:
+    case Rectangle::TOPLEFTCORNER:
+    case Rectangle::BOTTOMLEFTCORNER:
+        speed.x = -speed.x;
         speed.y = -speed.y;
         break;
     }

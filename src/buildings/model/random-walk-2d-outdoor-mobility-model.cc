@@ -251,40 +251,68 @@ RandomWalk2dOutdoorMobilityModel::CalculateIntersectionFromOutside(const Vector&
     // get the closest side
     Rectangle rect = Rectangle(boundaries.xMin, boundaries.xMax, boundaries.yMin, boundaries.yMax);
     NS_LOG_INFO("rect " << rect);
-    Rectangle::Side closestSide = rect.GetClosestSide(current);
+    Rectangle::Side closestSide = rect.GetClosestSideOrCorner(current);
 
     double xIntersect = 0;
     double yIntersect = 0;
 
     switch (closestSide)
     {
-    case Rectangle::RIGHT:
+    case Rectangle::RIGHTSIDE:
         NS_LOG_INFO("The closest side is RIGHT");
-        NS_ABORT_MSG_IF(next.x - current.x == 0, "x position not updated");
         xIntersect = boundaries.xMax + m_epsilon;
+        NS_ABORT_MSG_IF(next.x - current.x == 0, "x position not updated");
         yIntersect =
             (next.y - current.y) / (next.x - current.x) * (xIntersect - current.x) + current.y;
         break;
-    case Rectangle::LEFT:
+    case Rectangle::LEFTSIDE:
         NS_LOG_INFO("The closest side is LEFT");
         xIntersect = boundaries.xMin - m_epsilon;
         NS_ABORT_MSG_IF(next.x - current.x == 0, "x position not updated");
         yIntersect =
             (next.y - current.y) / (next.x - current.x) * (xIntersect - current.x) + current.y;
         break;
-    case Rectangle::TOP:
+    case Rectangle::TOPSIDE:
         NS_LOG_INFO("The closest side is TOP");
         yIntersect = boundaries.yMax + m_epsilon;
         NS_ABORT_MSG_IF(next.y - current.y == 0, "y position not updated");
         xIntersect =
             (next.x - current.x) / (next.y - current.y) * (yIntersect - current.y) + current.x;
         break;
-    case Rectangle::BOTTOM:
+    case Rectangle::BOTTOMSIDE:
         NS_LOG_INFO("The closest side is BOTTOM");
         yIntersect = boundaries.yMin - m_epsilon;
         NS_ABORT_MSG_IF(next.y - current.y == 0, "y position not updated");
         xIntersect =
             (next.x - current.x) / (next.y - current.y) * (yIntersect - current.y) + current.x;
+        break;
+    case Rectangle::TOPRIGHTCORNER:
+        NS_LOG_INFO("The closest side is TOPRIGHT");
+        xIntersect = boundaries.xMax + m_epsilon;
+        NS_ABORT_MSG_IF(next.x - current.x == 0, "x position not updated");
+        yIntersect = boundaries.yMax + m_epsilon;
+        NS_ABORT_MSG_IF(next.y - current.y == 0, "y position not updated");
+        break;
+    case Rectangle::TOPLEFTCORNER:
+        NS_LOG_INFO("The closest side is TOPLEFT");
+        xIntersect = boundaries.xMin - m_epsilon;
+        NS_ABORT_MSG_IF(next.x - current.x == 0, "x position not updated");
+        yIntersect = boundaries.yMax + m_epsilon;
+        NS_ABORT_MSG_IF(next.y - current.y == 0, "y position not updated");
+        break;
+    case Rectangle::BOTTOMRIGHTCORNER:
+        NS_LOG_INFO("The closest side is BOTTOMRIGHT");
+        xIntersect = boundaries.xMax + m_epsilon;
+        NS_ABORT_MSG_IF(next.x - current.x == 0, "x position not updated");
+        yIntersect = boundaries.yMin - m_epsilon;
+        NS_ABORT_MSG_IF(next.y - current.y == 0, "y position not updated");
+        break;
+    case Rectangle::BOTTOMLEFTCORNER:
+        NS_LOG_INFO("The closest side is BOTTOMLEFT");
+        xIntersect = boundaries.xMin - m_epsilon;
+        NS_ABORT_MSG_IF(next.x - current.x == 0, "x position not updated");
+        yIntersect = boundaries.yMin - m_epsilon;
+        NS_ABORT_MSG_IF(next.y - current.y == 0, "y position not updated");
         break;
     }
     NS_LOG_INFO("xIntersect " << xIntersect << " yIntersect " << yIntersect);
@@ -298,18 +326,24 @@ RandomWalk2dOutdoorMobilityModel::Rebound(Time delayLeft)
     m_helper.UpdateWithBounds(m_bounds);
     Vector position = m_helper.GetCurrentPosition();
     Vector speed = m_helper.GetVelocity();
-    switch (m_bounds.GetClosestSide(position))
+    switch (m_bounds.GetClosestSideOrCorner(position))
     {
-    case Rectangle::RIGHT:
-        NS_LOG_INFO("The closest side is RIGHT");
-    case Rectangle::LEFT:
-        NS_LOG_INFO("The closest side is LEFT");
+    case Rectangle::RIGHTSIDE:
+    case Rectangle::LEFTSIDE:
+        NS_LOG_INFO("The closest side is RIGHT or LEFT");
         speed.x = -speed.x;
         break;
-    case Rectangle::TOP:
-        NS_LOG_INFO("The closest side is TOP");
-    case Rectangle::BOTTOM:
-        NS_LOG_INFO("The closest side is BOTTOM");
+    case Rectangle::TOPSIDE:
+    case Rectangle::BOTTOMSIDE:
+        NS_LOG_INFO("The closest side is TOP or BOTTOM");
+        speed.y = -speed.y;
+        break;
+    case Rectangle::TOPRIGHTCORNER:
+    case Rectangle::BOTTOMRIGHTCORNER:
+    case Rectangle::TOPLEFTCORNER:
+    case Rectangle::BOTTOMLEFTCORNER:
+        NS_LOG_INFO("The closest side is a corner");
+        speed.x = -speed.x;
         speed.y = -speed.y;
         break;
     }
