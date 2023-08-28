@@ -23,6 +23,7 @@
 #include "ns3/vector.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <sstream>
 
@@ -55,161 +56,87 @@ Rectangle::IsInside(const Vector& position) const
 Rectangle::Side
 Rectangle::GetClosestSideOrCorner(const Vector& position) const
 {
-    if (IsInside(position))
+    std::array<double, 4> distanceFromBorders{
+        std::abs(position.x - this->xMin), // left border
+        std::abs(this->xMax - position.x), // right border
+        std::abs(position.y - this->yMin), // bottom border
+        std::abs(this->yMax - position.y), // top border
+    };
+    uint8_t flags = 0;
+    double minDist = std::numeric_limits<double>::max();
+    for (int i = 0; i < 4; i++)
     {
-        double xMinDist = std::abs(position.x - this->xMin);
-        double xMaxDist = std::abs(this->xMax - position.x);
-        double yMinDist = std::abs(position.y - this->yMin);
-        double yMaxDist = std::abs(this->yMax - position.y);
-        double minX = std::min(xMinDist, xMaxDist);
-        double minY = std::min(yMinDist, yMaxDist);
-        if (minX < minY)
+        if (distanceFromBorders[i] > minDist)
         {
-            // Closer to a LEFT or RIGHT
-            if (xMinDist < xMaxDist)
-            {
-                return LEFTSIDE;
-            }
-            else
-            {
-                return RIGHTSIDE;
-            }
+            continue;
         }
-        else if (minX > minY)
+        // In case we find a border closer to the position,
+        // we replace it and mark the flag
+        if (distanceFromBorders[i] < minDist)
         {
-            // Closer to a TOP or BOTTOM
-            if (yMinDist < yMaxDist)
-            {
-                return BOTTOMSIDE;
-            }
-            else
-            {
-                return TOPSIDE;
-            }
+            minDist = distanceFromBorders[i];
+            flags = 0;
         }
-        else
-        {
-            // Closer to a corner
-            if ((xMinDist < xMaxDist) && (yMinDist < yMaxDist))
-            {
-                return BOTTOMRIGHTCORNER;
-            }
-            else if ((xMinDist < xMaxDist) && (yMinDist > yMaxDist))
-            {
-                return TOPRIGHTCORNER;
-            }
-            else if ((xMinDist > xMaxDist) && (yMinDist < yMaxDist))
-            {
-                return BOTTOMLEFTCORNER;
-            }
-            else
-            {
-                return TOPLEFTCORNER;
-            }
-        }
+        flags |= (0b1000 >> i);
     }
-    else
+    NS_ASSERT(minDist != std::numeric_limits<double>::max());
+    Rectangle::Side side;
+    switch (flags)
     {
-        if (position.x < this->xMin)
+    //     LRBT
+    case 0b1111:
+        // Every side is equally distant, so choose any
+        side = TOPSIDE;
+        break;
+    case 0b0011:
+        // Opposing sides are equally distant, so we need to check the other two
+        side = LEFTSIDE;
+        if (distanceFromBorders[0] > distanceFromBorders[1])
         {
-            if (position.y < this->yMin)
-            {
-                double yDiff = this->yMin - position.y;
-                double xDiff = this->xMin - position.x;
-                if (yDiff > xDiff)
-                {
-                    return BOTTOMSIDE;
-                }
-                else if (yDiff < xDiff)
-                {
-                    return LEFTSIDE;
-                }
-                else
-                {
-                    return BOTTOMLEFTCORNER;
-                }
-            }
-            else if (position.y < this->yMax)
-            {
-                return LEFTSIDE;
-            }
-            else
-            {
-                double yDiff = position.y - this->yMax;
-                double xDiff = this->xMin - position.x;
-                if (yDiff > xDiff)
-                {
-                    return TOPSIDE;
-                }
-                else if (yDiff < xDiff)
-                {
-                    return LEFTSIDE;
-                }
-                else
-                {
-                    return TOPLEFTCORNER;
-                }
-            }
+            side = RIGHTSIDE;
         }
-        else if (position.x < this->xMax)
+        break;
+    case 0b1100:
+        // Opposing sides are equally distant, so we need to check the other two
+        side = BOTTOMSIDE;
+        if (distanceFromBorders[2] > distanceFromBorders[3])
         {
-            if (position.y < this->yMin)
-            {
-                return BOTTOMSIDE;
-            }
-            else if (position.y < this->yMax)
-            {
-                NS_FATAL_ERROR(
-                    "This region should have been reached if the IsInside check was true");
-                return TOPSIDE; // silence compiler warning
-            }
-            else
-            {
-                return TOPSIDE;
-            }
+            side = TOPSIDE;
         }
-        else
-        {
-            if (position.y < this->yMin)
-            {
-                double yDiff = this->yMin - position.y;
-                double xDiff = position.x - this->xMin;
-                if (yDiff > xDiff)
-                {
-                    return BOTTOMSIDE;
-                }
-                else if (yDiff < xDiff)
-                {
-                    return RIGHTSIDE;
-                }
-                else
-                {
-                    return BOTTOMRIGHTCORNER;
-                }
-            }
-            else if (position.y < this->yMax)
-            {
-                return RIGHTSIDE;
-            }
-            else
-            {
-                double yDiff = position.y - this->yMax;
-                double xDiff = position.x - this->xMin;
-                if (yDiff > xDiff)
-                {
-                    return TOPSIDE;
-                }
-                else if (yDiff < xDiff)
-                {
-                    return RIGHTSIDE;
-                }
-                else
-                {
-                    return TOPRIGHTCORNER;
-                }
-            }
-        }
+        break;
+    case 0b0001:
+    case 0b1101:
+        side = TOPSIDE;
+        break;
+    case 0b0010:
+    case 0b1110:
+        side = BOTTOMSIDE;
+        break;
+    case 0b0100:
+    case 0b0111:
+        side = RIGHTSIDE;
+        break;
+    case 0b0101:
+        side = TOPRIGHTCORNER;
+        break;
+    case 0b0110:
+        side = BOTTOMRIGHTCORNER;
+        break;
+    case 0b1000:
+    case 0b1011:
+        side = LEFTSIDE;
+        break;
+    case 0b1001:
+        side = TOPLEFTCORNER;
+        break;
+    case 0b1010:
+        side = BOTTOMLEFTCORNER;
+        break;
+    default:
+        NS_FATAL_ERROR("Impossible case");
+        break;
     }
+    return side;
 }
 
 Vector

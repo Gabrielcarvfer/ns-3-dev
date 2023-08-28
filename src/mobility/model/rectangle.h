@@ -39,7 +39,7 @@ class Rectangle
      */
     enum Side
     {
-        RIGHTSIDE,
+        RIGHTSIDE = 0,
         LEFTSIDE,
         TOPSIDE,
         BOTTOMSIDE,
