@@ -125,20 +125,23 @@ RandomWalk2dMobilityModel::DoWalk(Time delayLeft)
     else
     {
         nextPosition = m_bounds.CalculateIntersection(position, speed);
-        Time delay;
+        double delaySeconds = std::numeric_limits<double>::max();
         if (speed.x != 0)
         {
-            delay = Seconds((nextPosition.x - position.x) / speed.x);
+            delaySeconds =
+                std::min(delaySeconds, std::abs((nextPosition.x - position.x) / speed.x));
         }
         else if (speed.y != 0)
         {
-            delay = Seconds((nextPosition.y - position.y) / speed.y);
+            delaySeconds =
+                std::min(delaySeconds, std::abs((nextPosition.y - position.y) / speed.y));
         }
         else
         {
             NS_ABORT_MSG("RandomWalk2dMobilityModel::DoWalk: unable to calculate the rebound time "
                          "(the node is stationary).");
         }
+        Time delay = Seconds(delaySeconds);
         m_event = Simulator::Schedule(delay,
                                       &RandomWalk2dMobilityModel::Rebound,
                                       this,

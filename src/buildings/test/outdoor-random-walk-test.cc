@@ -21,6 +21,7 @@
 #include "ns3/building.h"
 #include "ns3/config.h"
 #include "ns3/double.h"
+#include "ns3/enum.h"
 #include "ns3/log.h"
 #include "ns3/mobility-helper.h"
 #include "ns3/pointer.h"
@@ -82,6 +83,10 @@ OutdoorRandomWalkTestCase::CheckPositionOutdoor(Ptr<RandomWalk2dOutdoorMobilityM
 void
 OutdoorRandomWalkTestCase::DoRun()
 {
+    // Samples to test and time steps
+    double testStep = 10; // s
+    int maxChecks = 1000;
+
     // create a grid of buildings
     double buildingSizeX = 100; // m
     double buildingSizeY = 50;  // m
@@ -121,7 +126,11 @@ OutdoorRandomWalkTestCase::DoRun()
     mobility.SetMobilityModel(
         "ns3::RandomWalk2dOutdoorMobilityModel",
         "Bounds",
-        RectangleValue(Rectangle(-streetWidth, maxAxisX, -streetWidth, maxAxisY)));
+        RectangleValue(Rectangle(-streetWidth, maxAxisX, -streetWidth, maxAxisY)),
+        "Mode",
+        EnumValue(RandomWalk2dOutdoorMobilityModel::MODE_TIME),
+        "Time",
+        TimeValue(Seconds(testStep * maxChecks)));
     // create an OutdoorPositionAllocator and set its boundaries to match those of the mobility
     // model
     Ptr<OutdoorPositionAllocator> position = CreateObject<OutdoorPositionAllocator>();
@@ -140,9 +149,7 @@ OutdoorRandomWalkTestCase::DoRun()
     auto mobilityModel = nodes.Get(0)->GetObject<RandomWalk2dOutdoorMobilityModel>();
 
     // get maxChecks positions, check if they are outdoors
-    double testStep = 10; // s
-    int maxChecks = 1000;
-    for (int i = 0; i < maxChecks; ++i)
+    for (int i = 0; i < maxChecks; i++)
     {
         Simulator::Schedule(Seconds(i * testStep),
                             &OutdoorRandomWalkTestCase::CheckPositionOutdoor,

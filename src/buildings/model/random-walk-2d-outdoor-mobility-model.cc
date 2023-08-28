@@ -132,6 +132,11 @@ RandomWalk2dOutdoorMobilityModel::DoInitializePrivate()
 void
 RandomWalk2dOutdoorMobilityModel::DoWalk(Time delayLeft)
 {
+    if (delayLeft.IsNegative())
+    {
+        NS_LOG_INFO(this << " Ran out of time");
+        return;
+    }
     NS_LOG_FUNCTION(this << delayLeft.GetSeconds());
 
     Vector position = m_helper.GetCurrentPosition();
@@ -160,7 +165,8 @@ RandomWalk2dOutdoorMobilityModel::DoWalk(Time delayLeft)
             NS_LOG_LOGIC("NextPosition would lead into a building");
             nextPosition =
                 CalculateIntersectionFromOutside(position, nextPosition, building->GetBoundaries());
-            Time delay = Seconds((nextPosition.x - position.x) / speed.x);
+            Time delay = Seconds(std::min(std::abs((nextPosition.x - position.x) / speed.x),
+                                          std::abs((nextPosition.y - position.y) / speed.y)));
             m_event = Simulator::Schedule(delay,
                                           &RandomWalk2dOutdoorMobilityModel::AvoidBuilding,
                                           this,
@@ -179,7 +185,7 @@ RandomWalk2dOutdoorMobilityModel::DoWalk(Time delayLeft)
 
         if (outdoor)
         {
-            Time delay = Seconds((nextPosition.x - position.x) / speed.x);
+            Time delay = Seconds(std::abs((nextPosition.x - position.x) / speed.x));
             m_event = Simulator::Schedule(delay,
                                           &RandomWalk2dOutdoorMobilityModel::Rebound,
                                           this,
@@ -190,7 +196,12 @@ RandomWalk2dOutdoorMobilityModel::DoWalk(Time delayLeft)
             NS_LOG_LOGIC("NextPosition would lead into a building");
             nextPosition =
                 CalculateIntersectionFromOutside(position, nextPosition, building->GetBoundaries());
-            Time delay = Seconds((nextPosition.x - position.x) / speed.x);
+            Time delay = Seconds(std::min(std::abs((nextPosition.x - position.x) / speed.x),
+                                          std::abs((nextPosition.y - position.y) / speed.y)));
+            if (delay > delayLeft)
+            {
+                std::cout << "boop" << std::endl;
+            }
             m_event = Simulator::Schedule(delay,
                                           &RandomWalk2dOutdoorMobilityModel::AvoidBuilding,
                                           this,
