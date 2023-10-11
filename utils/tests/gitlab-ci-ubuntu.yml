@@ -13,22 +13,6 @@
     - if: $RELEASE == "weekly"
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       allow_failure: true
-  before_script:
-    - apt update
-    - apt upgrade -y
-    - DEBIAN_FRONTEND=noninteractive apt install -y
-      $COMPILER cmake ninja-build ccache
-      python3 python3-dev
-      gsl-bin libgsl-dev $LIBGSL
-      libboost-all-dev
-      libgtk-3-dev
-      libfl-dev
-      libxml2 libxml2-dev
-      libopenmpi-dev openmpi-bin openmpi-common openmpi-doc
-      libsqlite3-dev sqlite3
-      libeigen3-dev
-      qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools
-      ssh
 
 weekly-ubuntu:
   rules:
@@ -43,8 +27,8 @@ weekly-ubuntu:
 # Ubuntu 20.04 (Until April 2025)
 weekly-build-ubuntu-20.04-debug:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:20.04
+  needs: ["ubuntu20.04"]
+  image: $CI_REGISTRY_IMAGE:ubuntu20.04
   stage: build
   variables:
     MODE: debug
@@ -53,8 +37,8 @@ weekly-build-ubuntu-20.04-debug:
 
 weekly-build-ubuntu-20.04-default:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:20.04
+  needs: ["ubuntu20.04"]
+  image: $CI_REGISTRY_IMAGE:ubuntu20.04
   stage: build
   variables:
     MODE: default
@@ -63,8 +47,8 @@ weekly-build-ubuntu-20.04-default:
 
 weekly-build-ubuntu-20.04-optimized:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:20.04
+  needs: ["ubuntu20.04"]
+  image: $CI_REGISTRY_IMAGE:ubuntu20.04
   stage: build
   variables:
     MODE: optimized
@@ -73,7 +57,7 @@ weekly-build-ubuntu-20.04-optimized:
 
 weekly-test-ubuntu-20.04-default:
   extends: .weekly-base-ubuntu
-  image: ubuntu:20.04
+  image: $CI_REGISTRY_IMAGE:ubuntu20.04
   stage: test
   needs: ["weekly-build-ubuntu-20.04-default"]
   dependencies:
@@ -85,7 +69,7 @@ weekly-test-ubuntu-20.04-default:
 
 weekly-test-ubuntu-20.04-optimized:
   extends: .weekly-base-ubuntu
-  image: ubuntu:20.04
+  image: $CI_REGISTRY_IMAGE:ubuntu20.04
   stage: test
   needs: ["weekly-build-ubuntu-20.04-optimized"]
   dependencies:
@@ -98,8 +82,8 @@ weekly-test-ubuntu-20.04-optimized:
 # Ubuntu 22.04 (Until January 2032)
 weekly-build-ubuntu-22.04-debug:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:22.04
+  needs: ["ubuntu22.04"]
+  image: $CI_REGISTRY_IMAGE:ubuntu22.04
   stage: build
   variables:
     MODE: debug
@@ -108,8 +92,8 @@ weekly-build-ubuntu-22.04-debug:
 
 weekly-build-ubuntu-22.04-default:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:22.04
+  needs: ["ubuntu22.04"]
+  image: $CI_REGISTRY_IMAGE:ubuntu22.04
   stage: build
   variables:
     MODE: default
@@ -118,8 +102,8 @@ weekly-build-ubuntu-22.04-default:
 
 weekly-build-ubuntu-22.04-optimized:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:22.04
+  needs: ["ubuntu22.04"]
+  image: $CI_REGISTRY_IMAGE:ubuntu22.04
   stage: build
   variables:
     MODE: optimized
@@ -128,7 +112,7 @@ weekly-build-ubuntu-22.04-optimized:
 
 weekly-test-ubuntu-22.04-default:
   extends: .weekly-base-ubuntu
-  image: ubuntu:22.04
+  image: $CI_REGISTRY_IMAGE:ubuntu22.04
   stage: test
   needs: ["weekly-build-ubuntu-22.04-default"]
   dependencies:
@@ -140,7 +124,7 @@ weekly-test-ubuntu-22.04-default:
 
 weekly-test-ubuntu-22.04-optimized:
   extends: .weekly-base-ubuntu
-  image: ubuntu:22.04
+  image: $CI_REGISTRY_IMAGE:ubuntu22.04
   stage: test
   needs: ["weekly-build-ubuntu-22.04-optimized"]
   dependencies:
@@ -153,8 +137,8 @@ weekly-test-ubuntu-22.04-optimized:
 # Ubuntu Rolling (latest released, might be non-LTS)
 weekly-build-ubuntu-rolling-debug:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:rolling
+  needs: ["ubuntu.rolling"]
+  image: $CI_REGISTRY_IMAGE:ubuntu.rolling
   stage: build
   variables:
     MODE: debug
@@ -163,8 +147,8 @@ weekly-build-ubuntu-rolling-debug:
 
 weekly-build-ubuntu-rolling-default:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:rolling
+  needs: ["ubuntu.rolling"]
+  image: $CI_REGISTRY_IMAGE:ubuntu.rolling
   stage: build
   variables:
     MODE: default
@@ -174,8 +158,8 @@ weekly-build-ubuntu-rolling-default:
 # Aug. 26, 2023: --disable-eigen is needed to prevent a -Werror=unused-variable
 weekly-build-ubuntu-rolling-optimized:
   extends: .weekly-base-ubuntu
-  needs: ["weekly-ubuntu"]
-  image: ubuntu:rolling
+  needs: ["ubuntu.rolling"]
+  image: $CI_REGISTRY_IMAGE:ubuntu.rolling
   stage: build
   variables:
     MODE: optimized
@@ -185,7 +169,7 @@ weekly-build-ubuntu-rolling-optimized:
 
 weekly-test-ubuntu-rolling-default:
   extends: .weekly-base-ubuntu
-  image: ubuntu:rolling
+  image: $CI_REGISTRY_IMAGE:ubuntu.rolling
   stage: test
   needs: ["weekly-build-ubuntu-rolling-default"]
   dependencies:
@@ -198,7 +182,7 @@ weekly-test-ubuntu-rolling-default:
 # Aug. 26, 2023: --disable-eigen is needed to prevent a -Werror=unused-variable
 weekly-test-ubuntu-rolling-optimized:
   extends: .weekly-base-ubuntu
-  image: ubuntu:rolling
+  image: $CI_REGISTRY_IMAGE:ubuntu.rolling
   stage: test
   needs: ["weekly-build-ubuntu-rolling-optimized"]
   dependencies:

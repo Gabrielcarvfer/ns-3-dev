@@ -1,0 +1,37 @@
+.build-and-register-docker-image:
+  stage: .pre
+  image: docker
+  services:
+    - docker:dind
+  before_script:
+    - mkdir -p $HOME/.docker
+    - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+  script:
+    - IMAGE_NAME="$CI_REGISTRY_IMAGE:$CI_JOB_NAME"
+    - echo $IMAGE_NAME
+    - mkdir empty-dir
+    - ERROR=$(docker pull "$IMAGE_NAME"; echo "$?");
+    - if [[ "$ERROR" == "1" ]];
+      then docker build ./empty-dir -t $IMAGE_NAME -f $DOCKERFILE --push;
+      fi
+
+ubuntu20.04:
+  needs: ["weekly-ubuntu"]
+  extends:
+    - .build-and-register-docker-image
+  variables:
+    DOCKERFILE: "./utils/tests/dockerfiles/Dockerfile.ubuntu.2004.txt"
+
+ubuntu22.04:
+  needs: ["weekly-ubuntu"]
+  extends:
+    - .build-and-register-docker-image
+  variables:
+    DOCKERFILE: "./utils/tests/dockerfiles/Dockerfile.ubuntu.2204.txt"
+
+ubuntu.rolling:
+  needs: ["weekly-ubuntu"]
+  extends:
+    - .build-and-register-docker-image
+  variables:
+    DOCKERFILE: "./utils/tests/dockerfiles/Dockerfile.ubuntu.rolling.txt"

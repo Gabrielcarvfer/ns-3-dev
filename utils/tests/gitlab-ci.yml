@@ -83,6 +83,7 @@ workflow:
 
 # Weekly jobs for other distribution and compilers
 include:
+  - "utils/tests/gitlab-ci-docker.yml"
   - "utils/tests/gitlab-ci-per-commit.yml"
   - "utils/tests/gitlab-ci-alpine.yml"
   - "utils/tests/gitlab-ci-ubuntu.yml"
