@@ -436,6 +436,22 @@ def load_modules():
         print("You can install it with the following command: pip install cppyy")
         exit(-1)
 
+    # Define templates that were optimized away from the PCH
+    try:
+        cppyy.cppdef("""
+            template std::__cxx11::basic_string<char,
+                     std::char_traits<char>,
+                     std::allocator<char>>::pointer std::__cxx11::basic_string<char, std::char_traits<char>,
+                     std::allocator<char>>::_M_use_local_data();
+            template std::__cxx11::basic_string<wchar_t,
+                     std::char_traits<wchar_t>,
+                     std::allocator<wchar_t>>::pointer std::__cxx11::basic_string<wchar_t,
+                     std::char_traits<wchar_t>,
+                     std::allocator<wchar_t>>::_M_use_local_data();
+        """)
+    except SyntaxError:
+        pass
+
     # Enable full logs for debugging
     # cppyy.set_debug(True)
 
