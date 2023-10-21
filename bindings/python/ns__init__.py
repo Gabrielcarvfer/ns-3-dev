@@ -479,12 +479,14 @@ def load_modules():
                 if os.path.isdir(linked_lib_include_dir):
                     cppyy.add_include_path(linked_lib_include_dir)
 
-    for module in modules:
-        cppyy.include(f"ns3/{module}-module.h")
-
-    # After including all headers, we finally load the modules
+    # We load the modules first in order to prevent running undefined functions
+    # during the static initialization of variables in header files
     for library in libraries_to_load:
         cppyy.load_library(library)
+
+    # Then we load the headers
+    for module in modules:
+        cppyy.include(f"ns3/{module}-module.h")
 
     # We expose cppyy to consumers of this module as ns.cppyy
     setattr(cppyy.gbl.ns3, "cppyy", cppyy)
