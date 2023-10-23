@@ -497,6 +497,7 @@ GtpcCreateSessionRequestMessage::GtpcCreateSessionRequestMessage()
     SetSequenceNumber(0);
     m_imsi = 0;
     m_uliEcgi = 0;
+    m_senderCpFteid = {};
 }
 
 GtpcCreateSessionRequestMessage::~GtpcCreateSessionRequestMessage()
@@ -658,6 +659,7 @@ GtpcCreateSessionResponseMessage::GtpcCreateSessionResponseMessage()
     SetMessageType(GtpcHeader::CreateSessionResponse);
     SetSequenceNumber(0);
     m_cause = Cause_t::RESERVED;
+    m_senderCpFteid = {};
 }
 
 GtpcCreateSessionResponseMessage::~GtpcCreateSessionResponseMessage()
