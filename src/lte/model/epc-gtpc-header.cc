@@ -1208,6 +1208,7 @@ GtpcDeleteBearerResponseMessage::GtpcDeleteBearerResponseMessage()
 {
     SetMessageType(GtpcHeader::DeleteBearerResponse);
     SetSequenceNumber(0);
+    m_cause = Cause_t::RESERVED;
 }
 
 GtpcDeleteBearerResponseMessage::~GtpcDeleteBearerResponseMessage()
