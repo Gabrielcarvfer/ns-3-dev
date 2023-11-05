@@ -20,8 +20,6 @@
 #ifndef RIPNG_HEADER_H
 #define RIPNG_HEADER_H
 
-#include "ipv6-header.h"
-
 #include "ns3/header.h"
 #include "ns3/ipv6-address.h"
 #include "ns3/packet.h"

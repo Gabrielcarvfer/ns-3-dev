@@ -23,7 +23,6 @@
 #define TCPLINUXRENO_H
 
 #include "tcp-congestion-ops.h"
-#include "tcp-socket-state.h"
 
 namespace ns3
 {

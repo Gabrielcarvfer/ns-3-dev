@@ -32,7 +32,6 @@
 #include "ns3/traced-value.h"
 
 #include <queue>
-#include <stdint.h>
 
 namespace ns3
 {

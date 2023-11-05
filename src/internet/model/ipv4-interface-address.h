@@ -21,9 +21,6 @@
 
 #include "ns3/ipv4-address.h"
 
-#include <ostream>
-#include <stdint.h>
-
 namespace ns3
 {
 

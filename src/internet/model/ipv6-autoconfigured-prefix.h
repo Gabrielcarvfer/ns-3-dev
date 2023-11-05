@@ -23,11 +23,6 @@
 #include "ns3/ipv6-address.h"
 #include "ns3/timer.h"
 
-#include <list>
-#include <ostream>
-#include <stdint.h>
-#include <vector>
-
 namespace ns3
 {
 class Node;

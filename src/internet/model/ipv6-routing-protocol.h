@@ -21,7 +21,6 @@
 #define IPV6_ROUTING_PROTOCOL_H
 
 #include "ipv6-header.h"
-#include "ipv6-interface-address.h"
 #include "ipv6.h"
 
 #include "ns3/callback.h"

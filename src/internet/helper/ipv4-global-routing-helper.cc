@@ -18,6 +18,7 @@
  */
 #include "ipv4-global-routing-helper.h"
 
+#include "ns3/global-route-manager.h"
 #include "ns3/global-router-interface.h"
 #include "ns3/ipv4-global-routing.h"
 #include "ns3/ipv4-list-routing.h"

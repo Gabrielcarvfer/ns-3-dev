@@ -21,7 +21,6 @@
 #define IPV6_EXTENSION_H
 
 #include "ipv6-extension-header.h"
-#include "ipv6-header.h"
 #include "ipv6-interface.h"
 #include "ipv6-l3-protocol.h"
 
@@ -33,10 +32,6 @@
 #include "ns3/ptr.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/traced-callback.h"
-
-#include <list>
-#include <map>
-#include <tuple>
 
 namespace ns3
 {

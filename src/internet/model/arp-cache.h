@@ -31,9 +31,7 @@
 #include "ns3/simulator.h"
 #include "ns3/traced-callback.h"
 
-#include <list>
 #include <map>
-#include <stdint.h>
 
 namespace ns3
 {

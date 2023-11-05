@@ -20,9 +20,7 @@
 #ifndef IPV4_L3_PROTOCOL_H
 #define IPV4_L3_PROTOCOL_H
 
-#include "ipv4-header.h"
 #include "ipv4-routing-protocol.h"
-#include "ipv4.h"
 
 #include "ns3/ipv4-address.h"
 #include "ns3/net-device.h"
@@ -30,11 +28,6 @@
 #include "ns3/ptr.h"
 #include "ns3/simulator.h"
 #include "ns3/traced-callback.h"
-
-#include <list>
-#include <map>
-#include <stdint.h>
-#include <vector>
 
 class Ipv4L3ProtocolTestCase;
 

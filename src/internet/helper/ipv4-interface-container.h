@@ -23,9 +23,6 @@
 #include "ns3/ipv4-address.h"
 #include "ns3/ipv4.h"
 
-#include <stdint.h>
-#include <vector>
-
 namespace ns3
 {
 

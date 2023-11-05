@@ -23,8 +23,6 @@
 
 #include "tcp-congestion-ops.h"
 
-#include <vector>
-
 namespace ns3
 {
 

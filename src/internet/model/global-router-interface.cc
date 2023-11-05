@@ -19,6 +19,7 @@
 
 #include "global-router-interface.h"
 
+#include "global-route-manager.h"
 #include "ipv4-global-routing.h"
 #include "ipv4.h"
 #include "loopback-net-device.h"

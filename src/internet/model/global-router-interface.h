@@ -21,7 +21,6 @@
 #ifndef GLOBAL_ROUTER_INTERFACE_H
 #define GLOBAL_ROUTER_INTERFACE_H
 
-#include "global-route-manager.h"
 #include "ipv4-routing-table-entry.h"
 
 #include "ns3/bridge-net-device.h"
@@ -31,9 +30,6 @@
 #include "ns3/node.h"
 #include "ns3/object.h"
 #include "ns3/ptr.h"
-
-#include <list>
-#include <stdint.h>
 
 namespace ns3
 {

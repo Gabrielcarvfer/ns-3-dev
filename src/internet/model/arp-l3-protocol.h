@@ -27,8 +27,6 @@
 #include "ns3/random-variable-stream.h"
 #include "ns3/traced-callback.h"
 
-#include <list>
-
 namespace ns3
 {
 

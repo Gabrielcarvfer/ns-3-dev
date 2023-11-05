@@ -21,9 +21,6 @@
 
 #include "ipv4-routing-helper.h"
 
-#include <list>
-#include <stdint.h>
-
 namespace ns3
 {
 

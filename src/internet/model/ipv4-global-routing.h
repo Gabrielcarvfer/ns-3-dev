@@ -19,16 +19,11 @@
 #ifndef IPV4_GLOBAL_ROUTING_H
 #define IPV4_GLOBAL_ROUTING_H
 
-#include "ipv4-header.h"
 #include "ipv4-routing-protocol.h"
-#include "ipv4.h"
 
 #include "ns3/ipv4-address.h"
 #include "ns3/ptr.h"
 #include "ns3/random-variable-stream.h"
-
-#include <list>
-#include <stdint.h>
 
 namespace ns3
 {

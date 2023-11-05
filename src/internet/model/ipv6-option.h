@@ -21,7 +21,6 @@
 #define IPV6_OPTION_H
 
 #include "ipv6-header.h"
-#include "ipv6-interface.h"
 
 #include "ns3/buffer.h"
 #include "ns3/ipv6-address.h"

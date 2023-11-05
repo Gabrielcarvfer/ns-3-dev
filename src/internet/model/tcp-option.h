@@ -24,8 +24,6 @@
 #include "ns3/object-factory.h"
 #include "ns3/object.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

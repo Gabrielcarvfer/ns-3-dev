@@ -23,8 +23,6 @@
 #include "ns3/nstime.h"
 #include "ns3/simulator.h"
 
-#include <list>
-
 namespace ns3
 {
 

@@ -26,7 +26,6 @@
 #ifndef TCPYEAH_H
 #define TCPYEAH_H
 
-#include "tcp-recovery-ops.h"
 #include "tcp-scalable.h"
 
 namespace ns3

@@ -7,8 +7,6 @@
 
 #include "ns3/socket.h"
 
-#include <list>
-
 namespace ns3
 {
 

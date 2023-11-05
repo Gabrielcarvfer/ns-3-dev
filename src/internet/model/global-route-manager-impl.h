@@ -27,12 +27,6 @@
 #include "ns3/object.h"
 #include "ns3/ptr.h"
 
-#include <list>
-#include <map>
-#include <queue>
-#include <stdint.h>
-#include <vector>
-
 namespace ns3
 {
 

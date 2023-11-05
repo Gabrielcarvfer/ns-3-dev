@@ -18,7 +18,6 @@
 #define IPV4_ROUTING_PROTOCOL_H
 
 #include "ipv4-header.h"
-#include "ipv4-interface-address.h"
 #include "ipv4.h"
 
 #include "ns3/callback.h"

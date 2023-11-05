@@ -20,8 +20,6 @@
 #ifndef RIP_HEADER_H
 #define RIP_HEADER_H
 
-#include "ipv4-header.h"
-
 #include "ns3/header.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/packet.h"

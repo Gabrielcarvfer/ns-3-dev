@@ -25,9 +25,6 @@
 #include "ns3/packet.h"
 #include "ns3/ptr.h"
 
-#include <stdint.h>
-#include <unordered_map>
-
 namespace ns3
 {
 

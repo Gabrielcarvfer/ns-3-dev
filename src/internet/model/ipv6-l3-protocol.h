@@ -20,16 +20,12 @@
 #ifndef IPV6_L3_PROTOCOL_H
 #define IPV6_L3_PROTOCOL_H
 
-#include "ipv6-header.h"
 #include "ipv6-pmtu-cache.h"
 #include "ipv6-routing-protocol.h"
-#include "ipv6.h"
 
 #include "ns3/ipv6-address.h"
 #include "ns3/net-device.h"
 #include "ns3/traced-callback.h"
-
-#include <list>
 
 class Ipv6L3ProtocolTestCase;
 

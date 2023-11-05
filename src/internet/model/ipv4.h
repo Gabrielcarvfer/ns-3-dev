@@ -27,8 +27,6 @@
 #include "ns3/object.h"
 #include "ns3/socket.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

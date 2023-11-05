@@ -22,14 +22,11 @@
 
 #include "ipv4-interface.h"
 #include "ipv4-l3-protocol.h"
-#include "ipv4-routing-protocol.h"
 #include "ipv4-routing-table-entry.h"
 #include "rip-header.h"
 
 #include "ns3/inet-socket-address.h"
 #include "ns3/random-variable-stream.h"
-
-#include <list>
 
 namespace ns3
 {

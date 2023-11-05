@@ -21,15 +21,12 @@
 #define TCP_HEADER_H
 
 #include "tcp-option.h"
-#include "tcp-socket-factory.h"
 
 #include "ns3/buffer.h"
 #include "ns3/header.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/ipv6-address.h"
 #include "ns3/sequence-number.h"
-
-#include <stdint.h>
 
 namespace ns3
 {

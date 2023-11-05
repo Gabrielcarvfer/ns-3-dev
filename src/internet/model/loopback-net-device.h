@@ -22,9 +22,6 @@
 #include "ns3/mac48-address.h"
 #include "ns3/net-device.h"
 
-#include <stdint.h>
-#include <string>
-
 namespace ns3
 {
 

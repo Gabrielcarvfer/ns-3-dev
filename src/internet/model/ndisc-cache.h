@@ -28,9 +28,7 @@
 #include "ns3/ptr.h"
 #include "ns3/timer.h"
 
-#include <list>
 #include <map>
-#include <stdint.h>
 
 namespace ns3
 {

@@ -26,9 +26,6 @@
 #include "ns3/ipv6-address.h"
 #include "ns3/sequence-number.h"
 
-#include <stdint.h>
-#include <unordered_map>
-
 namespace ns3
 {
 

@@ -20,8 +20,6 @@
 
 #include "ipv6-routing-protocol.h"
 
-#include <list>
-
 namespace ns3
 {
 

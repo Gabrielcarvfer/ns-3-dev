@@ -24,9 +24,6 @@
 
 #include "ns3/ipv6-address.h"
 
-#include <list>
-#include <stdint.h>
-
 namespace ns3
 {
 

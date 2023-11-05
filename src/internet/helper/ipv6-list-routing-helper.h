@@ -21,9 +21,6 @@
 
 #include "ipv6-routing-helper.h"
 
-#include <list>
-#include <stdint.h>
-
 namespace ns3
 {
 

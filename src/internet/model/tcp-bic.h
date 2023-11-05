@@ -20,7 +20,6 @@
 #define TCPBIC_H
 
 #include "tcp-congestion-ops.h"
-#include "tcp-recovery-ops.h"
 
 class TcpBicIncrementTest;
 class TcpBicDecrementTest;

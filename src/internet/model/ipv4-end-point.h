@@ -27,8 +27,6 @@
 #include "ns3/ipv4-address.h"
 #include "ns3/net-device.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 
