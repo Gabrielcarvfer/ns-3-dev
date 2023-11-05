@@ -24,7 +24,6 @@
 #include "lte-ffr-algorithm.h"
 #include "lte-ffr-rrc-sap.h"
 #include "lte-ffr-sap.h"
-#include "lte-rrc-sap.h"
 
 namespace ns3
 {

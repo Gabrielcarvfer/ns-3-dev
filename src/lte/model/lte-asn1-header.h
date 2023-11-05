@@ -23,7 +23,6 @@
 #include "ns3/header.h"
 
 #include <bitset>
-#include <string>
 
 namespace ns3
 {

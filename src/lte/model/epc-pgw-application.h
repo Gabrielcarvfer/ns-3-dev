@@ -21,7 +21,6 @@
 #ifndef EPC_PGW_APPLICATION_H
 #define EPC_PGW_APPLICATION_H
 
-#include "epc-gtpc-header.h"
 #include "epc-tft-classifier.h"
 
 #include "ns3/application.h"

@@ -24,11 +24,7 @@
 #include "lte-control-messages.h"
 #include "lte-enb-cphy-sap.h"
 #include "lte-enb-phy-sap.h"
-#include "lte-harq-phy.h"
 #include "lte-phy.h"
-
-#include <map>
-#include <set>
 
 namespace ns3
 {

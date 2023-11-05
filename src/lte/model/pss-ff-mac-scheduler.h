@@ -22,16 +22,12 @@
 #define PSS_FF_MAC_SCHEDULER_H
 
 #include "ff-mac-csched-sap.h"
-#include "ff-mac-sched-sap.h"
 #include "ff-mac-scheduler.h"
 #include "lte-amc.h"
 #include "lte-common.h"
 #include "lte-ffr-sap.h"
 
 #include <ns3/nstime.h>
-
-#include <map>
-#include <vector>
 
 namespace ns3
 {

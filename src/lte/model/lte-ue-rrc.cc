@@ -38,6 +38,7 @@
 #include <ns3/object-factory.h>
 #include <ns3/object-map.h>
 #include <ns3/simulator.h>
+#include "ns3/pointer.h"
 
 #include <cmath>
 

@@ -21,8 +21,6 @@
 #define EPS_GTPU_V1_H
 
 #include <ns3/header.h>
-#include <ns3/ipv4-header.h>
-#include <ns3/ptr.h>
 
 namespace ns3
 {

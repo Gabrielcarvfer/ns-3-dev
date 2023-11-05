@@ -22,10 +22,7 @@
 #define LTE_UE_POWER_CONTROL_H
 
 #include <ns3/object.h>
-#include <ns3/ptr.h>
 #include <ns3/traced-callback.h>
-
-#include <vector>
 
 namespace ns3
 {

@@ -28,7 +28,6 @@
 #include <ns3/eps-bearer.h>
 #include <ns3/ipv4-address-helper.h>
 #include <ns3/ipv6-address-helper.h>
-#include <ns3/object.h>
 
 namespace ns3
 {

@@ -24,11 +24,7 @@
 #include <ns3/mobility-model.h>
 #include <ns3/net-device-container.h>
 #include <ns3/node-container.h>
-#include <ns3/nstime.h>
 #include <ns3/test.h>
-#include <ns3/vector.h>
-
-#include <vector>
 
 namespace ns3
 {

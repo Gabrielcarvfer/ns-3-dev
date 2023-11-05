@@ -22,9 +22,6 @@
 
 #include "ff-mac-common.h"
 
-#include <stdint.h>
-#include <vector>
-
 namespace ns3
 {
 

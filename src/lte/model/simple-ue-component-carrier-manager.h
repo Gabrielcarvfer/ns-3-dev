@@ -22,10 +22,7 @@
 #define SIMPLE_UE_COMPONENT_CARRIER_MANAGER_H
 
 #include "lte-rrc-sap.h"
-#include "lte-ue-ccm-rrc-sap.h"
 #include "lte-ue-component-carrier-manager.h"
-
-#include <map>
 
 namespace ns3
 {

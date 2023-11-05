@@ -30,25 +30,14 @@
 
 #include "component-carrier.h"
 #include "epc-enb-s1-sap.h"
-#include "epc-x2-sap.h"
 #include "lte-anr-sap.h"
 #include "lte-ccm-rrc-sap.h"
-#include "lte-enb-cmac-sap.h"
 #include "lte-enb-cphy-sap.h"
 #include "lte-ffr-rrc-sap.h"
 #include "lte-handover-management-sap.h"
-#include "lte-mac-sap.h"
 #include "lte-pdcp-sap.h"
-#include "lte-rrc-sap.h"
 
-#include <ns3/event-id.h>
-#include <ns3/nstime.h>
-#include <ns3/object.h>
 #include <ns3/traced-callback.h>
-
-#include <map>
-#include <set>
-#include <vector>
 
 namespace ns3
 {

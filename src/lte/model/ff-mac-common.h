@@ -23,8 +23,6 @@
 #include <ns3/ptr.h>
 #include <ns3/simple-ref-count.h>
 
-#include <vector>
-
 /**
  * Constants. See section 4.4
  */

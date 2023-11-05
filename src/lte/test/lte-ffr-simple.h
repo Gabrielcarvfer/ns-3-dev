@@ -24,10 +24,7 @@
 #include <ns3/lte-ffr-algorithm.h>
 #include <ns3/lte-ffr-rrc-sap.h>
 #include <ns3/lte-ffr-sap.h>
-#include <ns3/lte-rrc-sap.h>
 #include <ns3/traced-callback.h>
-
-#include <map>
 
 namespace ns3
 {

@@ -22,12 +22,8 @@
 #define LTE_TEST_CELL_SELECTION_H
 
 #include <ns3/lte-ue-rrc.h>
-#include <ns3/node-container.h>
-#include <ns3/nstime.h>
 #include <ns3/test.h>
 #include <ns3/vector.h>
-
-#include <vector>
 
 namespace ns3
 {

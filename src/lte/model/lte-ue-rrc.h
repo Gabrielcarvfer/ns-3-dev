@@ -28,18 +28,10 @@
 
 #include "lte-as-sap.h"
 #include "lte-pdcp-sap.h"
-#include "lte-rrc-sap.h"
 #include "lte-ue-ccm-rrc-sap.h"
-#include "lte-ue-cmac-sap.h"
 #include "lte-ue-cphy-sap.h"
 
-#include <ns3/object.h>
-#include <ns3/packet.h>
 #include <ns3/traced-callback.h>
-
-#include <map>
-#include <set>
-#include <vector>
 
 namespace ns3
 {

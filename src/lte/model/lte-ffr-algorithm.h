@@ -25,8 +25,6 @@
 #include "ff-mac-sched-sap.h"
 #include "lte-rrc-sap.h"
 
-#include <ns3/object.h>
-
 #include <map>
 
 namespace ns3

@@ -22,16 +22,7 @@
 #define LTE_ENB_COMPONENT_CARRIER_MANAGER_H
 
 #include "lte-ccm-mac-sap.h"
-#include "lte-ccm-rrc-sap.h"
-#include "lte-enb-cmac-sap.h"
 #include "lte-enb-rrc.h"
-#include "lte-mac-sap.h"
-#include "lte-rrc-sap.h"
-
-#include <ns3/object.h>
-
-#include <map>
-#include <vector>
 
 namespace ns3
 {

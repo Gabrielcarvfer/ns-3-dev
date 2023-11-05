@@ -24,9 +24,6 @@
 #include "lte-ffr-algorithm.h"
 #include "lte-ffr-rrc-sap.h"
 #include "lte-ffr-sap.h"
-#include "lte-rrc-sap.h"
-
-#include <map>
 
 // value for SINR outside the range defined by FF-API, used to indicate that there
 // is no CQI for this element

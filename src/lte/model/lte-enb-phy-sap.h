@@ -20,7 +20,6 @@
 #ifndef LTE_ENB_PHY_SAP_H
 #define LTE_ENB_PHY_SAP_H
 
-#include "ff-mac-common.h"
 #include "ff-mac-sched-sap.h"
 
 #include <ns3/packet.h>

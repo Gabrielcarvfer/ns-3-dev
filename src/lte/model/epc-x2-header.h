@@ -24,8 +24,6 @@
 
 #include "ns3/header.h"
 
-#include <vector>
-
 namespace ns3
 {
 

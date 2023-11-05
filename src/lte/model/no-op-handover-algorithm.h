@@ -23,7 +23,6 @@
 
 #include "lte-handover-algorithm.h"
 #include "lte-handover-management-sap.h"
-#include "lte-rrc-sap.h"
 
 namespace ns3
 {

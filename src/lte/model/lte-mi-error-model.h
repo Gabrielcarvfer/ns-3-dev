@@ -33,12 +33,7 @@
 
 #include "lte-harq-phy.h"
 
-#include <ns3/ptr.h>
 #include <ns3/spectrum-value.h>
-
-#include <list>
-#include <stdint.h>
-#include <vector>
 
 namespace ns3
 {

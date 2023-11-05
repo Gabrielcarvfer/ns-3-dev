@@ -21,13 +21,9 @@
 #ifndef LTE_UE_COMPONENT_CARRIER_MANAGER_H
 #define LTE_UE_COMPONENT_CARRIER_MANAGER_H
 
-#include "lte-mac-sap.h"
 #include "lte-ue-ccm-rrc-sap.h"
 
 #include <ns3/object.h>
-
-#include <map>
-#include <vector>
 
 namespace ns3
 {

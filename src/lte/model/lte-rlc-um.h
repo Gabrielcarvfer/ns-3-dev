@@ -23,8 +23,6 @@
 #include "lte-rlc-sequence-number.h"
 #include "lte-rlc.h"
 
-#include <ns3/event-id.h>
-
 #include <map>
 
 namespace ns3

@@ -23,9 +23,6 @@
 
 #include "lte-handover-algorithm.h"
 #include "lte-handover-management-sap.h"
-#include "lte-rrc-sap.h"
-
-#include <ns3/nstime.h>
 
 namespace ns3
 {

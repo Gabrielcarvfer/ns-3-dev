@@ -29,7 +29,6 @@
 #include <ns3/lte-common.h>
 
 #include <fstream>
-#include <string>
 
 namespace ns3
 {

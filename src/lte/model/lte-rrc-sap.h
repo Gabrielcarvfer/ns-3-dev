@@ -21,11 +21,7 @@
 #ifndef LTE_RRC_SAP_H
 #define LTE_RRC_SAP_H
 
-#include <ns3/ptr.h>
 #include <ns3/simulator.h>
-
-#include <list>
-#include <stdint.h>
 
 namespace ns3
 {

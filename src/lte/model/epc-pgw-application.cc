@@ -20,6 +20,7 @@
 
 #include "epc-pgw-application.h"
 
+#include "epc-gtpc-header.h"
 #include "epc-gtpu-header.h"
 
 #include "ns3/abort.h"

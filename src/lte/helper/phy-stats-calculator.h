@@ -27,7 +27,6 @@
 #include "ns3/uinteger.h"
 
 #include <fstream>
-#include <string>
 
 namespace ns3
 {

@@ -26,14 +26,11 @@
 #include "lte-ue-cmac-sap.h"
 #include "lte-ue-phy-sap.h"
 
-#include <ns3/event-id.h>
 #include <ns3/nstime.h>
 #include <ns3/packet-burst.h>
-#include <ns3/packet.h>
 #include <ns3/traced-callback.h>
 
 #include <map>
-#include <vector>
 
 namespace ns3
 {
