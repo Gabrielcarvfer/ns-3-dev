@@ -20,8 +20,6 @@
 #ifndef PACKET_DATA_CALCULATORS_H
 #define PACKET_DATA_CALCULATORS_H
 
-#include "mac48-address.h"
-
 #include "ns3/basic-data-calculators.h"
 #include "ns3/data-calculator.h"
 #include "ns3/packet.h"

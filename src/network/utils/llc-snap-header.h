@@ -22,9 +22,6 @@
 
 #include "ns3/header.h"
 
-#include <stdint.h>
-#include <string>
-
 namespace ns3
 {
 

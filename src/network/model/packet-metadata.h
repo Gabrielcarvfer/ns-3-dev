@@ -25,10 +25,6 @@
 #include "ns3/callback.h"
 #include "ns3/type-id.h"
 
-#include <limits>
-#include <stdint.h>
-#include <vector>
-
 namespace ns3
 {
 

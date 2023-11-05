@@ -22,9 +22,7 @@
 
 #include "ns3/type-name.h"
 
-#include <iostream>
 #include <limits>
-#include <stdint.h>
 
 namespace ns3
 {

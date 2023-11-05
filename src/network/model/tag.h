@@ -23,8 +23,6 @@
 
 #include "ns3/object-base.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

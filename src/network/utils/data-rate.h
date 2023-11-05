@@ -24,10 +24,6 @@
 #include "ns3/attribute.h"
 #include "ns3/nstime.h"
 
-#include <iostream>
-#include <stdint.h>
-#include <string>
-
 namespace ns3
 {
 

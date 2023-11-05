@@ -21,9 +21,6 @@
 
 #include "ns3/node.h"
 
-#include <type_traits>
-#include <vector>
-
 namespace ns3
 {
 

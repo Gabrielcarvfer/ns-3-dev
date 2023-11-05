@@ -21,9 +21,6 @@
 
 #include "ns3/net-device.h"
 
-#include <stdint.h>
-#include <vector>
-
 namespace ns3
 {
 

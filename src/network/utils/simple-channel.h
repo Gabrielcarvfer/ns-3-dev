@@ -25,7 +25,6 @@
 #include "ns3/nstime.h"
 
 #include <map>
-#include <vector>
 
 namespace ns3
 {

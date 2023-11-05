@@ -23,8 +23,6 @@
 #include "ns3/packet.h"
 #include "ns3/trailer.h"
 
-#include <string>
-
 namespace ns3
 {
 

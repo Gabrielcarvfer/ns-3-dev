@@ -20,15 +20,11 @@
 #define SIMPLE_NET_DEVICE_H
 
 #include "data-rate.h"
-#include "mac48-address.h"
 #include "queue-fwd.h"
 
 #include "ns3/event-id.h"
 #include "ns3/net-device.h"
 #include "ns3/traced-callback.h"
-
-#include <stdint.h>
-#include <string>
 
 namespace ns3
 {

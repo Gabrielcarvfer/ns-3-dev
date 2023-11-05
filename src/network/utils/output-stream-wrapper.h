@@ -22,8 +22,6 @@
 #include "ns3/ptr.h"
 #include "ns3/simple-ref-count.h"
 
-#include <fstream>
-
 namespace ns3
 {
 

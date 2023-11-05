@@ -20,13 +20,10 @@
 #define ERROR_CHANNEL_H
 
 #include "error-model.h"
-#include "mac48-address.h"
 #include "simple-channel.h"
 
 #include "ns3/channel.h"
 #include "ns3/nstime.h"
-
-#include <vector>
 
 namespace ns3
 {

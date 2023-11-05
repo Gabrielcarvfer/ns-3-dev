@@ -27,8 +27,6 @@
 #include "ns3/queue.h"
 #include "ns3/simple-channel.h"
 
-#include <string>
-
 namespace ns3
 {
 

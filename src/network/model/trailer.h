@@ -20,10 +20,7 @@
 #ifndef TRAILER_H
 #define TRAILER_H
 
-#include "buffer.h"
 #include "chunk.h"
-
-#include <stdint.h>
 
 namespace ns3
 {

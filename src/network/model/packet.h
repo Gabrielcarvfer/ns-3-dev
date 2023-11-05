@@ -19,7 +19,6 @@
 #ifndef PACKET_H
 #define PACKET_H
 
-#include "buffer.h"
 #include "byte-tag-list.h"
 #include "header.h"
 #include "nix-vector.h"
@@ -32,8 +31,6 @@
 #include "ns3/callback.h"
 #include "ns3/mac48-address.h"
 #include "ns3/ptr.h"
-
-#include <stdint.h>
 
 namespace ns3
 {

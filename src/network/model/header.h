@@ -20,10 +20,7 @@
 #ifndef HEADER_H
 #define HEADER_H
 
-#include "buffer.h"
 #include "chunk.h"
-
-#include <stdint.h>
 
 namespace ns3
 {

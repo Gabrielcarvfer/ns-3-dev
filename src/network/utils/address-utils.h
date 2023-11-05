@@ -19,8 +19,6 @@
 #ifndef ADDRESS_UTILS_H
 #define ADDRESS_UTILS_H
 
-#include "ipv4-address.h"
-#include "ipv6-address.h"
 #include "mac16-address.h"
 #include "mac48-address.h"
 #include "mac64-address.h"

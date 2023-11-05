@@ -24,8 +24,6 @@
 
 #include "ns3/type-id.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

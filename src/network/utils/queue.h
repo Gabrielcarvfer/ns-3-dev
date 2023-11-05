@@ -33,8 +33,6 @@
 #include "ns3/traced-value.h"
 
 #include <sstream>
-#include <string>
-#include <type_traits>
 
 namespace ns3
 {

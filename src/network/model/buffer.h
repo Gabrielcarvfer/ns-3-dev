@@ -21,10 +21,6 @@
 
 #include "ns3/assert.h"
 
-#include <ostream>
-#include <stdint.h>
-#include <vector>
-
 #define BUFFER_FREE_LIST 1
 
 namespace ns3

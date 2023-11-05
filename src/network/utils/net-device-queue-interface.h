@@ -27,9 +27,6 @@
 #include "ns3/ptr.h"
 #include "ns3/simulator.h"
 
-#include <functional>
-#include <vector>
-
 namespace ns3
 {
 

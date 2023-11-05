@@ -19,14 +19,10 @@
 #ifndef MAC64_ADDRESS_H
 #define MAC64_ADDRESS_H
 
-#include "ipv4-address.h"
 #include "ipv6-address.h"
 
 #include "ns3/attribute-helper.h"
 #include "ns3/attribute.h"
-
-#include <ostream>
-#include <stdint.h>
 
 namespace ns3
 {

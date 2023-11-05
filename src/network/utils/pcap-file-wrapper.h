@@ -25,10 +25,6 @@
 #include "ns3/packet.h"
 #include "ns3/ptr.h"
 
-#include <cstring>
-#include <fstream>
-#include <limits>
-
 namespace ns3
 {
 

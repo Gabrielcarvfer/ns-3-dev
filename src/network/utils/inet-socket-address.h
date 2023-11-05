@@ -24,8 +24,6 @@
 
 #include "ns3/address.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

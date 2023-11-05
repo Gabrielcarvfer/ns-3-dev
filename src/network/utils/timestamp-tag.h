@@ -23,8 +23,6 @@
 #include "ns3/tag.h"
 #include "ns3/type-id.h"
 
-#include <iostream>
-
 namespace ns3
 {
 

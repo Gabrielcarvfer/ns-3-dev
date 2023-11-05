@@ -24,9 +24,6 @@
 #include "ns3/attribute-helper.h"
 #include "ns3/attribute.h"
 
-#include <iostream>
-#include <string>
-
 namespace ns3
 {
 

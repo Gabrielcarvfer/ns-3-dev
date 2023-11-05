@@ -22,8 +22,6 @@
 #include "ns3/buffer.h"
 #include "ns3/header.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

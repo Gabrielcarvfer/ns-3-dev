@@ -19,7 +19,6 @@
 #ifndef PACKET_SOCKET_ADDRESS_H
 #define PACKET_SOCKET_ADDRESS_H
 
-#include "mac48-address.h"
 #include "mac64-address.h"
 
 #include "ns3/address.h"
