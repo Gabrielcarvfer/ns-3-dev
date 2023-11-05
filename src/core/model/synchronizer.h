@@ -18,10 +18,7 @@
 #ifndef SYNCHRONIZER_H
 #define SYNCHRONIZER_H
 
-#include "nstime.h"
 #include "object.h"
-
-#include <stdint.h>
 
 /**
  * @file

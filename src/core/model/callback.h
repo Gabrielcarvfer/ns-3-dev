@@ -22,16 +22,9 @@
 #define CALLBACK_H
 
 #include "attribute-helper.h"
-#include "attribute.h"
-#include "fatal-error.h"
-#include "ptr.h"
-#include "simple-ref-count.h"
 
 #include <functional>
 #include <memory>
-#include <typeinfo>
-#include <utility>
-#include <vector>
 
 /**
  * \file

@@ -19,9 +19,7 @@
 #ifndef OBJECT_FACTORY_H
 #define OBJECT_FACTORY_H
 
-#include "attribute-construction-list.h"
 #include "object.h"
-#include "type-id.h"
 
 /**
  * \file

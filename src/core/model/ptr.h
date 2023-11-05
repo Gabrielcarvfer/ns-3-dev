@@ -23,9 +23,6 @@
 #include "assert.h"
 #include "deprecated.h"
 
-#include <iostream>
-#include <stdint.h>
-
 /**
  * \file
  * \ingroup ptr

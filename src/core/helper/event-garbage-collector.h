@@ -22,8 +22,6 @@
 #include "ns3/event-id.h"
 #include "ns3/simulator.h"
 
-#include <set>
-
 /**
  * \file
  * \ingroup events

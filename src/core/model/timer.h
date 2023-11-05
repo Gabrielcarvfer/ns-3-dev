@@ -20,8 +20,6 @@
 #define TIMER_H
 
 #include "event-id.h"
-#include "fatal-error.h"
-#include "int-to-type.h"
 #include "nstime.h"
 
 /**
@@ -49,7 +47,6 @@ namespace ns3
  * In addition, it can be configured to take different actions when the
  * Timer is destroyed.
  */
-
 class TimerImpl;
 
 /**

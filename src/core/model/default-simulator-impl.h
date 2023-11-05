@@ -22,8 +22,6 @@
 
 #include "simulator-impl.h"
 
-#include <list>
-#include <mutex>
 #include <thread>
 
 /**

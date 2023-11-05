@@ -23,8 +23,6 @@
 #include "scheduler.h"
 
 #include <map>
-#include <stdint.h>
-#include <utility>
 
 /**
  * \file

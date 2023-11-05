@@ -21,14 +21,7 @@
 #define OBJECT_H
 
 #include "attribute-construction-list.h"
-#include "attribute.h"
 #include "object-base.h"
-#include "ptr.h"
-#include "simple-ref-count.h"
-
-#include <stdint.h>
-#include <string>
-#include <vector>
 
 /**
  * \file

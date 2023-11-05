@@ -20,7 +20,6 @@
 #ifndef TRICKLE_TIMER_H
 #define TRICKLE_TIMER_H
 
-#include "event-id.h"
 #include "nstime.h"
 #include "random-variable-stream.h"
 

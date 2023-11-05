@@ -19,6 +19,7 @@
 
 #include "hash.h"
 
+#include "hash-murmur3.h"
 #include "log.h"
 
 /**

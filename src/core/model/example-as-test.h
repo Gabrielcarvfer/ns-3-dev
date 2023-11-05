@@ -22,8 +22,6 @@
 
 #include "test.h"
 
-#include <string>
-
 /**
  * \file
  * \ingroup testing

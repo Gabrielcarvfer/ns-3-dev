@@ -22,8 +22,6 @@
 
 #include "val-array.h"
 
-#include <valarray>
-
 namespace ns3
 {
 

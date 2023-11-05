@@ -19,7 +19,6 @@
 #define OBJECT_NAMES_H
 
 #include "object.h"
-#include "ptr.h"
 
 /**
  * \file

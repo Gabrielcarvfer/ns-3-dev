@@ -23,6 +23,7 @@
 #include "log.h"
 #include "singleton.h"
 #include "system-path.h"
+#include "system-wall-clock-ms.h"
 
 #include <cmath>
 #include <cstring>

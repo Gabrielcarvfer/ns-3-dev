@@ -20,14 +20,9 @@
 #ifndef TUPLE_H
 #define TUPLE_H
 
-#include "attribute-helper.h"
 #include "string.h"
 
 #include <algorithm>
-#include <sstream>
-#include <tuple>
-#include <type_traits>
-#include <utility>
 
 namespace ns3
 {

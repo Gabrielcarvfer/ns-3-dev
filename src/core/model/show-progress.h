@@ -27,13 +27,9 @@
  * ns3::ShowProgress declaration.
  */
 
-#include "event-id.h"
 #include "nstime.h"
 #include "system-wall-clock-ms.h"
 #include "system-wall-clock-timestamp.h"
-#include "time-printer.h"
-
-#include <iostream>
 
 namespace ns3
 {

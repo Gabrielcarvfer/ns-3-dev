@@ -21,18 +21,13 @@
 #define NS3_LENGTH_H_
 
 #include "attribute-helper.h"
-#include "attribute.h"
 
 #ifdef HAVE_BOOST
 #include <boost/units/quantity.hpp>
 #include <boost/units/systems/si.hpp>
 #endif
 
-#include <istream>
-#include <limits>
 #include <optional>
-#include <ostream>
-#include <string>
 
 /**
  * \file

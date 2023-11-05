@@ -22,9 +22,6 @@
 
 #include "scheduler.h"
 
-#include <stdint.h>
-#include <vector>
-
 /**
  * \file
  * \ingroup scheduler

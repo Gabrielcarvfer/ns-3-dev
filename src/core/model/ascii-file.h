@@ -23,8 +23,6 @@
 #define ASCII_FILE_H
 
 #include <fstream>
-#include <stdint.h>
-#include <string>
 
 namespace ns3
 {

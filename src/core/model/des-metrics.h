@@ -31,9 +31,6 @@
 
 #include <fstream>
 #include <mutex>
-#include <stdint.h> // uint32_t
-#include <string>
-#include <vector>
 
 namespace ns3
 {

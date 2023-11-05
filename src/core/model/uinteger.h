@@ -20,10 +20,6 @@
 #define UINTEGER_H
 
 #include "attribute-helper.h"
-#include "attribute.h"
-
-#include <limits>
-#include <stdint.h>
 
 /**
  * \file

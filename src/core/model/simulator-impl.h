@@ -20,12 +20,8 @@
 #ifndef SIMULATOR_IMPL_H
 #define SIMULATOR_IMPL_H
 
-#include "event-id.h"
-#include "event-impl.h"
 #include "nstime.h"
 #include "object-factory.h"
-#include "object.h"
-#include "ptr.h"
 
 /**
  * \file

@@ -19,15 +19,8 @@
 #ifndef COMMAND_LINE_H
 #define COMMAND_LINE_H
 
-#include "callback.h"
 #include "nstime.h"
 #include "type-id.h"
-
-#include <memory> // shared_ptr
-#include <sstream>
-#include <string>
-#include <tuple>
-#include <vector>
 
 /**
  * \file

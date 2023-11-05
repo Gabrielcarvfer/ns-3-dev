@@ -20,16 +20,10 @@
 #ifndef ATTRIBUTE_CONTAINER_H
 #define ATTRIBUTE_CONTAINER_H
 
-#include "attribute-helper.h"
 #include "string.h"
 
 #include <algorithm>
-#include <iterator>
 #include <list>
-#include <sstream>
-#include <type_traits>
-#include <typeinfo>
-#include <utility>
 
 namespace ns3
 {

@@ -21,7 +21,6 @@
 #include "synchronizer.h"
 
 #include <condition_variable>
-#include <mutex>
 
 /**
  * @file

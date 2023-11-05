@@ -23,8 +23,6 @@
 #include "attribute-accessor-helper.h"
 #include "attribute.h"
 
-#include <sstream>
-
 /**
  * \file
  * \ingroup attributehelper

@@ -25,7 +25,6 @@
 #include "default-deleter.h"
 
 #include <limits>
-#include <stdint.h>
 
 /**
  * \file

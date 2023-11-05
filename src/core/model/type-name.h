@@ -21,8 +21,6 @@
 
 #include "fatal-error.h"
 
-#include <string>
-
 /**
  * \file
  * \ingroup attributeimpl

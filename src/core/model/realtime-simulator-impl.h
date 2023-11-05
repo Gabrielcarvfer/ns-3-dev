@@ -18,16 +18,10 @@
 #ifndef REALTIME_SIMULATOR_IMPL_H
 #define REALTIME_SIMULATOR_IMPL_H
 
-#include "assert.h"
-#include "event-impl.h"
-#include "log.h"
-#include "ptr.h"
 #include "scheduler.h"
 #include "simulator-impl.h"
 #include "synchronizer.h"
 
-#include <list>
-#include <mutex>
 #include <thread>
 
 /**

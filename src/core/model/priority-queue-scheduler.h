@@ -22,11 +22,7 @@
 
 #include "scheduler.h"
 
-#include <algorithm>
-#include <functional>
 #include <queue>
-#include <stdint.h>
-#include <utility>
 
 /**
  * \file

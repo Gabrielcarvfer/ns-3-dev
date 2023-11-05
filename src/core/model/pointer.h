@@ -19,7 +19,6 @@
 #ifndef NS_POINTER_H
 #define NS_POINTER_H
 
-#include "attribute.h"
 #include "object.h"
 
 /**

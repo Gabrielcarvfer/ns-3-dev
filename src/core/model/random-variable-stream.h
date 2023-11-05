@@ -25,12 +25,9 @@
 #ifndef RANDOM_VARIABLE_STREAM_H
 #define RANDOM_VARIABLE_STREAM_H
 
-#include "attribute-helper.h"
 #include "object.h"
-#include "type-id.h"
 
 #include <map>
-#include <stdint.h>
 
 /**
  * \file

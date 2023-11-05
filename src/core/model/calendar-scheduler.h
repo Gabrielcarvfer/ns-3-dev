@@ -23,9 +23,6 @@
 
 #include "scheduler.h"
 
-#include <list>
-#include <stdint.h>
-
 /**
  * \file
  * \ingroup scheduler

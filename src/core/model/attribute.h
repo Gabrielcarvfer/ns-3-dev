@@ -22,9 +22,6 @@
 #include "ptr.h"
 #include "simple-ref-count.h"
 
-#include <stdint.h>
-#include <string>
-
 /**
  * \file
  * \ingroup attributes

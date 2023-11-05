@@ -20,14 +20,9 @@
 #ifndef SIMULATOR_H
 #define SIMULATOR_H
 
-#include "event-id.h"
-#include "event-impl.h"
 #include "make-event.h"
 #include "nstime.h"
 #include "object-factory.h"
-
-#include <stdint.h>
-#include <string>
 
 /**
  * @file

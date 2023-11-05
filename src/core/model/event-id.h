@@ -22,8 +22,6 @@
 #include "event-impl.h"
 #include "ptr.h"
 
-#include <stdint.h>
-
 /**
  * \file
  * \ingroup events

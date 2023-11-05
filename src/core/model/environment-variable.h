@@ -27,9 +27,7 @@
  */
 
 #include <memory> // shared_ptr
-#include <string>
 #include <unordered_map>
-#include <utility> // pair
 
 namespace ns3
 {

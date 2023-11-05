@@ -22,8 +22,6 @@
 
 #include "int64x64.h"
 
-#include <string>
-
 /**
  * \file
  * \ingroup buildversion

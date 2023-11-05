@@ -20,13 +20,7 @@
 #ifndef PAIR_H
 #define PAIR_H
 
-#include "attribute-helper.h"
 #include "string.h"
-
-#include <sstream>
-#include <type_traits>
-#include <typeinfo> // typeid
-#include <utility>
 
 namespace ns3
 {

@@ -25,6 +25,7 @@
 #include "simulator.h"
 
 #include <cmath>
+#include <mutex>
 
 /**
  * \file

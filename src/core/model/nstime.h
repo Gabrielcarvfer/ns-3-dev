@@ -19,18 +19,12 @@
 #ifndef TIME_H
 #define TIME_H
 
-#include "assert.h"
 #include "attribute-helper.h"
-#include "attribute.h"
 #include "event-id.h"
 #include "int64x64.h"
 #include "type-name.h"
 
-#include <cmath>
-#include <limits>
-#include <ostream>
 #include <set>
-#include <stdint.h>
 
 /**
  * \file

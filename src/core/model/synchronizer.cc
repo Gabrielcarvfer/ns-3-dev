@@ -18,6 +18,7 @@
 #include "synchronizer.h"
 
 #include "log.h"
+#include "nstime.h"
 
 /**
  * \file

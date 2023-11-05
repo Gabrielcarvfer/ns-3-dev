@@ -18,14 +18,9 @@
 #ifndef NS3_TEST_H
 #define NS3_TEST_H
 
-#include "system-wall-clock-ms.h"
-
-#include <fstream>
 #include <iostream>
 #include <limits>
-#include <list>
 #include <sstream>
-#include <stdint.h>
 #include <string>
 #include <vector>
 

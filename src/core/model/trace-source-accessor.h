@@ -20,10 +20,6 @@
 #define TRACE_SOURCE_ACCESSOR_H
 
 #include "callback.h"
-#include "ptr.h"
-#include "simple-ref-count.h"
-
-#include <stdint.h>
 
 /**
  * \file

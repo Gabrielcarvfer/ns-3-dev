@@ -20,13 +20,8 @@
 #ifndef HASH_H
 #define HASH_H
 
-#include "assert.h"
-#include "hash-fnv.h"
 #include "hash-function.h"
-#include "hash-murmur3.h"
 #include "ptr.h"
-
-#include <string>
 
 /**
  * \file

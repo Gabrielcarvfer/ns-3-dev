@@ -21,8 +21,6 @@
 
 #include "simple-ref-count.h"
 
-#include <stdint.h>
-
 /**
  * \file
  * \ingroup events

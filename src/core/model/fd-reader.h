@@ -23,7 +23,6 @@
 #include "callback.h"
 #include "event-id.h"
 
-#include <cstdint>
 #include <thread>
 
 #ifdef __WIN32__

@@ -19,12 +19,10 @@
 #ifndef VAL_ARRAY_H
 #define VAL_ARRAY_H
 
-#include "assert.h"
 #include "simple-ref-count.h"
 
 #include <complex>
 #include <valarray>
-#include <vector>
 
 namespace ns3
 {

@@ -20,10 +20,8 @@
 #ifndef TIMER_IMPL_H
 #define TIMER_IMPL_H
 
-#include "fatal-error.h"
 #include "int-to-type.h"
 #include "simulator.h"
-#include "type-traits.h"
 
 /**
  * \file

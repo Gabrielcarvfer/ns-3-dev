@@ -20,7 +20,6 @@
 #define NS3_VECTOR_H
 
 #include "attribute-helper.h"
-#include "attribute.h"
 
 /**
  * \file

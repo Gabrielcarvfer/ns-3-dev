@@ -18,6 +18,8 @@
  */
 
 #include "ns3/double.h"
+#include "ns3/hash-murmur3.h"
+#include "ns3/hash.h"
 #include "ns3/integer.h"
 #include "ns3/log.h"
 #include "ns3/object.h"

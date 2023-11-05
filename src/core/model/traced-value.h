@@ -19,12 +19,7 @@
 #ifndef TRACED_VALUE_H
 #define TRACED_VALUE_H
 
-#include "boolean.h"
-#include "double.h"
-#include "enum.h"
-#include "integer.h"
 #include "traced-callback.h"
-#include "uinteger.h"
 
 /**
  * \file

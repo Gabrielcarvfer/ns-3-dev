@@ -17,6 +17,8 @@
  * Author: Peter D. Barnes, Jr. <pdbarnes@llnl.gov>
  */
 
+#include "ns3/hash-fnv.h"
+#include "ns3/hash-murmur3.h"
 #include "ns3/hash.h"
 #include "ns3/test.h"
 

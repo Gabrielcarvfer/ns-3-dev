@@ -22,8 +22,6 @@
 
 #include "object.h"
 
-#include <stdint.h>
-
 /**
  * \file
  * \ingroup scheduler

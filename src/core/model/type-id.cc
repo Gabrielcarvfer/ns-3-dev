@@ -18,6 +18,7 @@
  */
 #include "type-id.h"
 
+#include "hash-murmur3.h"
 #include "hash.h"
 #include "log.h" // NS_ASSERT and NS_LOG
 #include "singleton.h"

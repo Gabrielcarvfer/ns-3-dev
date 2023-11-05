@@ -19,12 +19,8 @@
 #ifndef OBJECT_BASE_H
 #define OBJECT_BASE_H
 
-#include "callback.h"
 #include "type-id.h"
 #include "warnings.h"
-
-#include <list>
-#include <string>
 
 /**
  * \file

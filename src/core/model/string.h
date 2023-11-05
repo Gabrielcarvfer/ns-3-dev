@@ -21,9 +21,6 @@
 
 #include "attribute-helper.h"
 
-#include <string>
-#include <vector>
-
 /**
  * \file
  * \ingroup attribute_String

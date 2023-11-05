@@ -20,7 +20,6 @@
 #define ENUM_VALUE_H
 
 #include "attribute-accessor-helper.h"
-#include "attribute.h"
 
 #include <list>
 

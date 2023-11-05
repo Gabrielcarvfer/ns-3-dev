@@ -20,10 +20,6 @@
 #define GLOBAL_VALUE_H
 
 #include "attribute.h"
-#include "ptr.h"
-
-#include <string>
-#include <vector>
 
 /**
  * \file

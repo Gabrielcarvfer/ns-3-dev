@@ -19,10 +19,7 @@
 #ifndef OBJECT_MAP_H
 #define OBJECT_MAP_H
 
-#include "attribute.h"
 #include "object-ptr-container.h"
-#include "object.h"
-#include "ptr.h"
 
 /**
  * \file

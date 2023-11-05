@@ -21,9 +21,6 @@
 
 #include "ptr.h"
 
-#include <string>
-#include <vector>
-
 /**
  * \file
  * \ingroup config

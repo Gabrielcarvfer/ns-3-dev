@@ -23,9 +23,6 @@
 #include "fatal-impl.h"
 #include "log.h" // NS_LOG_APPEND...
 
-#include <cstdlib>
-#include <exception>
-#include <iostream>
 #include <string_view>
 
 /**
