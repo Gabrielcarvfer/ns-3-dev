@@ -25,6 +25,8 @@
 #include "peer-management-protocol-mac.h"
 
 #include "ns3/assert.h"
+#include "ns3/boolean.h"
+#include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/mesh-point-device.h"
 #include "ns3/mesh-wifi-interface-mac-plugin.h"

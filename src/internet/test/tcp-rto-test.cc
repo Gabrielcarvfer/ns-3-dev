@@ -23,7 +23,7 @@
 #include "ns3/node.h"
 #include "ns3/rtt-estimator.h"
 #include "ns3/simple-channel.h"
-
+#include "ns3/uinteger.h"
 NS_LOG_COMPONENT_DEFINE("TcpRtoTest");
 
 using namespace ns3;

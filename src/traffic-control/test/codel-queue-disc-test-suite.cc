@@ -19,6 +19,7 @@
  *
  */
 
+#include "ns3/boolean.h"
 #include "ns3/codel-queue-disc.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
@@ -27,7 +28,6 @@
 #include "ns3/string.h"
 #include "ns3/test.h"
 #include "ns3/uinteger.h"
-
 using namespace ns3;
 
 // The following code borrowed from Linux codel.h, for unit testing

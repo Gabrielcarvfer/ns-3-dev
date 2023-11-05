@@ -28,10 +28,12 @@
 
 #include "cobalt-queue-disc.h"
 
+#include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/net-device-queue-interface.h"
 #include "ns3/queue.h"
 #include "ns3/string.h"
+#include "ns3/uinteger.h"
 
 namespace ns3
 {

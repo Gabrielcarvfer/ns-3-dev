@@ -17,7 +17,9 @@
  * Author: Stefano Avallone <stavallo@unina.it>
  */
 
+#include "ns3/boolean.h"
 #include "ns3/config.h"
+#include "ns3/enum.h"
 #include "ns3/he-configuration.h"
 #include "ns3/he-frame-exchange-manager.h"
 #include "ns3/he-phy.h"

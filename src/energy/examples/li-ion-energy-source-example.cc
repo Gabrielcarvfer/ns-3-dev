@@ -18,6 +18,7 @@
  */
 
 #include "ns3/command-line.h"
+#include "ns3/double.h"
 #include "ns3/energy-source-container.h"
 #include "ns3/li-ion-energy-source.h"
 #include "ns3/log.h"

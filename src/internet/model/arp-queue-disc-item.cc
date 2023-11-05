@@ -17,6 +17,7 @@
 
 #include "arp-queue-disc-item.h"
 
+#include "ns3/hash.h"
 #include "ns3/log.h"
 
 namespace ns3

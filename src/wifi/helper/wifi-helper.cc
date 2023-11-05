@@ -23,6 +23,7 @@
 
 #include "ns3/ampdu-subframe-header.h"
 #include "ns3/ap-wifi-mac.h"
+#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/eht-configuration.h"
 #include "ns3/he-configuration.h"

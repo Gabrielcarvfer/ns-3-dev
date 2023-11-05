@@ -23,6 +23,7 @@
 #include "lte-test-entities.h"
 
 #include "ns3/config.h"
+#include "ns3/double.h"
 #include "ns3/error-model.h"
 #include "ns3/log.h"
 #include "ns3/lte-rlc-header.h"
@@ -34,7 +35,6 @@
 #include "ns3/radio-bearer-stats-calculator.h"
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LteRlcUmE2eTest");

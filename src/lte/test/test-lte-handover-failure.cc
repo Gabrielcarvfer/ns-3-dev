@@ -18,6 +18,7 @@
  * Author: Sachin Nayak <sachinnn@uw.edu>
  */
 
+#include "ns3/double.h"
 #include <ns3/boolean.h>
 #include <ns3/callback.h>
 #include <ns3/config.h>
@@ -39,7 +40,6 @@
 #include <ns3/rng-seed-manager.h>
 #include <ns3/simulator.h>
 #include <ns3/test.h>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LteHandoverFailureTest");

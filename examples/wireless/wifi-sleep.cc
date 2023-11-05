@@ -60,6 +60,8 @@
 #include "ns3/wifi-utils.h"
 #include "ns3/yans-wifi-channel.h"
 #include "ns3/yans-wifi-helper.h"
+#include "ns3/double.h"
+#include "ns3/uinteger.h"
 
 using namespace ns3;
 

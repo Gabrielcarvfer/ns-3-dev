@@ -17,6 +17,7 @@
  * Author: Alexander Krotov <krotov@iitp.ru>
  */
 
+#include "ns3/enum.h"
 #include "ns3/fcfs-wifi-queue-scheduler.h"
 #include "ns3/simulator.h"
 #include "ns3/test.h"

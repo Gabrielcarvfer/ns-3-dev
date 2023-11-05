@@ -17,6 +17,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
+#include "ns3/boolean.h"
 #include "ns3/fcfs-wifi-queue-scheduler.h"
 #include "ns3/he-configuration.h"
 #include "ns3/ht-configuration.h"

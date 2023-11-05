@@ -20,6 +20,7 @@
 
 #include "mesh-helper.h"
 
+#include "ns3/boolean.h"
 #include "ns3/fcfs-wifi-queue-scheduler.h"
 #include "ns3/frame-exchange-manager.h"
 #include "ns3/mesh-point-device.h"

@@ -32,8 +32,10 @@
 #include "wifi-phy.h"
 
 #include "ns3/attribute-container.h"
+#include "ns3/boolean.h"
 #include "ns3/eht-configuration.h"
 #include "ns3/emlsr-manager.h"
+#include "ns3/enum.h"
 #include "ns3/he-configuration.h"
 #include "ns3/ht-configuration.h"
 #include "ns3/log.h"

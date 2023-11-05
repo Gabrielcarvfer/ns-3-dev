@@ -20,6 +20,7 @@
 #include "tcp-header.h"
 #include "udp-header.h"
 
+#include "ns3/hash.h"
 #include "ns3/log.h"
 
 namespace ns3

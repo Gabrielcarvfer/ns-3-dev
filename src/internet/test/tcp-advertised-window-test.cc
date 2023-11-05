@@ -22,7 +22,7 @@
 #include "ns3/node.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/tcp-rx-buffer.h"
-
+#include "ns3/uinteger.h"
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpAdvertisedWindowTestSuite");

@@ -35,6 +35,7 @@
 #include "wifi-psdu.h"
 #include "wifi-tx-parameters.h"
 
+#include "ns3/boolean.h"
 #include "ns3/ht-frame-exchange-manager.h"
 #include "ns3/log.h"
 #include "ns3/pointer.h"

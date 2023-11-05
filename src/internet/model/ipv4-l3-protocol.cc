@@ -30,6 +30,7 @@
 
 #include "ns3/boolean.h"
 #include "ns3/callback.h"
+#include "ns3/hash.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/log.h"
 #include "ns3/net-device.h"

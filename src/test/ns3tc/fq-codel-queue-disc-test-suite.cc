@@ -18,6 +18,7 @@
  *          Stefano Avallone <stefano.avallone@unina.it>
  */
 
+#include "ns3/boolean.h"
 #include "ns3/codel-queue-disc.h"
 #include "ns3/fq-codel-queue-disc.h"
 #include "ns3/ipv4-address.h"
@@ -33,6 +34,7 @@
 #include "ns3/tcp-header.h"
 #include "ns3/test.h"
 #include "ns3/udp-header.h"
+#include "ns3/uinteger.h"
 
 using namespace ns3;
 

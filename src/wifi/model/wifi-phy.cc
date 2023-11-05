@@ -30,9 +30,12 @@
 #include "wifi-radio-energy-model.h"
 #include "wifi-utils.h"
 
+#include "ns3/boolean.h"
 #include "ns3/channel.h"
+#include "ns3/double.h"
 #include "ns3/dsss-phy.h"
 #include "ns3/eht-phy.h" //also includes OFDM, HT, VHT and HE
+#include "ns3/enum.h"
 #include "ns3/erp-ofdm-phy.h"
 #include "ns3/error-model.h"
 #include "ns3/ht-configuration.h"
@@ -43,6 +46,7 @@
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/tuple.h"
+#include "ns3/uinteger.h"
 #include "ns3/vht-configuration.h"
 
 #include <algorithm>

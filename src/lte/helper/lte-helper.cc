@@ -29,6 +29,9 @@
 #include "phy-stats-calculator.h"
 #include "phy-tx-stats-calculator.h"
 
+#include "ns3/boolean.h"
+#include "ns3/double.h"
+#include "ns3/enum.h"
 #include <ns3/abort.h>
 #include <ns3/buildings-propagation-loss-model.h>
 #include <ns3/epc-enb-application.h>

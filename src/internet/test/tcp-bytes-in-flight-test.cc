@@ -19,10 +19,10 @@
 #include "tcp-error-model.h"
 #include "tcp-general-test.h"
 
+#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpBytesInFlightTestSuite");

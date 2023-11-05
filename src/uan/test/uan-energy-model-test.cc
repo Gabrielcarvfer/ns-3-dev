@@ -21,6 +21,7 @@
 #include "ns3/acoustic-modem-energy-model.h"
 #include "ns3/basic-energy-source-helper.h"
 #include "ns3/constant-position-mobility-model.h"
+#include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/packet.h"
@@ -34,7 +35,6 @@
 #include "ns3/uan-noise-model-default.h"
 #include "ns3/uan-phy.h"
 #include "ns3/uan-prop-model-ideal.h"
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("UanEnergyModelTestSuite");

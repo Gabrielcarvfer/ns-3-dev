@@ -28,6 +28,7 @@
 #include "codel-queue-disc.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/drop-tail-queue.h"
 #include "ns3/enum.h"
 #include "ns3/log.h"

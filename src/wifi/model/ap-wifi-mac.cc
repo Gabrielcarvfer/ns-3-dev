@@ -34,10 +34,13 @@
 #include "wifi-net-device.h"
 #include "wifi-phy.h"
 
+#include "ns3/boolean.h"
 #include "ns3/eht-configuration.h"
 #include "ns3/eht-frame-exchange-manager.h"
+#include "ns3/enum.h"
 #include "ns3/he-configuration.h"
 #include "ns3/ht-configuration.h"
+#include "ns3/integer.h"
 #include "ns3/log.h"
 #include "ns3/multi-link-element.h"
 #include "ns3/packet.h"

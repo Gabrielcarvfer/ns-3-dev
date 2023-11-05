@@ -25,6 +25,7 @@
 #include "ns3/ctrl-headers.h"
 #include "ns3/eht-configuration.h"
 #include "ns3/emlsr-manager.h"
+#include "ns3/enum.h"
 #include "ns3/he-frame-exchange-manager.h"
 #include "ns3/log.h"
 #include "ns3/mgt-headers.h"

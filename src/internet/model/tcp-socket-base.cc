@@ -48,8 +48,10 @@
 #include "tcp-tx-buffer.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/data-rate.h"
 #include "ns3/double.h"
+#include "ns3/enum.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
 #include "ns3/log.h"

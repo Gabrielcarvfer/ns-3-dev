@@ -19,6 +19,9 @@
 
 #include "generic-battery-model-helper.h"
 
+#include "ns3/double.h"
+#include "ns3/enum.h"
+
 namespace ns3
 {
 

@@ -21,6 +21,7 @@
 #include "tcp-error-model.h"
 #include "tcp-general-test.h"
 
+#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/ipv4-end-point.h"
 #include "ns3/ipv4.h"
@@ -32,7 +33,6 @@
 #include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-linux-reno.h"
 #include "ns3/tcp-tx-buffer.h"
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpDctcpTestSuite");

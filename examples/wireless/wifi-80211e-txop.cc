@@ -32,6 +32,7 @@
 #include "ns3/wifi-net-device.h"
 #include "ns3/yans-wifi-channel.h"
 #include "ns3/yans-wifi-helper.h"
+#include "ns3/boolean.h"
 
 // This is an example that illustrates 802.11 QoS for different Access Categories.
 // It defines 4 independent Wi-Fi networks (working on different logical channels

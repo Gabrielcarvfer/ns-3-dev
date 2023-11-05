@@ -36,6 +36,9 @@
 #include "lte-rlc-um.h"
 #include "lte-rlc.h"
 
+#include "ns3/boolean.h"
+#include "ns3/enum.h"
+#include "ns3/integer.h"
 #include <ns3/abort.h>
 #include <ns3/fatal-error.h>
 #include <ns3/log.h>

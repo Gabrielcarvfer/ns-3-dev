@@ -18,6 +18,7 @@
  *
  */
 
+#include "ns3/uinteger.h"
 #include <ns3/basic-data-calculators.h>
 #include <ns3/config.h>
 #include <ns3/error-model.h>

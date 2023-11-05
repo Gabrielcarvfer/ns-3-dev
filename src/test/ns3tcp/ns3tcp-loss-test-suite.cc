@@ -18,6 +18,7 @@
 #include "ns3tcp-socket-writer.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
 #include "ns3/error-model.h"

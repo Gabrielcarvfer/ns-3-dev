@@ -18,6 +18,7 @@
  *
  */
 
+#include "ns3/boolean.h"
 #include <ns3/callback.h>
 #include <ns3/constant-position-mobility-model.h>
 #include <ns3/log.h>

@@ -24,6 +24,7 @@
 #include "wifi-mac-trailer.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 
 #undef NS_LOG_APPEND_CONTEXT

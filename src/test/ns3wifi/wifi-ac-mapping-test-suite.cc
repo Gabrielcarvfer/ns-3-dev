@@ -17,6 +17,8 @@
  * Author: Stefano Avallone <stavallo@unina.it>
  */
 
+#include "ns3/boolean.h"
+#include "ns3/double.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/llc-snap-header.h"
@@ -35,7 +37,6 @@
 #include "ns3/wifi-mac.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/yans-wifi-helper.h"
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("WifiAcMappingTest");

@@ -27,6 +27,7 @@
 #include "cobalt-queue-disc.h"
 
 #include "ns3/abort.h"
+#include "ns3/double.h"
 #include "ns3/drop-tail-queue.h"
 #include "ns3/enum.h"
 #include "ns3/log.h"

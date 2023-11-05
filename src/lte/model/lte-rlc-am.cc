@@ -24,6 +24,7 @@
 #include "lte-rlc-sdu-status-tag.h"
 #include "lte-rlc-tag.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 

@@ -40,7 +40,7 @@
 #include "ns3/tcp-header.h"
 #include "ns3/test.h"
 #include "ns3/udp-header.h"
-
+#include "ns3/uinteger.h"
 using namespace ns3;
 
 /// Variable to assign g_hash to a new packet's flow

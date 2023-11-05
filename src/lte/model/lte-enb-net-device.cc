@@ -33,6 +33,7 @@
 #include "lte-handover-algorithm.h"
 #include "lte-net-device.h"
 
+#include "ns3/boolean.h"
 #include <ns3/abort.h>
 #include <ns3/callback.h>
 #include <ns3/enum.h>

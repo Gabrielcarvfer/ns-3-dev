@@ -28,6 +28,7 @@
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-yeah.h"
 #include "ns3/test.h"
+#include "ns3/uinteger.h"
 
 using namespace ns3;
 

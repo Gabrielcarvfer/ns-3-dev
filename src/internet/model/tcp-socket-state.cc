@@ -16,6 +16,9 @@
  */
 #include "tcp-socket-state.h"
 
+#include "ns3/boolean.h"
+#include "ns3/uinteger.h"
+
 namespace ns3
 {
 

@@ -18,8 +18,10 @@
  */
 
 #include "ns3/ap-wifi-mac.h"
+#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/eht-configuration.h"
+#include "ns3/enum.h"
 #include "ns3/frame-exchange-manager.h"
 #include "ns3/log.h"
 #include "ns3/mgt-headers.h"

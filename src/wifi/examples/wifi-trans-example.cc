@@ -17,7 +17,9 @@
  * Author: Rediet <getachew.redieteab@orange.com>
  */
 
+#include "ns3/boolean.h"
 #include "ns3/command-line.h"
+#include "ns3/double.h"
 #include "ns3/gnuplot.h"
 #include "ns3/mobility-helper.h"
 #include "ns3/spectrum-analyzer-helper.h"
@@ -26,7 +28,7 @@
 #include "ns3/spectrum-wifi-helper.h"
 #include "ns3/ssid.h"
 #include "ns3/string.h"
-
+#include "ns3/uinteger.h"
 using namespace ns3;
 
 /**

@@ -25,6 +25,8 @@
 #include "ns3/abort.h"
 #include "ns3/assert.h"
 #include "ns3/attribute-container.h"
+#include "ns3/boolean.h"
+#include "ns3/enum.h"
 #include "ns3/log.h"
 #include "ns3/wifi-mpdu.h"
 #include "ns3/wifi-net-device.h"

@@ -23,6 +23,7 @@
 #include "he-frame-exchange-manager.h"
 #include "he-phy.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/wifi-acknowledgment.h"
 #include "ns3/wifi-mac-queue.h"

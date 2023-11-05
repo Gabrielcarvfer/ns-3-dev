@@ -16,11 +16,14 @@
  *
  */
 
+#include "ns3/boolean.h"
+#include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/tcp-bic.h"
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
+#include "ns3/uinteger.h"
 
 using namespace ns3;
 

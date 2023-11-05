@@ -22,13 +22,13 @@
 #include "tcp-error-model.h"
 #include "tcp-general-test.h"
 
+#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/log.h"
 #include "ns3/tcp-rate-ops.h"
 #include "ns3/tcp-tx-buffer.h"
 #include "ns3/tcp-tx-item.h"
 #include "ns3/test.h"
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpRateOpsTestSuite");

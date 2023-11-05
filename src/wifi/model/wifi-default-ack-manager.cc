@@ -27,6 +27,9 @@
 #include "wifi-protection.h"
 #include "wifi-tx-parameters.h"
 
+#include "ns3/boolean.h"
+#include "ns3/double.h"
+#include "ns3/enum.h"
 #include "ns3/he-frame-exchange-manager.h"
 #include "ns3/log.h"
 

@@ -29,6 +29,7 @@
 #include "wifi-mac-queue.h"
 #include "wifi-net-device.h"
 
+#include "ns3/boolean.h"
 #include "ns3/eht-configuration.h"
 #include "ns3/eht-frame-exchange-manager.h"
 #include "ns3/he-configuration.h"

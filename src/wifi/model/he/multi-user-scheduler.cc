@@ -23,6 +23,8 @@
 #include "he-frame-exchange-manager.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
+#include "ns3/enum.h"
 #include "ns3/log.h"
 #include "ns3/qos-txop.h"
 #include "ns3/wifi-acknowledgment.h"
