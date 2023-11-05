@@ -35,6 +35,7 @@
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/tcp-header.h"
+#include "ns3/tcp-recovery-ops.h"
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/tcp-westwood-plus.h"
 #include "ns3/test.h"
