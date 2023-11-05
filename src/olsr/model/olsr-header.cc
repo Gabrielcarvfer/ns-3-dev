@@ -22,8 +22,6 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 
-#include <cmath>
-
 #define IPV4_ADDRESS_SIZE 4
 #define OLSR_MSG_HEADER_SIZE 12
 #define OLSR_PKT_HEADER_SIZE 4

@@ -60,6 +60,7 @@
 #include "ns3/animation-interface.h"
 #include "ns3/command-line.h"
 #include "ns3/csma-helper.h"
+#include "ns3/double.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/mobility-helper.h"
@@ -71,7 +72,6 @@
 #include "ns3/string.h"
 #include "ns3/yans-wifi-channel.h"
 #include "ns3/yans-wifi-helper.h"
-#include "ns3/double.h"
 using namespace ns3;
 
 //

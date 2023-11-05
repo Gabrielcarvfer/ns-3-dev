@@ -17,12 +17,9 @@
  * Author: Pavel Boyko <boyko@iitp.ru>
  */
 
-#include "mesh-information-element-vector.h"
-
 #include "ns3/hwmp-protocol.h"
 #include "ns3/packet.h"
 
-#include <algorithm>
 // All information elements:
 #include "ns3/ie-dot11s-beacon-timing.h"
 #include "ns3/ie-dot11s-configuration.h"

@@ -41,9 +41,6 @@
 #include <netinet/in.h>
 #endif
 
-#include <limits>
-#include <string>
-
 using namespace ns3;
 
 /**

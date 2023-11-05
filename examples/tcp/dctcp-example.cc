@@ -98,8 +98,6 @@
 #include "ns3/traffic-control-module.h"
 
 #include <iomanip>
-#include <iostream>
-
 using namespace ns3;
 
 std::stringstream filePlotQueue1;

@@ -20,8 +20,6 @@
 #include "ns3/callback.h"
 #include "ns3/command-line.h"
 
-#include <iostream>
-
 /**
  * \file
  * \ingroup core-examples

@@ -22,8 +22,6 @@
 
 #include "application.h"
 
-#include "node.h"
-
 #include "ns3/log.h"
 #include "ns3/nstime.h"
 #include "ns3/simulator.h"

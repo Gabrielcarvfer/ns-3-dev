@@ -18,8 +18,6 @@
 
 #include "make-event.h"
 
-#include "log.h"
-
 /**
  * \file
  * \ingroup events

@@ -20,7 +20,6 @@
 #include "lte-pdcp.h"
 
 #include "lte-pdcp-header.h"
-#include "lte-pdcp-sap.h"
 #include "lte-pdcp-tag.h"
 
 #include "ns3/log.h"

@@ -19,8 +19,6 @@
 #include "ns3/traced-value.h"
 #include "ns3/uinteger.h"
 
-#include <iostream>
-
 using namespace ns3;
 
 /**

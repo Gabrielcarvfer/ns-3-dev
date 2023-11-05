@@ -20,14 +20,8 @@
 #include "component-carrier-ue.h"
 
 #include "lte-ue-mac.h"
-#include "lte-ue-phy.h"
 
-#include <ns3/abort.h>
-#include <ns3/boolean.h>
-#include <ns3/log.h>
 #include <ns3/pointer.h>
-#include <ns3/simulator.h>
-#include <ns3/uinteger.h>
 
 namespace ns3
 {

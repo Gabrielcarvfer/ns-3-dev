@@ -35,8 +35,6 @@
 #include "ns3/object-factory.h"
 #include "ns3/uinteger.h"
 
-#include <climits>
-
 namespace ns3
 {
 

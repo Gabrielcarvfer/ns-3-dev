@@ -88,10 +88,7 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/traffic-control-module.h"
 
-#include <fstream>
 #include <iomanip>
-#include <iostream>
-#include <string>
 
 using namespace ns3;
 

@@ -21,9 +21,6 @@
 #include "log.h"
 
 #include <csignal>
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
 #include <list>
 
 #ifdef __WIN32__

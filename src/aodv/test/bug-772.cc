@@ -40,8 +40,6 @@
 #include "ns3/v4ping-helper.h"
 #include "ns3/yans-wifi-helper.h"
 
-#include <sstream>
-
 using namespace ns3;
 
 //-----------------------------------------------------------------------------

@@ -24,7 +24,6 @@
 
 #include <cstring>
 #include <iomanip>
-#include <iostream>
 
 namespace ns3
 {

@@ -22,8 +22,6 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/stats-module.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("SeventhScriptExample");

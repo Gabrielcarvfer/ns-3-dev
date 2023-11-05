@@ -23,9 +23,7 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 
-#include <cstring>
 #include <iomanip>
-#include <iostream>
 
 namespace ns3
 {

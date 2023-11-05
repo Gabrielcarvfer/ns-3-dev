@@ -17,8 +17,6 @@
  * http://wiki.osll.ru/doku.php/start)
  */
 
-#include "unistd.h"
-
 #include "ns3/basic-energy-source.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
@@ -28,8 +26,6 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/simple-device-energy-model.h"
 #include "ns3/udp-echo-helper.h"
-
-#include <iostream>
 
 using namespace ns3;
 

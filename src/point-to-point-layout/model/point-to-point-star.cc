@@ -24,10 +24,6 @@
 #include "ns3/point-to-point-net-device.h"
 #include "ns3/vector.h"
 
-#include <cmath>
-#include <iostream>
-#include <sstream>
-
 namespace ns3
 {
 

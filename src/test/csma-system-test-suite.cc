@@ -46,8 +46,6 @@
 #include "ns3/test.h"
 #include "ns3/uinteger.h"
 
-#include <string>
-
 using namespace ns3;
 
 /**

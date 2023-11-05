@@ -19,8 +19,6 @@
 
 #include "hash-function.h"
 
-#include "log.h"
-
 /**
  * \file
  * \ingroup hash

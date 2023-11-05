@@ -21,7 +21,6 @@
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/csma-net-device.h"
-#include "ns3/global-router-interface.h"
 #include "ns3/internet-module.h"
 #include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/ipv4-global-routing.h"
@@ -32,11 +31,6 @@
 #include "ns3/ipv4-static-routing.h"
 #include "ns3/network-module.h"
 #include "ns3/point-to-point-module.h"
-
-#include <cassert>
-#include <fstream>
-#include <iostream>
-#include <string>
 
 using namespace ns3;
 using std::cout;

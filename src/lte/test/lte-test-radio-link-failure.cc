@@ -35,11 +35,6 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/udp-client-server-helper.h"
 
-#include <iomanip>
-#include <iostream>
-#include <stdio.h>
-#include <vector>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LteRadioLinkFailureTest");

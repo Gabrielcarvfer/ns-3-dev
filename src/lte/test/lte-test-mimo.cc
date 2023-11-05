@@ -24,35 +24,16 @@
 #include "ns3/string.h"
 #include <ns3/boolean.h>
 #include <ns3/buildings-helper.h>
-#include <ns3/buildings-propagation-loss-model.h>
 #include <ns3/enum.h>
-#include <ns3/eps-bearer.h>
-#include <ns3/log.h>
 #include <ns3/lte-enb-net-device.h>
 #include <ns3/lte-enb-phy.h>
 #include <ns3/lte-helper.h>
 #include <ns3/lte-ue-net-device.h>
-#include <ns3/lte-ue-phy.h>
 #include <ns3/lte-ue-rrc.h>
-#include <ns3/mobility-building-info.h>
 #include <ns3/mobility-helper.h>
-#include <ns3/net-device-container.h>
-#include <ns3/node-container.h>
-#include <ns3/object.h>
-#include <ns3/packet.h>
 #include <ns3/pf-ff-mac-scheduler.h>
 #include <ns3/pointer.h>
-#include <ns3/ptr.h>
 #include <ns3/rr-ff-mac-scheduler.h>
-#include <ns3/simulator.h>
-#include <ns3/spectrum-error-model.h>
-#include <ns3/spectrum-interference.h>
-#include <ns3/test.h>
-
-#include <iostream>
-#include <sstream>
-#include <string>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LteTestMimo");

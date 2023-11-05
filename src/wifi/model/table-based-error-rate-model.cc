@@ -30,7 +30,6 @@
 #include "ns3/string.h"
 #include "ns3/uinteger.h"
 
-#include <algorithm>
 #include <cmath>
 
 namespace ns3

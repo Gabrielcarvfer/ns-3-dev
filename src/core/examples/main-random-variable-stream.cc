@@ -24,10 +24,7 @@
 #include "ns3/random-variable-stream.h"
 #include "ns3/string.h"
 
-#include <cmath>
 #include <fstream>
-#include <iostream>
-#include <map>
 
 /**
  * \file

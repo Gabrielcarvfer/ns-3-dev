@@ -45,8 +45,6 @@
 #include "ns3/three-gpp-v2v-propagation-loss-model.h"
 #include "ns3/uniform-planar-array.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("ThreeGppV2vChannelExample");

@@ -20,8 +20,6 @@
 
 #include "mesh-wifi-interface-mac.h"
 
-#include "mesh-wifi-beacon.h"
-
 #include "ns3/boolean.h"
 #include "ns3/channel-access-manager.h"
 #include "ns3/double.h"

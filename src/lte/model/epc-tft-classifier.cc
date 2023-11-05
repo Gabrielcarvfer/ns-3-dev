@@ -24,8 +24,6 @@
 
 #include "epc-tft-classifier.h"
 
-#include "epc-tft.h"
-
 #include "ns3/icmpv4-l4-protocol.h"
 #include "ns3/icmpv6-l4-protocol.h"
 #include "ns3/ipv4-header.h"

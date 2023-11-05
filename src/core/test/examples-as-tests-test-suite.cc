@@ -20,8 +20,6 @@
 #include "ns3/example-as-test.h"
 #include "ns3/system-path.h"
 
-#include <vector>
-
 using namespace ns3;
 
 /**

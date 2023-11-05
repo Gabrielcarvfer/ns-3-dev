@@ -43,11 +43,6 @@
 #include "ns3/olsr-helper.h"
 #include "ns3/point-to-point-module.h"
 
-#include <cassert>
-#include <fstream>
-#include <iostream>
-#include <string>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("SimplePointToPointOlsrExample");

@@ -24,19 +24,15 @@
  */
 #include "random-variable-stream.h"
 
-#include "assert.h"
 #include "boolean.h"
 #include "double.h"
 #include "integer.h"
-#include "log.h"
 #include "pointer.h"
 #include "rng-seed-manager.h"
 #include "rng-stream.h"
 #include "string.h"
 
-#include <algorithm> // upper_bound
 #include <cmath>
-#include <iostream>
 
 /**
  * \file

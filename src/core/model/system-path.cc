@@ -18,17 +18,10 @@
  */
 #include "system-path.h"
 
-#include "assert.h"
 #include "environment-variable.h"
-#include "fatal-error.h"
-#include "log.h"
 #include "string.h"
 
-#include <algorithm>
-#include <ctime>
 #include <regex>
-#include <sstream>
-#include <tuple>
 
 // Some compilers such as GCC < 8 (Ubuntu 18.04
 // ships with GCC 7) do not ship with the

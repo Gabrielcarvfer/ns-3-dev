@@ -18,7 +18,6 @@
  */
 #include "double.h"
 
-#include "log.h"
 #include "object.h"
 
 #include <sstream>

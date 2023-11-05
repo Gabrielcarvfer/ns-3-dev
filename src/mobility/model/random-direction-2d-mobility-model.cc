@@ -23,9 +23,6 @@
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 
-#include <algorithm>
-#include <cmath>
-
 namespace ns3
 {
 

@@ -19,14 +19,7 @@
 
 #include "spectrum-test.h"
 
-#include <ns3/log.h>
-#include <ns3/object.h>
 #include <ns3/spectrum-converter.h>
-#include <ns3/spectrum-value.h>
-#include <ns3/test.h>
-
-#include <cmath>
-#include <iostream>
 
 using namespace ns3;
 

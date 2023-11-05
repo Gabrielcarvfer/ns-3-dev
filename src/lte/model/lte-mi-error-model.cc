@@ -30,14 +30,9 @@
 
 #include "lte-mi-error-model.h"
 
-#include <ns3/log.h>
 #include <ns3/pointer.h>
 
 #include <cmath>
-#include <list>
-#include <stdint.h>
-#include <stdlib.h>
-#include <vector>
 
 namespace ns3
 {

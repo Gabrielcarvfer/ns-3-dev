@@ -31,8 +31,6 @@
 #include "ns3/network-module.h"
 #include "ns3/stats-module.h"
 
-#include <ostream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("WiFiDistanceApps");

@@ -27,8 +27,6 @@
 #include "ns3/log.h"
 #include "ns3/uinteger.h"
 
-#include <cmath>
-
 namespace ns3
 {
 

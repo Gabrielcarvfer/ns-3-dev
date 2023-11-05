@@ -25,14 +25,11 @@
 #include "burst-profile-manager.h"
 #include "connection-manager.h"
 #include "ss-manager.h"
-#include "ss-record.h"
 
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
-
-#include <stdint.h>
 
 namespace ns3
 {

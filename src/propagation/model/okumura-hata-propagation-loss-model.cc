@@ -25,7 +25,6 @@
 #include "ns3/log.h"
 #include "ns3/mobility-model.h"
 
-#include <algorithm>
 #include <cmath>
 
 namespace ns3

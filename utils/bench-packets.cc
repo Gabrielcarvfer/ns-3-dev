@@ -26,12 +26,7 @@
 #include "ns3/packet.h"
 #include "ns3/system-wall-clock-ms.h"
 
-#include <algorithm>
-#include <iostream>
-#include <limits>
 #include <sstream>
-#include <stdlib.h> // for exit ()
-#include <string>
 
 using namespace ns3;
 

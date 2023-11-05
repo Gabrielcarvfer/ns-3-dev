@@ -19,20 +19,13 @@
  *                               <amine.ismail@UDcast.com>
  */
 
-#include "ss-net-device.h"
-
 #include "bandwidth-manager.h"
 #include "burst-profile-manager.h"
 #include "connection-manager.h"
 #include "dl-mac-messages.h"
-#include "service-flow-manager.h"
-#include "service-flow-record.h"
-#include "service-flow.h"
 #include "ss-link-manager.h"
 #include "ss-scheduler.h"
 #include "ul-mac-messages.h"
-#include "wimax-mac-queue.h"
-#include "wimax-phy.h"
 
 #include "ns3/config.h"
 #include "ns3/enum.h"
@@ -41,8 +34,6 @@
 #include "ns3/pointer.h"
 #include "ns3/simulator.h"
 #include "ns3/trace-source-accessor.h"
-
-#include <algorithm>
 
 namespace ns3
 {

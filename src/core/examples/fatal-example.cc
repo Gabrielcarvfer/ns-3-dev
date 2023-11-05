@@ -21,8 +21,6 @@
 #include "ns3/fatal-error.h"
 #include "ns3/simulator.h"
 
-#include <iostream>
-
 /**
  * \file
  * \defgroup fatal-example Core example: NS_FATAL error handlers

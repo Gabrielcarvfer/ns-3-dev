@@ -30,9 +30,6 @@
 #include "ns3/packet-sink.h"
 #include "ns3/point-to-point-module.h"
 
-#include <fstream>
-#include <string>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpBulkSendExample");

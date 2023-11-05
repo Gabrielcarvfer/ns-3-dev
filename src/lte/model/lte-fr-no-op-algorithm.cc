@@ -20,8 +20,6 @@
 
 #include "lte-fr-no-op-algorithm.h"
 
-#include <ns3/log.h>
-
 namespace ns3
 {
 

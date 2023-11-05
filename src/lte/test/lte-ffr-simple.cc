@@ -21,7 +21,6 @@
 #include "lte-ffr-simple.h"
 
 #include "ns3/lte-rrc-sap.h"
-#include <ns3/log.h>
 #include "ns3/uinteger.h"
 
 namespace ns3

@@ -22,8 +22,10 @@
  * Adapted from wifi-ht-network.cc example
  */
 
+#include "ns3/boolean.h"
 #include "ns3/command-line.h"
 #include "ns3/config.h"
+#include "ns3/double.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/mobility-helper.h"
@@ -37,14 +39,12 @@
 #include "ns3/ssid.h"
 #include "ns3/string.h"
 #include "ns3/udp-client-server-helper.h"
+#include "ns3/uinteger.h"
 #include "ns3/waveform-generator-helper.h"
 #include "ns3/waveform-generator.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/yans-wifi-channel.h"
 #include "ns3/yans-wifi-helper.h"
-#include "ns3/boolean.h"
-#include "ns3/double.h"
-#include "ns3/uinteger.h"
 
 #include <iomanip>
 

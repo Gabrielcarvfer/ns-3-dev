@@ -16,10 +16,6 @@
  */
 
 #include <iomanip>
-#include <iostream>
-#include <sstream>
-#include <stdint.h>
-#include <string>
 
 namespace ns3
 {

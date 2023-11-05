@@ -26,9 +26,6 @@
 
 #include "show-progress.h"
 
-#include "event-id.h"
-#include "log.h"
-#include "nstime.h"
 #include "simulator.h"
 
 #include <iomanip>

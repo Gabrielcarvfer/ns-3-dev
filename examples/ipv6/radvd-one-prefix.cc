@@ -38,8 +38,6 @@
 #include "ns3/radvd-prefix.h"
 #include "ns3/radvd.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("RadvdExample");

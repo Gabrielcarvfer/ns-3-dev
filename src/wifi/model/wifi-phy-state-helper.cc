@@ -17,19 +17,13 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "wifi-phy-state-helper.h"
-
 #include "wifi-phy-listener.h"
 #include "wifi-phy.h"
 #include "wifi-psdu.h"
-#include "wifi-tx-vector.h"
 
 #include "ns3/log.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
-
-#include <algorithm>
-#include <iterator>
 
 namespace ns3
 {

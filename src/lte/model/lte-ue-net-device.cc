@@ -26,10 +26,8 @@
 
 #include "epc-ue-nas.h"
 #include "lte-enb-net-device.h"
-#include "lte-net-device.h"
 #include "lte-ue-component-carrier-manager.h"
 #include "lte-ue-mac.h"
-#include "lte-ue-phy.h"
 #include "lte-ue-rrc.h"
 
 #include "ns3/callback.h"
@@ -48,8 +46,6 @@
 #include "ns3/uinteger.h"
 #include <ns3/ipv4-l3-protocol.h>
 #include <ns3/ipv6-l3-protocol.h>
-#include <ns3/log.h>
-#include <ns3/object-factory.h>
 #include <ns3/object-map.h>
 
 namespace ns3

@@ -21,7 +21,6 @@
 
 #include "ap-wifi-mac.h"
 #include "wifi-mac-queue.h"
-#include "wifi-mac-trailer.h"
 
 #include "ns3/abort.h"
 #include "ns3/boolean.h"

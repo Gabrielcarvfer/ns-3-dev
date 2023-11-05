@@ -40,20 +40,12 @@
 #include "ns3/applications-module.h"
 #include "ns3/assert.h"
 #include "ns3/core-module.h"
-#include "ns3/global-route-manager.h"
 #include "ns3/internet-module.h"
 #include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/mobility-module.h"
 #include "ns3/netanim-module.h"
 #include "ns3/network-module.h"
 #include "ns3/point-to-point-module.h"
-
-#include <cstdlib>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <vector>
 
 using namespace ns3;
 

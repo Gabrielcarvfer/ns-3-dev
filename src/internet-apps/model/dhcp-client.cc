@@ -24,8 +24,6 @@
 
 #include "dhcp-client.h"
 
-#include "dhcp-header.h"
-
 #include "ns3/ipv4-routing-table-entry.h"
 #include "ns3/ipv4-static-routing-helper.h"
 #include "ns3/ipv4.h"

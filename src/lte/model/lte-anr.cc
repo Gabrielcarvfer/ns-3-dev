@@ -26,7 +26,6 @@
 
 #include "lte-anr.h"
 
-#include <ns3/log.h>
 #include <ns3/uinteger.h>
 
 namespace ns3

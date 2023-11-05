@@ -39,9 +39,6 @@
 #include "ns3/network-module.h"
 #include "ns3/traffic-control-module.h"
 
-#include <chrono>
-#include <unistd.h>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("NetmapEmulationSendExample");

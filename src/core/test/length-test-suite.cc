@@ -29,15 +29,8 @@
 #include <boost/units/systems/si/prefixes.hpp>
 #endif
 
-#include <array>
-#include <cmath>
-#include <functional>
-#include <initializer_list>
 #include <iomanip>
-#include <limits>
 #include <map>
-#include <sstream>
-#include <string>
 
 /**
  * \file

@@ -20,11 +20,7 @@
 
 #include "lte-spectrum-value-helper.h"
 
-#include <ns3/fatal-error.h>
-#include <ns3/log.h>
-
 #include <cmath>
-#include <map>
 
 // just needed to log a std::vector<int> properly...
 namespace std

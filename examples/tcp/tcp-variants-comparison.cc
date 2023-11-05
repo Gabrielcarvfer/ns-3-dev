@@ -36,7 +36,6 @@
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/enum.h"
-#include "ns3/error-model.h"
 #include "ns3/event-id.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/internet-module.h"
@@ -46,10 +45,6 @@
 #include "ns3/tcp-header.h"
 #include "ns3/traffic-control-module.h"
 #include "ns3/udp-header.h"
-
-#include <fstream>
-#include <iostream>
-#include <string>
 
 using namespace ns3;
 

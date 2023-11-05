@@ -18,9 +18,6 @@
  */
 #include "enum.h"
 
-#include "fatal-error.h"
-#include "log.h"
-
 #include <algorithm> // find_if
 #include <numeric>   // std::accumulate
 #include <sstream>

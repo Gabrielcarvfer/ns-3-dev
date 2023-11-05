@@ -29,7 +29,6 @@
 #include "ns3/wifi-tx-vector.h"
 #include "ns3/yans-error-rate-model.h"
 
-#include <cmath>
 #include <fstream>
 
 using namespace ns3;

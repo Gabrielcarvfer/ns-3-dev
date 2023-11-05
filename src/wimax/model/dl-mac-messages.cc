@@ -23,8 +23,6 @@
 
 #include "ns3/address-utils.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

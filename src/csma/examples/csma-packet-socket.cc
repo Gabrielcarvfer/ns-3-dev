@@ -31,11 +31,6 @@
 #include "ns3/csma-module.h"
 #include "ns3/network-module.h"
 
-#include <cassert>
-#include <fstream>
-#include <iostream>
-#include <string>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("CsmaPacketSocketExample");

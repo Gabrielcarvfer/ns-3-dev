@@ -22,9 +22,6 @@
 #include "ns3/fatal-error.h"
 #include "ns3/vector.h"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
 #include <sstream>
 
 namespace ns3

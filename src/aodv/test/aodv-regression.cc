@@ -39,8 +39,6 @@
 #include "ns3/uinteger.h"
 #include "ns3/yans-wifi-helper.h"
 
-#include <sstream>
-
 using namespace ns3;
 
 /**

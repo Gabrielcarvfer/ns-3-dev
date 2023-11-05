@@ -19,11 +19,7 @@
 #include "ns3/pcap-file.h"
 #include "ns3/test.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <iostream>
-#include <sstream>
 
 using namespace ns3;
 

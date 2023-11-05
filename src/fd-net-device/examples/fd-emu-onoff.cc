@@ -108,11 +108,6 @@
 #include "ns3/internet-module.h"
 #include "ns3/network-module.h"
 
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("EmuFdNetDeviceSaturationExample");

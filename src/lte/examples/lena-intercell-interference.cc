@@ -26,7 +26,6 @@
 #include "ns3/radio-bearer-stats-calculator.h"
 
 #include <iomanip>
-#include <string>
 
 using namespace ns3;
 

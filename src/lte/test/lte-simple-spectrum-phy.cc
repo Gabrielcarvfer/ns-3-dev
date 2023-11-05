@@ -23,13 +23,7 @@
 #include "ns3/lte-net-device.h"
 #include "ns3/lte-phy-tag.h"
 #include "ns3/lte-spectrum-signal-parameters.h"
-#include <ns3/antenna-model.h>
-#include <ns3/boolean.h>
-#include <ns3/double.h>
-#include <ns3/log.h>
 #include <ns3/simulator.h>
-
-#include <cmath>
 
 namespace ns3
 {

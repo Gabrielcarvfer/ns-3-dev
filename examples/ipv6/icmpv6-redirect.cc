@@ -46,8 +46,6 @@
 #include "ns3/ipv6-routing-table-entry.h"
 #include "ns3/ipv6-static-routing-helper.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("Icmpv6RedirectExample");

@@ -52,10 +52,6 @@
 #include "ns3/udp-socket.h"
 #include "ns3/uinteger.h"
 
-#include <functional>
-#include <limits>
-#include <string>
-
 using namespace ns3;
 
 /**

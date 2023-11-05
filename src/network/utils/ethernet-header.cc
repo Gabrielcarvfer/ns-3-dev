@@ -26,7 +26,6 @@
 #include "ns3/log.h"
 
 #include <iomanip>
-#include <iostream>
 
 namespace ns3
 {

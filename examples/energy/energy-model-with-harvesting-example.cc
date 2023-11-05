@@ -55,11 +55,6 @@
 #include "ns3/wifi-radio-energy-model-helper.h"
 #include "ns3/yans-wifi-helper.h"
 
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("EnergyWithHarvestingExample");

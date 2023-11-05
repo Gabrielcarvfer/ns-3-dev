@@ -42,9 +42,6 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/traffic-control-module.h"
 
-#include <fstream>
-#include <iostream>
-#include <string>
 #include <sys/stat.h>
 
 using namespace ns3;

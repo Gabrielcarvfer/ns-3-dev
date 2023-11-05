@@ -31,16 +31,9 @@
 #include "lte-rlc-am.h"
 #include "lte-rlc-tm.h"
 #include "lte-rlc-um.h"
-#include "lte-rlc.h"
 
-#include <ns3/fatal-error.h>
-#include <ns3/log.h>
-#include <ns3/object-factory.h>
-#include <ns3/object-map.h>
-#include <ns3/simulator.h>
 #include "ns3/pointer.h"
-
-#include <cmath>
+#include <ns3/object-map.h>
 
 namespace ns3
 {

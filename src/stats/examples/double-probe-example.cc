@@ -24,8 +24,6 @@
 #include "ns3/core-module.h"
 #include "ns3/double-probe.h"
 
-#include <string>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("DoubleProbeExample");

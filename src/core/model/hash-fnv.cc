@@ -31,11 +31,6 @@
 
 #include "hash-fnv.h"
 
-#include "log.h"
-
-#include <stdlib.h>
-#include <sys/types.h>
-
 /**
  * \file
  * \ingroup hash

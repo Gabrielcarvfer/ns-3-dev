@@ -17,17 +17,10 @@
  * Author: Jahanzeb Farooq <jahanzeb.farooq@sophia.inria.fr>
  */
 
-#include "bs-uplink-scheduler.h"
-
 #include "bandwidth-manager.h"
 #include "bs-link-manager.h"
-#include "bs-net-device.h"
 #include "burst-profile-manager.h"
-#include "cid.h"
-#include "service-flow-record.h"
-#include "service-flow.h"
 #include "ss-manager.h"
-#include "ss-record.h"
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"

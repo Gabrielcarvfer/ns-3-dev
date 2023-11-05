@@ -76,9 +76,6 @@
 #include "ns3/olsr-module.h"
 #include "ns3/yans-wifi-helper.h"
 
-#include <fstream>
-#include <iostream>
-
 using namespace ns3;
 using namespace dsr;
 

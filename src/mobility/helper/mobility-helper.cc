@@ -28,8 +28,6 @@
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 
-#include <iostream>
-
 namespace ns3
 {
 

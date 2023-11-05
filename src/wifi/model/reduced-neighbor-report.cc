@@ -24,8 +24,6 @@
 #include "ns3/abort.h"
 #include "ns3/address-utils.h"
 
-#include <iterator>
-
 namespace ns3
 {
 

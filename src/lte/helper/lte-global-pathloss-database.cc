@@ -23,8 +23,6 @@
 #include "ns3/lte-spectrum-phy.h"
 #include "ns3/lte-ue-net-device.h"
 
-#include <limits>
-
 namespace ns3
 {
 

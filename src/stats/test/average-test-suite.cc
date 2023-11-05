@@ -20,8 +20,6 @@
 #include "ns3/average.h"
 #include "ns3/test.h"
 
-#include <cmath>
-
 using namespace ns3;
 
 // Note, the rationale for this particular value of TOLERANCE is not

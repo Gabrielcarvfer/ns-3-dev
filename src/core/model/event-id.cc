@@ -16,10 +16,7 @@
  *
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
-#include "event-id.h"
 
-#include "event-impl.h"
-#include "log.h"
 #include "simulator.h"
 
 /**

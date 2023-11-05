@@ -47,8 +47,6 @@
 #include "ns3/simulator.h"
 #include "ns3/test.h"
 
-#include <algorithm>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("ns2-mobility-helper-test-suite");

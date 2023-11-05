@@ -17,9 +17,6 @@
  * Author: Peter D. Barnes, Jr. <pdbarnes@llnl.gov>
  */
 
-#include "node-printer.h"
-
-#include "log.h"
 #include "simulator.h" // GetContext()
 
 #include <iomanip>

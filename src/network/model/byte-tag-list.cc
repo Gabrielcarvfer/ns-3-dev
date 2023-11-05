@@ -21,8 +21,6 @@
 #include "ns3/log.h"
 
 #include <cstring>
-#include <limits>
-#include <vector>
 
 #define USE_FREE_LIST 1
 #define FREE_LIST_SIZE 1000

@@ -19,8 +19,6 @@
 
 #include "he-capabilities.h"
 
-#include <algorithm>
-
 namespace ns3
 {
 

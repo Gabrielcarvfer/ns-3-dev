@@ -26,7 +26,6 @@
 
 #include <bitset>
 #include <iomanip>
-#include <list>
 
 NS_LOG_COMPONENT_DEFINE("TestLteRlcHeader");
 

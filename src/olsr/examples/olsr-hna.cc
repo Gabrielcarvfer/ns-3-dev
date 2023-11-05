@@ -59,11 +59,6 @@
 #include "ns3/olsr-routing-protocol.h"
 #include "ns3/yans-wifi-helper.h"
 
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("OlsrHna");

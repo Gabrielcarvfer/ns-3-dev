@@ -23,8 +23,6 @@
 
 #include "ns3/uinteger.h"
 
-#include <stdint.h>
-
 namespace ns3
 {
 

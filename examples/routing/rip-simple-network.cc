@@ -56,8 +56,6 @@
 #include "ns3/ipv4-routing-table-entry.h"
 #include "ns3/ipv4-static-routing-helper.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("RipSimpleRouting");

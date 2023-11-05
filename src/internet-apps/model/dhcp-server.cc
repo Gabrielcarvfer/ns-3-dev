@@ -23,8 +23,6 @@
 
 #include "dhcp-server.h"
 
-#include "dhcp-header.h"
-
 #include "ns3/assert.h"
 #include "ns3/ipv4-packet-info-tag.h"
 #include "ns3/ipv4.h"
@@ -33,8 +31,6 @@
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
 #include "ns3/socket.h"
-
-#include <algorithm>
 
 namespace ns3
 {

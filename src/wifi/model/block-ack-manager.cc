@@ -22,16 +22,10 @@
 #include "ctrl-headers.h"
 #include "mac-rx-middle.h"
 #include "mgt-headers.h"
-#include "qos-utils.h"
 #include "wifi-mac-queue.h"
-#include "wifi-tx-vector.h"
-#include "wifi-utils.h"
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
-
-#include <algorithm>
-#include <optional>
 
 namespace ns3
 {

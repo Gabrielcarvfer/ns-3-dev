@@ -18,13 +18,10 @@
  */
 
 #include <ns3/antenna-model.h>
-#include <ns3/log.h>
 #include <ns3/test.h>
 
 #include <cmath>
-#include <iostream>
 #include <sstream>
-#include <string>
 
 using namespace ns3;
 

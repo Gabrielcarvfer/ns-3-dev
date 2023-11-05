@@ -17,11 +17,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "channel-access-manager.h"
-
-#include "txop.h"
 #include "wifi-phy-listener.h"
-#include "wifi-phy.h"
 
 #include "ns3/eht-frame-exchange-manager.h"
 #include "ns3/log.h"

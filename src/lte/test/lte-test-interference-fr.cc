@@ -22,8 +22,6 @@
 
 #include "lte-test-interference-fr.h"
 
-#include "lte-simple-spectrum-phy.h"
-
 #include "ns3/boolean.h"
 #include "ns3/double.h"
 #include "ns3/ff-mac-scheduler.h"
@@ -40,7 +38,6 @@
 #include "ns3/string.h"
 #include <ns3/enum.h>
 #include <ns3/lte-chunk-processor.h>
-#include <ns3/pointer.h>
 
 using namespace ns3;
 

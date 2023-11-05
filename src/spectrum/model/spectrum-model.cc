@@ -20,12 +20,6 @@
 
 #include "spectrum-model.h"
 
-#include <ns3/assert.h>
-#include <ns3/log.h>
-
-#include <cmath>
-#include <cstddef>
-
 namespace ns3
 {
 

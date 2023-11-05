@@ -37,8 +37,6 @@
 #include "ns3/mobility-module.h"
 #include "ns3/sixlowpan-module.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("Ping6WsnExample");

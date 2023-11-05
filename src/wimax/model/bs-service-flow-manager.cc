@@ -18,16 +18,9 @@
  *          Mohamed Amine Ismail <amine.ismail@sophia.inria.fr>
  */
 
-#include "bs-net-device.h"
 #include "bs-uplink-scheduler.h"
 #include "connection-manager.h"
-#include "service-flow-manager.h"
-#include "service-flow-record.h"
-#include "service-flow.h"
 #include "ss-manager.h"
-#include "ss-record.h"
-#include "ss-scheduler.h"
-#include "wimax-connection.h"
 
 #include "ns3/buffer.h"
 #include "ns3/enum.h"
@@ -36,8 +29,6 @@
 #include "ns3/packet.h"
 #include "ns3/pointer.h"
 #include "ns3/simulator.h"
-
-#include <stdint.h>
 
 namespace ns3
 {

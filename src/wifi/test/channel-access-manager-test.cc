@@ -27,9 +27,6 @@
 #include "ns3/spectrum-wifi-phy.h"
 #include "ns3/test.h"
 
-#include <list>
-#include <numeric>
-
 using namespace ns3;
 
 template <typename TxopType>

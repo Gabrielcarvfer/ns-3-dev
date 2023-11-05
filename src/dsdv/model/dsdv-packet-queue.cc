@@ -33,9 +33,6 @@
 #include "ns3/log.h"
 #include "ns3/socket.h"
 
-#include <algorithm>
-#include <functional>
-
 namespace ns3
 {
 

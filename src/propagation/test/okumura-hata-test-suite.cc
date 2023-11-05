@@ -21,9 +21,7 @@
 #include <ns3/constant-position-mobility-model.h>
 #include <ns3/double.h>
 #include <ns3/enum.h>
-#include <ns3/log.h>
 #include <ns3/okumura-hata-propagation-loss-model.h>
-#include <ns3/string.h>
 #include <ns3/test.h>
 
 using namespace ns3;

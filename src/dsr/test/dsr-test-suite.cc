@@ -46,8 +46,6 @@
 #include "ns3/test.h"
 #include "ns3/uinteger.h"
 
-#include <vector>
-
 using namespace ns3;
 using namespace dsr;
 

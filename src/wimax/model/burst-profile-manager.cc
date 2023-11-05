@@ -19,15 +19,11 @@
 
 #include "burst-profile-manager.h"
 
-#include "bs-net-device.h"
 #include "mac-messages.h"
-#include "ss-manager.h"
 #include "ss-net-device.h"
 #include "ss-record.h"
 
 #include "ns3/log.h"
-
-#include <stdint.h>
 
 namespace ns3
 {

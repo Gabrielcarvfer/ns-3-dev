@@ -52,10 +52,6 @@
 #include "ns3/mobility-module.h"
 #include "ns3/ns2-mobility-helper.h"
 
-#include <fstream>
-#include <iostream>
-#include <sstream>
-
 using namespace ns3;
 
 // Prints actual position and velocity when a course change event occurs

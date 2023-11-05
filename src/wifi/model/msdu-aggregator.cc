@@ -18,21 +18,12 @@
  *         Stefano Avallone <stavallo@unina.it>
  */
 
-#include "msdu-aggregator.h"
-
-#include "qos-txop.h"
 #include "wifi-mac-queue.h"
-#include "wifi-mac-trailer.h"
-#include "wifi-mac.h"
-#include "wifi-remote-station-manager.h"
-#include "wifi-tx-parameters.h"
 
 #include "ns3/ht-capabilities.h"
 #include "ns3/ht-frame-exchange-manager.h"
 #include "ns3/log.h"
 #include "ns3/packet.h"
-
-#include <algorithm>
 
 namespace ns3
 {

@@ -19,9 +19,6 @@
 
 #include "mu-edca-parameter-set.h"
 
-#include <algorithm>
-#include <cmath>
-
 namespace ns3
 {
 

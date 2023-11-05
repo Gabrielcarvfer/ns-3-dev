@@ -17,6 +17,7 @@
  * Author: Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
+#include "ns3/boolean.h"
 #include "ns3/command-line.h"
 #include "ns3/config.h"
 #include "ns3/ht-configuration.h"
@@ -36,7 +37,6 @@
 #include "ns3/wifi-net-device.h"
 #include "ns3/yans-wifi-channel.h"
 #include "ns3/yans-wifi-helper.h"
-#include "ns3/boolean.h"
 
 // This example shows how to configure mixed networks (i.e. mixed b/g and HT/non-HT) and how are
 // performance in several scenarios.

@@ -31,7 +31,6 @@
 #include "ns3/simulator.h"
 #include "ns3/spectrum-test.h"
 #include <ns3/lte-chunk-processor.h>
-#include <ns3/lte-control-messages.h>
 
 using namespace ns3;
 

@@ -19,7 +19,6 @@
 
 #include "lte-rlc.h"
 
-#include "lte-rlc-sap.h"
 #include "lte-rlc-tag.h"
 // #include "lte-mac-sap.h"
 // #include "ff-mac-sched-sap.h"

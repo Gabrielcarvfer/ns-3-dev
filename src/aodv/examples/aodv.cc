@@ -28,9 +28,6 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/yans-wifi-helper.h"
 
-#include <cmath>
-#include <iostream>
-
 using namespace ns3;
 
 /**

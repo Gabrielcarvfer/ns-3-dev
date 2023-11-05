@@ -35,7 +35,6 @@
 #include "ns3/uinteger.h"
 #include <ns3/ipv4-l3-protocol.h>
 #include <ns3/ipv6-l3-protocol.h>
-#include <ns3/log.h>
 
 namespace ns3
 {

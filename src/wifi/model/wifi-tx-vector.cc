@@ -18,17 +18,10 @@
  *          Ghada Badawy <gbadawy@gmail.com>
  */
 
-#include "wifi-tx-vector.h"
-
-#include "wifi-phy-common.h"
-
 #include "ns3/abort.h"
 #include "ns3/eht-phy.h"
 
-#include <algorithm>
-#include <iterator>
 #include <numeric>
-#include <set>
 
 namespace ns3
 {

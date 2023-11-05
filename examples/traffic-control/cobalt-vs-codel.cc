@@ -29,9 +29,6 @@
 #include "ns3/tcp-header.h"
 #include "ns3/traffic-control-module.h"
 
-#include <fstream>
-#include <string>
-
 // Dumbbell topology with 7 senders and 1 receiver
 // is used for this example. On successful completion,
 // the Congestion window and Queue size traces get stored

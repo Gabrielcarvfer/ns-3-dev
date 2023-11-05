@@ -31,9 +31,6 @@
 #include "ns3/test.h"
 #include "ns3/udp-socket-factory.h"
 
-#include <limits>
-#include <string>
-
 using namespace ns3;
 
 /**

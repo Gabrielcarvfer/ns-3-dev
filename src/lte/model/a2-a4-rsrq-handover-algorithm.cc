@@ -26,10 +26,7 @@
 
 #include "a2-a4-rsrq-handover-algorithm.h"
 
-#include <ns3/log.h>
 #include <ns3/uinteger.h>
-
-#include <algorithm>
 
 namespace ns3
 {

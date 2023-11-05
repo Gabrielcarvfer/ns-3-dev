@@ -21,7 +21,6 @@
 #include "ns3/component-carrier.h"
 #include "ns3/config-store.h"
 #include "ns3/core-module.h"
-#include <ns3/buildings-helper.h>
 
 using namespace ns3;
 

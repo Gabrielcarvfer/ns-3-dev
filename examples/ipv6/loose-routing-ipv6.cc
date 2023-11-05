@@ -43,8 +43,6 @@
 #include "ns3/internet-module.h"
 #include "ns3/ipv6-header.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LooseRoutingIpv6Example");

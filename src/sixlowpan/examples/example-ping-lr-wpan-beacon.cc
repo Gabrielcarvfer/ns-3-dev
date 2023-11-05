@@ -26,8 +26,6 @@
 #include "ns3/sixlowpan-module.h"
 #include "ns3/spectrum-module.h"
 
-#include <fstream>
-
 using namespace ns3;
 
 static void

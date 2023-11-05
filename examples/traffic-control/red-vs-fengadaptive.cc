@@ -26,10 +26,6 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/traffic-control-module.h"
 
-#include <iomanip>
-#include <iostream>
-#include <map>
-
 using namespace ns3;
 
 int
