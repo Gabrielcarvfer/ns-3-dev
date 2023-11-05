@@ -20,6 +20,7 @@
 #include "ns3/adhoc-wifi-mac.h"
 #include "ns3/boolean.h"
 #include "ns3/constant-position-mobility-model.h"
+#include "ns3/double.h"
 #include "ns3/fcfs-wifi-queue-scheduler.h"
 #include "ns3/frame-exchange-manager.h"
 #include "ns3/interference-helper.h"
