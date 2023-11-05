@@ -23,8 +23,6 @@
 #include "ns3/nstime.h"
 #include "ns3/wifi-information-element.h"
 
-#include <array>
-
 namespace ns3
 {
 

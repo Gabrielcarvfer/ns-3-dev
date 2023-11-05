@@ -28,7 +28,6 @@
 #include "reduced-neighbor-report.h"
 #include "ssid.h"
 #include "status-code.h"
-#include "supported-rates.h"
 #include "wifi-mgt-header.h"
 
 #include "ns3/dsss-parameter-set.h"
@@ -45,8 +44,6 @@
 #include "ns3/tid-to-link-mapping-element.h"
 #include "ns3/vht-capabilities.h"
 #include "ns3/vht-operation.h"
-
-#include <list>
 
 namespace ns3
 {

@@ -28,9 +28,6 @@
 #include "ns3/trace-helper.h"
 #include "ns3/wifi-phy.h"
 
-#include <functional>
-#include <vector>
-
 namespace ns3
 {
 

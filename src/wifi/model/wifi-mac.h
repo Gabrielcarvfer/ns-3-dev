@@ -20,20 +20,10 @@
 #ifndef WIFI_MAC_H
 #define WIFI_MAC_H
 
-#include "qos-utils.h"
 #include "ssid.h"
 #include "wifi-mac-queue-scheduler.h"
 #include "wifi-remote-station-manager.h"
-#include "wifi-standards.h"
-
-#include <functional>
-#include <list>
-#include <map>
-#include <memory>
-#include <optional>
-#include <set>
-#include <unordered_map>
-#include <vector>
+#include "wifi-utils.h"
 
 namespace ns3
 {

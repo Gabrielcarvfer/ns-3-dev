@@ -27,12 +27,6 @@
 #include "ns3/nstime.h"
 #include "ns3/object.h"
 
-#include <algorithm>
-#include <map>
-#include <memory>
-#include <unordered_map>
-#include <vector>
-
 namespace ns3
 {
 

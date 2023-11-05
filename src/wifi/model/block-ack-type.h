@@ -20,7 +20,6 @@
 #ifndef BLOCK_ACK_TYPE_H
 #define BLOCK_ACK_TYPE_H
 
-#include <cstdint>
 #include <ostream>
 #include <vector>
 

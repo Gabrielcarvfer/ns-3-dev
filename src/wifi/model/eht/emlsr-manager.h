@@ -27,10 +27,6 @@
 #include "ns3/sta-wifi-mac.h"
 #include "ns3/wifi-phy-operating-channel.h"
 
-#include <map>
-#include <optional>
-#include <set>
-
 namespace ns3
 {
 

@@ -24,8 +24,6 @@
 
 #include "ns3/phy-entity.h"
 
-#include <vector>
-
 /**
  * \file
  * \ingroup wifi

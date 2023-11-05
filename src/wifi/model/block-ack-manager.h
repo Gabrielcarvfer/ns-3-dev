@@ -20,19 +20,13 @@
 #ifndef BLOCK_ACK_MANAGER_H
 #define BLOCK_ACK_MANAGER_H
 
-#include "block-ack-type.h"
 #include "originator-block-ack-agreement.h"
 #include "recipient-block-ack-agreement.h"
-#include "wifi-mac-header.h"
 #include "wifi-mpdu.h"
-#include "wifi-tx-vector.h"
 
 #include "ns3/nstime.h"
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"
-
-#include <map>
-#include <optional>
 
 namespace ns3
 {

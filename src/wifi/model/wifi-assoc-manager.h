@@ -20,12 +20,7 @@
 #ifndef WIFI_ASSOC_MANAGER_H
 #define WIFI_ASSOC_MANAGER_H
 
-#include "qos-utils.h"
 #include "sta-wifi-mac.h"
-
-#include <optional>
-#include <set>
-#include <unordered_map>
 
 namespace ns3
 {

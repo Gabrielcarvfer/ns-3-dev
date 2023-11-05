@@ -20,17 +20,8 @@
 #ifndef WIFI_MAC_QUEUE_SCHEDULER_IMPL_H
 #define WIFI_MAC_QUEUE_SCHEDULER_IMPL_H
 
-#include "wifi-mac-queue-scheduler.h"
 #include "wifi-mac-queue.h"
 #include "wifi-mac.h"
-
-#include <algorithm>
-#include <functional>
-#include <list>
-#include <map>
-#include <numeric>
-#include <unordered_map>
-#include <vector>
 
 class WifiMacQueueDropOldestTest;
 

@@ -25,10 +25,6 @@
 
 #include "ns3/nstime.h"
 
-#include <map>
-#include <memory>
-#include <set>
-
 namespace ns3
 {
 

@@ -23,8 +23,6 @@
 
 #include "wifi-phy-common.h"
 
-#include <vector>
-
 namespace ns3
 {
 

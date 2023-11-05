@@ -22,11 +22,7 @@
 #ifndef AP_WIFI_MAC_H
 #define AP_WIFI_MAC_H
 
-#include "wifi-mac-header.h"
 #include "wifi-mac.h"
-
-#include <unordered_map>
-#include <variant>
 
 namespace ns3
 {

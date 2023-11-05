@@ -25,10 +25,7 @@
 #include "wifi-standards.h"
 
 #include "ns3/fatal-error.h"
-#include "ns3/ptr.h"
 #include "ns3/wifi-spectrum-value-helper.h"
-
-#include <ostream>
 
 /**
  * \file

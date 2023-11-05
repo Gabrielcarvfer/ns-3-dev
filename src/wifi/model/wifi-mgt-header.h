@@ -28,11 +28,7 @@
 #include "ns3/multi-link-element.h"
 
 #include <algorithm>
-#include <iterator>
 #include <numeric>
-#include <optional>
-#include <utility>
-#include <vector>
 
 namespace ns3
 {

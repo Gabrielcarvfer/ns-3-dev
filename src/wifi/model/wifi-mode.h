@@ -26,8 +26,6 @@
 #include "ns3/attribute-helper.h"
 #include "ns3/callback.h"
 
-#include <vector>
-
 namespace ns3
 {
 

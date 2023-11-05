@@ -23,7 +23,6 @@
 #define QOS_TXOP_H
 
 #include "block-ack-manager.h"
-#include "qos-utils.h"
 #include "txop.h"
 
 #include "ns3/traced-value.h"

@@ -23,7 +23,6 @@
 #include "ns3/object.h"
 
 #include <map>
-#include <tuple>
 
 namespace ns3
 {

@@ -23,8 +23,6 @@
 #include "ns3/he-frame-exchange-manager.h"
 #include "ns3/mgt-headers.h"
 
-#include <unordered_map>
-
 namespace ns3
 {
 

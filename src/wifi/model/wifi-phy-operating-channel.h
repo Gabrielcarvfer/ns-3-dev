@@ -21,13 +21,11 @@
 #ifndef WIFI_PHY_OPERATING_CHANNEL_H
 #define WIFI_PHY_OPERATING_CHANNEL_H
 
-#include "wifi-phy-band.h"
 #include "wifi-standards.h"
 
 #include "ns3/he-ru.h"
 
 #include <set>
-#include <tuple>
 
 namespace ns3
 {

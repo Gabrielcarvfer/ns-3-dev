@@ -25,8 +25,6 @@
 #include "ns3/callback.h"
 #include "ns3/nstime.h"
 
-#include <map>
-
 namespace ns3
 {
 

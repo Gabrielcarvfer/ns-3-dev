@@ -22,8 +22,6 @@
 
 #include "ns3/he-ppdu.h"
 
-#include <optional>
-
 /**
  * \file
  * \ingroup wifi

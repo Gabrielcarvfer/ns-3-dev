@@ -26,8 +26,6 @@
 
 #include <list>
 #include <optional>
-#include <tuple>
-#include <unordered_map>
 
 namespace ns3
 {

@@ -25,7 +25,6 @@
 #include "ns3/wifi-remote-station-manager.h"
 
 #include <fstream>
-#include <map>
 
 namespace ns3
 {

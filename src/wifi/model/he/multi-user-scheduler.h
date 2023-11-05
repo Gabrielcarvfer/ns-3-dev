@@ -20,15 +20,11 @@
 #ifndef MULTI_USER_SCHEDULER_H
 #define MULTI_USER_SCHEDULER_H
 
-#include "he-ru.h"
-
 #include "ns3/ap-wifi-mac.h"
 #include "ns3/ctrl-headers.h"
 #include "ns3/object.h"
 #include "ns3/wifi-remote-station-manager.h"
 #include "ns3/wifi-tx-parameters.h"
-
-#include <unordered_map>
 
 namespace ns3
 {

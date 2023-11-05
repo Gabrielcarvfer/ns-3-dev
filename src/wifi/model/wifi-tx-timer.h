@@ -25,9 +25,6 @@
 #include "ns3/simulator.h"
 #include "ns3/traced-callback.h"
 
-#include <functional>
-#include <unordered_map>
-
 namespace ns3
 {
 

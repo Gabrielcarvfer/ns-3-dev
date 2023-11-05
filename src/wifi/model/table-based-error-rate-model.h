@@ -22,7 +22,6 @@
 #define TABLE_BASED_ERROR_RATE_MODEL_H
 
 #include "error-rate-model.h"
-#include "wifi-mode.h"
 
 #include "ns3/error-rate-tables.h"
 

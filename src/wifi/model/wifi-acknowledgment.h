@@ -20,15 +20,11 @@
 #ifndef WIFI_ACKNOWLEDGMENT_H
 #define WIFI_ACKNOWLEDGMENT_H
 
-#include "block-ack-type.h"
 #include "ctrl-headers.h"
 #include "wifi-mac-header.h"
 #include "wifi-tx-vector.h"
 
 #include "ns3/nstime.h"
-
-#include <map>
-#include <memory>
 
 namespace ns3
 {

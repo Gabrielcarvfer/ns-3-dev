@@ -24,7 +24,6 @@
 #include "ns3/wifi-information-element.h"
 #include "ns3/wifi-mac-header.h"
 
-#include <memory>
 #include <optional>
 #include <variant>
 

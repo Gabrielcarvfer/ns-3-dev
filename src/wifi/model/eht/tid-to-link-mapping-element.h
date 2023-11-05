@@ -24,9 +24,7 @@
 #include "ns3/wifi-information-element.h"
 #include "ns3/wifi-utils.h"
 
-#include <map>
 #include <optional>
-#include <set>
 
 namespace ns3
 {

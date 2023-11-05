@@ -22,14 +22,11 @@
 #define WIFI_TX_VECTOR_H
 
 #include "wifi-mode.h"
-#include "wifi-phy-common.h"
 
 #include "ns3/he-ru.h"
 
-#include <list>
 #include <optional>
 #include <set>
-#include <vector>
 
 namespace ns3
 {

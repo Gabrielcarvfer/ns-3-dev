@@ -20,7 +20,6 @@
 #ifndef HE_RU_H
 #define HE_RU_H
 
-#include <cstdint>
 #include <map>
 #include <ostream>
 #include <vector>

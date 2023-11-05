@@ -23,15 +23,10 @@
 #ifndef WIFI_MAC_QUEUE_H
 #define WIFI_MAC_QUEUE_H
 
-#include "qos-utils.h"
 #include "wifi-mac-queue-container.h"
 #include "wifi-mpdu.h"
 
 #include "ns3/queue.h"
-
-#include <functional>
-#include <optional>
-#include <unordered_map>
 
 namespace ns3
 {

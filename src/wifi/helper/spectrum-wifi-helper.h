@@ -22,9 +22,6 @@
 
 #include "wifi-helper.h"
 
-#include <map>
-#include <set>
-
 namespace ns3
 {
 

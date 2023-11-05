@@ -23,7 +23,6 @@
 #include <ns3/wifi-information-element.h>
 
 #include <optional>
-#include <vector>
 
 namespace ns3
 {

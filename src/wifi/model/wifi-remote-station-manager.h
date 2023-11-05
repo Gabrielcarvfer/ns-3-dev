@@ -23,7 +23,6 @@
 #include "qos-utils.h"
 #include "wifi-mode.h"
 #include "wifi-remote-station-info.h"
-#include "wifi-utils.h"
 
 #include "ns3/data-rate.h"
 #include "ns3/eht-capabilities.h"
@@ -34,11 +33,6 @@
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"
 #include "ns3/vht-capabilities.h"
-
-#include <array>
-#include <memory>
-#include <optional>
-#include <unordered_map>
 
 namespace ns3
 {

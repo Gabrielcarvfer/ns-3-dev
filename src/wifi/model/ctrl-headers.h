@@ -27,9 +27,6 @@
 #include "ns3/header.h"
 #include "ns3/mac48-address.h"
 
-#include <list>
-#include <vector>
-
 namespace ns3
 {
 

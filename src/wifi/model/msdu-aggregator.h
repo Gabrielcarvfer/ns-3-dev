@@ -20,14 +20,11 @@
 #ifndef MSDU_AGGREGATOR_H
 #define MSDU_AGGREGATOR_H
 
-#include "qos-utils.h"
 #include "wifi-mode.h"
 #include "wifi-mpdu.h"
 
 #include "ns3/nstime.h"
 #include "ns3/object.h"
-
-#include <map>
 
 namespace ns3
 {

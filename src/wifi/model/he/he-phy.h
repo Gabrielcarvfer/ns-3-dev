@@ -28,8 +28,6 @@
 #include "ns3/vht-phy.h"
 #include "ns3/wifi-phy-band.h"
 
-#include <optional>
-
 /**
  * \file
  * \ingroup wifi

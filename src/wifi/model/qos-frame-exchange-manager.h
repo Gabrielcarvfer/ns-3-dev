@@ -22,8 +22,6 @@
 
 #include "frame-exchange-manager.h"
 
-#include <optional>
-
 namespace ns3
 {
 

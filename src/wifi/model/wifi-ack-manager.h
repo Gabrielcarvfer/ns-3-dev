@@ -24,8 +24,6 @@
 
 #include "ns3/object.h"
 
-#include <memory>
-
 namespace ns3
 {
 

@@ -27,8 +27,6 @@
 #include "ns3/traced-value.h"
 
 #include <map>
-#include <memory>
-#include <vector>
 
 class EmlsrUlTxopTest;
 

@@ -24,10 +24,6 @@
 
 #include "ns3/nstime.h"
 
-#include <list>
-#include <optional>
-#include <unordered_map>
-
 /**
  * \file
  * \ingroup wifi

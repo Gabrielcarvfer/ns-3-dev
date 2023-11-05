@@ -24,19 +24,11 @@
 #define PHY_ENTITY_H
 
 #include "wifi-mpdu-type.h"
-#include "wifi-phy-band.h"
 #include "wifi-ppdu.h"
-#include "wifi-tx-vector.h"
 
 #include "ns3/event-id.h"
 #include "ns3/nstime.h"
 #include "ns3/simple-ref-count.h"
-
-#include <list>
-#include <map>
-#include <optional>
-#include <tuple>
-#include <utility>
 
 /**
  * \file

@@ -24,11 +24,8 @@
 #include "phy-entity.h"
 #include "wifi-phy-operating-channel.h"
 #include "wifi-phy-state-helper.h"
-#include "wifi-standards.h"
 
 #include "ns3/error-model.h"
-
-#include <limits>
 
 namespace ns3
 {

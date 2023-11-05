@@ -30,9 +30,7 @@
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
 
-#include <list>
 #include <optional>
-#include <set>
 #include <variant>
 
 namespace ns3

@@ -25,7 +25,6 @@
 
 #include <map>
 #include <optional>
-#include <vector>
 
 namespace ns3
 {

@@ -28,7 +28,6 @@
 #include "wifi-psdu.h"
 #include "wifi-tx-parameters.h"
 #include "wifi-tx-timer.h"
-#include "wifi-tx-vector.h"
 
 // Needed to compile wave bindings
 #include "channel-access-manager.h"

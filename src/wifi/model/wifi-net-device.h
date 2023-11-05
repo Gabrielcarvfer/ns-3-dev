@@ -25,8 +25,6 @@
 #include "ns3/net-device.h"
 #include "ns3/traced-callback.h"
 
-#include <vector>
-
 namespace ns3
 {
 

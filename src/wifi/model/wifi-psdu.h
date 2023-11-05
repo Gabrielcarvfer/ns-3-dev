@@ -20,13 +20,9 @@
 #ifndef WIFI_PSDU_H
 #define WIFI_PSDU_H
 
-#include "wifi-mac-header.h"
 #include "wifi-mpdu.h"
 
 #include "ns3/nstime.h"
-
-#include <set>
-#include <vector>
 
 namespace ns3
 {

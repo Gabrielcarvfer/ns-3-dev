@@ -24,9 +24,6 @@
 
 #include "ns3/vht-frame-exchange-manager.h"
 
-#include <map>
-#include <unordered_map>
-
 namespace ns3
 {
 

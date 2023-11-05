@@ -22,8 +22,6 @@
 
 #include "emlsr-manager.h"
 
-#include <optional>
-
 namespace ns3
 {
 

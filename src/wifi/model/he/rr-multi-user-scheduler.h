@@ -22,8 +22,6 @@
 
 #include "multi-user-scheduler.h"
 
-#include <list>
-
 namespace ns3
 {
 

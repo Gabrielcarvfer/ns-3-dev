@@ -20,13 +20,11 @@
 #ifndef WIFI_MAC_QUEUE_SCHEDULER_H
 #define WIFI_MAC_QUEUE_SCHEDULER_H
 
-#include "qos-utils.h"
 #include "wifi-mac-queue-container.h"
 
 #include "ns3/object.h"
 
 #include <bitset>
-#include <optional>
 
 namespace ns3
 {

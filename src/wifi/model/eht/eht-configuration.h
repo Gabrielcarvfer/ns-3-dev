@@ -25,9 +25,6 @@
 #include "ns3/object.h"
 #include "ns3/wifi-utils.h"
 
-#include <list>
-#include <map>
-
 namespace ns3
 {
 
