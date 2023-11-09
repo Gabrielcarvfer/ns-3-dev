@@ -104,8 +104,9 @@ main(int argc, char* argv[])
     onoff.SetAttribute("PacketSize", UintegerValue(50));
 
     ApplicationContainer apps = onoff.Install(c.Get(0));
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream("mixed-global-routing.tr");
@@ -114,6 +115,10 @@ main(int argc, char* argv[])
 
     p2p.EnablePcapAll("mixed-global-routing");
     csma.EnablePcapAll("mixed-global-routing", false);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

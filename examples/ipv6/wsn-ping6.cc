@@ -114,12 +114,17 @@ main(int argc, char** argv)
     ping.SetAttribute("Interval", TimeValue(interPacketInterval));
     ping.SetAttribute("Size", UintegerValue(packetSize));
     ApplicationContainer apps = ping.Install(nodes.Get(0));
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(2));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     lrWpanHelper.EnableAsciiAll(ascii.CreateFileStream("ping6wsn.tr"));
     lrWpanHelper.EnablePcapAll(std::string("ping6wsn"), true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

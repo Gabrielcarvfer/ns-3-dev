@@ -354,6 +354,8 @@ main(int argc, char* argv[])
     // print the list of buildings to file
     PrintGnuplottableBuildingListToFile("three-gpp-v2v-channel-example-buildings.txt");
 
+    Simulator::Stop(simTime);
+
     Simulator::Run();
     Simulator::Destroy();
     return 0;

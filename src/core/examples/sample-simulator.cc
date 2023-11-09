@@ -105,13 +105,17 @@ main(int argc, char* argv[])
 
     Simulator::Schedule(Seconds(v->GetValue()), &RandomFunction);
 
-    EventId id = Simulator::Schedule(Seconds(30), &CancelledEvent);
+    const Time cancelledEventTime = Seconds(30);
+    EventId id = Simulator::Schedule(cancelledEventTime, &CancelledEvent);
     Simulator::Cancel(id);
 
     Simulator::Schedule(Seconds(25), []() {
         std::cout << "Code within a lambda expression at time " << Simulator::Now().As(Time::S)
                   << std::endl;
     });
+    // Stop well after the latest (cancelled) event time
+    const Time stopTime = cancelledEventTime + Seconds(10);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
 

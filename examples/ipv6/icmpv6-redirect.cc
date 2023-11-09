@@ -114,14 +114,19 @@ main(int argc, char** argv)
     ping.SetAttribute("Count", UintegerValue(maxPacketCount));
     ping.SetAttribute("Size", UintegerValue(packetSize));
     ApplicationContainer apps = ping.Install(sta1);
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(2));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("icmpv6-redirect.tr"));
     csma.EnablePcapAll("icmpv6-redirect", true);
 
     /* Now, do the actual simulation. */
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
+
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();
     Simulator::Destroy();

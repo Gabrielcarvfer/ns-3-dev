@@ -285,6 +285,9 @@ Experiment::Run(UanHelper& uan)
             NS_FATAL_ERROR("Could not open ascii trace file: " << m_asciitracefile);
         }
         UanHelper::EnableAsciiAll(ascii);
+        // Add margin to allow the apps to complete.
+        const Time stopTime = nextEvent + m_simTime + Seconds(1);
+        Simulator::Stop(stopTime);
 
         Simulator::Run();
         sinkNode = nullptr;

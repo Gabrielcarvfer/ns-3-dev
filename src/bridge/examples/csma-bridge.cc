@@ -111,8 +111,9 @@ main(int argc, char* argv[])
 
     ApplicationContainer app = onoff.Install(terminals.Get(0));
     // Start the application
+    const Time appsStop = Seconds(10);
     app.Start(Seconds(1));
-    app.Stop(Seconds(10));
+    app.Stop(appsStop);
 
     // Create an optional packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
@@ -126,7 +127,7 @@ main(int argc, char* argv[])
     onoff.SetAttribute("Remote", AddressValue(InetSocketAddress(Ipv4Address("10.1.1.1"), port)));
     app = onoff.Install(terminals.Get(3));
     app.Start(Seconds(1.1));
-    app.Stop(Seconds(10));
+    app.Stop(appsStop);
 
     app = sink.Install(terminals.Get(0));
     app.Start(Seconds(0));
@@ -148,6 +149,10 @@ main(int argc, char* argv[])
     // display timestamps correctly)
     //
     csma.EnablePcapAll("csma-bridge", false);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     //
     // Now, do the actual simulation.

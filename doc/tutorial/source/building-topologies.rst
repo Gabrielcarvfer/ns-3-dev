@@ -245,8 +245,9 @@ the constructor.
   UdpEchoServerHelper echoServer(9);
 
   ApplicationContainer serverApps = echoServer.Install(csmaNodes.Get(nCsma));
+  const Time appsStop = Seconds(10);
   serverApps.Start(Seconds(1));
-  serverApps.Stop(Seconds(10));
+  serverApps.Stop(appsStop);
 
 Recall that the ``csmaNodes NodeContainer`` contains one of the
 nodes created for the point-to-point network and ``nCsma`` "extra" nodes.
@@ -274,7 +275,7 @@ leftmost point-to-point node seen in the topology illustration.
 
   ApplicationContainer clientApps = echoClient.Install(p2pNodes.Get(0));
   clientApps.Start(Seconds(2));
-  clientApps.Stop(Seconds(10));
+  clientApps.Stop(appsStop);
 
 Since we have actually built an internetwork here, we need some form of
 internetwork routing.  |ns3| provides what we call global routing to
@@ -329,6 +330,8 @@ the ``first.cc`` example.
 
 ::
 
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
     Simulator::Run();
     Simulator::Destroy();
     return 0;

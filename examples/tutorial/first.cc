@@ -55,8 +55,9 @@ main(int argc, char* argv[])
     UdpEchoServerHelper echoServer(9);
 
     ApplicationContainer serverApps = echoServer.Install(nodes.Get(1));
+    const Time appsStop = Seconds(10);
     serverApps.Start(Seconds(1));
-    serverApps.Stop(Seconds(10));
+    serverApps.Stop(appsStop);
 
     UdpEchoClientHelper echoClient(interfaces.GetAddress(1), 9);
     echoClient.SetAttribute("MaxPackets", UintegerValue(1));
@@ -65,7 +66,11 @@ main(int argc, char* argv[])
 
     ApplicationContainer clientApps = echoClient.Install(nodes.Get(0));
     clientApps.Start(Seconds(2));
-    clientApps.Stop(Seconds(10));
+    clientApps.Stop(appsStop);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     Simulator::Destroy();

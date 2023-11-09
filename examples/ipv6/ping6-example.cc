@@ -85,12 +85,17 @@ main(int argc, char** argv)
     ping.SetAttribute("InterfaceAddress", AddressValue(i.GetAddress(0, 0)));
 
     ApplicationContainer apps = ping.Install(n.Get(0));
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(2));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("ping6.tr"));
     csma.EnablePcapAll(std::string("ping6"), true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

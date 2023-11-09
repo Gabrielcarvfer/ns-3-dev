@@ -185,9 +185,6 @@ main(int argc, char* argv[])
     // Tracing
     wifiPhy.EnablePcap("wifi-simple-adhoc", devices);
 
-    // Output what we are doing
-    NS_LOG_UNCOND("Testing " << numPackets << " packets sent with receiver rss " << rss);
-
     Simulator::ScheduleWithContext(source->GetNode()->GetId(),
                                    Seconds(1),
                                    &GenerateTraffic,
@@ -195,7 +192,10 @@ main(int argc, char* argv[])
                                    packetSize,
                                    numPackets,
                                    interPacketInterval);
+    Simulator::Stop((numPackets + 1) * interPacketInterval);
 
+    // Output what we are doing
+    NS_LOG_UNCOND("Testing " << numPackets << " packets sent with receiver rss " << rss);
     Simulator::Run();
     Simulator::Destroy();
 

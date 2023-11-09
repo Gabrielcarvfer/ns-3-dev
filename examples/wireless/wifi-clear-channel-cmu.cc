@@ -214,8 +214,9 @@ Experiment::Run(const WifiHelper& wifi,
                         packetSize,
                         maxPacketCount,
                         interPacketInterval);
-    Simulator::Run();
+    Simulator::Stop((maxPacketCount + 1) * interPacketInterval);
 
+    Simulator::Run();
     Simulator::Destroy();
 
     return m_pktsTotal;

@@ -115,6 +115,10 @@ main(int argc, char* argv[])
     outputConfig2.ConfigureDefaults();
     outputConfig2.ConfigureAttributes();
 
+    // No traffic; only enough time to instantiate objects before saving the config
+    const Time stopTime = Seconds(1);
+    Simulator::Stop(stopTime);
+
     Simulator::Run();
 
     Simulator::Destroy();

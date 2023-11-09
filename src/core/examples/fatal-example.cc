@@ -62,7 +62,8 @@ main(int argc, char** argv)
     // First schedule some events
     Simulator::Schedule(Seconds(1), FatalNoMsg);
     Simulator::Schedule(Seconds(2), FatalCont);
-    Simulator::Schedule(Seconds(3), Fatal);
+    const Time fatalTime = Seconds(3);
+    Simulator::Schedule(fatalTime, Fatal);
 
     // Show some errors outside of simulation time
     std::cerr << "\nFatal error with custom message, and continuing:" << std::endl;
@@ -70,6 +71,10 @@ main(int argc, char** argv)
 
     std::cerr << "\nFatal error without message, and continuing:" << std::endl;
     NS_FATAL_ERROR_NO_MSG_CONT();
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = fatalTime + Seconds(1);
+    Simulator::Stop(stopTime);
 
     // Now run the simulator
     Simulator::Run();

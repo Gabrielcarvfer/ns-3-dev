@@ -166,7 +166,12 @@ main(int argc, char* argv[])
     httpClient->TraceConnectWithoutContext("RxPage", MakeCallback(&ClientPageReceived));
 
     // Stop browsing after 30 minutes
-    clientApps.Stop(Seconds(simTimeSec));
+    const Time clientStop = Seconds(simTimeSec);
+    clientApps.Stop(clientStop);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = clientStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     Simulator::Destroy();

@@ -142,13 +142,14 @@ main(int argc, char* argv[])
     //
     uint16_t port = 50000;
 
+    const Time appsStop = Seconds(10);
     if (!useIpv6)
     {
         Address hubLocalAddress(InetSocketAddress(Ipv4Address::GetAny(), port));
         PacketSinkHelper packetSinkHelper("ns3::TcpSocketFactory", hubLocalAddress);
         ApplicationContainer hubApp = packetSinkHelper.Install(star.GetHub());
         hubApp.Start(Seconds(1));
-        hubApp.Stop(Seconds(10));
+        hubApp.Stop(appsStop);
     }
     else
     {
@@ -156,7 +157,7 @@ main(int argc, char* argv[])
         PacketSinkHelper packetSinkHelper6("ns3::TcpSocketFactory", hubLocalAddress6);
         ApplicationContainer hubApp6 = packetSinkHelper6.Install(star.GetHub());
         hubApp6.Start(Seconds(1));
-        hubApp6.Stop(Seconds(10));
+        hubApp6.Stop(appsStop);
     }
 
     //
@@ -184,7 +185,7 @@ main(int argc, char* argv[])
     }
 
     spokeApps.Start(Seconds(1));
-    spokeApps.Stop(Seconds(10));
+    spokeApps.Stop(appsStop);
 
     //
     // Because we are evil, we also add OnOff applications to send TCP to the hub
@@ -214,7 +215,7 @@ main(int argc, char* argv[])
     }
 
     fillApps.Start(Seconds(1));
-    fillApps.Stop(Seconds(10));
+    fillApps.Stop(appsStop);
 
     NS_LOG_INFO("Enable static global routing.");
     //
@@ -234,6 +235,10 @@ main(int argc, char* argv[])
     // Do pcap tracing on all devices on all nodes.
     //
     csma.EnablePcapAll("csma-star", false);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

@@ -429,6 +429,8 @@ main(int argc, char* argv[])
         Simulator::Schedule(MilliSeconds(timeRes * i), &ComputeSnr, params);
     }
 
+    Simulator::Stop(MilliSeconds(simTime + 1));
+
     Simulator::Run();
     Simulator::Destroy();
     return 0;

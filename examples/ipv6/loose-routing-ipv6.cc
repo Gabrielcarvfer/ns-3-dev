@@ -163,12 +163,17 @@ main(int argc, char** argv)
     ApplicationContainer apps = client.Install(h0);
     DynamicCast<Ping>(apps.Get(0))->SetRouters(routersAddress);
 
+    const Time appsStop = Seconds(20);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(20));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("loose-routing-ipv6.tr"));
     csma.EnablePcapAll("loose-routing-ipv6", true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

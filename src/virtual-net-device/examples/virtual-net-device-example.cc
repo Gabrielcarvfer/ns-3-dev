@@ -315,8 +315,9 @@ main(int argc, char* argv[])
                       Address(InetSocketAddress(Ipv4Address("11.0.0.254"), port)));
     onoff.SetConstantRate(DataRate("448kb/s"));
     ApplicationContainer apps = onoff.Install(c.Get(0));
+    const Time onOffStop = Seconds(10);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(onOffStop);
 
     // Create a packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
@@ -329,7 +330,7 @@ main(int argc, char* argv[])
     onoff.SetAttribute("Remote", AddressValue(InetSocketAddress(Ipv4Address("11.0.0.1"), port)));
     apps = onoff.Install(c.Get(3));
     apps.Start(Seconds(1.1));
-    apps.Stop(Seconds(10));
+    apps.Stop(onOffStop);
 
     // Create a packet sink to receive these packets
     apps = sink.Install(c.Get(1));
@@ -339,6 +340,10 @@ main(int argc, char* argv[])
     AsciiTraceHelper ascii;
     p2p.EnableAsciiAll(ascii.CreateFileStream("virtual-net-device.tr"));
     p2p.EnablePcapAll("virtual-net-device");
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = onOffStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

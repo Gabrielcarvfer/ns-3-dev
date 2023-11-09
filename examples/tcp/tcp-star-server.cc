@@ -115,8 +115,9 @@ main(int argc, char* argv[])
     Address sinkLocalAddress(InetSocketAddress(Ipv4Address::GetAny(), port));
     PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", sinkLocalAddress);
     ApplicationContainer sinkApp = sinkHelper.Install(serverNode);
+    const Time appsStop = Seconds(10);
     sinkApp.Start(Seconds(1));
-    sinkApp.Stop(Seconds(10));
+    sinkApp.Stop(appsStop);
 
     // Create the OnOff applications to send TCP to the server
     OnOffHelper clientHelper("ns3::TcpSocketFactory", Address());
@@ -134,12 +135,16 @@ main(int argc, char* argv[])
         clientApps.Add(clientHelper.Install(clientNodes.Get(i)));
     }
     clientApps.Start(Seconds(1));
-    clientApps.Stop(Seconds(10));
+    clientApps.Stop(appsStop);
 
     // configure tracing
     AsciiTraceHelper ascii;
     p2p.EnableAsciiAll(ascii.CreateFileStream("tcp-star-server.tr"));
     p2p.EnablePcapAll("tcp-star-server");
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

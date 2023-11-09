@@ -67,8 +67,9 @@ main(int argc, char* argv[])
     Address hubLocalAddress(InetSocketAddress(Ipv4Address::GetAny(), port));
     PacketSinkHelper packetSinkHelper("ns3::TcpSocketFactory", hubLocalAddress);
     ApplicationContainer hubApp = packetSinkHelper.Install(star.GetHub());
+    const Time appsStop = Seconds(10);
     hubApp.Start(Seconds(1));
-    hubApp.Stop(Seconds(10));
+    hubApp.Stop(appsStop);
 
     //
     // Create OnOff applications to send TCP to the hub, one on each spoke node.
@@ -86,7 +87,7 @@ main(int argc, char* argv[])
         spokeApps.Add(onOffHelper.Install(star.GetSpokeNode(i)));
     }
     spokeApps.Start(Seconds(1));
-    spokeApps.Stop(Seconds(10));
+    spokeApps.Stop(appsStop);
 
     NS_LOG_INFO("Enable static global routing.");
     //
@@ -99,6 +100,10 @@ main(int argc, char* argv[])
     // Do pcap tracing on all point-to-point devices on all nodes.
     //
     pointToPoint.EnablePcapAll("star");
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

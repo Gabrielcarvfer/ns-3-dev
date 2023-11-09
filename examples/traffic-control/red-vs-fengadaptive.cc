@@ -139,8 +139,9 @@ main(int argc, char* argv[])
     {
         sinkApps.Add(packetSinkHelper.Install(d.GetLeft(i)));
     }
+    const Time sinkStop = Seconds(30);
     sinkApps.Start(Seconds(0));
-    sinkApps.Stop(Seconds(30));
+    sinkApps.Stop(sinkStop);
 
     ApplicationContainer clientApps;
     for (uint32_t i = 0; i < d.RightCount(); ++i)
@@ -154,6 +155,10 @@ main(int argc, char* argv[])
     clientApps.Stop(Seconds(15)); // Stop before the sink
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = sinkStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     std::cout << "Running the simulation" << std::endl;
     Simulator::Run();

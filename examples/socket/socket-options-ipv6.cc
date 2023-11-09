@@ -134,13 +134,18 @@ main(int argc, char* argv[])
 
     // Schedule SendPacket
     Time interPacketInterval = Seconds(packetInterval);
+    const Time sendStart = Seconds(1);
     Simulator::ScheduleWithContext(source->GetNode()->GetId(),
-                                   Seconds(1),
+                                   sendStart,
                                    &SendPacket,
                                    source,
                                    packetSize,
                                    packetCount,
                                    interPacketInterval);
+
+    // Stop after the last packet is sent.
+    const Time stopTime = sendStart + packetCount * interPacketInterval;
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

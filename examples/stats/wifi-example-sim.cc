@@ -233,6 +233,10 @@ main(int argc, char* argv[])
     receiver->SetDelayTracker(delayStat);
     data.AddDataCalculator(delayStat);
 
+    // Upper bound: the sender (default 30 packets, 0.5 s apart) finishes well before
+    const Time stopTime = Seconds(60);
+    Simulator::Stop(stopTime);
+
     //--------------------------------------------
     //-- Run the simulation
     //--------------------------------------------

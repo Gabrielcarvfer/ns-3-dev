@@ -470,6 +470,7 @@ main(int argc, char* argv[])
                                              bandwidthHz,
                                              RbBandwidthHz));
     }
+    Simulator::Stop(MilliSeconds(simTimeMs + 1));
 
     Simulator::Run();
     Simulator::Destroy();

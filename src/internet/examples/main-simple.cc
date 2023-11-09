@@ -77,8 +77,11 @@ main(int argc, char* argv[])
     GenerateTraffic(source, 500);
     sink->SetRecvCallback(MakeCallback(&SocketPrinter));
 
-    Simulator::Run();
+    // GenerateTraffic sends its last packet at 4.5 s
+    const Time stopTime = Seconds(6);
+    Simulator::Stop(stopTime);
 
+    Simulator::Run();
     Simulator::Destroy();
 
     return 0;

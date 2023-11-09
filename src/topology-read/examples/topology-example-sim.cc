@@ -177,12 +177,17 @@ main(int argc, char* argv[])
 
     PacketSinkHelper sink = PacketSinkHelper("ns3::Ipv4RawSocketFactory", dst);
     apps = sink.Install(randomServerNode);
+    const Time sinkStop = Seconds(3);
     apps.Start(Seconds(0));
-    apps.Stop(Seconds(3));
+    apps.Stop(sinkStop);
 
     // we trap the packet sink receiver to extract the TTL.
     Config::ConnectWithoutContext("/NodeList/*/ApplicationList/*/$ns3::PacketSink/Rx",
                                   MakeCallback(&SinkRx));
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = sinkStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     // ------------------------------------------------------------
     // -- Run the simulation

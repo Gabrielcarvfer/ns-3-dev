@@ -183,6 +183,10 @@ main(int argc, char* argv[])
         internet.EnablePcapIpv4("smf-trace", (*iter)->GetId(), 1, false);
     }
 
+    // Ample time for the MaxBytes-limited flow to complete.
+    const Time stopTime = Seconds(30);
+    Simulator::Stop(stopTime);
+
     // run simulation
     Simulator::Run();
 

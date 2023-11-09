@@ -137,7 +137,8 @@ main(int argc, char* argv[])
     }
 
     clientApps.Start(Seconds(0));
-    clientApps.Stop(Seconds(10));
+    const Time clientStop = Seconds(10);
+    clientApps.Stop(clientStop);
 
     // Set the bounding box for animation
 
@@ -147,6 +148,10 @@ main(int argc, char* argv[])
 
     // Set up the actual simulation
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = clientStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     std::cout << "Animation Trace file created:" << animFile << std::endl;

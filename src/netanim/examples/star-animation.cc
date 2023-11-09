@@ -87,8 +87,10 @@ main(int argc, char* argv[])
     }
     PacketSinkHelper packetSinkHelper("ns3::TcpSocketFactory", hubLocalAddress);
     ApplicationContainer hubApp = packetSinkHelper.Install(star.GetHub());
-    hubApp.Start(Seconds(1));
-    hubApp.Stop(Seconds(10));
+    const Time appsStart = Seconds(1);
+    const Time appsStop = Seconds(10);
+    hubApp.Start(appsStart);
+    hubApp.Stop(appsStop);
 
     //
     // Create OnOff applications to send TCP to the hub, one on each spoke node.
@@ -113,8 +115,8 @@ main(int argc, char* argv[])
         onOffHelper.SetAttribute("Remote", remoteAddress);
         spokeApps.Add(onOffHelper.Install(star.GetSpokeNode(i)));
     }
-    spokeApps.Start(Seconds(1));
-    spokeApps.Stop(Seconds(10));
+    spokeApps.Start(appsStart);
+    spokeApps.Stop(appsStop);
 
     NS_LOG_INFO("Enable static global routing.");
     //
@@ -130,6 +132,10 @@ main(int argc, char* argv[])
 
     // Create the animation object and configure for specified output
     AnimationInterface anim(animFile);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

@@ -142,8 +142,9 @@ main(int argc, char* argv[])
     // directly.
     //
     ApplicationContainer apps = server.Install("/Names/server");
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     uint32_t packetSize = 1024;
     uint32_t maxPacketCount = 1;
@@ -158,7 +159,7 @@ main(int argc, char* argv[])
     //
     apps = client.Install("/Names/client");
     apps.Start(Seconds(2));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     //
     // Use the Config system to connect a trace source using the object name
@@ -191,6 +192,10 @@ main(int argc, char* argv[])
     // overriding a couple of default parameters.
     //
     csma.EnablePcap("client-device.pcap", d.Get(0), false, true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     std::cout << "Running simulation..." << std::endl;
     Simulator::Run();

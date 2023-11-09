@@ -114,8 +114,9 @@ main(int argc, char** argv)
     radvdHelper.GetRadvdInterface(iic2.GetInterfaceIndex(1))->SetSendAdvert(false);
 
     ApplicationContainer radvdApps = radvdHelper.Install(r);
+    const Time radvdStop = Seconds(10);
     radvdApps.Start(Seconds(1));
-    radvdApps.Stop(Seconds(10));
+    radvdApps.Stop(radvdStop);
 
     /* Create a Ping application to send ICMPv6 echo request from n0 to n1 via R */
     uint32_t packetSize = 1024;
@@ -132,6 +133,10 @@ main(int argc, char** argv)
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("radvd.tr"));
     csma.EnablePcapAll(std::string("radvd"), true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = radvdStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

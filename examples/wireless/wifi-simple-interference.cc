@@ -252,10 +252,6 @@ main(int argc, char* argv[])
     // Tracing
     wifiPhy.EnablePcap("wifi-simple-interference", devices.Get(0));
 
-    // Output what we are doing
-    NS_LOG_UNCOND("Primary packet RSS=" << prss << " dBm and interferer RSS=" << irss
-                                        << " dBm at time offset=" << delta.As(Time::US));
-
     Simulator::ScheduleWithContext(source->GetNode()->GetId(),
                                    startTime,
                                    &GenerateTraffic,
@@ -268,6 +264,13 @@ main(int argc, char* argv[])
                                    interferer,
                                    iPacketSize);
 
+    // Leave time for the later of the two packets to be received.
+    const Time stopTime = startTime + Abs(delta) + Seconds(1);
+    Simulator::Stop(stopTime);
+
+    // Output what we are doing
+    NS_LOG_UNCOND("Primary packet RSS=" << prss << " dBm and interferer RSS=" << irss
+                                        << " dBm at time offset=" << delta.As(Time::US));
     Simulator::Run();
     Simulator::Destroy();
 

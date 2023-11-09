@@ -133,13 +133,18 @@ main(int argc, char** argv)
     echoClient.SetAttribute("PacketSize", UintegerValue(packetSizeN2));
     echoClient.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
     ApplicationContainer clientAppsN2 = echoClient.Install(n1);
+    const Time clientStop = Seconds(20);
     clientAppsN2.Start(Seconds(11));
-    clientAppsN2.Stop(Seconds(20));
+    clientAppsN2.Stop(clientStop);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("fragmentation-ipv6-PMTU.tr"));
     csma.EnablePcapAll(std::string("fragmentation-ipv6-PMTU"), true);
     pointToPoint.EnablePcapAll(std::string("fragmentation-ipv6-PMTU"), true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = clientStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

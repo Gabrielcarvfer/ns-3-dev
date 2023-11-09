@@ -112,27 +112,28 @@ main(int argc, char* argv[])
                       Address(InetSocketAddress(i3i2.GetAddress(1), port)));
     onoff.SetConstantRate(DataRate("448kb/s"));
     ApplicationContainer apps = onoff.Install(c.Get(0));
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     // Create an optional packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
                           Address(InetSocketAddress(Ipv4Address::GetAny(), port)));
     apps = sink.Install(c.Get(2));
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     // Create a similar flow from n3 to n1, starting at time 1.1 seconds
     onoff.SetAttribute("Remote", AddressValue(InetSocketAddress(i1i2.GetAddress(0), port)));
     apps = onoff.Install(c.Get(3));
     apps.Start(Seconds(1.1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     // Create a packet sink to receive these packets
     sink.SetAttribute("Local", AddressValue(InetSocketAddress(Ipv4Address::GetAny(), port)));
     apps = sink.Install(c.Get(1));
     apps.Start(Seconds(1.1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     //
     // Error model
@@ -158,6 +159,10 @@ main(int argc, char* argv[])
     AsciiTraceHelper ascii;
     p2p.EnableAsciiAll(ascii.CreateFileStream("simple-error-model.tr"));
     p2p.EnablePcapAll("simple-error-model");
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

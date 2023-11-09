@@ -81,8 +81,9 @@ main(int argc, char* argv[])
     NS_LOG_INFO("Create UdpServer application on node 1.");
     UdpServerHelper server(port);
     ApplicationContainer apps = server.Install(n.Get(1));
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     NS_LOG_INFO("Create UdpClient application on node 0 to send to node 1.");
     uint32_t MaxPacketSize = 1472; // Back off 20 (IP) + 8 (UDP) bytes from MTU
@@ -90,7 +91,11 @@ main(int argc, char* argv[])
     client.SetAttribute("MaxPacketSize", UintegerValue(MaxPacketSize));
     apps = client.Install(n.Get(0));
     apps.Start(Seconds(2));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

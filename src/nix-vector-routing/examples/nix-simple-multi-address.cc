@@ -182,7 +182,8 @@ main(int argc, char* argv[])
 
     ApplicationContainer serverApps = echoServer.Install(nodes34.Get(1));
     serverApps.Start(Seconds(1));
-    serverApps.Stop(Seconds(10));
+    const Time appsStop = Seconds(10);
+    serverApps.Stop(appsStop);
 
     // Set the destination address as 10.1.3.2
     UdpEchoClientHelper echoClient(interfaces34.GetAddress(1), 9);
@@ -192,7 +193,7 @@ main(int argc, char* argv[])
 
     ApplicationContainer clientApps = echoClient.Install(nodes12.Get(0));
     clientApps.Start(Seconds(2));
-    clientApps.Stop(Seconds(10));
+    clientApps.Stop(appsStop);
 
     // Trace routing paths for different source and destinations.
     Ptr<OutputStreamWrapper> routingStream =
@@ -219,6 +220,9 @@ main(int argc, char* argv[])
                                   nodes12.Get(0),
                                   Ipv4Address("10.2.3.2"),
                                   routingStream);
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     Simulator::Destroy();

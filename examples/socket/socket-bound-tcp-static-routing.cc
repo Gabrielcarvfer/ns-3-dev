@@ -149,8 +149,9 @@ main(int argc, char* argv[])
     PacketSinkHelper sink("ns3::TcpSocketFactory",
                           InetSocketAddress(Ipv4Address::GetAny(), dstport));
     ApplicationContainer apps = sink.Install(nDst);
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(0));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     p2p.EnableAsciiAll(ascii.CreateFileStream("socket-bound-tcp-static-routing.tr"));
@@ -173,6 +174,10 @@ main(int argc, char* argv[])
     // If you uncomment what's below, it results in ASSERT failing since you can't
     // bind to a socket not existing on a node
     // Simulator::Schedule(Seconds(4),&BindSock, srcSocket, dDstRtrdDst.Get(0));
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
+
     Simulator::Run();
     Simulator::Destroy();
 

@@ -102,8 +102,9 @@ main(int argc, char* argv[])
     // Install packet sink on node 0 to receive packets from node 1
     PacketSinkHelper sink = PacketSinkHelper("ns3::PacketSocketFactory", socket);
     apps = sink.Install(nodes.Get(0));
+    const Time sinkStop = Seconds(20);
     apps.Start(Seconds(0));
-    apps.Stop(Seconds(20));
+    apps.Stop(sinkStop);
 
     // While the below trace sink is hooked to all nodes (the wildcard "*")
     // only one packet sink (on node 0) is actually added above, so
@@ -116,6 +117,10 @@ main(int argc, char* argv[])
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("csma-packet-socket.tr"));
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = sinkStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

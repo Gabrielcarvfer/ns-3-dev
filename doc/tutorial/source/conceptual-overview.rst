@@ -551,8 +551,9 @@ created.
     UdpEchoServerHelper echoServer(9);
 
     ApplicationContainer serverApps = echoServer.Install(nodes.Get(1));
+    const Time appsStop = Seconds(10);
     serverApps.Start(Seconds(1));
-    serverApps.Stop(Seconds(10));
+    serverApps.Stop(appsStop);
 
 The first line of code in the above snippet declares the
 ``UdpEchoServerHelper``.  As usual, this isn't the application itself, it
@@ -593,16 +594,18 @@ C++ conversion sequence to take the C++ double 1.0 and convert it to an
 |ns3| ``Time`` object using a ``Seconds`` cast.  Be aware that
 the conversion rules may be controlled by the model author, and C++ has its
 own rules, so you can't always just assume that parameters will be happily
-converted for you.  The two lines,
+converted for you.  The lines,
 
 ::
 
+    const Time appsStop = Seconds(10);
     serverApps.Start(Seconds(1));
-    serverApps.Stop(Seconds(10));
+    serverApps.Stop(appsStop);
 
 will cause the echo server application to ``Start`` (enable itself) at one
 second into the simulation and to ``Stop`` (disable itself) at ten seconds
-into the simulation.  By virtue of the fact that we have declared a simulation
+into the simulation (the stop time is kept in the ``appsStop`` variable so
+that it can be reused below).  By virtue of the fact that we have declared a simulation
 event (the application stop event) to be executed at ten seconds, the simulation
 will last *at least* ten seconds.
 
@@ -622,7 +625,7 @@ that is managed by an ``UdpEchoClientHelper``.
 
     ApplicationContainer clientApps = echoClient.Install(nodes.Get(0));
     clientApps.Start(Seconds(2));
-    clientApps.Stop(Seconds(10));
+    clientApps.Stop(appsStop);
 
 For the echo client, however, we need to set five different ``Attributes``.
 The first two ``Attributes`` are set during construction of the
@@ -665,11 +668,12 @@ When we previously called the methods,
 
 ::
 
+    const Time appsStop = Seconds(10);
     serverApps.Start(Seconds(1));
-    serverApps.Stop(Seconds(10));
+    serverApps.Stop(appsStop);
     ...
     clientApps.Start(Seconds(2));
-    clientApps.Stop(Seconds(10));
+    clientApps.Stop(appsStop);
 
 we actually scheduled events in the simulator at 1.0 seconds, 2.0 seconds and
 two events at 10.0 seconds.  When ``Simulator::Run`` is called, the system
@@ -750,20 +754,22 @@ process.
 Many of the simulation programs in the tutorial do not explicitly call
 ``Simulator::Stop``, since the event queue will automatically run out
 of events.  However, these programs will also accept a call to
-``Simulator::Stop``.  For example, the following additional statement
-in the first example program will schedule an explicit stop at 11 seconds:
+``Simulator::Stop``.  For example, the following statements
+in the first example program schedule an explicit stop at 11 seconds,
+one second after the applications stop:
 
 ::
 
-  +  Simulator::Stop(Seconds(11));
-     Simulator::Run();
-     Simulator::Destroy();
-     return 0;
-   }
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
+    Simulator::Run();
+    Simulator::Destroy();
+    return 0;
+  }
 
 The above will not actually change the behavior of this program, since
 this particular simulation naturally ends after 10 seconds.  But if you
-were to change the stop time in the above statement from 11 seconds to 1
+were to change ``stopTime`` in the above statement from 11 seconds to 1
 second, you would notice that the simulation stops before any output is
 printed to the screen (since the output occurs around time 2 seconds of
 simulation time).

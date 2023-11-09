@@ -195,14 +195,18 @@ Experiment::Run(const WifiHelper& wifi,
     onoff.SetAttribute("PacketSize", UintegerValue(2000));
 
     ApplicationContainer apps = onoff.Install(c.Get(0));
+    const Time appsStop = Seconds(250);
     apps.Start(Seconds(0.5));
-    apps.Stop(Seconds(250));
+    apps.Stop(appsStop);
 
     Simulator::Schedule(Seconds(1.5), &Experiment::AdvancePosition, this, c.Get(1));
     Ptr<Socket> recvSink = SetupPacketReceive(c.Get(1));
 
-    Simulator::Run();
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
+    Simulator::Run();
     Simulator::Destroy();
 
     return m_output;

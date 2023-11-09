@@ -192,17 +192,22 @@ main(int argc, char** argv)
 
     Ptr<OutputStreamWrapper> routingStream = Create<OutputStreamWrapper>(&std::cout);
     Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(2), n0, routingStream);
-    Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(10), n0, routingStream);
+    const Time lastEvent = Seconds(10);
+    Ipv6RoutingHelper::PrintRoutingTableAt(lastEvent, n0, routingStream);
 
     IpAddressHelper ipAddressHelper;
     /* RA should be received, two prefixes + routes + default route should be present */
     Simulator::Schedule(Seconds(2), &IpAddressHelper::PrintIpAddresses, &ipAddressHelper, n0);
     /* at the end, RA addresses and routes should be cleared */
-    Simulator::Schedule(Seconds(10), &IpAddressHelper::PrintIpAddresses, &ipAddressHelper, n0);
+    Simulator::Schedule(lastEvent, &IpAddressHelper::PrintIpAddresses, &ipAddressHelper, n0);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("radvd-two-prefix.tr"));
     csma.EnablePcapAll(std::string("radvd-two-prefix"), true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = lastEvent + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

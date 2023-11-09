@@ -79,6 +79,10 @@ main(int argc, char* argv[])
     server->SetLocal(socketAddr);
     nodes.Get(1)->AddApplication(server);
 
+    // Applications run from time 0 until the simulation stops
+    const Time stopTime = Seconds(1);
+    Simulator::Stop(stopTime);
+
     Simulator::Run();
     Simulator::Destroy();
     return 0;

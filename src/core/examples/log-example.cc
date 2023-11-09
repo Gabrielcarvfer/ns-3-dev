@@ -112,7 +112,12 @@ main(int argc, char** argv)
     Simulator::ScheduleWithContext(node->GetId(), Seconds(3), &MyEventObject::Event, &(*myObj));
 
     NS_LOG_INFO("Scheduling FreeEvent");
-    Simulator::Schedule(Seconds(5), FreeEvent);
+    const Time freeEventTime = Seconds(5);
+    Simulator::Schedule(freeEventTime, FreeEvent);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = freeEventTime + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_DEBUG("Starting run...");
     Simulator::Run();

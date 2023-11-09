@@ -79,18 +79,23 @@ main(int argc, char* argv[])
     }
 
     clientApps.Start(Seconds(0));
-    clientApps.Stop(Seconds(10));
+    const Time clientStop = Seconds(10);
+    clientApps.Stop(clientStop);
 
     // Set the bounding box for animation
     d.BoundingBox(1, 1, 100, 100);
 
     // Create the animation object and configure for specified output
     AnimationInterface anim(animFile);
-    anim.EnablePacketMetadata();                                // Optional
-    anim.EnableIpv4L3ProtocolCounters(Seconds(0), Seconds(10)); // Optional
+    anim.EnablePacketMetadata();                               // Optional
+    anim.EnableIpv4L3ProtocolCounters(Seconds(0), clientStop); // Optional
 
     // Set up the actual simulation
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = clientStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     std::cout << "Animation Trace file created:" << animFile << std::endl;

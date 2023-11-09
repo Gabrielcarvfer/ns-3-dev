@@ -101,8 +101,9 @@ main(int argc, char* argv[])
     NS_LOG_INFO("Create Sink.");
     PacketSinkHelper sink = PacketSinkHelper("ns3::Ipv4RawSocketFactory", dst);
     apps = sink.Install(c.Get(3));
+    const Time sinkStop = Seconds(11);
     apps.Start(Seconds(0));
-    apps.Stop(Seconds(11));
+    apps.Stop(sinkStop);
 
     NS_LOG_INFO("Create pinger");
     PingHelper ping(addresses.GetAddress(2));
@@ -128,6 +129,10 @@ main(int argc, char* argv[])
     }
 
     Packet::EnablePrinting();
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = sinkStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

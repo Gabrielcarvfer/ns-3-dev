@@ -97,6 +97,9 @@ main(int argc, char* argv[])
     // set ylabel "Y"
     // set cblabel "SINR (dB)"
     // plot "rem.out" using ($1):($2):(10*log10($4)) with image
+    // The REM is generated at simulation start; no traffic is needed
+    const Time stopTime = Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
 

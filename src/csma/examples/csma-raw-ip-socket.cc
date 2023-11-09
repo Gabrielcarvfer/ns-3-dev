@@ -94,8 +94,9 @@ main(int argc, char* argv[])
     NS_LOG_INFO("Create Sink.");
     PacketSinkHelper sink = PacketSinkHelper("ns3::Ipv4RawSocketFactory", dst);
     apps = sink.Install(c.Get(3));
+    const Time sinkStop = Seconds(12);
     apps.Start(Seconds(0));
-    apps.Stop(Seconds(12));
+    apps.Stop(sinkStop);
 
     NS_LOG_INFO("Configure Tracing.");
     // first, pcap tracing in non-promiscuous mode
@@ -105,6 +106,10 @@ main(int argc, char* argv[])
                                   MakeCallback(&SinkRx));
 
     Packet::EnablePrinting();
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = sinkStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

@@ -81,13 +81,18 @@ def main(argv):
     ping.SetAttribute("Size", ns.UintegerValue(packetSize))
 
     apps = ping.Install(ns.NodeContainer(net1.Get(0)))
+    appsStop = ns.Seconds(20)
     apps.Start(ns.Seconds(2))
-    apps.Stop(ns.Seconds(20))
+    apps.Stop(appsStop)
 
     print("Tracing")
     ascii = ns.AsciiTraceHelper()
     csma.EnableAsciiAll(ascii.CreateFileStream("simple-routing-ping6.tr"))
     csma.EnablePcapAll("simple-routing-ping6", True)
+
+    # Add margin to allow the apps to complete.
+    stopTime = appsStop + ns.Seconds(1)
+    ns.Simulator.Stop(stopTime)
 
     # Run Simulation
     ns.Simulator.Run()

@@ -136,12 +136,17 @@ main(int argc, char** argv)
     ping.SetAttribute("Count", UintegerValue(maxPacketCount));
     ping.SetAttribute("Size", UintegerValue(packetSize));
     ApplicationContainer apps = ping.Install(net1.Get(0));
+    const Time appsStop = Seconds(20);
     apps.Start(Seconds(2));
-    apps.Stop(Seconds(20));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("simple-routing-ping6.tr"));
     csma.EnablePcapAll("simple-routing-ping6", true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

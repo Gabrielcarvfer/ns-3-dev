@@ -96,12 +96,17 @@ main(int argc, char** argv)
 
     UdpEchoServerHelper echoServer(42);
     ApplicationContainer serverApps = echoServer.Install(net2.Get(1));
+    const Time serverStop = Seconds(30);
     serverApps.Start(Seconds(0));
-    serverApps.Stop(Seconds(30));
+    serverApps.Stop(serverStop);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll(ascii.CreateFileStream("fragmentation-ipv6.tr"));
     csma.EnablePcapAll(std::string("fragmentation-ipv6"), true);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = serverStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

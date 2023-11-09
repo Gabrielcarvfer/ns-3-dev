@@ -129,19 +129,24 @@ main(int argc, char* argv[])
                       Address(InetSocketAddress(ifInAddrC.GetLocal(), port)));
     onoff.SetConstantRate(DataRate(6000));
     ApplicationContainer apps = onoff.Install(nA);
+    const Time appsStop = Seconds(10);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     // Create a packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
                           Address(InetSocketAddress(Ipv4Address::GetAny(), port)));
     apps = sink.Install(nC);
     apps.Start(Seconds(1));
-    apps.Stop(Seconds(10));
+    apps.Stop(appsStop);
 
     AsciiTraceHelper ascii;
     p2p.EnableAsciiAll(ascii.CreateFileStream("global-routing-injection32.tr"));
     p2p.EnablePcapAll("global-routing-injection32");
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     Simulator::Destroy();

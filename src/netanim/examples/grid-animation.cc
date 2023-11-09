@@ -63,7 +63,8 @@ main(int argc, char* argv[])
     clientApps.Add(clientHelper.Install(grid.GetNode(0, 0)));
 
     clientApps.Start(Seconds(0));
-    clientApps.Stop(Seconds(1.5));
+    const Time clientStop = Seconds(1.5);
+    clientApps.Stop(clientStop);
 
     // Set the bounding box for animation
     grid.BoundingBox(1, 1, 100, 100);
@@ -73,6 +74,10 @@ main(int argc, char* argv[])
 
     // Set up the actual simulation
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = clientStop + Seconds(0.5);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     Simulator::Destroy();

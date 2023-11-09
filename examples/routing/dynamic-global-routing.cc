@@ -153,8 +153,9 @@ main(int argc, char* argv[])
     onoff2.SetAttribute("PacketSize", UintegerValue(50));
 
     ApplicationContainer apps2 = onoff2.Install(c.Get(1));
+    const Time apps2Stop = Seconds(16);
     apps2.Start(Seconds(11));
-    apps2.Stop(Seconds(16));
+    apps2.Stop(apps2Stop);
 
     // Create an optional packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
@@ -167,7 +168,7 @@ main(int argc, char* argv[])
                            Address(InetSocketAddress(Ipv4Address::GetAny(), port)));
     apps2 = sink2.Install(c.Get(6));
     apps2.Start(Seconds(11));
-    apps2.Stop(Seconds(16));
+    apps2.Stop(apps2Stop);
 
     AsciiTraceHelper ascii;
     Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream("dynamic-global-routing.tr");
@@ -202,6 +203,10 @@ main(int argc, char* argv[])
     Ptr<OutputStreamWrapper> routingStream =
         Create<OutputStreamWrapper>("dynamic-global-routing.routes", std::ios::out);
     Ipv4RoutingHelper::PrintRoutingTableAllAt(Seconds(12), routingStream);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = apps2Stop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();

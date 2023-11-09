@@ -148,10 +148,11 @@ main(int argc, char* argv[])
                         &UniformRandomVariable::SetAntithetic,
                         uniformRv,
                         false);
-    Simulator::Schedule(NanoSeconds(123456789),
-                        &UniformRandomVariable::SetAntithetic,
-                        uniformRv,
-                        false);
+    const Time lastEventTime = NanoSeconds(123456789);
+    Simulator::Schedule(lastEventTime, &UniformRandomVariable::SetAntithetic, uniformRv, false);
+    // Any time after lastEventTime works; keep a round value
+    const Time stopTime = Seconds(1);
+    Simulator::Stop(stopTime);
 
     Simulator::Run();
     Simulator::Destroy();

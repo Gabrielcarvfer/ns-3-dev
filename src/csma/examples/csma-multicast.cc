@@ -133,8 +133,9 @@ main(int argc, char* argv[])
     //
     // Tell the application when to start and stop.
     //
-    srcC.Start(Seconds(1.));
-    srcC.Stop(Seconds(10.));
+    const Time appsStop = Seconds(10);
+    srcC.Start(Seconds(1));
+    srcC.Stop(appsStop);
 
     // Create an optional packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
@@ -143,7 +144,7 @@ main(int argc, char* argv[])
     ApplicationContainer sinkC = sink.Install(c1.Get(2)); // Node n4
     // Start the sink
     sinkC.Start(Seconds(1));
-    sinkC.Stop(Seconds(10));
+    sinkC.Stop(appsStop);
 
     NS_LOG_INFO("Configure Tracing.");
     //
@@ -159,6 +160,10 @@ main(int argc, char* argv[])
     // and can be read by the "tcpdump -r" command (use "-tt" option to
     // display timestamps correctly)
     csma.EnablePcapAll("csma-multicast", false);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     //
     // Now, do the actual simulation.

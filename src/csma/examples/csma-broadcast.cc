@@ -83,8 +83,9 @@ main(int argc, char* argv[])
 
     ApplicationContainer app = onoff.Install(c0.Get(0));
     // Start the application
+    const Time appsStop = Seconds(10);
     app.Start(Seconds(1));
-    app.Stop(Seconds(10));
+    app.Stop(appsStop);
 
     // Create an optional packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
@@ -92,7 +93,7 @@ main(int argc, char* argv[])
     app = sink.Install(c0.Get(1));
     app.Add(sink.Install(c1.Get(1)));
     app.Start(Seconds(1));
-    app.Stop(Seconds(10));
+    app.Stop(appsStop);
 
     // Configure ascii tracing of all enqueue, dequeue, and NetDevice receive
     // events on all devices.  Trace output will be sent to the file
@@ -105,6 +106,10 @@ main(int argc, char* argv[])
     // csma-broadcast-<nodeId>-<interfaceId>.pcap
     // and can be read by the "tcpdump -tt -r" command
     csma.EnablePcapAll("csma-broadcast", false);
+
+    // Add margin to allow the apps to complete.
+    const Time stopTime = appsStop + Seconds(1);
+    Simulator::Stop(stopTime);
 
     NS_LOG_INFO("Run Simulation.");
     Simulator::Run();
