@@ -115,6 +115,7 @@ main(int argc, char* argv[])
     outputConfig2.ConfigureDefaults();
     outputConfig2.ConfigureAttributes();
 
+    Simulator::Stop(Seconds(1));
     Simulator::Run();
 
     Simulator::Destroy();

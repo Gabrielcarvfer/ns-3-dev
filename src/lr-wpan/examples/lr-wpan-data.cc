@@ -223,6 +223,7 @@ main(int argc, char* argv[])
                                    dev1->GetMac(),
                                    params,
                                    p2);
+    Simulator::Stop(Seconds(3));
 
     Simulator::Run();
 

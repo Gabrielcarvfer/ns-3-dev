@@ -62,6 +62,7 @@ main(int argc, char* argv[])
     clientApps.Start(Seconds(2));
     clientApps.Stop(Seconds(10));
 
+    Simulator::Stop(Seconds(11));
     Simulator::Run();
     Simulator::Destroy();
     return 0;

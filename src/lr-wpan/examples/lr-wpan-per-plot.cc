@@ -140,7 +140,7 @@ main(int argc, char* argv[])
             p = Create<Packet>(packetSize);
             Simulator::Schedule(Seconds(i), &LrWpanMac::McpsDataRequest, dev0->GetMac(), params, p);
         }
-
+        Simulator::Stop(Seconds(maxPackets));
         Simulator::Run();
 
         per = (static_cast<double>(maxPackets - g_packetsReceived) / maxPackets) * 100;

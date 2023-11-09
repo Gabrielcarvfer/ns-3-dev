@@ -168,7 +168,7 @@ main(int argc, char* argv[])
     // Stop browsing after 30 minutes
     clientApps.Stop(Seconds(simTimeSec));
 
-    Simulator::Run();
+    Simulator::Stop(Seconds(31)) Simulator::Run();
     Simulator::Destroy();
     return 0;
 }

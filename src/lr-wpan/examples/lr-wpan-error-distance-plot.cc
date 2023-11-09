@@ -148,6 +148,7 @@ main(int argc, char* argv[])
             p = Create<Packet>(packetSize);
             Simulator::Schedule(Seconds(i), &LrWpanMac::McpsDataRequest, dev0->GetMac(), params, p);
         }
+        Simulator::Stop(Seconds(maxPackets));
         Simulator::Run();
         NS_LOG_DEBUG("Received " << g_packetsReceived << " packets for distance " << j);
         psrdataset.Add(j, g_packetsReceived / 1000.0);

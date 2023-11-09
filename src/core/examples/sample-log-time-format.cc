@@ -152,7 +152,7 @@ main(int argc, char* argv[])
                         &UniformRandomVariable::SetAntithetic,
                         uniformRv,
                         false);
-
+    Simulator::Stop(Seconds(1));
     Simulator::Run();
     Simulator::Destroy();
 

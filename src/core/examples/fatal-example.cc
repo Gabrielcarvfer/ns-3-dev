@@ -72,6 +72,7 @@ main(int argc, char** argv)
     NS_FATAL_ERROR_NO_MSG_CONT();
 
     // Now run the simulator
+    Simulator::Stop(Seconds(4));
     Simulator::Run();
 
     // Should not get here

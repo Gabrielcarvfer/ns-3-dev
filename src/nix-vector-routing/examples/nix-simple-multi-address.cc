@@ -219,7 +219,7 @@ main(int argc, char* argv[])
                                   nodes12.Get(0),
                                   Ipv4Address("10.2.3.2"),
                                   routingStream);
-
+    Simulator::Stop(Seconds(11));
     Simulator::Run();
     Simulator::Destroy();
     return 0;

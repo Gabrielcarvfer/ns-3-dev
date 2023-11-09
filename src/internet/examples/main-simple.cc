@@ -77,8 +77,8 @@ main(int argc, char* argv[])
     GenerateTraffic(source, 500);
     sink->SetRecvCallback(MakeCallback(&SocketPrinter));
 
+    Simulator::Stop(Seconds(6));
     Simulator::Run();
-
     Simulator::Destroy();
 
     return 0;

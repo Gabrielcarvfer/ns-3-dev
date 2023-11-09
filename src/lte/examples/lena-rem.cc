@@ -97,6 +97,7 @@ main(int argc, char* argv[])
     // set ylabel "Y"
     // set cblabel "SINR (dB)"
     // plot "rem.out" using ($1):($2):(10*log10($4)) with image
+    Simulator::Stop(Seconds(1));
 
     Simulator::Run();
 

@@ -148,6 +148,7 @@ main(int argc, char* argv[])
     // Set up the actual simulation
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
+    Simulator::Stop(Seconds(11));
     Simulator::Run();
     std::cout << "Animation Trace file created:" << animFile << std::endl;
     Simulator::Destroy();

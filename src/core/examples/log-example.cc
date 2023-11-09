@@ -115,6 +115,7 @@ main(int argc, char** argv)
     Simulator::Schedule(Seconds(5), FreeEvent);
 
     NS_LOG_DEBUG("Starting run...");
+    Simulator::Stop(Seconds(6));
     Simulator::Run();
     NS_LOG_DEBUG("... run complete");
     Simulator::Destroy();

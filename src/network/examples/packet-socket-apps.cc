@@ -79,6 +79,7 @@ main(int argc, char* argv[])
     server->SetLocal(socketAddr);
     nodes.Get(1)->AddApplication(server);
 
+    Simulator::Stop(Seconds(1));
     Simulator::Run();
     Simulator::Destroy();
     return 0;

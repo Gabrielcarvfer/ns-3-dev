@@ -139,6 +139,7 @@ PsrExperiment::Run(PsrExperiment::Input input)
         Simulator::Schedule(Seconds(i), &PsrExperiment::Send, this);
     }
     m_tx = tx;
+    Simulator::Stop(Seconds(m_input.nPackets + 1));
     Simulator::Run();
     Simulator::Destroy();
     return m_output;

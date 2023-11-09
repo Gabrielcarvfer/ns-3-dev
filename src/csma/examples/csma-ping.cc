@@ -130,6 +130,7 @@ main(int argc, char* argv[])
     Packet::EnablePrinting();
 
     NS_LOG_INFO("Run Simulation.");
+    Simulator::Stop(Seconds(12));
     Simulator::Run();
     Simulator::Destroy();
     NS_LOG_INFO("Done.");

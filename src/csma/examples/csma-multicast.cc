@@ -133,8 +133,8 @@ main(int argc, char* argv[])
     //
     // Tell the application when to start and stop.
     //
-    srcC.Start(Seconds(1.));
-    srcC.Stop(Seconds(10.));
+    srcC.Start(Seconds(1));
+    srcC.Stop(Seconds(10));
 
     // Create an optional packet sink to receive these packets
     PacketSinkHelper sink("ns3::UdpSocketFactory",
@@ -164,6 +164,7 @@ main(int argc, char* argv[])
     // Now, do the actual simulation.
     //
     NS_LOG_INFO("Run Simulation.");
+    Simulator::Stop(Seconds(11));
     Simulator::Run();
     Simulator::Destroy();
     NS_LOG_INFO("Done.");

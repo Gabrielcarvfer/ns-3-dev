@@ -109,7 +109,7 @@ main(int argc, char* argv[])
         std::cout << "Code within a lambda expression at time " << Simulator::Now().As(Time::S)
                   << std::endl;
     });
-
+    Simulator::Stop(Seconds(40));
     Simulator::Run();
 
     Simulator::Destroy();

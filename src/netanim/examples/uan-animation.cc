@@ -210,6 +210,7 @@ NetAnimExperiment::Run(UanHelper& uan)
         std::string traceFileName = "uan-animation.xml";
         AnimationInterface anim(traceFileName);
 
+        Simulator::Stop(Seconds(nextEvent + m_simTime));
         Simulator::Run();
         sinkNode = nullptr;
         sinkSocket = nullptr;
