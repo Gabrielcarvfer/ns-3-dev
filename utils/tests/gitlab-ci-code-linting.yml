@@ -36,7 +36,7 @@ check-style-clang-format-14:
     CLANG_FORMAT_VERSION: 14
 
 # Clang-tidy
-clang-tidy-17:
+.clang-tidy-17:
   stage: code-linting
   image: ubuntu:rolling
   variables:
@@ -54,12 +54,12 @@ clang-tidy-17:
     - ./ns3 configure -d debug
       --enable-clang-tidy
       --enable-examples --enable-tests --enable-asserts
-      --enable-mpi
+      $MODULE_SETTINGS
   script:
     - if (git remote | grep -qw upstream) ; then
       git remote remove upstream ;
       fi
-    - git remote add -t $CI_DEFAULT_BRANCH --no-tags -f upstream https://gitlab.com/nsnam/ns-3-dev.git
+    - git remote add -t $CI_DEFAULT_BRANCH --no-tags -f upstream $UPSTREAM_REPOSITORY
     - git diff --name-only upstream/$CI_DEFAULT_BRANCH > $FILES_CHANGED
 
     # Run full clang-tidy in the following cases: 1) default branch, 2) ".clang-tidy" file changed
@@ -90,6 +90,14 @@ clang-tidy-17:
   interruptible: true
   timeout: 3h
 
+# Default clang-tidy 17 job
+# 3rd-party module makers may set --enable-modules=module_name to restrict scanning
+clang-tidy-17:
+  extends: .clang-tidy-17
+  variables:
+    MODULE_SETTINGS: --enable-mpi
+    UPSTREAM_REPOSITORY: https://gitlab.com/nsnam/ns-3-dev.git
+
 # Emacs line
 emacs-line:
   stage: .pre
@@ -105,7 +113,7 @@ emacs-line:
   timeout: 1h
 
 # Spell checking
-spell-check:
+.spell-check:
   stage: .pre
   image: python:latest
   before_script:
@@ -115,12 +123,18 @@ spell-check:
     - if (git remote | grep -qw upstream) ; then
       git remote remove upstream ;
       fi
-    - git remote add -t $CI_DEFAULT_BRANCH --no-tags -f upstream https://gitlab.com/nsnam/ns-3-dev.git
 
+    - git remote add -t $CI_DEFAULT_BRANCH --no-tags -f upstream $UPSTREAM_REPOSITORY
     - git log --pretty=%B HEAD...upstream/$CI_DEFAULT_BRANCH ^upstream/$CI_DEFAULT_BRANCH > git_messages.txt
     # Check source code and commit messages
     - codespell -f -C0 ./
   timeout: 1h
+
+# Default spell-check job
+spell-check:
+  extends: .spell-check
+  variables:
+    UPSTREAM_REPOSITORY: https://gitlab.com/nsnam/ns-3-dev.git
 
 # Check cmake format
 cmake-format:
