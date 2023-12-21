@@ -109,5 +109,8 @@
             ],
             "default": "default"
         }
+    ],
+    "clangd.fallbackFlags": [
+        "-I${workspaceFolder}/build/include"
     ]
 }
