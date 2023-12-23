@@ -2,13 +2,11 @@ include(ExternalProject)
 
 ExternalProject_Add(
   brite_dep
-  URL https://code.nsnam.org/BRITE/archive/30338f4f63b9.zip
-  URL_HASH MD5=b36ecf8f6b5f2cfae936ba1f1bfcff5c
+  GIT_REPOSITORY https://gitlab.com/Gabrielcarvfer/brite.git
+  GIT_TAG 45c2c4a0ef53af6d85bbaa2cc008bd2c99a28a7a
   PREFIX brite_dep
   BUILD_IN_SOURCE TRUE
-  CONFIGURE_COMMAND make
-  BUILD_COMMAND make
-  INSTALL_COMMAND make install PREFIX=${CMAKE_OUTPUT_DIRECTORY}
+  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_OUTPUT_DIRECTORY}
 )
 
 ExternalProject_Add(
@@ -48,6 +46,12 @@ find_file(
   PATH_SUFFIXES boost
   HINTS /usr/local
 )
+
+message(WARNING "${BOOST_STATIC_ASSERT}")
+if(${BOOST_STATIC_ASSERT} STREQUAL "BOOST_STATIC_ASSERT-NOTFOUND")
+  message(FATAL_ERROR "Boost static assert is required by openflow")
+endif()
+
 get_filename_component(boost_dir ${BOOST_STATIC_ASSERT} DIRECTORY)
 
 install(
@@ -56,11 +60,10 @@ install(
   USE_SOURCE_PERMISSIONS
   PATTERN "boost/*"
 )
-install(
-  DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib/
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  USE_SOURCE_PERMISSIONS
-  PATTERN "lib/*"
+
+# Install component headers and libraries
+install(DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/ DESTINATION ${CMAKE_INSTALL_PREFIX}
+        USE_SOURCE_PERMISSIONS
 )
 
 macro(add_dependency_to_optional_modules_dependencies)
