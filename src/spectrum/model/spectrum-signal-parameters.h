@@ -117,13 +117,13 @@ struct SpectrumSignalParameters : public SimpleRefCount<SpectrumSignalParameters
      * Needed in the MIMO system in which multiple TX and RX ports can exist,
      * hence the PSD is multidimensional. Elements are the complex numbers.
      */
-    Ptr<const ComplexMatrixArray> spectrumChannelMatrix;
+    Ptr<ComplexMatrixArray> spectrumChannelMatrix;
 
     /**
      * The 3D precoding matrix where the dimensions are: the number of TX ports,
      * the number of TX streams, the number of RBs.
      */
-    Ptr<const ComplexMatrixArray> precodingMatrix;
+    Ptr<ComplexMatrixArray> precodingMatrix;
 };
 
 } // namespace ns3
