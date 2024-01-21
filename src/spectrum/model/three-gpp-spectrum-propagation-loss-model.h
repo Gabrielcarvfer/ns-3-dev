@@ -160,7 +160,7 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
      * \param isReverse true if params and longTerm were computed with RX->TX switched
      * \return 3D spectrum channel matrix with dimensions numRxPorts * numTxPorts * numRBs
      */
-    Ptr<MatrixBasedChannelModel::Complex3DVector> GenSpectrumChannelMatrix(
+    Ptr<const MatrixBasedChannelModel::Complex3DVector> GenSpectrumChannelMatrix(
         Ptr<SpectrumValue> inPsd,
         Ptr<const MatrixBasedChannelModel::Complex3DVector> longTerm,
         Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix,

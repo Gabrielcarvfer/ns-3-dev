@@ -349,7 +349,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     return rxParams;
 }
 
-Ptr<MatrixBasedChannelModel::Complex3DVector>
+Ptr<const MatrixBasedChannelModel::Complex3DVector>
 ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     Ptr<SpectrumValue> inPsd,
     Ptr<const MatrixBasedChannelModel::Complex3DVector> longTerm,
