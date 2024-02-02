@@ -289,7 +289,7 @@ for example::
 
 or by using a command line argument
 
-.. sourcecode:: terminal
+.. sourcecode:: console
 
   $ ./ns3 run "...  --SimulatorImplementationType=ns3::DistributedSimulatorImpl"
 
