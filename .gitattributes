@@ -1,2 +1,6 @@
 src/*/bindings/* linguist-generated=true
-
+* text eol=lf
+*.jpg text=auto
+*.png text=auto
+*.pdf text=auto
+*.dia text=auto
