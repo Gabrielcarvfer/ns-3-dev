@@ -157,6 +157,9 @@ class MatrixBasedChannelModel : public Object
          */
         std::pair<uint32_t, uint32_t> m_nodeIds;
 
+        mutable std::vector<std::valarray<std::complex<double>>>
+            m_cachedDelaySincos; //!< cached delay
+
         /**
          * Destructor for ChannelParams
          */
@@ -208,7 +211,6 @@ class MatrixBasedChannelModel : public Object
     {
         return (uint64_t)std::min(a, b) << 32 | std::max(a, b);
     }
-
     static const uint8_t AOA_INDEX = 0; //!< index of the AOA value in the m_angle array
     static const uint8_t ZOA_INDEX = 1; //!< index of the ZOA value in the m_angle array
     static const uint8_t AOD_INDEX = 2; //!< index of the AOD value in the m_angle array

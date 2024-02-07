@@ -1149,6 +1149,8 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
         // Step 9: Generate the cross polarization power ratios
         // Step 10: Draw initial phases
         channelParams = GenerateChannelParameters(condition, table3gpp, aMob, bMob);
+        channelParams->m_cachedDelaySincos.clear();
+
         // store or replace the channel parameters
         m_channelParamsMap[channelParamsKey] = channelParams;
     }
