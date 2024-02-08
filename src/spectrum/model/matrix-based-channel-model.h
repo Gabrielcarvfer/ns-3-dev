@@ -156,6 +156,7 @@ class MatrixBasedChannelModel : public Object
          * were generated generated).
          */
         std::pair<uint32_t, uint32_t> m_nodeIds;
+        mutable ComplexMatrixArray m_cachedDelaySincos; //!< cached delay
 
         /**
          * Destructor for ChannelParams
