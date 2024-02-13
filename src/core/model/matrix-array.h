@@ -229,6 +229,29 @@ class MatrixArray : public ValArray<T>
               typename = std::enable_if_t<(std::is_same_v<T, std::complex<double>> && EnableBool)>>
     MatrixArray<T> HermitianTranspose() const;
 
+    /**
+     * \brief Function that updates the dimensions of a MatrixArray and resize
+     * the underlying valarray container if necessary to avoid reallocations
+     */
+    void SetDimensions(size_t numRows, size_t numCols, size_t numPages)
+    {
+        size_t newSize = numRows*numCols*numPages;
+        if (newSize > m_values.size())
+        {
+            m_values.resize(newSize);
+        }
+        m_numPages = numPages;
+        m_numRows = numRows;
+        m_numCols = numCols;
+    }
+    /**
+     * \brief Function that returns the underlying valarray
+     * for third-party modification
+     */
+    std::valarray<T>& GetValuesRef()
+    {
+        return m_values;
+    }
   protected:
     // To simplify functions in MatrixArray that are using members from the template base class
     using ValArray<T>::m_numRows;
