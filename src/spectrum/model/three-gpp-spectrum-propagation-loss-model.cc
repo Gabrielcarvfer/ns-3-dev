@@ -34,6 +34,48 @@
 
 #include <map>
 
+// Get absolute value of floating point by setting the sign bit to 0
+double abse(double value)
+{
+    union
+    {
+        uint64_t i;
+        double d;
+    } temp;
+    temp.d = value;
+    temp.i &= 0x7FFFFFFFFFFFFFFF;
+    return temp.d;
+}
+
+// https://www.mdpi.com/2079-9292/11/15/2285
+double sine1(double theta)
+{
+    return (2/M_PI)*(2/M_PI)*theta*(M_PI-abse(theta));;
+}
+double cose1(double theta)
+{
+    return sine1(M_PI/2 - abse(theta));
+}
+double scale(double theta)
+{
+    theta=theta-floorf(theta*1/M_2_PI)*M_2_PI;
+    theta=abse(theta);
+    return theta;
+}
+double sine2(double theta)
+{
+    constexpr double alpha = 0.224;
+    double sTheta = sine1(theta);
+    return sTheta*((1-alpha)-alpha*abse(sTheta));
+}
+double cose2(double theta)
+{
+    constexpr double alpha = 0.224;
+    double cTheta = cose1(theta);
+    return cTheta*((1-alpha)-alpha*abse(cTheta));
+}
+
+
 namespace ns3
 {
 
@@ -281,14 +323,14 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
 
         // cluster angle angle[direction][n], where direction = 0(aoa), 1(zoa).
         double tempDoppler =
-            factor * ((sin(zoa[cIndex] * M_PI / 180) * cos(aoa[cIndex] * M_PI / 180) * uSpeed.x +
-                       sin(zoa[cIndex] * M_PI / 180) * sin(aoa[cIndex] * M_PI / 180) * uSpeed.y +
-                       cos(zoa[cIndex] * M_PI / 180) * uSpeed.z) +
-                      (sin(zod[cIndex] * M_PI / 180) * cos(aod[cIndex] * M_PI / 180) * sSpeed.x +
-                       sin(zod[cIndex] * M_PI / 180) * sin(aod[cIndex] * M_PI / 180) * sSpeed.y +
-                       cos(zod[cIndex] * M_PI / 180) * sSpeed.z) +
+            factor * ((sine1(zoa[cIndex] * M_PI / 180) * cose1(aoa[cIndex] * M_PI / 180) * uSpeed.x +
+                       sine1(zoa[cIndex] * M_PI / 180) * sine1(aoa[cIndex] * M_PI / 180) * uSpeed.y +
+                       cose1(zoa[cIndex] * M_PI / 180) * uSpeed.z) +
+                      (sine1(zod[cIndex] * M_PI / 180) * cose1(aod[cIndex] * M_PI / 180) * sSpeed.x +
+                       sine1(zod[cIndex] * M_PI / 180) * sine1(aod[cIndex] * M_PI / 180) * sSpeed.y +
+                       cose1(zod[cIndex] * M_PI / 180) * sSpeed.z) +
                       2 * alpha * D);
-        doppler[cIndex] = std::complex<double>(cos(tempDoppler), sin(tempDoppler));
+        doppler[cIndex] = std::complex<double>(cose1(tempDoppler), sine1(tempDoppler));
     }
 
     NS_ASSERT(numCluster <= doppler.GetSize());
@@ -382,8 +424,9 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
             for (std::size_t cIndex = 0; cIndex < numCluster; cIndex++)
             {
                 double delay = -2 * M_PI * fsb * (channelParams->m_delay[cIndex]);
+                delay = scale(delay);
                 channelParams->m_cachedDelaySincos(i, cIndex) =
-                    std::complex<double>(cos(delay), sin(delay));
+                    std::complex<double>(cose2(delay), sine2(delay));
             }
             sbit++;
         }
