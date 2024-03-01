@@ -163,7 +163,7 @@ class MatrixBasedChannelModel : public Object
          * It is used to determine RB width (12*SCS) changes due to numerology,
          * in case the number of the RBs in the channel remains constant.
          */
-        mutable double m_cachedRbWidth;
+        mutable double m_cachedRbWidth = 0.0;
 
         /**
          * Matrix array that holds the precomputed delay sincos
