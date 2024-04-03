@@ -1249,19 +1249,26 @@ macro(process_options)
         <cstdlib>
         <cstring>
         <exception>
+        <deque>
         <fstream>
+        <functional>
         <iostream>
         <limits>
         <list>
         <map>
         <math.h>
         <ostream>
+        <queue>
         <set>
         <sstream>
         <stdint.h>
         <stdlib.h>
         <string>
+        <tuple>
+        <typeinfo>
+        <type_traits>
         <unordered_map>
+        <utility>
         <vector>
     )
     add_library(
