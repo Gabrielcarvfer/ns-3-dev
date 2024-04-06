@@ -47,84 +47,57 @@ namespace
 /** @{ */
 /** Scaling exponent, relative to smallest unit. */
 //                                      Y,   D,  H, MIN,  S, MS, US, NS, PS, FS
-const int8_t UNIT_POWER[Time::LAST] = {17, 17, 17, 16, 15, 12, 9, 6, 3, 0};
+constexpr int8_t UNIT_POWER[Time::LAST] = {17, 17, 17, 16, 15, 12, 9, 6, 3, 0};
 /** Scaling coefficient, relative to smallest unit. */
-const int32_t UNIT_COEFF[Time::LAST] = {315360, 864, 36, 6, 1, 1, 1, 1, 1, 1};
+constexpr int32_t UNIT_COEFF[Time::LAST] = {315360, 864, 36, 6, 1, 1, 1, 1, 1, 1};
 
 /**
  * Scale a unit to the smallest unit.
  * \param u The unit to scale
  * \returns The value of \pname{u} in terms of the smallest defined unit.
  */
-long double
+constexpr long double
 Scale(Time::Unit u)
 {
-    return UNIT_COEFF[u] * std::pow(10L, UNIT_POWER[u]);
+    long double pow10 = 1.0;
+    for (auto i = 0; i < UNIT_POWER[u]; i++)
+    {
+        pow10 *= 10.0;
+    }
+    return UNIT_COEFF[u] * pow10;
 }
 
 /**
  * Initializer for \c UNIT_VALUE
  * \returns The array of scale factors between units.
  */
-long double*
-InitUnitValue()
-{
-    static long double values[Time::LAST];
-    for (auto u = static_cast<int>(Time::Y); u != static_cast<int>(Time::LAST); ++u)
-    {
-        values[u] = Scale(static_cast<Time::Unit>(u));
-    }
-    return values;
-}
-
 /** Value of each unit, in terms of the smallest defined unit. */
-const long double* UNIT_VALUE = InitUnitValue();
-
+constexpr long double UNIT_VALUE[Time::LAST]{Scale(Time::Unit::Y),
+                                             Scale(Time::Unit::D),
+                                             Scale(Time::Unit::H),
+                                             Scale(Time::Unit::MIN),
+                                             Scale(Time::Unit::S),
+                                             Scale(Time::Unit::MS),
+                                             Scale(Time::Unit::US),
+                                             Scale(Time::Unit::NS),
+                                             Scale(Time::Unit::PS),
+                                             Scale(Time::Unit::FS)};
 /** @} */
 
 } // unnamed namespace
 
 // The set of marked times
 // static
-Time::MarkedTimes* Time::g_markingTimes = nullptr;
+Time::MarkedTimes Time::m_markingTimes;
 
-/// The static mutex for critical sections around modification of Time::g_markingTimes.
+/// The static mutex for critical sections around modification of Time::m_markingTimes.
 static std::mutex g_markingMutex;
 
-// Function called to force static initialization
-// static
-bool
-Time::StaticInit()
-{
-    static bool firstTime = true;
+/// The static resolution value
+Time::Resolution Time::m_resolution;
 
-    std::unique_lock lock{g_markingMutex};
-
-    if (firstTime)
-    {
-        if (!g_markingTimes)
-        {
-            static MarkedTimes markingTimes;
-            g_markingTimes = &markingTimes;
-        }
-        else
-        {
-            NS_LOG_ERROR("firstTime but g_markingTimes != 0");
-        }
-
-        // Schedule the cleanup.
-        // We'd really like:
-        //   NS_LOG_LOGIC ("scheduling ClearMarkedTimes()");
-        //   Simulator::Schedule ( Seconds (0), & ClearMarkedTimes);
-        //   [or even better:  Simulator::AtStart ( & ClearMarkedTimes ); ]
-        // But this triggers a static initialization order error,
-        // since the Simulator static initialization may not have occurred.
-        // Instead, we call ClearMarkedTimes directly from Simulator::Run ()
-        firstTime = false;
-    }
-
-    return firstTime;
-}
+/// The control variable to initialize the resolution just once
+bool Time::m_initialized = false;
 
 Time::Time(const std::string& s)
 {
@@ -191,11 +164,7 @@ Time::Time(const std::string& s)
         iss >> v;
         *this = Time::FromDouble(v, Time::S);
     }
-
-    if (g_markingTimes)
-    {
-        Mark(this);
-    }
+    Mark(this);
 }
 
 // static
@@ -203,9 +172,8 @@ Time::Resolution&
 Time::SetDefaultNsResolution()
 {
     NS_LOG_FUNCTION_NOARGS();
-    static Resolution resolution;
-    SetResolution(Time::NS, &resolution, false);
-    return resolution;
+    SetResolution(Time::NS, &Time::m_resolution, false);
+    return m_resolution;
 }
 
 // static
@@ -312,12 +280,7 @@ Time::ClearMarkedTimes()
     std::unique_lock lock{g_markingMutex};
 
     NS_LOG_FUNCTION_NOARGS();
-    if (g_markingTimes)
-    {
-        NS_LOG_LOGIC("clearing MarkedTimes");
-        g_markingTimes->erase(g_markingTimes->begin(), g_markingTimes->end());
-        g_markingTimes = nullptr;
-    }
+    m_markingTimes.erase(m_markingTimes.begin(), m_markingTimes.end());
 } // Time::ClearMarkedTimes
 
 // static
@@ -329,17 +292,14 @@ Time::Mark(Time* const time)
     NS_LOG_FUNCTION(time);
     NS_ASSERT(time != nullptr);
 
-    // Repeat the g_markingTimes test here inside the CriticalSection,
+    // Repeat the m_markingTimes test here inside the CriticalSection,
     // since earlier test was outside and might be stale.
-    if (g_markingTimes)
-    {
-        auto ret = g_markingTimes->insert(time);
-        NS_LOG_LOGIC("\t[" << g_markingTimes->size() << "] recording " << time);
+    auto ret = m_markingTimes.insert(time);
+    NS_LOG_LOGIC("\t[" << m_markingTimes.size() << "] recording " << time);
 
-        if (!ret.second)
-        {
-            NS_LOG_WARN("already recorded " << time << "!");
-        }
+    if (!ret.second)
+    {
+        NS_LOG_WARN("already recorded " << time << "!");
     }
 } // Time::Mark ()
 
@@ -352,23 +312,17 @@ Time::Clear(Time* const time)
     NS_LOG_FUNCTION(time);
     NS_ASSERT(time != nullptr);
 
-    if (g_markingTimes)
+    MarkedTimes::size_type num = m_markingTimes.erase(time);
+    if (num != 1)
     {
-        NS_ASSERT_MSG(g_markingTimes->count(time) == 1,
-                      "Time object " << time << " registered " << g_markingTimes->count(time)
-                                     << " times (should be 1).");
-
-        MarkedTimes::size_type num = g_markingTimes->erase(time);
-        if (num != 1)
-        {
-            NS_LOG_WARN("unexpected result erasing " << time << "!");
-            NS_LOG_WARN("got " << num << ", expected 1");
-        }
-        else
-        {
-            NS_LOG_LOGIC("\t[" << g_markingTimes->size() << "] removing  " << time);
-        }
+        NS_LOG_WARN("unexpected result erasing " << time << "!");
+        NS_LOG_WARN("got " << num << ", expected 1");
     }
+    else
+    {
+        NS_LOG_LOGIC("\t[" << m_markingTimes.size() << "] removing  " << time);
+    }
+
 } // Time::Clear ()
 
 // static
@@ -379,11 +333,7 @@ Time::ConvertTimes(const Unit unit)
 
     NS_LOG_FUNCTION_NOARGS();
 
-    NS_ASSERT_MSG(g_markingTimes != nullptr,
-                  "No MarkedTimes registry. "
-                  "Time::SetResolution () called more than once?");
-
-    for (auto it = g_markingTimes->begin(); it != g_markingTimes->end(); it++)
+    for (auto it = m_markingTimes.begin(); it != m_markingTimes.end(); it++)
     {
         Time* const tp = *it;
         if (!(tp->m_data == std::numeric_limits<int64_t>::min() ||
@@ -393,13 +343,12 @@ Time::ConvertTimes(const Unit unit)
         }
     }
 
-    NS_LOG_LOGIC("logged " << g_markingTimes->size() << " Time objects.");
+    NS_LOG_LOGIC("logged " << m_markingTimes.size() << " Time objects.");
 
     // Body of ClearMarkedTimes
-    // Assert above already guarantees g_markingTimes != 0
+    // Assert above already guarantees m_markingTimes != 0
     NS_LOG_LOGIC("clearing MarkedTimes");
-    g_markingTimes->erase(g_markingTimes->begin(), g_markingTimes->end());
-    g_markingTimes = nullptr;
+    m_markingTimes.erase(m_markingTimes.begin(), m_markingTimes.end());
 
 } // Time::ConvertTimes ()
 

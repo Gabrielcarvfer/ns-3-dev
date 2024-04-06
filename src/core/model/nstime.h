@@ -138,10 +138,7 @@ class Time
     inline Time()
         : m_data()
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     /**
@@ -152,10 +149,7 @@ class Time
     inline Time(const Time& o)
         : m_data(o.m_data)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     /**
@@ -166,10 +160,7 @@ class Time
     Time(Time&& o)
         : m_data(o.m_data)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     /**
@@ -185,73 +176,49 @@ class Time
     explicit inline Time(double v)
         : m_data(llround(v))
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     explicit inline Time(int v)
         : m_data(v)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     explicit inline Time(long int v)
         : m_data(v)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     explicit inline Time(long long int v)
         : m_data(v)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     explicit inline Time(unsigned int v)
         : m_data(v)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     explicit inline Time(unsigned long int v)
         : m_data(v)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     explicit inline Time(unsigned long long int v)
         : m_data(v)
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     explicit inline Time(const int64x64_t& v)
         : m_data(v.Round())
     {
-        if (g_markingTimes)
-        {
-            Mark(this);
-        }
+        Mark(this);
     }
 
     /**@}*/ // Numeric constructors
@@ -302,10 +269,7 @@ class Time
     /** Destructor */
     ~Time()
     {
-        if (g_markingTimes)
-        {
-            Clear(this);
-        }
+        Clear(this);
     }
 
     /**
@@ -648,14 +612,19 @@ class Time
     };
 
     /**
+     * Current resolution
+     */
+    static Resolution m_resolution;
+    static bool m_initialized;
+
+    /**
      *  Get the current Resolution
      *
      *  \return A pointer to the current Resolution
      */
     static inline Resolution* PeekResolution()
     {
-        static Time::Resolution& resolution{SetDefaultNsResolution()};
-        return &resolution;
+        return &m_resolution;
     }
 
     /**
@@ -705,29 +674,21 @@ class Time
      *  > and copy constructable; clearly a const type will not be assignable.
      */
     typedef std::set<Time*> MarkedTimes;
-    /**
-     *  Record of outstanding Time objects which will need conversion
-     *  when the resolution is set.
-     *
-     *  \internal
-     *
-     *  Use a classic static variable so we can check in Time ctors
-     *  without a function call.
-     *
-     *  We'd really like to initialize this here, but we don't want to require
-     *  C++0x, so we init in time.cc.  To ensure that happens before first use,
-     *  we add a call to StaticInit (below) to every compilation unit which
-     *  includes nstime.h.
-     */
-    static MarkedTimes* g_markingTimes;
+    static MarkedTimes m_markingTimes;
 
-  public:
     /**
      *  Function to force static initialization of Time.
-     *
-     * \return \c true on the first call
      */
-    static bool StaticInit();
+  public:
+    __attribute__((constructor)) static void StaticInit()
+    {
+        if (!m_initialized)
+        {
+            SetDefaultNsResolution();
+            m_initialized = true;
+            m_markingTimes.clear();
+        }
+    }
 
   private:
     /**
@@ -839,13 +800,6 @@ namespace TracedValueCallback
 typedef void (*Time)(Time oldValue, Time newValue);
 
 } // namespace TracedValueCallback
-
-/**
- * Force static initialization order of Time in each compilation unit.
- * This is internal to the Time implementation.
- * \relates Time
- */
-static bool g_TimeStaticInit [[maybe_unused]] = Time::StaticInit();
 
 /**
  * Equality operator for Time.
@@ -1489,6 +1443,17 @@ class TimeWithUnit
  * \returns The type name as a string.
  */
 TYPENAMEGET_DEFINE(Time);
+
+class InitializationHelper
+{
+  public:
+    InitializationHelper()
+    {
+        Time::StaticInit();
+    }
+};
+
+static InitializationHelper initHelper;
 
 } // namespace ns3
 
