@@ -34,6 +34,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 * (core) `Time` arithmetic (`+`, `-`, `+=`, `-=`, `*`, `/`, `%`, `Div()`, `Rem()`, `Abs()`) and conversions (`Seconds()` and the other unit functions, `Time(double)`, `Time(int64x64_t)`, `ToInteger()`, `To()`, `ToDouble()` and the `Get*()` accessors) now saturate to `Time::Max()` or `Time::Min()` (or to the limits of the result type) when the result is out of range, instead of wrapping around or invoking undefined behavior. For example, `Simulator::Now() + Time::Max()` is `Time::Max()`, and `Seconds(10000).GetFemtoSeconds()` is `INT64_MAX` instead of a wrapped negative value. A `Time` created from NaN is 0, and asserts in debug builds.
 * (core) `Time::Max()` and `Time::Min()` are printed as their exact number of time steps followed by ' (max)' or ' (min)', e.g. `+9223372036854775807ns (max)` at the default resolution, whatever unit is passed to `Time::As()`. `operator>>` and `Time(std::string)` read these back, so `TimeValue` attributes holding the limits round-trip.
+* (core) Creating a `Time` from a non-zero value that rounds to zero at the current resolution (e.g. `Time(0.1)`, which is 0.1 ns at the default resolution, or `FemtoSeconds(1)`) now prints a warning on the standard error, in all builds. `Time(double)` and `Time(int64x64_t)` now convert through `Time::FromDouble()` and `Time::From()`; results of `Time` arithmetic that round to zero do not warn.
 
 ## Changes from ns-3.48 to ns-3.49
 

@@ -15,12 +15,15 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 using namespace ns3;
 
@@ -741,6 +744,102 @@ TimeOverflowSaturatesTestCase::DoRun()
 
 /**
  * @ingroup core-tests
+ * @brief Checks that a warning is printed when a non-zero value becomes a
+ *        zero Time at the current resolution, and only then.
+ */
+class TimeRoundToZeroTestCase : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor for TimeRoundToZeroTestCase.
+     */
+    TimeRoundToZeroTestCase();
+
+  private:
+    /**
+     * @brief DoRun for TimeRoundToZeroTestCase.
+     */
+    void DoRun() override;
+
+    /**
+     * Create a Time, capturing what is printed on the standard error meanwhile.
+     * @param [in] create The function creating the Time.
+     * @param [out] warning What was printed on the standard error.
+     * @return The Time created.
+     */
+    Time Create(const std::function<Time()>& create, std::string& warning);
+};
+
+TimeRoundToZeroTestCase::TimeRoundToZeroTestCase()
+    : TestCase("Warn when a non-zero value rounds to a zero Time")
+{
+}
+
+Time
+TimeRoundToZeroTestCase::Create(const std::function<Time()>& create, std::string& warning)
+{
+    std::ostringstream captured;
+    std::streambuf* original = std::cerr.rdbuf(captured.rdbuf());
+    const Time time = create();
+    std::cerr.rdbuf(original);
+    warning = captured.str();
+    return time;
+}
+
+void
+TimeRoundToZeroTestCase::DoRun()
+{
+    NS_TEST_ASSERT_MSG_EQ(Time::GetResolution(), Time::NS, "test precondition: ns resolution");
+    std::string warning;
+
+    // Values that round to zero warn.
+    for (const auto& [name, create] : std::vector<std::pair<std::string, std::function<Time()>>>{
+             {"Time (0.1)", [] { return Time(0.1); }},
+             {"Time (-0.4)", [] { return Time(-0.4); }},
+             {"Time (int64x64_t (0.25))", [] { return Time(int64x64_t(0.25)); }},
+             {"NanoSeconds (int64x64_t (0.4))", [] { return NanoSeconds(int64x64_t(0.4)); }},
+             {"Seconds (1e-10)", [] { return Seconds(1e-10); }},
+             {"PicoSeconds (499)", [] { return PicoSeconds(499); }},
+             {"FemtoSeconds (1)", [] { return FemtoSeconds(1); }},
+         })
+    {
+        NS_TEST_EXPECT_MSG_EQ(Create(create, warning), Time(), name);
+        NS_TEST_EXPECT_MSG_NE(warning.find("rounded to 0"), std::string::npos, name);
+    }
+    NS_TEST_EXPECT_MSG_EQ(Create([] { return Time(0.1); }, warning), Time(), "Time (0.1)");
+    NS_TEST_EXPECT_MSG_NE(warning.find("0.1ns"),
+                          std::string::npos,
+                          "value and unit in " << warning);
+
+    // Zero, and values that do not round to zero, do not.
+    for (const auto& [name, create, expected] :
+         std::vector<std::tuple<std::string, std::function<Time()>, Time>>{
+             {"Time (0)", [] { return Time(0.0); }, Time()},
+             {"Seconds (0)", [] { return Seconds(0); }, Time()},
+             {"Time (0.6)", [] { return Time(0.6); }, NanoSeconds(1)},
+             {"Time (1.5)", [] { return Time(1.5); }, NanoSeconds(2)},
+             {"Seconds (4.6)", [] { return Seconds(4.6); }, NanoSeconds(4600000000)},
+             {"PicoSeconds (1500)", [] { return PicoSeconds(1500); }, NanoSeconds(1)},
+             {"MilliSeconds (3)", [] { return MilliSeconds(3); }, NanoSeconds(3000000)},
+         })
+    {
+        NS_TEST_EXPECT_MSG_EQ(Create(create, warning), expected, name);
+        NS_TEST_EXPECT_MSG_EQ(warning, "", name);
+    }
+
+    // Arithmetic results that round to zero are not user input, and do not warn.
+    NS_TEST_EXPECT_MSG_EQ(Create([] { return NanoSeconds(1) / int64x64_t(3); }, warning),
+                          Time(),
+                          "1 ns / 3");
+    NS_TEST_EXPECT_MSG_EQ(warning, "", "1 ns / 3");
+    NS_TEST_EXPECT_MSG_EQ(Create([] { return NanoSeconds(1) * 0.25; }, warning),
+                          Time(),
+                          "1 ns * 0.25");
+    NS_TEST_EXPECT_MSG_EQ(warning, "", "1 ns * 0.25");
+}
+
+/**
+ * @ingroup core-tests
  * @brief   Time test Suite.  Runs the appropriate test cases for time
  */
 static class TimeTestSuite : public TestSuite
@@ -753,6 +852,7 @@ static class TimeTestSuite : public TestSuite
         AddTestCase(new TimeInputOutputTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TimeToIntegerOverflowTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TimeOverflowSaturatesTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TimeRoundToZeroTestCase(), TestCase::Duration::QUICK);
         // This should be last, since it changes the resolution
         AddTestCase(new TimeSimpleTestCase(), TestCase::Duration::QUICK);
     }

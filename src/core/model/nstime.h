@@ -180,8 +180,8 @@ class CORE_EXPORT Time
      * @param [in] v The value.
      */
     explicit inline Time(double v)
-        : m_data(StepsSaturated(v))
     {
+        *this = FromDouble(v, GetResolution());
         if (MarkingTimes())
         {
             Mark(this);
@@ -243,8 +243,8 @@ class CORE_EXPORT Time
     }
 
     explicit inline Time(const int64x64_t& v)
-        : m_data(StepsSaturated(v))
     {
+        *this = From(v, GetResolution());
         if (MarkingTimes())
         {
             Mark(this);
@@ -482,7 +482,7 @@ class CORE_EXPORT Time
      */
     inline static Time From(const int64x64_t& value)
     {
-        return Time(value);
+        return From(value, GetResolution());
     }
 
     /**
@@ -516,7 +516,12 @@ class CORE_EXPORT Time
         {
             return Time(MulSaturated(v, info->factor));
         }
-        return Time(v / info->factor);
+        const int64_t steps = v / info->factor;
+        if (steps == 0)
+        {
+            WarnRoundedToZero(static_cast<double>(v), unit);
+        }
+        return Time(steps);
     }
 
     inline static Time FromDouble(double value, Unit unit)
@@ -579,7 +584,12 @@ class CORE_EXPORT Time
         {
             retval.MulByInvert(info->timeFrom);
         }
-        return Time(retval);
+        const int64_t steps = StepsSaturated(retval);
+        if (steps == 0)
+        {
+            WarnRoundedToZero(value.GetDouble(), unit);
+        }
+        return Time(steps);
     }
 
     /**@}*/ // Create Times from Values and Units
@@ -815,26 +825,6 @@ class CORE_EXPORT Time
 
     /**
      * Round a value in the current unit to time steps, saturating.
-     * @param [in] value The value; NaN gives 0.
-     * @return The saturated number of time steps.
-     */
-    static int64_t StepsSaturated(double value)
-    {
-        NS_ASSERT_MSG(!std::isnan(value), "Attempted to create a Time from NaN.");
-        int64_t saturated;
-        if (std::isnan(value))
-        {
-            return 0;
-        }
-        if (Saturate(value, saturated))
-        {
-            return saturated;
-        }
-        return llround(value);
-    }
-
-    /**
-     * Round a value in the current unit to time steps, saturating.
      * @param [in] value The value.
      * @return The saturated number of time steps.
      */
@@ -850,6 +840,18 @@ class CORE_EXPORT Time
         }
         return value.Round();
     }
+
+    /**
+     * Warn, on the standard error in every build, that a non-zero value
+     * became a zero Time when converted to the current resolution.
+     *
+     * A zero delay where a non-zero one was meant can, e.g., make a timer
+     * reschedule itself forever without advancing the simulation time.
+     *
+     * @param [in] value The value, in \pname{unit}.
+     * @param [in] unit The unit of \pname{value}.
+     */
+    static void WarnRoundedToZero(double value, Unit unit);
 
     /** How to convert between other units and the current unit. */
     struct Information
@@ -1151,7 +1153,7 @@ operator*(const Time& lhs, const int64x64_t& rhs)
     }
     int64x64_t res = lhs.m_data;
     res *= rhs;
-    return Time(res);
+    return Time(Time::StepsSaturated(res));
 }
 
 /**
@@ -1255,7 +1257,7 @@ operator/(const Time& lhs, const int64x64_t& rhs)
     }
     int64x64_t res = lhs.m_data;
     res /= rhs;
-    return Time(res);
+    return Time(Time::StepsSaturated(res));
 }
 
 /**

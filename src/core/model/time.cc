@@ -12,6 +12,7 @@
 #include "nstime.h"
 
 #include <cmath> // pow
+#include <iostream>
 #include <mutex>
 #include <sstream>
 
@@ -432,6 +433,59 @@ Time::As(const Unit unit /* = Time::AUTO */) const
     return TimeWithUnit(*this, unit);
 }
 
+namespace
+{
+/**
+ * Get the label of a time unit, as used when printing Times.
+ * @param [in] unit The unit.
+ * @return The unit label, e.g. "ns".
+ */
+std::string
+UnitLabel(Time::Unit unit)
+{
+    switch (unit)
+    {
+    case Time::Y:
+        return "y";
+    case Time::D:
+        return "d";
+    case Time::H:
+        return "h";
+    case Time::MIN:
+        return "min";
+    case Time::S:
+        return "s";
+    case Time::MS:
+        return "ms";
+    case Time::US:
+        return "us";
+    case Time::NS:
+        return "ns";
+    case Time::PS:
+        return "ps";
+    case Time::FS:
+        return "fs";
+
+    case Time::LAST:
+    case Time::AUTO:
+    default:
+        NS_ABORT_MSG("can't be reached");
+        return "unreachable";
+    }
+}
+} // namespace
+
+// static
+void
+Time::WarnRoundedToZero(double value, Unit unit)
+{
+    std::cerr << "Warning: a Time of " << value << UnitLabel(unit)
+              << " was rounded to 0 at the current resolution of " << UnitLabel(GetResolution())
+              << "; a zero delay where a non-zero one was meant can, e.g., make a timer"
+                 " reschedule itself forever."
+              << std::endl;
+}
+
 std::ostream&
 operator<<(std::ostream& os, const Time& time)
 {
@@ -472,46 +526,7 @@ operator<<(std::ostream& os, const TimeWithUnit& timeU)
         unit = static_cast<Time::Unit>(u);
     }
 
-    switch (unit)
-    {
-    case Time::Y:
-        label = "y";
-        break;
-    case Time::D:
-        label = "d";
-        break;
-    case Time::H:
-        label = "h";
-        break;
-    case Time::MIN:
-        label = "min";
-        break;
-    case Time::S:
-        label = "s";
-        break;
-    case Time::MS:
-        label = "ms";
-        break;
-    case Time::US:
-        label = "us";
-        break;
-    case Time::NS:
-        label = "ns";
-        break;
-    case Time::PS:
-        label = "ps";
-        break;
-    case Time::FS:
-        label = "fs";
-        break;
-
-    case Time::LAST:
-    case Time::AUTO:
-    default:
-        NS_ABORT_MSG("can't be reached");
-        label = "unreachable";
-        break;
-    }
+    label = UnitLabel(unit);
 
     // Note: we must copy the "original" format flags because we have to modify them.
     // std::ios_base::showpos is to print the "+" in front of the number for positive,
