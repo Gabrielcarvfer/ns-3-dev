@@ -169,7 +169,7 @@ function(scan_python_examples path)
   endif()
 
   # Search for python examples
-  file(GLOB_RECURSE python_examples ${path}/*.py)
+  file(GLOB python_examples ${path}/*.py)
   foreach(python_example ${python_examples})
     if(NOT (${python_example} MATCHES "examples-to-run"))
       set(ns3-execs-py "${python_example};${ns3-execs-py}"
