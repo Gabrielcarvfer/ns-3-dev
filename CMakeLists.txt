@@ -67,6 +67,7 @@ option(
 )
 option(NS3_GSL "Build with GSL support" ON)
 option(NS3_GTK3 "Build with GTK3 support" ON)
+option(NS3_LEAN_AND_MEAN "Do less CMake wizardry with module libraries" OFF)
 option(NS3_LINK_TIME_OPTIMIZATION "Build with link-time optimization" OFF)
 option(NS3_MONOLIB
        "Build a single shared ns-3 library and link it against executables" OFF

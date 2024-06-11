@@ -105,7 +105,7 @@ endfunction()
 # MODULE_ENABLED_FEATURES = "list;of;enabled;features;for;this;module" (used by fd-net-device)
 # cmake-format: on
 
-function(build_lib)
+function(build_lib_wizardry)
   # Argument parsing
   set(options IGNORE_PCH)
   set(oneValueArgs LIBNAME)
@@ -484,6 +484,131 @@ function(build_lib)
     message(STATUS "Processed ${FOLDER}")
   endif()
 endfunction()
+
+function(build_lib_lean_and_mean) # Argument parsing
+  set(options IGNORE_PCH)
+  set(oneValueArgs LIBNAME)
+  set(multiValueArgs
+      SOURCE_FILES
+      HEADER_FILES
+      LIBRARIES_TO_LINK
+      TEST_SOURCES
+      DEPRECATED_HEADER_FILES
+      MODULE_ENABLED_FEATURES
+      PRIVATE_HEADER_FILES
+  )
+  cmake_parse_arguments(
+    "BLIB" "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN}
+  )
+
+  # Get path src/module or contrib/module
+  string(REPLACE "${PROJECT_SOURCE_DIR}/" "" FOLDER
+                 "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+
+  # Add library to a global list of libraries
+  if("${FOLDER}" MATCHES "src")
+    set(ns3-libs "${BLIB_LIBNAME};${ns3-libs}"
+        CACHE INTERNAL "list of processed upstream modules"
+    )
+  else()
+    set(ns3-contrib-libs "${BLIB_LIBNAME};${ns3-contrib-libs}"
+        CACHE INTERNAL "list of processed contrib modules"
+    )
+  endif()
+
+  # Create shared library with sources and headers
+  add_library(${BLIB_LIBNAME} SHARED "${BLIB_SOURCE_FILES}")
+
+  # Link the shared library with the libraries passed
+  target_link_libraries(${BLIB_LIBNAME} ${BLIB_LIBRARIES_TO_LINK})
+
+  # Write a module header that includes all headers from that module
+  write_module_header("${BLIB_LIBNAME}" "${BLIB_HEADER_FILES}")
+
+  # Create core and config-store header files
+  set(config_headers)
+  if("${BLIB_LIBNAME}" STREQUAL "core")
+    set(config_headers ${CMAKE_HEADER_OUTPUT_DIRECTORY}/config-store-config.h
+                       ${CMAKE_HEADER_OUTPUT_DIRECTORY}/core-config.h
+    )
+    if(${ENABLE_BUILD_VERSION})
+      list(APPEND config_headers
+           ${CMAKE_HEADER_OUTPUT_DIRECTORY}/version-defines.h
+      )
+    endif()
+  endif()
+
+  # Format library name, set header dependencies and output directory of DLLs
+  set_target_properties(
+    ${BLIB_LIBNAME}
+    PROPERTIES
+      PUBLIC_HEADER
+      "${BLIB_HEADER_FILES};${BLIB_DEPRECATED_HEADER_FILES};${config_headers};${CMAKE_HEADER_OUTPUT_DIRECTORY}/${BLIB_LIBNAME}-module.h"
+      PRIVATE_HEADER "${BLIB_PRIVATE_HEADER_FILES}"
+      RUNTIME_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+  )
+
+  # Build tests if requested
+  if(${NS3_TESTS})
+    list(LENGTH test_sources test_source_len)
+    if(${test_source_len} GREATER 0)
+      # Create libname of output library test of module
+      list(APPEND test${BLIB_LIBNAME}
+           ns${NS3_VER}-${libname}-test-${build_type}
+      )
+
+      # Create shared library containing tests of the module
+      add_library(${test${BLIB_LIBNAME}} SHARED "${BLIB_TEST_SOURCES}")
+
+      # Link test library to the module library
+      target_link_libraries(${test${BLIB_LIBNAME}} ${BLIB_LIBNAME})
+    endif()
+  endif()
+
+  # Build lib examples if requested
+  if(${NS3_EXAMPLES})
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+      add_subdirectory(examples)
+    endif()
+  endif()
+
+  copy_headers_before_building_lib(
+    ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY} "${BLIB_HEADER_FILES}"
+    public
+  )
+  if(BLIB_PRIVATE_HEADER_FILES)
+    copy_headers_before_building_lib(
+      ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+      "${BLIB_PRIVATE_HEADER_FILES}" private
+    )
+  endif()
+
+  if(BLIB_DEPRECATED_HEADER_FILES)
+    copy_headers_before_building_lib(
+      ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+      "${BLIB_DEPRECATED_HEADER_FILES}" deprecated
+    )
+  endif()
+
+  install(
+    TARGETS ${BLIB_LIBNAME}
+    EXPORT ns3ExportTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ns3"
+    PRIVATE_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ns3"
+  )
+endfunction()
+
+macro(build_lib)
+  if(${NS3_LEAN_AND_MEAN})
+    build_lib_lean_and_mean(${ARGN})
+  else()
+    build_lib_wizardry(${ARGN})
+  endif()
+endmacro()
 
 # cmake-format: off
 #
