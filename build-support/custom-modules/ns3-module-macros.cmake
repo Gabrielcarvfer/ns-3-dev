@@ -419,7 +419,7 @@ function(build_lib)
     list(LENGTH BLIB_TEST_SOURCES test_source_len)
     if(${test_source_len} GREATER 0)
       # Create BLIB_LIBNAME of output library test of module
-      set(test${BLIB_LIBNAME} lib${BLIB_LIBNAME}-test CACHE INTERNAL "")
+      set(test${BLIB_LIBNAME} ${BLIB_LIBNAME}-test CACHE INTERNAL "")
 
       # Create shared library containing tests of the module on UNIX and just
       # the object file that will be part of test-runner on Windows

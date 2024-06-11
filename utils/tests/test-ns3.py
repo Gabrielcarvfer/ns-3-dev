@@ -691,7 +691,7 @@ class NS3ConfigureBuildProfileTestCase(unittest.TestCase):
         # Build core to check if profile suffixes match the expected.
         return_code, stdout, stderr = run_ns3("build core")
         self.assertEqual(return_code, 0)
-        self.assertIn("Built target libcore", stdout)
+        self.assertIn("Built target core", stdout)
 
         libraries = get_libraries_list()
         self.assertGreater(len(libraries), 0)
@@ -722,7 +722,7 @@ class NS3ConfigureBuildProfileTestCase(unittest.TestCase):
         # Build core to check if profile suffixes match the expected
         return_code, stdout, stderr = run_ns3("build core")
         self.assertEqual(return_code, 0)
-        self.assertIn("Built target libcore", stdout)
+        self.assertIn("Built target core", stdout)
 
         libraries = get_libraries_list()
         self.assertGreater(len(libraries), 0)
@@ -884,7 +884,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
 
         # If nothing went wrong, this should have worked
         self.assertEqual(return_code, 0)
-        self.assertIn("Built target libcore-test", stdout)
+        self.assertIn("Built target core-test", stdout)
 
         # Now we disabled the tests
         return_code, stdout, stderr = run_ns3('configure -G "{generator}" --disable-tests')
@@ -2085,7 +2085,7 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         """
         return_code, stdout, stderr = run_ns3("build core")
         self.assertEqual(return_code, 0)
-        self.assertIn("Built target libcore", stdout)
+        self.assertIn("Built target core", stdout)
 
     def test_02_BuildNonExistingTargets(self):
         """!
