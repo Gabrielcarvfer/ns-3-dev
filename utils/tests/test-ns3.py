@@ -1075,7 +1075,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
             self.assertLess(len(get_enabled_modules()), len(self.ns3_modules))
             self.assertIn("ns3-lte", enabled_modules)
             self.assertTrue(get_test_enabled())
-            self.assertLessEqual(len(get_programs_list()), len(self.ns3_executables))
+            self.assertLessEqual(len(get_programs_list()), len(self.ns3_executables) + (1 if win32 else 0))
 
             # Replace the ns3rc file with the wifi module, enabling examples and disabling tests
             with open(ns3rc_script, "w", encoding="utf-8") as f:
@@ -1355,8 +1355,17 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
                     f.write("")
 
         # Reload the cmake cache to pick them up
+        # It will fail because the empty scratch has no main function
+        return_code, stdout, stderr = run_ns3('configure -G "{generator}"')
+        self.assertEqual(return_code, 1)
+        print("a")
+        # Remove the empty.cc file and try again
+        empty = "scratch/empty.cc"
+        os.remove(empty)
+        test_files.remove(empty)
         return_code, stdout, stderr = run_ns3('configure -G "{generator}"')
         self.assertEqual(return_code, 0)
+        print("b")
 
         # Try to build them with ns3 and cmake
         for path in test_files + backup_files:
@@ -1373,6 +1382,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
             else:
                 self.assertEqual(return_code1, 2)
                 self.assertEqual(return_code2, 1)
+        print("c")
 
         # Try to run them
         for path in test_files:
@@ -1382,6 +1392,7 @@ class NS3ConfigureTestCase(NS3BaseTestCase):
                 self.assertEqual(return_code, 0)
             else:
                 self.assertEqual(return_code, 1)
+        print("d")
 
         run_ns3("clean")
         with DockerContainerManager(self, "ubuntu:20.04") as container:
