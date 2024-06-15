@@ -8,6 +8,12 @@
       - $CPPYY == "True"
       - $RELEASE == "weekly"
       - $RELEASE == "daily"
+  only:
+    changes:
+      - "**/*.cc"
+      - "**/*.h"
+      - "build-support/**/*"
+      - "**/CMakeLists.txt"
   image: archlinux
   before_script:
     - pacman-key --init
