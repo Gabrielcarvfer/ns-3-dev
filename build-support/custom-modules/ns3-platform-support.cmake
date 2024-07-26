@@ -28,6 +28,20 @@ if(EXISTS "/proc/version")
   endif()
 endif()
 
+# cmake-format: off
+# Some genius at Microsoft thought it was a good idea to inject Windows
+# %PATH% into WSL $PATH, **BY DEFAULT**
+# Detect and warn users how to disable path injection
+# cmake-format: on
+if("$ENV{PATH}" MATCHES "/mnt/c/")
+  message(
+    FATAL_ERROR
+      "To prevent Windows path injection on WSL, append the following to /etc/wsl.conf, then use `wsl --shutdown` to restart the WSL VM:
+[interop]
+appendWindowsPath = false"
+  )
+endif()
+
 # Set Linux flag if on Linux
 if(UNIX AND NOT APPLE)
   if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
