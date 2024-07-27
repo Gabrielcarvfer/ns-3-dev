@@ -328,27 +328,11 @@ function(build_lib_wizardry)
     PRIVATE_HEADER_FILES ${BLIB_PRIVATE_HEADER_FILES}
   )
 
-  # Build lib examples if requested
-  set(examples_before ${ns3-execs-clean})
-  foreach(example_folder example;examples)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${example_folder})
-      if(${ENABLE_EXAMPLES})
-        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${example_folder}/CMakeLists.txt)
-          add_subdirectory(${example_folder})
-        endif()
-      endif()
-      scan_python_examples(${CMAKE_CURRENT_SOURCE_DIR}/${example_folder})
-    endif()
-  endforeach()
-  set(module_examples ${ns3-execs-clean})
+  # Scan for C++ and Python examples and return a list of C++ examples (which
+  # can be set as dependencies of examples-as-test test suites)
+  build_lib_scan_examples(module_examples)
 
-  # Filter only module examples
-  foreach(example ${examples_before})
-    list(REMOVE_ITEM module_examples ${example})
-  endforeach()
-  unset(examples_before)
-
-  # Check if the module tests should be built
+  # Check if a module test should be built
   build_lib_check_examples_and_tests_filtered_in(${BLIB_LIBNAME} filtered_in)
 
   # Build tests if requested
@@ -398,19 +382,9 @@ function(build_lib_wizardry)
       endif()
 
       # Add dependency between tests and examples used as tests
-      if(${ENABLE_EXAMPLES})
-        foreach(source_file ${BLIB_TEST_SOURCES})
-          file(READ ${source_file} source_file_contents)
-          foreach(example_as_test ${module_examples})
-            string(FIND "${source_file_contents}" "${example_as_test}"
-                        is_sub_string
-            )
-            if(NOT (${is_sub_string} EQUAL -1))
-              add_dependencies(test-runner-examples-as-tests ${example_as_test})
-            endif()
-          endforeach()
-        endforeach()
-      endif()
+      examples_as_tests_dependencies(
+        "${module_examples}" "${BLIB_TEST_SOURCES}"
+      )
     endif()
   endif()
 
@@ -511,11 +485,7 @@ function(build_lib_lean_and_mean) # Argument parsing
   endif()
 
   # Build lib examples if requested
-  if(${NS3_EXAMPLES})
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/examples)
-      add_subdirectory(examples)
-    endif()
-  endif()
+  build_lib_scan_examples(module_examples)
 
   copy_headers(
     PUBLIC_HEADER_OUTPUT_DIR ${CMAKE_HEADER_OUTPUT_DIRECTORY}
@@ -596,6 +566,9 @@ function(build_lib_example)
   endif()
 endfunction()
 
+# Check if module examples and tests should be built or not
+#
+# Arguments: libname (e.g. core, wifi), filtered_in (return boolean)
 function(build_lib_check_examples_and_tests_filtered_in libname filtered_in)
   set(in ON)
   if(NS3_FILTER_MODULE_EXAMPLES_AND_TESTS)
@@ -640,6 +613,50 @@ function(separate_ns3_from_non_ns3_libs libname libraries_to_link
   endforeach()
   set(${ns_libraries_to_link} ${ns_libs} PARENT_SCOPE)
   set(${non_ns_libraries_to_link} ${non_ns_libs} PARENT_SCOPE)
+endfunction()
+
+# This macro scans for C++ and Python examples for a given module and return a
+# list of C++ examples
+#
+# Arguments: module_cpp_examples = return list of C++ examples
+function(build_lib_scan_examples module_cpp_examples)
+  # Build lib examples if requested
+  set(examples_before ${ns3-execs-clean})
+  foreach(example_folder example;examples)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${example_folder})
+      if(${ENABLE_EXAMPLES})
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${example_folder}/CMakeLists.txt)
+          add_subdirectory(${example_folder})
+        endif()
+      endif()
+      scan_python_examples(${CMAKE_CURRENT_SOURCE_DIR}/${example_folder})
+    endif()
+  endforeach()
+  set(module_examples ${ns3-execs-clean})
+
+  # Return a list of module c++ examples (current examples - previous examples)
+  list(REMOVE_ITEM module_examples ${examples_before})
+  set(${module_cpp_examples} ${module_examples} PARENT_SCOPE)
+endfunction()
+
+# This macro scans for C++ examples used by examples-as-tests suites
+#
+# Arguments: module_cpp_examples = list of C++ example executable names,
+# module_test_sources = list of C++ sources with tests
+function(examples_as_tests_dependencies module_cpp_examples module_test_sources)
+  if(${ENABLE_EXAMPLES})
+    foreach(source_file ${module_test_sources})
+      file(READ ${source_file} source_file_contents)
+      foreach(example_as_test ${module_cpp_examples})
+        string(FIND "${source_file_contents}" "${example_as_test}"
+                    is_sub_string
+        )
+        if(NOT (${is_sub_string} EQUAL -1))
+          add_dependencies(test-runner-examples-as-tests ${example_as_test})
+        endif()
+      endforeach()
+    endforeach()
+  endif()
 endfunction()
 
 # This macro checks if all headers from a module actually exist or are missing
