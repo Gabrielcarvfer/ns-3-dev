@@ -209,17 +209,6 @@ function(build_lib_wizardry)
            ${CMAKE_HEADER_OUTPUT_DIRECTORY}/version-defines.h
       )
     endif()
-
-    # Enable examples as tests suites
-    if(${ENABLE_EXAMPLES} AND ${ENABLE_TESTS})
-      if(NOT ${XCODE})
-        target_compile_definitions(
-          ${BLIB_LIBNAME}-obj PRIVATE NS3_ENABLE_EXAMPLES
-        )
-      else()
-        target_compile_definitions(${BLIB_LIBNAME} PRIVATE NS3_ENABLE_EXAMPLES)
-      endif()
-    endif()
   endif()
   set_target_properties(
     ${BLIB_LIBNAME}
