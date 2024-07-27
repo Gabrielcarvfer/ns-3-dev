@@ -47,6 +47,40 @@ function(copy_headers_before_building_lib libname outputdir headers visibility)
   endforeach()
 endfunction(copy_headers_before_building_lib)
 
+function(copy_headers)
+  # Argument parsing
+  set(options)
+  set(oneValueArgs PUBLIC_HEADER_OUTPUT_DIR DEPRECATED_HEADER_OUTPUT_DIR
+                   PRIVATE_HEADER_OUTPUT_DIR
+  )
+  set(multiValueArgs PUBLIC_HEADER_FILES DEPRECATED_HEADER_FILES
+                     PRIVATE_HEADER_FILES
+  )
+  cmake_parse_arguments(
+    "CP" "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN}
+  )
+  if((DEFINED CP_PUBLIC_HEADER_OUTPUT_DIR) AND (DEFINED CP_PUBLIC_HEADER_FILES))
+    copy_headers_before_building_lib(
+      "" "${CP_PUBLIC_HEADER_OUTPUT_DIR}" "${CP_PUBLIC_HEADER_FILES}" public
+    )
+  endif()
+  if((DEFINED CP_DEPRECATED_HEADER_OUTPUT_DIR) AND (DEFINED
+                                                    CP_DEPRECATED_HEADER_FILES)
+  )
+    copy_headers_before_building_lib(
+      "" "${CP_DEPRECATED_HEADER_OUTPUT_DIR}" "${CP_DEPRECATED_HEADER_FILES}"
+      deprecated
+    )
+  endif()
+  if((DEFINED CP_PRIVATE_HEADER_OUTPUT_DIR) AND (DEFINED CP_PRIVATE_HEADER_FILES
+                                                )
+  )
+    copy_headers_before_building_lib(
+      "" "${CP_PRIVATE_HEADER_OUTPUT_DIR}" "${CP_PRIVATE_HEADER_FILES}" private
+    )
+  endif()
+endfunction()
+
 function(remove_lib_prefix prefixed_library library)
   # Check if there is a lib prefix
   string(FIND "${prefixed_library}" "lib" lib_pos)
@@ -360,23 +394,14 @@ function(build_lib_wizardry)
   endif()
 
   # Copy all header files to outputfolder/include before each build
-  copy_headers_before_building_lib(
-    ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY} "${BLIB_HEADER_FILES}"
-    public
+  copy_headers(
+    PUBLIC_HEADER_OUTPUT_DIR ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+    PUBLIC_HEADER_FILES ${BLIB_HEADER_FILES}
+    DEPRECATED_HEADER_OUTPUT_DIR ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+    DEPRECATED_HEADER_FILES ${BLIB_DEPRECATED_HEADER_FILES}
+    PRIVATE_HEADER_OUTPUT_DIR ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+    PRIVATE_HEADER_FILES ${BLIB_PRIVATE_HEADER_FILES}
   )
-  if(BLIB_PRIVATE_HEADER_FILES)
-    copy_headers_before_building_lib(
-      ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}
-      "${BLIB_PRIVATE_HEADER_FILES}" private
-    )
-  endif()
-
-  if(BLIB_DEPRECATED_HEADER_FILES)
-    copy_headers_before_building_lib(
-      ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}
-      "${BLIB_DEPRECATED_HEADER_FILES}" deprecated
-    )
-  endif()
 
   # Build lib examples if requested
   set(examples_before ${ns3-execs-clean})
@@ -573,23 +598,14 @@ function(build_lib_lean_and_mean) # Argument parsing
     endif()
   endif()
 
-  copy_headers_before_building_lib(
-    ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY} "${BLIB_HEADER_FILES}"
-    public
+  copy_headers(
+    PUBLIC_HEADER_OUTPUT_DIR ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+    PUBLIC_HEADER_FILES ${BLIB_HEADER_FILES}
+    DEPRECATED_HEADER_OUTPUT_DIR ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+    DEPRECATED_HEADER_FILES ${BLIB_DEPRECATED_HEADER_FILES}
+    PRIVATE_HEADER_OUTPUT_DIR ${CMAKE_HEADER_OUTPUT_DIRECTORY}
+    PRIVATE_HEADER_FILES ${BLIB_PRIVATE_HEADER_FILES}
   )
-  if(BLIB_PRIVATE_HEADER_FILES)
-    copy_headers_before_building_lib(
-      ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}
-      "${BLIB_PRIVATE_HEADER_FILES}" private
-    )
-  endif()
-
-  if(BLIB_DEPRECATED_HEADER_FILES)
-    copy_headers_before_building_lib(
-      ${BLIB_LIBNAME} ${CMAKE_HEADER_OUTPUT_DIRECTORY}
-      "${BLIB_DEPRECATED_HEADER_FILES}" deprecated
-    )
-  endif()
 
   install(
     TARGETS ${BLIB_LIBNAME}
