@@ -225,35 +225,11 @@ function(build_lib_wizardry)
     add_dependencies(timeTraceReport ${BLIB_LIBNAME})
   endif()
 
-  # Split ns and non-ns libraries to manage their propagation properly
-  set(non_ns_libraries_to_link ${CMAKE_THREAD_LIBS_INIT})
-
-  set(ns_libraries_to_link)
-
-  foreach(library ${BLIB_LIBRARIES_TO_LINK})
-    remove_lib_prefix("${library}" module_name)
-
-    # In case the dependency library matches the ns-3 module, we are most likely
-    # dealing with brite, click and openflow collisions. All the ns-3 module
-    # targets used to be prefixed with 'lib' to be differentiable, but now we
-    # are dropping it. To disambiguate them two, we assume these external
-    # libraries are shared libraries by adding suffixes.
-    if("${library}" STREQUAL "${BLIB_LIBNAME}")
-      list(APPEND non_ns_libraries_to_link
-           ${library}${CMAKE_SHARED_LIBRARY_SUFFIX}
-      )
-      continue()
-    endif()
-
-    # Check if the module exists in the ns-3 modules list or if it is a
-    # 3rd-party library
-    if(${module_name} IN_LIST ns3-all-enabled-modules)
-      list(APPEND ns_libraries_to_link ${library})
-    else()
-      list(APPEND non_ns_libraries_to_link ${library})
-    endif()
-    unset(module_name)
-  endforeach()
+  # Separate ns and non-ns libraries to manage their propagation properly
+  separate_ns3_from_non_ns3_libs(
+    "${BLIB_LIBNAME}" "${BLIB_LIBRARIES_TO_LINK}" ns_libraries_to_link
+    non_ns_libraries_to_link
+  )
 
   if(NOT ${NS3_REEXPORT_THIRD_PARTY_LIBRARIES})
     # ns-3 libraries are linked publicly, to make sure other modules can find
@@ -366,21 +342,8 @@ function(build_lib_wizardry)
   write_module_header("${BLIB_LIBNAME}" "${BLIB_HEADER_FILES}")
 
   # Check if headers actually exist to prevent copying errors during
-  # installation
-  get_target_property(headers_to_check ${BLIB_LIBNAME} PUBLIC_HEADER)
-  set(missing_headers)
-  foreach(header ${headers_to_check})
-    if(NOT ((EXISTS ${header}) OR (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${header})
-           )
-    )
-      list(APPEND missing_headers ${header})
-    endif()
-  endforeach()
-  if(missing_headers)
-    message(
-      FATAL_ERROR "Missing header files for ${BLIB_LIBNAME}: ${missing_headers}"
-    )
-  endif()
+  # installation (includes the module header created above)
+  build_lib_check_headers(${BLIB_LIBNAME})
 
   # Copy all header files to outputfolder/include before each build
   copy_headers(
@@ -669,6 +632,65 @@ function(build_lib_example)
       ${IGNORE_PCH}
     )
     # cmake-format: on
+  endif()
+endfunction()
+
+# Separate the LIBRARIES_TO_LINK list into ns-3 modules and external libraries
+#
+# Arguments: libname (e.g. core, wifi), libraries_to_link (input list),
+# ns_libraries_to_link and non_ns_libraries_to_link (output lists)
+function(separate_ns3_from_non_ns3_libs libname libraries_to_link
+         ns_libraries_to_link non_ns_libraries_to_link
+)
+  set(non_ns_libs ${CMAKE_THREAD_LIBS_INIT})
+  set(ns_libs)
+  foreach(library ${libraries_to_link})
+    remove_lib_prefix("${library}" module_name)
+
+    # In case the dependency library matches the ns-3 module, we are most likely
+    # dealing with brite, click and openflow collisions. All the ns-3 module
+    # targets used to be prefixed with 'lib' to be differentiable, but now we
+    # are dropping it. To disambiguate them two, we assume these external
+    # libraries are shared libraries by adding suffixes.
+    if("${library}" STREQUAL "${libname}")
+      list(APPEND non_ns_libs ${library}${CMAKE_SHARED_LIBRARY_SUFFIX})
+      continue()
+    endif()
+
+    # Check if the module exists in the ns-3 modules list or if it is a
+    # 3rd-party library
+    if(${module_name} IN_LIST ns3-all-enabled-modules)
+      list(APPEND ns_libs ${library})
+    else()
+      list(APPEND non_ns_libs ${library})
+    endif()
+    unset(module_name)
+  endforeach()
+  set(${ns_libraries_to_link} ${ns_libs} PARENT_SCOPE)
+  set(${non_ns_libraries_to_link} ${non_ns_libs} PARENT_SCOPE)
+endfunction()
+
+# This macro checks if all headers from a module actually exist or are missing
+#
+# Arguments: target_name = module name (e.g. core, wifi)
+function(build_lib_check_headers target_name)
+  # Retrieve target properties containing the public (which include deprecated)
+  # and private headers
+  get_target_property(headers_to_check ${target_name} PUBLIC_HEADER)
+  get_target_property(headers_to_check2 ${target_name} PRIVATE_HEADER)
+  list(APPEND headers_to_check ${headers_to_check2})
+  set(missing_headers)
+  foreach(header ${headers_to_check})
+    if(NOT ((EXISTS ${header}) OR (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${header})
+           )
+    )
+      list(APPEND missing_headers ${header})
+    endif()
+  endforeach()
+  if(missing_headers)
+    message(
+      FATAL_ERROR "Missing header files for ${target_name}: ${missing_headers}"
+    )
   endif()
 endfunction()
 
