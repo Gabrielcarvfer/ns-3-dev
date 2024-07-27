@@ -172,31 +172,16 @@ function(build_lib_wizardry)
     )
   endif()
 
-  if(NOT ${XCODE})
-    # Create object library with sources and headers, that will be used in
-    # lib-ns3-static and the shared library
-    add_library(
-      ${BLIB_LIBNAME}-obj OBJECT "${BLIB_SOURCE_FILES}" "${BLIB_HEADER_FILES}"
-    )
+  # Create the module shared library
+  add_library(${BLIB_LIBNAME} SHARED "${BLIB_SOURCE_FILES}")
 
-    if(${PRECOMPILE_HEADERS_ENABLED} AND (NOT ${BLIB_IGNORE_PCH}))
-      target_precompile_headers(${BLIB_LIBNAME}-obj REUSE_FROM stdlib_pch)
-    endif()
-
-    # Create shared library with previously created object library (saving
-    # compilation time for static libraries)
-    add_library(${BLIB_LIBNAME} SHARED $<TARGET_OBJECTS:${BLIB_LIBNAME}-obj>)
-  else()
-    # Xcode and CMake don't play well when using object libraries, so we have a
-    # specific path for that
-    add_library(${BLIB_LIBNAME} SHARED "${BLIB_SOURCE_FILES}")
-
-    if(${PRECOMPILE_HEADERS_ENABLED} AND (NOT ${BLIB_IGNORE_PCH}))
-      target_precompile_headers(${BLIB_LIBNAME} REUSE_FROM stdlib_pch)
-    endif()
-  endif()
-
+  # Set alias
   add_library(ns3::${BLIB_LIBNAME} ALIAS ${BLIB_LIBNAME})
+
+  # Reuse PCH
+  if(${PRECOMPILE_HEADERS_ENABLED} AND (NOT ${BLIB_IGNORE_PCH}))
+    target_precompile_headers(${BLIB_LIBNAME} REUSE_FROM stdlib_pch)
+  endif()
 
   # Associate public headers with library for installation purposes
   set(config_headers)
@@ -290,10 +275,6 @@ function(build_lib_wizardry)
     ${BLIB_LIBNAME} ${exported_libraries} ${private_libraries}
   )
 
-  if(NOT ${XCODE})
-    target_link_libraries(${BLIB_LIBNAME}-obj PRIVATE ${ns_libraries_to_link})
-  endif()
-
   # set output name of library
   set_target_properties(
     ${BLIB_LIBNAME}
@@ -329,14 +310,6 @@ function(build_lib_wizardry)
       CACHE INTERNAL
             "list of non-ns libraries to link to NS3_STATIC and NS3_MONOLIB"
   )
-  if(${NS3_STATIC} OR ${NS3_MONOLIB})
-    set(lib-ns3-static-objs
-        "$<TARGET_OBJECTS:${BLIB_LIBNAME}-obj>;${lib-ns3-static-objs}"
-        CACHE
-          INTERNAL
-          "list of object files from module used by NS3_STATIC and NS3_MONOLIB"
-    )
-  endif()
 
   # Write a module header that includes all headers from that module
   write_module_header("${BLIB_LIBNAME}" "${BLIB_HEADER_FILES}")
