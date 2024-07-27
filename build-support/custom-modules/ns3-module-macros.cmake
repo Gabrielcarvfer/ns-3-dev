@@ -376,13 +376,7 @@ function(build_lib_wizardry)
   unset(examples_before)
 
   # Check if the module tests should be built
-  set(filtered_in ON)
-  if(NS3_FILTER_MODULE_EXAMPLES_AND_TESTS)
-    set(filtered_in OFF)
-    if(${BLIB_LIBNAME} IN_LIST NS3_FILTER_MODULE_EXAMPLES_AND_TESTS)
-      set(filtered_in ON)
-    endif()
-  endif()
+  build_lib_check_examples_and_tests_filtered_in(${BLIB_LIBNAME} filtered_in)
 
   # Build tests if requested
   if(${ENABLE_TESTS} AND ${filtered_in})
@@ -605,13 +599,7 @@ function(build_lib_example)
   )
 
   # Check if a module example should be built
-  set(filtered_in ON)
-  if(NS3_FILTER_MODULE_EXAMPLES_AND_TESTS)
-    set(filtered_in OFF)
-    if(${BLIB_LIBNAME} IN_LIST NS3_FILTER_MODULE_EXAMPLES_AND_TESTS)
-      set(filtered_in ON)
-    endif()
-  endif()
+  build_lib_check_examples_and_tests_filtered_in(${BLIB_LIBNAME} filtered_in)
 
   if((NOT missing_dependencies) AND ${filtered_in})
     # Convert boolean into text to forward argument
@@ -633,6 +621,17 @@ function(build_lib_example)
     )
     # cmake-format: on
   endif()
+endfunction()
+
+function(build_lib_check_examples_and_tests_filtered_in libname filtered_in)
+  set(in ON)
+  if(NS3_FILTER_MODULE_EXAMPLES_AND_TESTS)
+    set(in OFF)
+    if(${libname} IN_LIST NS3_FILTER_MODULE_EXAMPLES_AND_TESTS)
+      set(in ON)
+    endif()
+  endif()
+  set(${filtered_in} ${in} PARENT_SCOPE)
 endfunction()
 
 # Separate the LIBRARIES_TO_LINK list into ns-3 modules and external libraries
