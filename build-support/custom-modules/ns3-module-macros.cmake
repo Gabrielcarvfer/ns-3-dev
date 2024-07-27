@@ -332,61 +332,10 @@ function(build_lib_wizardry)
   # can be set as dependencies of examples-as-test test suites)
   build_lib_scan_examples(module_examples)
 
-  # Check if a module test should be built
-  build_lib_check_examples_and_tests_filtered_in(${BLIB_LIBNAME} filtered_in)
-
   # Build tests if requested
-  if(${ENABLE_TESTS} AND ${filtered_in})
-    list(LENGTH BLIB_TEST_SOURCES test_source_len)
-    if(${test_source_len} GREATER 0)
-      # Create BLIB_LIBNAME of output library test of module
-      set(test${BLIB_LIBNAME} ${BLIB_LIBNAME}-test CACHE INTERNAL "")
-
-      # Create shared library containing tests of the module on UNIX and just
-      # the object file that will be part of test-runner on Windows
-      if(WIN32)
-        set(ns3-libs-tests
-            "$<TARGET_OBJECTS:${test${BLIB_LIBNAME}}>;${ns3-libs-tests}"
-            CACHE INTERNAL "list of test libraries"
-        )
-        add_library(${test${BLIB_LIBNAME}} OBJECT "${BLIB_TEST_SOURCES}")
-      else()
-        set(ns3-libs-tests "${test${BLIB_LIBNAME}};${ns3-libs-tests}"
-            CACHE INTERNAL "list of test libraries"
-        )
-        add_library(${test${BLIB_LIBNAME}} SHARED "${BLIB_TEST_SOURCES}")
-
-        # Link test library to the module library
-        if(${NS3_MONOLIB})
-          target_link_libraries(
-            ${test${BLIB_LIBNAME}} ${LIB_AS_NEEDED_PRE} ${lib-ns3-monolib}
-            ${LIB_AS_NEEDED_POST}
-          )
-        else()
-          target_link_libraries(
-            ${test${BLIB_LIBNAME}} ${LIB_AS_NEEDED_PRE} ${BLIB_LIBNAME}
-            "${BLIB_LIBRARIES_TO_LINK}" ${LIB_AS_NEEDED_POST}
-          )
-        endif()
-        set_target_properties(
-          ${test${BLIB_LIBNAME}}
-          PROPERTIES OUTPUT_NAME
-                     ns${NS3_VER}-${BLIB_LIBNAME}-test${build_profile_suffix}
-        )
-      endif()
-      target_compile_definitions(
-        ${test${BLIB_LIBNAME}} PRIVATE NS_TEST_SOURCEDIR="${FOLDER}/test"
-      )
-      if(${PRECOMPILE_HEADERS_ENABLED} AND (NOT ${BLIB_IGNORE_PCH}))
-        target_precompile_headers(${test${BLIB_LIBNAME}} REUSE_FROM stdlib_pch)
-      endif()
-
-      # Add dependency between tests and examples used as tests
-      examples_as_tests_dependencies(
-        "${module_examples}" "${BLIB_TEST_SOURCES}"
-      )
-    endif()
-  endif()
+  build_lib_tests(
+    "${BLIB_LIBNAME}" "${BLIB_IGNORE_PCH}" "${FOLDER}" "${BLIB_TEST_SOURCES}"
+  )
 
   # Handle package export
   install(
@@ -468,21 +417,9 @@ function(build_lib_lean_and_mean) # Argument parsing
   )
 
   # Build tests if requested
-  if(${NS3_TESTS})
-    list(LENGTH test_sources test_source_len)
-    if(${test_source_len} GREATER 0)
-      # Create libname of output library test of module
-      list(APPEND test${BLIB_LIBNAME}
-           ns${NS3_VER}-${libname}-test-${build_type}
-      )
-
-      # Create shared library containing tests of the module
-      add_library(${test${BLIB_LIBNAME}} SHARED "${BLIB_TEST_SOURCES}")
-
-      # Link test library to the module library
-      target_link_libraries(${test${BLIB_LIBNAME}} ${BLIB_LIBNAME})
-    endif()
-  endif()
+  build_lib_tests(
+    "${BLIB_LIBNAME}" "${BLIB_IGNORE_PCH}" "${FOLDER}" "${BLIB_TEST_SOURCES}"
+  )
 
   # Build lib examples if requested
   build_lib_scan_examples(module_examples)
@@ -637,6 +574,67 @@ function(build_lib_scan_examples module_cpp_examples)
   # Return a list of module c++ examples (current examples - previous examples)
   list(REMOVE_ITEM module_examples ${examples_before})
   set(${module_cpp_examples} ${module_examples} PARENT_SCOPE)
+endfunction()
+
+# This macro builds the test library for the module library
+#
+# Arguments: libname (e.g. core), ignore_pch (TRUE/FALSE), folder (src/contrib),
+# sources (list of .cc's)
+function(build_lib_tests libname ignore_pch folder test_sources)
+  if(${ENABLE_TESTS})
+    # Check if the module tests should be built
+    build_lib_check_examples_and_tests_filtered_in(${libname} filtered_in)
+    if(NOT ${filtered_in})
+      return()
+    endif()
+    list(LENGTH test_sources test_source_len)
+    if(${test_source_len} GREATER 0)
+      # Create libname of output library test of module
+      set(test${libname} ${libname}-test CACHE INTERNAL "")
+
+      # Create shared library containing tests of the module on UNIX and just
+      # the object file that will be part of test-runner on Windows
+      if(WIN32)
+        set(ns3-libs-tests
+            "$<TARGET_OBJECTS:${test${libname}}>;${ns3-libs-tests}"
+            CACHE INTERNAL "list of test libraries"
+        )
+        add_library(${test${libname}} OBJECT "${test_sources}")
+      else()
+        set(ns3-libs-tests "${test${libname}};${ns3-libs-tests}"
+            CACHE INTERNAL "list of test libraries"
+        )
+        add_library(${test${libname}} SHARED "${test_sources}")
+
+        # Link test library to the module library
+        if(${NS3_MONOLIB})
+          target_link_libraries(
+            ${test${libname}} ${LIB_AS_NEEDED_PRE} ${lib-ns3-monolib}
+            ${LIB_AS_NEEDED_POST}
+          )
+        else()
+          target_link_libraries(
+            ${test${libname}} ${LIB_AS_NEEDED_PRE} ${libname}
+            "${BLIB_LIBRARIES_TO_LINK}" ${LIB_AS_NEEDED_POST}
+          )
+        endif()
+        set_target_properties(
+          ${test${libname}}
+          PROPERTIES OUTPUT_NAME
+                     ns${NS3_VER}-${libname}-test${build_profile_suffix}
+        )
+      endif()
+      target_compile_definitions(
+        ${test${libname}} PRIVATE NS_TEST_SOURCEDIR="${folder}/test"
+      )
+      if(${PRECOMPILE_HEADERS_ENABLED} AND (NOT ${ignore_pch}))
+        target_precompile_headers(${test${libname}} REUSE_FROM stdlib_pch)
+      endif()
+
+      # Add dependency between tests and examples used as tests
+      examples_as_tests_dependencies("${module_examples}" "${test_sources}")
+    endif()
+  endif()
 endfunction()
 
 # This macro scans for C++ examples used by examples-as-tests suites
