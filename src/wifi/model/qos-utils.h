@@ -13,6 +13,7 @@
 #include "ns3/ptr.h"
 #include "ns3/wifi-export.h"
 
+#include <list>
 #include <map>
 
 namespace ns3
@@ -197,6 +198,9 @@ bool operator<=(AcIndex left, AcIndex right);
  * Table 10-1 "UP-to-AC Mappings" of 802.11-2016)
  */
 WIFI_EXPORT extern const std::map<AcIndex, WifiAc> wifiAcList;
+
+/// List of the Access Categories corresponding to the four EDCA functions.
+inline const std::list<AcIndex> edcaAcIndices = {AC_VI, AC_VO, AC_BE, AC_BK};
 
 /**
  * @ingroup wifi
