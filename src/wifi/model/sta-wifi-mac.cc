@@ -480,7 +480,7 @@ StaWifiMac::GetAssociationRequest(bool isReassoc, uint8_t linkId) const
     if (isReassoc)
     {
         MgtReassocRequestHeader reassoc;
-        reassoc.SetCurrentApAddress(GetBssid(linkId));
+        reassoc.m_currentApAddr = GetBssid(linkId);
         mgtFrame = std::move(reassoc);
     }
     else
@@ -494,8 +494,8 @@ StaWifiMac::GetAssociationRequest(bool isReassoc, uint8_t linkId) const
         auto supportedRates = GetSupportedRates(linkId);
         frame.template Get<SupportedRates>() = supportedRates.rates;
         frame.template Get<ExtendedSupportedRatesIE>() = supportedRates.extendedRates;
-        frame.Capabilities() = GetCapabilities(linkId);
-        frame.SetListenInterval(0);
+        frame.m_capability = GetCapabilities(linkId);
+        frame.m_listenInterval = 0;
         if (GetHtSupported(linkId))
         {
             frame.template Get<ExtendedCapabilities>() = GetExtendedCapabilities();
@@ -914,7 +914,7 @@ StaWifiMac::ScanningTimeout(const std::optional<ApInfo>& bestAp)
         if constexpr (std::is_same_v<T, MgtBeaconHeader> ||
                       std::is_same_v<T, MgtProbeResponseHeader>)
         {
-            return MicroSeconds(frame.GetBeaconIntervalUs());
+            return MicroSeconds(frame.m_beaconInterval);
         }
         else
         {
@@ -1286,7 +1286,7 @@ StaWifiMac::ReceiveBeacon(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     NS_LOG_DEBUG("Beacon received");
     MgtBeaconHeader beacon;
     mpdu->GetPacket()->PeekHeader(beacon);
-    const auto& capabilities = beacon.Capabilities();
+    const auto& capabilities = beacon.m_capability;
     NS_ASSERT(capabilities.IsEss());
     bool goodBeacon;
     if (IsWaitAssocResp() || IsAssociated())
@@ -1329,7 +1329,7 @@ StaWifiMac::ReceiveBeacon(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     if (m_state == ASSOCIATED)
     {
         m_beaconArrival(Simulator::Now());
-        Time delay = MicroSeconds(std::get<MgtBeaconHeader>(apInfo.m_frame).GetBeaconIntervalUs() *
+        Time delay = MicroSeconds(std::get<MgtBeaconHeader>(apInfo.m_frame).m_beaconInterval *
                                   m_maxMissedBeacons);
         RestartBeaconWatchdog(delay);
         ApplyOperationalSettings(apInfo.m_frame, hdr.GetAddr2(), hdr.GetAddr3(), linkId);
@@ -1395,9 +1395,9 @@ StaWifiMac::ReceiveAssocResp(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     }
 
     std::optional<Mac48Address> apMldAddress;
-    if (assocResp.GetStatusCode().IsSuccess())
+    if (assocResp.m_statusCode.IsSuccess())
     {
-        m_aid = assocResp.GetAssociationId();
+        m_aid = assocResp.m_aid;
         NS_LOG_DEBUG((hdr.IsReassocResp() ? "reassociation done" : "association completed"));
         ApplyOperationalSettings(assocResp, hdr.GetAddr2(), hdr.GetAddr3(), linkId);
         NS_ASSERT(GetLink(linkId).bssid.has_value() && *GetLink(linkId).bssid == hdr.GetAddr3());
@@ -1465,7 +1465,7 @@ StaWifiMac::ReceiveAssocResp(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     {
         setupLinks.push_back(id);
     }
-    if (assocResp.GetStatusCode().IsSuccess())
+    if (assocResp.m_statusCode.IsSuccess())
     {
         setupLinks.remove(linkId);
     }
@@ -1508,11 +1508,11 @@ StaWifiMac::ReceiveAssocResp(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
             MgtAssocResponseHeader assoc = perStaProfile.GetAssocResponse();
             RecordCapabilities(assoc, *bssid, staLinkid);
             RecordOperations(assoc, *bssid, staLinkid);
-            if (assoc.GetStatusCode().IsSuccess())
+            if (assoc.m_statusCode.IsSuccess())
             {
-                NS_ABORT_MSG_IF(m_aid != 0 && m_aid != assoc.GetAssociationId(),
+                NS_ABORT_MSG_IF(m_aid != 0 && m_aid != assoc.m_aid,
                                 "AID should be the same for all the links");
-                m_aid = assoc.GetAssociationId();
+                m_aid = assoc.m_aid;
                 NS_LOG_DEBUG("Setup on link " << staLinkid << " completed");
                 ApplyOperationalSettings(assocResp, *bssid, *bssid, staLinkid);
                 SetBssid(*bssid, staLinkid);
@@ -1753,7 +1753,7 @@ StaWifiMac::ApplyOperationalSettings(const MgtFrameType& frame,
 
     // lambda processing Information Elements included in all frame types sent by APs
     auto processOtherIes = [&](auto&& frame) {
-        const auto& capabilities = frame.Capabilities();
+        const auto& capabilities = frame.m_capability;
         bool isShortPreambleEnabled = capabilities.IsShortPreamble();
         auto remoteStationManager = GetWifiRemoteStationManager(linkId);
         if (erpInformation && erpInformation->has_value() && GetErpSupported(linkId))
