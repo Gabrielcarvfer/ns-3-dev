@@ -500,7 +500,7 @@ WifiStaticSetupHelper::SetStaticEmlsrPostInit(Ptr<WifiNetDevice> apDev,
     emlsrManager->ComputeOperatingChannels();
     auto emlOmnReq = emlsrManager->GetEmlOmn();
     auto emlsrLinkId = emlsrManager->GetLinkToSendEmlOmn();
-    emlsrManager->ChangeEmlsrMode();
+    emlsrManager->ChangeEmlsrMode(emlsrLinkId);
     auto clientLinkAddr = clientMac->GetFrameExchangeManager(emlsrLinkId)->GetAddress();
     auto apMac = DynamicCast<ApWifiMac>(apDev->GetMac());
     NS_ASSERT_MSG(apMac, "Expected ApWifiMac");
