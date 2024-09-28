@@ -163,6 +163,7 @@ class ShowProgress
      * @see Feedback()
      */
     static const int64x64_t HYSTERESIS;
+    static const int64x64_t INV_HYSTERESIS; //<! Inverse hysteresis
     /**
      * Maximum growth factor.
      * @see Feedback()
@@ -173,9 +174,10 @@ class ShowProgress
     SystemWallClockTimestamp m_stamp; //!< Elapsed wallclock time.
     Time m_elapsed;                   //!< Total elapsed wallclock time since last update.
     Time m_interval;                  //!< The target update interval, in wallclock time
-    Time m_vtime;                     //!< The virtual time interval.
-    EventId m_event;                  //!< The next progress event.
-    uint64_t m_eventCount;            //!< Simulator event count
+    int64x64_t m_invInterval; //!< Inverse interval (precomputed to avoid int64x64_t divisions)
+    Time m_vtime;             //!< The virtual time interval.
+    EventId m_event;          //!< The next progress event.
+    uint64_t m_eventCount;    //!< Simulator event count
 
     TimePrinter m_printer; //!< The TimePrinter to use
     std::ostream* m_os;    //!< The output stream to use.

@@ -29,6 +29,8 @@ NS_LOG_COMPONENT_DEFINE("ShowProgress");
 
 /* static */
 const int64x64_t ShowProgress::HYSTERESIS = 1.414;
+const int64x64_t ShowProgress::INV_HYSTERESIS = 1 / ShowProgress::HYSTERESIS;
+
 /* static */
 const int64x64_t ShowProgress::MAXGAIN = 2.0;
 
@@ -47,6 +49,7 @@ ShowProgress::ShowProgress(const Time interval /* = Seconds (1.0) */,
       m_repCount(0)
 {
     NS_LOG_FUNCTION(this << interval);
+    m_invInterval = 1 / static_cast<int64x64_t>(m_interval.GetTimeStep());
     ScheduleCheckProgress();
     Start();
 }
@@ -62,6 +65,7 @@ ShowProgress::SetInterval(const Time interval)
     NS_LOG_FUNCTION(this << interval);
     const int64x64_t ratio = interval / m_interval;
     m_interval = interval;
+    m_invInterval = 1 / static_cast<int64x64_t>(m_interval.GetTimeStep());
     // If we aren't at the initial value assume we have a reasonable
     // update time m_vtime, so we should rescale it
     if (m_vtime > Time(1))
@@ -114,10 +118,10 @@ ShowProgress::GiveFeedback(uint64_t nEvents, int64x64_t ratio, int64x64_t speed)
     if (m_verbose)
     {
         (*m_os) << std::right << std::setw(5) << m_repCount << std::left
-                << (ratio > (1.0 / HYSTERESIS) ? "-->" : "   ") << std::setprecision(9)
+                << (ratio > (1.0 * INV_HYSTERESIS) ? "-->" : "   ") << std::setprecision(9)
                 << " [del: " << m_elapsed.As(Time::S) << "/ int: " << m_interval.As(Time::S)
                 << " = rat: " << ratio
-                << (ratio > HYSTERESIS ? " dn" : (ratio < 1.0 / HYSTERESIS ? " up" : " --"))
+                << (ratio > HYSTERESIS ? " dn" : (ratio < 1.0 * INV_HYSTERESIS ? " up" : " --"))
                 << ", vt: " << m_vtime.As(Time::S) << "] ";
     }
 
@@ -155,7 +159,7 @@ ShowProgress::CheckProgress()
 
     // Ratio: how much real time did we use,
     // compared to reporting interval target
-    const int64x64_t ratio = m_elapsed / m_interval;
+    const int64x64_t ratio = m_elapsed.GetTimeStep() * m_invInterval;
 
     // Elapsed event count
     uint64_t events = Simulator::GetEventCount();
@@ -220,7 +224,7 @@ ShowProgress::CheckProgress()
      */
     if (ratio > HYSTERESIS)
     {
-        int64x64_t f = 1 + (ratio - 1) / 2;
+        int64x64_t f = 1 + (ratio - 1) * 0.5;
         if (ratio > MAXGAIN)
         {
             f = MAXGAIN;
@@ -228,9 +232,9 @@ ShowProgress::CheckProgress()
 
         m_vtime = m_vtime / f;
     }
-    else if (ratio < 1.0 / HYSTERESIS)
+    else if (ratio < 1.0 * INV_HYSTERESIS)
     {
-        int64x64_t f = 1 + (1 / ratio - 1) / 2;
+        int64x64_t f = 1 + (1 / ratio - 1) * 0.5;
         if (1 / ratio > MAXGAIN)
         {
             f = MAXGAIN;
@@ -239,7 +243,7 @@ ShowProgress::CheckProgress()
     }
 
     // Only give feedback if ratio is at least as big as 1/HYSTERESIS
-    if (ratio > (1.0 / HYSTERESIS))
+    if (ratio > (1.0 * INV_HYSTERESIS))
     {
         GiveFeedback(nEvents, ratio, speed);
         m_elapsed = Time(0);
