@@ -436,6 +436,11 @@ class Time
         return m_data;
     }
 
+    inline int64x64_t GetData() const
+    {
+        return m_data;
+    }
+
     inline double GetDouble() const
     {
         return static_cast<double>(m_data);
