@@ -6,17 +6,17 @@
 # MODE (debug, default, optimized)
 
 .base-test:
-  image: archlinux
+  image: agners/archlinuxarm
   before_script:
     # add the core-debug repo to pacman.conf
-    - printf "\n%s\n%s\n" "[core-debug]" "Include = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
-    - pacman-key --init
+    #- printf "\n%s\n%s\n" "[core-debug]" "Include = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
+    #- pacman-key --init
     - pacman -Syu --noconfirm
       base-devel cmake ninja ccache valgrind
       python python-pip python-distutils-extra binutils lcov
       boost gsl gtk3 openmpi
-      glibc-debug
       openssh git
+      #glibc-debug
     - pip install lcov_cobertura --break-system-packages
   script:
     - mkdir -p $CCACHE_BASEDIR_VALUE
@@ -263,3 +263,16 @@ weekly-build-coverage:
   tags:
     - nsnam
     - linux
+
+weekly-build-debug-valgrind-takes-forever:
+  extends: .base-test
+  stage: build
+  dependencies: [ ]
+  variables:
+    MODE: debug
+    VALGRIND_FLAG: -g --verbose-failed
+    FULLNESS: "-f TAKES_FOREVER"
+    FORCE_TESTS: Force
+  tags:
+    - nsnam
+    - arm
