@@ -2069,39 +2069,43 @@ def run_tests():
             # followed by a VALGR failing test suite of the same name.
             #
             if job.is_skip:
-                with open(xml_results_file, "a", encoding="utf-8") as f:
-                    f.write("<Test>\n")
-                    f.write("  <Name>%s</Name>\n" % job.display_name)
-                    f.write("  <Result>SKIP</Result>\n")
-                    f.write("  <Reason>%s</Reason>\n" % job.skip_reason)
-                    f.write("</Test>\n")
+                with open(xml_results_file, "a", encoding="utf-8") as f_to:
+                    f_to.write("<Test>\n")
+                    f_to.write("  <Name>%s</Name>\n" % job.display_name)
+                    f_to.write("  <Result>SKIP</Result>\n")
+                    f_to.write("  <Reason>%s</Reason>\n" % job.skip_reason)
+                    f_to.write("</Test>\n")
             else:
                 failed_jobs.append(job)
-                if job.returncode == 0 or job.returncode == 1 or job.returncode == 2:
-                    with open(xml_results_file, "a", encoding="utf-8") as f_to, open(
-                        job.tmp_file_name, encoding="utf-8"
-                    ) as f_from:
-                        contents = f_from.read()
-                        if status == "VALGR":
-                            pre = contents.find("<Result>") + len("<Result>")
-                            post = contents.find("</Result>")
-                            contents = contents[:pre] + "VALGR" + contents[post:]
-                        f_to.write(contents)
-                        # When running with sanitizers, the program may
-                        # crash before ever writing the expected xml
-                        # output file
-                        try:
-                            et = ET.parse(job.tmp_file_name)
-                            if et.find("Result").text in ["PASS", "SKIP"]:
-                                failed_jobs.pop()
-                        except:
-                            pass
-                else:
-                    with open(xml_results_file, "a", encoding="utf-8") as f:
-                        f.write("<Test>\n")
-                        f.write("  <Name>%s</Name>\n" % job.display_name)
-                        f.write("  <Result>CRASH</Result>\n")
-                        f.write("</Test>\n")
+                try:
+                    if job.returncode == 0 or job.returncode == 1 or job.returncode == 2:
+                        with open(job.tmp_file_name, encoding="utf-8") as f_from:
+                            contents = f_from.read()
+                            if status == "VALGR":
+                                pre = contents.find("<Result>") + len("<Result>")
+                                post = contents.find("</Result>")
+                                contents = contents[:pre] + "VALGR" + contents[post:]
+
+                            with open(xml_results_file, "a", encoding="utf-8") as f_to:
+                                f_to.write(contents)
+
+                            # When running with sanitizers, the program may
+                            # crash before ever writing the expected xml
+                            # output file
+                            try:
+                                et = ET.parse(job.tmp_file_name)
+                                if et.find("Result").text in ["PASS", "SKIP"]:
+                                    failed_jobs.pop()
+                            except:
+                                pass
+                    else:
+                        raise Exception("Crashed test")
+                except:
+                    with open(xml_results_file, "a", encoding="utf-8") as f_to:
+                        f_to.write("<Test>\n")
+                        f_to.write("  <Name>%s</Name>\n" % job.display_name)
+                        f_to.write("  <Result>CRASH</Result>\n")
+                        f_to.write("</Test>\n")
 
     #
     # We have all of the tests run and the results written out.  One final
