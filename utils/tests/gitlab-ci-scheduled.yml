@@ -6,17 +6,18 @@
 # MODE (debug, default, optimized)
 
 .base-test:
-  image: archlinux
+  image: agners/archlinuxarm
+  #archlinux
   before_script:
     # add the core-debug repo to pacman.conf
-    - printf "\n%s\n%s\n" "[core-debug]" "Include = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
+    #- printf "\n%s\n%s\n" "[core-debug]" "Include = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
     - pacman-key --init
     - pacman -Syu --noconfirm
       base-devel cmake ninja ccache valgrind
       python python-pip python-distutils-extra binutils lcov
       boost gsl gtk3 openmpi
-      glibc-debug
       openssh git
+      #glibc-debug
     - pip install lcov_cobertura --break-system-packages
   script:
     - mkdir -p $CCACHE_BASEDIR_VALUE
@@ -29,7 +30,7 @@
       then ./ns3 build $TARGET;
       fi
     - if [[ "$CI_JOB_STAGE" == "test" ]] || [[ "$FORCE_TESTS" == "Force" ]];
-      then ./test.py -n $VALGRIND_FLAG $FULLNESS;
+      then ./test.py -n $VALGRIND_FLAG $FULLNESS --jobs 40;
       fi
   cache:
     key: "ccache-$CI_JOB_NAME"
