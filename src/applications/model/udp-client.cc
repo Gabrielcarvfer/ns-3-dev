@@ -12,6 +12,7 @@
 #include "seq-ts-header.h"
 
 #include "ns3/address-utils.h"
+#include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/nstime.h"
 #include "ns3/packet.h"
@@ -73,6 +74,16 @@ UdpClient::GetTypeId()
                           UintegerValue(1024),
                           MakeUintegerAccessor(&UdpClient::m_size),
                           MakeUintegerChecker<uint32_t>(12, 65507))
+            .AddAttribute("Period",
+                          "Period of a ON-OFF cycle",
+                          TimeValue(Years(1)),
+                          MakeTimeAccessor(&UdpClient::m_period),
+                          MakeTimeChecker())
+            .AddAttribute("DutyCycle",
+                          "Percentage of period in ON state",
+                          DoubleValue(1.0),
+                          MakeDoubleAccessor(&UdpClient::m_dutyCycle),
+                          MakeDoubleChecker<double>(0.0, 1.0))
             .AddTraceSource("Tx",
                             "A new packet is created and sent",
                             MakeTraceSourceAccessor(&UdpClient::m_txTrace),
@@ -226,7 +237,7 @@ UdpClient::StartApplication()
     m_peerString = peerAddressStringStream.str();
 #endif // NS3_LOG_ENABLE
 
-    m_sendEvent = Simulator::Schedule(Seconds(0.0), &UdpClient::Send, this);
+    StartPeriod();
 }
 
 void
@@ -242,6 +253,10 @@ UdpClient::Send()
     NS_LOG_FUNCTION(this);
     NS_ASSERT(m_sendEvent.IsExpired());
 
+    if (!m_onState)
+    {
+        return;
+    }
     Address from;
     Address to;
     m_socket->GetSockName(from);
@@ -283,6 +298,24 @@ uint64_t
 UdpClient::GetTotalTx() const
 {
     return m_totalTx;
+}
+
+void
+UdpClient::StartPeriod()
+{
+    m_onState = true;
+    // Schedule ON state
+    m_sendEvent = Simulator::Schedule(Seconds(0.0), &UdpClient::Send, this);
+    std::cout << "enabled"
+              << " " << this << " " << Simulator::Now().GetNanoSeconds() << std::endl;
+    // Schedule OFF state
+    Simulator::Schedule(m_period * m_dutyCycle, [this]() {
+        m_onState = false;
+        m_sendEvent.Cancel();
+        std::cout << "disabled"
+                  << " " << this << " " << Simulator::Now().GetNanoSeconds() << std::endl;
+    });
+    Simulator::Schedule(m_period, &UdpClient::StartPeriod, this);
 }
 
 } // Namespace ns3

@@ -89,6 +89,11 @@ class UdpClient : public SourceApplication
      */
     Address GetRemote() const;
 
+    /**
+     * \brief Start transmission period
+     */
+    void StartPeriod();
+
     /// Traced Callback: transmitted packets.
     TracedCallback<Ptr<const Packet>> m_txTrace;
 
@@ -105,6 +110,9 @@ class UdpClient : public SourceApplication
     std::optional<uint16_t> m_peerPort; //!< Remote peer port (deprecated) // NS_DEPRECATED_3_44
     EventId m_sendEvent;                //!< Event to send the next packet
 
+    Time m_period;      //!< Period of ON-OFF pattern
+    double m_dutyCycle; //!< Percentage of period spent on ON state
+    bool m_onState;     //!< Flag indicating the application is ON
 #ifdef NS3_LOG_ENABLE
     std::string m_peerString; //!< Remote peer address string
 #endif                        // NS3_LOG_ENABLE
