@@ -29,6 +29,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### Changed behavior
 
+* (spectrum) The disposal of phased array loss models order is now inverted to match the other models (channel->loss model). Authors should remove channel disposal from their loss models.
+
 ## Changes from ns-3.42 to ns-3.43
 
 ### New API

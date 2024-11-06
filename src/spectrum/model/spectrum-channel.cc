@@ -36,6 +36,11 @@ SpectrumChannel::DoDispose()
     m_propagationLoss = nullptr;
     m_propagationDelay = nullptr;
     m_spectrumPropagationLoss = nullptr;
+    if (m_phasedArraySpectrumPropagationLoss)
+    {
+        m_phasedArraySpectrumPropagationLoss->Dispose();
+    }
+    m_phasedArraySpectrumPropagationLoss = nullptr;
 }
 
 TypeId
