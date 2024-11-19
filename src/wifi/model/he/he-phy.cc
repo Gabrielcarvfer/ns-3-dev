@@ -1304,7 +1304,7 @@ HePhy::ObtainNextUid(const WifiTxVector& txVector)
     }
     else
     {
-        uid = m_globalPpduUid++;
+        uid = GetGlobalPpduUid()++;
     }
     m_previouslyTxPpduUid = uid; // to be able to identify solicited HE TB PPDUs
     return uid;

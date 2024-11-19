@@ -114,7 +114,7 @@ OfdmaTestHePhy::GetStaId(const Ptr<const WifiPpdu> ppdu) const
 void
 OfdmaTestHePhy::SetGlobalPpduUid(uint64_t uid)
 {
-    m_globalPpduUid = uid;
+    GetGlobalPpduUid() = uid;
 }
 
 /**

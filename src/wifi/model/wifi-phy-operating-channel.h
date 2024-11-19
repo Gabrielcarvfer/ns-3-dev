@@ -82,6 +82,13 @@ class WifiPhyOperatingChannel
     using ConstIteratorSet = std::set<ConstIterator, Compare>;
 
     /**
+     * Return a reference to the set of all available frequency channels
+     *
+     * @return reference to the set of frequency channels
+     */
+    static const std::set<FrequencyChannelInfo>& GetFrequencyChannels();
+
+    /**
      * Create an uninitialized PHY operating channel.
      */
     WifiPhyOperatingChannel();
@@ -124,9 +131,6 @@ class WifiPhyOperatingChannel
      *         false otherwise
      */
     bool operator!=(const WifiPhyOperatingChannel& other) const;
-
-    static const std::set<FrequencyChannelInfo>
-        m_frequencyChannels; //!< Available frequency channels
 
     /**
      * Return true if a valid channel has been set, false otherwise.
@@ -360,7 +364,7 @@ class WifiPhyOperatingChannel
                                    MHz_u width,
                                    WifiStandard standard,
                                    WifiPhyBand band,
-                                   ConstIterator start = m_frequencyChannels.begin());
+                                   ConstIterator start = GetFrequencyChannels().cbegin());
 
     /**
      * Get channel number of the primary channel
