@@ -32,7 +32,11 @@
 
 namespace ns3
 {
-const Time UE_MEASUREMENT_REPORT_DELAY = MicroSeconds(1);
+const Time
+UE_MEASUREMENT_REPORT_DELAY()
+{
+    return MicroSeconds(1);
+}
 
 NS_LOG_COMPONENT_DEFINE("LteUeRrc");
 
@@ -2678,13 +2682,7 @@ LteUeRrc::CancelEnteringTrigger(uint8_t measId, uint16_t cellId)
     {
         NS_ASSERT(it2->measId == measId);
 
-        for (auto it3 = it2->concernedCells.begin(); it3 != it2->concernedCells.end(); ++it3)
-        {
-            if (*it3 == cellId)
-            {
-                it3 = it2->concernedCells.erase(it3);
-            }
-        }
+        it2->concernedCells.remove_if([cellId](auto cell) { return cellId == cell; });
 
         if (it2->concernedCells.empty())
         {
@@ -2735,13 +2733,7 @@ LteUeRrc::CancelLeavingTrigger(uint8_t measId, uint16_t cellId)
     {
         NS_ASSERT(it2->measId == measId);
 
-        for (auto it3 = it2->concernedCells.begin(); it3 != it2->concernedCells.end(); ++it3)
-        {
-            if (*it3 == cellId)
-            {
-                it3 = it2->concernedCells.erase(it3);
-            }
-        }
+        it2->concernedCells.remove_if([cellId](auto cell) { return cellId == cell; });
 
         if (it2->concernedCells.empty())
         {
@@ -2789,7 +2781,7 @@ LteUeRrc::VarMeasReportListAdd(uint8_t measId, ConcernedCells_t enteringCells)
     {
         measReportIt->second.numberOfReportsSent = 0;
         measReportIt->second.periodicReportTimer =
-            Simulator::Schedule(UE_MEASUREMENT_REPORT_DELAY,
+            Simulator::Schedule(UE_MEASUREMENT_REPORT_DELAY(),
                                 &LteUeRrc::SendMeasurementReport,
                                 this,
                                 measId);

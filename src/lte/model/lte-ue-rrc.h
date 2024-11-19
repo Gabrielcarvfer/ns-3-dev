@@ -49,8 +49,10 @@ namespace ns3
  *    and
  *  - time-to-trigger check is always performed before the reporting, so there
  *    would still be chance for it to cancel the reporting if necessary.
+ *
+ * @return UE measurements procedure delay
  */
-extern const Time UE_MEASUREMENT_REPORT_DELAY;
+const Time UE_MEASUREMENT_REPORT_DELAY();
 
 class LteRlc;
 class LteMacSapProvider;
