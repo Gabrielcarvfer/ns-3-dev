@@ -281,6 +281,13 @@ Time::SetResolution(Unit unit, Resolution* resolution, const bool convert /* = t
 }
 
 // static
+Time::MarkedTimes* const
+Time::GetMarkingTimes()
+{
+    return g_markingTimes;
+}
+
+// static
 void
 Time::ClearMarkedTimes()
 {
