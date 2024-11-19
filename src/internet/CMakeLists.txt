@@ -335,7 +335,12 @@ set(test_sources
     test/udp-test.cc
 )
 
+if(${MSVC})
+  add_definitions(/Dinternet_EXPORTS)
+endif()
+
 build_lib(
+  GENERATE_EXPORT_HEADER
   LIBNAME internet
   SOURCE_FILES ${source_files}
   HEADER_FILES ${header_files}
