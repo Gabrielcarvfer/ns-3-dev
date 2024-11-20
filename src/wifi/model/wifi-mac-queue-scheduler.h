@@ -35,6 +35,8 @@ enum class WifiQueueBlockedReason : uint8_t
     USING_OTHER_EMLSR_LINK,
     WAITING_EMLSR_TRANSITION_DELAY,
     TID_NOT_MAPPED,
+    WAIT_UNTIL_DTIM,
+    TX_GROUP_AFTER_DTIM,
     REASONS_COUNT
 };
 
@@ -60,6 +62,10 @@ operator<<(std::ostream& os, WifiQueueBlockedReason reason)
         return (os << "WAITING_EMLSR_TRANSITION_DELAY");
     case WifiQueueBlockedReason::TID_NOT_MAPPED:
         return (os << "TID_NOT_MAPPED");
+    case WifiQueueBlockedReason::WAIT_UNTIL_DTIM:
+        return (os << "WAIT_UNTIL_DTIM");
+    case WifiQueueBlockedReason::TX_GROUP_AFTER_DTIM:
+        return (os << "TX_GROUP_AFTER_DTIM");
     case WifiQueueBlockedReason::REASONS_COUNT:
         return (os << "REASONS_COUNT");
     default:
