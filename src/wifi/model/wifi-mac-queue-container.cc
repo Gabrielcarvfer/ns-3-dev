@@ -132,9 +132,13 @@ WifiMacQueueContainer::DoExtractExpiredMpdus(ContainerQueue& queue) const
     auto firstExpiredIt = queue.begin();
     auto lastExpiredIt = firstExpiredIt;
     Time now = Simulator::Now();
+    // This flag allows the do..while loop to bypass checking invalidated iterators
+    bool alreadyChecked = false;
 
     do
     {
+        alreadyChecked = false;
+
         // advance firstExpiredIt and lastExpiredIt to skip all inflight MPDUs
         for (firstExpiredIt = lastExpiredIt;
              firstExpiredIt != queue.end() && !firstExpiredIt->inflights.empty();
@@ -171,9 +175,10 @@ WifiMacQueueContainer::DoExtractExpiredMpdus(ContainerQueue& queue) const
             // transfer non-inflight MPDUs with expired lifetime to the tail of m_expiredQueue
             m_expiredQueue.splice(m_expiredQueue.end(), queue, firstExpiredIt, lastExpiredIt);
             ret->second = m_expiredQueue.end();
+            alreadyChecked = true;
         }
 
-    } while (lastExpiredIt != firstExpiredIt);
+    } while (alreadyChecked || (lastExpiredIt != firstExpiredIt));
 
     return *ret;
 }
