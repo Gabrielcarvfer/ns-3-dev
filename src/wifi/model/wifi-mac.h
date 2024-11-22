@@ -962,6 +962,15 @@ class WifiMac : public Object
     virtual void DeaggregateAmsduAndForward(Ptr<const WifiMpdu> mpdu);
 
     /**
+     * Prepare and enqueue a Disassociation frame. This function shall only be called by an AP
+     * or by a non-AP station associated with an AP.
+     *
+     * @param addr1 the receiver address for the Disassociation frame
+     * @param linkId the ID of the link on which the frame is transmitted
+     */
+    void EnqueueDisassociation(Mac48Address addr1, uint8_t linkId);
+
+    /**
      * Apply the TID-to-Link Mapping negotiated with the given MLD for the given direction
      * by properly configuring the queue scheduler.
      *
