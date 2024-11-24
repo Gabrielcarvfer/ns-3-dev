@@ -1036,9 +1036,10 @@ StaWifiMac::Disassociated()
             apAddr = GetWifiRemoteStationManager(id)->GetMldAddress(*bssid).value_or(*bssid);
         }
         bssid = std::nullopt; // link is no longer setup
+        link->phy->ResumeFromOff();
     }
 
-    NS_LOG_DEBUG("Set state to UNASSOCIATED and start scanning");
+    NS_LOG_INFO("Set state to UNASSOCIATED and start scanning");
     SetState(UNASSOCIATED);
     // cancel the association request timer (see issue #862)
     m_assocRequestEvent.Cancel();
@@ -2096,6 +2097,12 @@ StaWifiMac::TxOk(Ptr<const WifiMpdu> mpdu)
         {
             m_powerSaveManager->NotifyPmModeChanged(link.pmMode, *linkId);
         }
+    }
+
+    if (hdr.IsDisassociation())
+    {
+        // the AP has acknowledged our disassociation frame, now try to associate again
+        Disassociated();
     }
 }
 
