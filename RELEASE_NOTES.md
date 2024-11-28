@@ -42,6 +42,7 @@ The required Doxygen version for documentation generation is version 1.11.
 - (wifi) Added the `IncrementRetryCountUnderBa` attribute to the  `WifiRemoteStationManager` to choose whether or not to increase the retry count of frames that are part of a block ack agreement; this attribute defaults to false to match the standard specifications.
 - (wifi) Added a new `BaEstablished` trace source to `QosTxop` to notify that a block ack agreement has been established with a given recipient for a given TID.
 - (zigbee) Added Zigbee module support.
+- (build) Scan for contrib modules in `ns-3-external-contrib` directory, at the same level of the ns-3 directory (e.g. `./ns-3-dev/../ns-3-external-contrib/`).
 
 ### Bugs fixed
 
