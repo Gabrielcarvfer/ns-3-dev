@@ -1259,6 +1259,7 @@ WifiHelper::EnableLogComponents(LogLevel logLevel)
     LogComponentEnable("OriginatorBlockAckAgreement", logLevel);
     LogComponentEnable("ParfWifiManager", logLevel);
     LogComponentEnable("PhyEntity", logLevel);
+    LogComponentEnable("PowerSaveManager", logLevel);
     LogComponentEnable("QosFrameExchangeManager", logLevel);
     LogComponentEnable("QosTxop", logLevel);
     LogComponentEnable("RecipientBlockAckAgreement", logLevel);
