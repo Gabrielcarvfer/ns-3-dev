@@ -178,6 +178,15 @@ class PowerSaveManager : public Object
      */
     virtual void DoNotifyReceivedBeacon(const MgtBeaconHeader& beacon, linkId_t linkId) = 0;
 
+    /**
+     * Notify subclasses of the reception of a frame in response to a PS-Poll frame on the given
+     * link. The notification is sent a SIFS after the reception of the frame.
+     *
+     * @param mpdu the received MPDU
+     * @param linkId the ID of the given link
+     */
+    virtual void DoNotifyReceivedFrameAfterPsPoll(Ptr<const WifiMpdu> mpdu, linkId_t linkId) = 0;
+
   private:
     Ptr<StaWifiMac> m_staMac;              //!< MAC which is using this Power Save Manager
     std::map<linkId_t, StaInfo> m_staInfo; ///< link ID-indexed map of STA infos

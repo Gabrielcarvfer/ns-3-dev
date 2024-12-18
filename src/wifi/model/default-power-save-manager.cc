@@ -136,4 +136,20 @@ DefaultPowerSaveManager::DoNotifyReceivedBeacon(const MgtBeaconHeader& beacon, l
     }
 }
 
+void
+DefaultPowerSaveManager::DoNotifyReceivedFrameAfterPsPoll(Ptr<const WifiMpdu> mpdu, linkId_t linkId)
+{
+    NS_LOG_FUNCTION(this << mpdu << linkId);
+
+    if (GetStaInfo(linkId).pendingUnicast)
+    {
+        NS_LOG_LOGIC("Waiting for more unicast frames; enqueue a PS-Poll frame");
+        GetStaMac()->EnqueuePsPoll(linkId);
+    }
+    else
+    {
+        GoToSleepIfPossible(linkId);
+    }
+}
+
 } // namespace ns3
