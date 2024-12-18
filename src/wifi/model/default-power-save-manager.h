@@ -30,6 +30,18 @@ class DefaultPowerSaveManager : public PowerSaveManager
 
     DefaultPowerSaveManager();
     ~DefaultPowerSaveManager() override;
+
+  protected:
+    /**
+     * Put the PHY operating on the given link to sleep, if no reason to stay awake.
+     *
+     * @param linkId the ID of the given link
+     */
+    void GoToSleepIfPossible(linkId_t linkId);
+
+    void DoNotifyReceivedBeacon(const MgtBeaconHeader& beacon, linkId_t linkId) override;
+
+    std::map<linkId_t, EventId> m_wakeUpEvents; ///< events scheduled to wake up PHYs
 };
 
 } // namespace ns3
