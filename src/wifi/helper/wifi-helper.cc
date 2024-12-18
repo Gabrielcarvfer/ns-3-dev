@@ -1223,6 +1223,7 @@ WifiHelper::EnableLogComponents(LogLevel logLevel)
     LogComponentEnable("ConstantRateWifiManager", logLevel);
     LogComponentEnable("DefaultApEmlsrManager", logLevel);
     LogComponentEnable("DefaultEmlsrManager", logLevel);
+    LogComponentEnable("DefaultPowerSaveManager", logLevel);
     LogComponentEnable("DsssErrorRateModel", logLevel);
     LogComponentEnable("DsssPhy", logLevel);
     LogComponentEnable("DsssPpdu", logLevel);

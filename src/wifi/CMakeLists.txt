@@ -29,6 +29,7 @@ set(source_files
     model/capability-information.cc
     model/channel-access-manager.cc
     model/ctrl-headers.cc
+    model/default-power-save-manager.cc
     model/edca-parameter-set.cc
     model/eht/advanced-ap-emlsr-manager.cc
     model/eht/advanced-emlsr-manager.cc
@@ -205,6 +206,7 @@ set(header_files
     model/capability-information.h
     model/channel-access-manager.h
     model/ctrl-headers.h
+    model/default-power-save-manager.h
     model/edca-parameter-set.h
     model/eht/advanced-ap-emlsr-manager.h
     model/eht/advanced-emlsr-manager.h
