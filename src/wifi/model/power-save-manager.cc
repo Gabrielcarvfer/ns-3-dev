@@ -279,6 +279,8 @@ void
 PowerSaveManager::NotifyRequestAccess(Ptr<Txop> txop, linkId_t linkId)
 {
     NS_LOG_FUNCTION(this << txop << linkId);
+
+    DoNotifyRequestAccess(txop, linkId);
 }
 
 void
