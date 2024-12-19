@@ -152,4 +152,12 @@ DefaultPowerSaveManager::DoNotifyReceivedFrameAfterPsPoll(Ptr<const WifiMpdu> mp
     }
 }
 
+void
+DefaultPowerSaveManager::DoNotifyReceivedGroupcast(Ptr<const WifiMpdu> mpdu, linkId_t linkId)
+{
+    NS_LOG_FUNCTION(this << mpdu << linkId);
+
+    GoToSleepIfPossible(linkId);
+}
+
 } // namespace ns3

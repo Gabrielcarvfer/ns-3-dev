@@ -187,6 +187,15 @@ class PowerSaveManager : public Object
      */
     virtual void DoNotifyReceivedFrameAfterPsPoll(Ptr<const WifiMpdu> mpdu, linkId_t linkId) = 0;
 
+    /**
+     * Notify subclasses of the reception of a groupcast frame (possibly after a DTIM) on the given
+     * link.
+     *
+     * @param mpdu the received MPDU
+     * @param linkId the ID of the given link
+     */
+    virtual void DoNotifyReceivedGroupcast(Ptr<const WifiMpdu> mpdu, linkId_t linkId) = 0;
+
   private:
     Ptr<StaWifiMac> m_staMac;              //!< MAC which is using this Power Save Manager
     std::map<linkId_t, StaInfo> m_staInfo; ///< link ID-indexed map of STA infos
