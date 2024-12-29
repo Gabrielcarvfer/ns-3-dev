@@ -164,6 +164,8 @@ PowerSaveManager::NotifyAssocCompleted()
     {
         m_staInfo[linkId] = StaInfo{};
     }
+
+    DoNotifyAssocCompleted();
 }
 
 void
@@ -180,6 +182,8 @@ PowerSaveManager::NotifyDisassociation()
             phy->ResumeFromSleep();
         }
     }
+
+    DoNotifyDisassociation();
 }
 
 void

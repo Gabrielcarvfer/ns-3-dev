@@ -39,6 +39,8 @@ class DefaultPowerSaveManager : public PowerSaveManager
      */
     void GoToSleepIfPossible(linkId_t linkId);
 
+    void DoNotifyAssocCompleted() override;
+    void DoNotifyDisassociation() override;
     void DoNotifyReceivedBeacon(const MgtBeaconHeader& beacon, linkId_t linkId) override;
 
     std::map<linkId_t, EventId> m_wakeUpEvents; ///< events scheduled to wake up PHYs
