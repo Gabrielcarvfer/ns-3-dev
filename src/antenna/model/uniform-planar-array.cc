@@ -108,6 +108,7 @@ UniformPlanarArray::SetNumColumns(uint32_t n)
         m_isBfVectorValid = false;
     }
     m_numColumns = n;
+    InvalidateChannels();
 }
 
 uint32_t
@@ -125,6 +126,7 @@ UniformPlanarArray::SetNumRows(uint32_t n)
         m_isBfVectorValid = false;
     }
     m_numRows = n;
+    InvalidateChannels();
 }
 
 uint32_t
@@ -139,6 +141,7 @@ UniformPlanarArray::SetAlpha(double alpha)
     m_alpha = alpha;
     m_cosAlpha = cos(m_alpha);
     m_sinAlpha = sin(m_alpha);
+    InvalidateChannels();
 }
 
 void
@@ -147,6 +150,7 @@ UniformPlanarArray::SetBeta(double beta)
     m_beta = beta;
     m_cosBeta = cos(m_beta);
     m_sinBeta = sin(m_beta);
+    InvalidateChannels();
 }
 
 void
@@ -155,6 +159,7 @@ UniformPlanarArray::SetPolSlant(double polSlant)
     m_polSlant = polSlant;
     m_cosPolSlant[0] = cos(m_polSlant);
     m_sinPolSlant[0] = sin(m_polSlant);
+    InvalidateChannels();
 }
 
 void
@@ -168,6 +173,7 @@ UniformPlanarArray::SetAntennaHorizontalSpacing(double s)
         m_isBfVectorValid = false;
     }
     m_disH = s;
+    InvalidateChannels();
 }
 
 double
@@ -187,6 +193,7 @@ UniformPlanarArray::SetAntennaVerticalSpacing(double s)
         m_isBfVectorValid = false;
     }
     m_disV = s;
+    InvalidateChannels();
 }
 
 double
@@ -292,6 +299,7 @@ UniformPlanarArray::SetNumVerticalPorts(uint16_t nPorts)
     NS_ASSERT_MSG(((m_numRows % nPorts) == 0),
                   "The number of vertical ports must divide number of rows");
     m_numVPorts = nPorts;
+    InvalidateChannels();
 }
 
 void
@@ -301,6 +309,7 @@ UniformPlanarArray::SetNumHorizontalPorts(uint16_t nPorts)
     NS_ASSERT_MSG(((m_numColumns % nPorts) == 0),
                   "The number of horizontal ports must divide number of columns");
     m_numHPorts = nPorts;
+    InvalidateChannels();
 }
 
 uint16_t
@@ -380,6 +389,7 @@ UniformPlanarArray::SetDualPol(bool isDualPol)
         m_cosPolSlant[1] = cos(m_polSlant - M_PI / 2);
         m_sinPolSlant[1] = sin(m_polSlant - M_PI / 2);
     }
+    InvalidateChannels();
 }
 
 double
