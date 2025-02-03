@@ -1226,8 +1226,9 @@ ThreeGppChannelModel::GetThreeGppTable(const Ptr<const MobilityModel> aMob,
     double hUT = std::min(aMob->GetPosition().z, bMob->GetPosition().z);
     double hBS = std::max(aMob->GetPosition().z, bMob->GetPosition().z);
 
-    double distance2D = sqrt(pow(aMob->GetPosition().x - bMob->GetPosition().x, 2) +
-                             pow(aMob->GetPosition().y - bMob->GetPosition().y, 2));
+    double distance2D =
+        sqrt(pow(aMob->GetPosition().x - bMob->GetVirtualPosition(aMob->GetPosition()).x, 2) +
+             pow(aMob->GetPosition().y - bMob->GetVirtualPosition(aMob->GetPosition()).y, 2));
 
     double fcGHz = m_frequency / 1.0e9;
     Ptr<ParamsTable> table3gpp = Create<ParamsTable>();
@@ -2877,8 +2878,11 @@ ThreeGppChannelModel::GenerateChannelParameters(const Ptr<const ChannelCondition
         clusterZod.push_back(ZSD * angle);
     }
 
-    Angles sAngle(bMob->GetPosition(), aMob->GetPosition());
-    Angles uAngle(aMob->GetPosition(), bMob->GetPosition());
+    auto aLoc = aMob->GetPosition();
+    auto bLoc = bMob->GetVirtualPosition(aLoc);
+
+    Angles sAngle(bLoc, aLoc);
+    Angles uAngle(aLoc, bLoc);
 
     for (uint8_t cIndex = 0; cIndex < channelParams->m_reducedClusterNumber; cIndex++)
     {
@@ -3302,8 +3306,11 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
     NS_ASSERT(table3gpp->m_raysPerCluster <= rayAoaRadian[0].size());
     NS_ASSERT(table3gpp->m_raysPerCluster <= rayAodRadian[0].size());
 
-    double x = sMob->GetPosition().x - uMob->GetPosition().x;
-    double y = sMob->GetPosition().y - uMob->GetPosition().y;
+    auto sPos = sMob->GetPosition();
+    auto uPos = uMob->GetVirtualPosition(sPos);
+    auto x = sPos.x - uPos.x;
+    auto y = sPos.y - uPos.y;
+
     double distance2D = sqrt(x * x + y * y);
     // NOTE we assume hUT = min (height(a), height(b)) and
     // hBS = max (height (a), height (b))
@@ -3312,8 +3319,8 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
     // compute the 3D distance using eq. 7.4-1
     double distance3D = std::sqrt(distance2D * distance2D + (hBs - hUt) * (hBs - hUt));
 
-    Angles sAngle(uMob->GetPosition(), sMob->GetPosition());
-    Angles uAngle(sMob->GetPosition(), uMob->GetPosition());
+    Angles sAngle(uPos, sPos);
+    Angles uAngle(sPos, uPos);
 
     Double2DVector sinCosA; // cached multiplications of sin and cos of the ZoA and AoA angles
     Double2DVector sinSinA; // cached multiplications of sines of the ZoA and AoA angles
