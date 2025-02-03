@@ -71,6 +71,29 @@ MobilityModel::DoGetPositionWithReference(const Vector& referencePosition) const
     return DoGetPosition();
 }
 
+void
+MobilityModel::SetWraparoundModel(Ptr<WraparoundModel> wraparound)
+{
+    m_wraparound = wraparound;
+}
+
+Ptr<WraparoundModel>
+MobilityModel::GetWraparoundModel() const
+{
+    return m_wraparound;
+}
+
+Vector
+MobilityModel::GetVirtualPosition(const Vector& ref) const
+{
+    auto pos = DoGetPosition();
+    if (m_wraparound)
+    {
+        return m_wraparound->GetRelativeVirtualPosition(ref, pos);
+    }
+    return pos;
+}
+
 Vector
 MobilityModel::GetVelocity() const
 {
@@ -88,6 +111,11 @@ MobilityModel::GetDistanceFrom(Ptr<const MobilityModel> other) const
 {
     Vector oPosition = other->DoGetPosition();
     Vector position = DoGetPosition();
+
+    if (m_wraparound)
+    {
+        return m_wraparound->CalculateDistance(position, oPosition);
+    }
     return CalculateDistance(position, oPosition);
 }
 

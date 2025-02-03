@@ -46,6 +46,7 @@ The required Doxygen version for documentation generation is version 1.11.
 - (wifi) Added a new `MainPhySwitch` trace source to EmlsrManager, which is fired when the main PHY switches channel to operate on another link and provides information about the reason for starting the switch.
 - (build) Scan for contrib modules in `ns-3-external-contrib` directory, at the same level of the ns-3 directory (e.g. `./ns-3-dev/../ns-3-external-contrib/`).
 - (wifi) Add support for exchanging 802.11be Multi-Link Probe Request frames. Currently, the default association manager does not instruct the MAC to transmit a Multi-Link Probe Request frame, though.
+- (mobility) Add a new `HexagonalWraparoundModel` to `MobilityModel`, allowing users from border sites to communicate with opposite sites, given a hexagonal deployment of 0, 1 or 3 rings.
 
 ### Bugs fixed
 

@@ -8,6 +8,8 @@
 #ifndef MOBILITY_MODEL_H
 #define MOBILITY_MODEL_H
 
+#include "wraparound-model.h"
+
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"
 #include "ns3/vector.h"
@@ -87,6 +89,25 @@ class MobilityModel : public Object
      */
     typedef void (*TracedCallback)(Ptr<const MobilityModel> model);
 
+    /**
+     * @brief Set wraparound model of the current MobilityModel
+     * @param wraparound the wraparound model
+     */
+    void SetWraparoundModel(Ptr<WraparoundModel> wraparound);
+
+    /**
+     * @brief Get wraparound model
+     * @return wraparound model
+     */
+    Ptr<WraparoundModel> GetWraparoundModel() const;
+
+    /**
+     * @brief Get virtual relative position to a reference point
+     * @param ref reference position
+     * @return virtual position
+     */
+    Vector GetVirtualPosition(const Vector& ref) const;
+
   protected:
     /**
      * Must be invoked by subclasses when the course of the
@@ -138,6 +159,8 @@ class MobilityModel : public Object
      * or position has occurred.
      */
     ns3::TracedCallback<Ptr<const MobilityModel>> m_courseChangeTrace;
+
+    Ptr<WraparoundModel> m_wraparound; //!< Pointer to wraparound model
 };
 
 } // namespace ns3

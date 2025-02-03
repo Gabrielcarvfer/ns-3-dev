@@ -12,6 +12,7 @@ build_lib(
     model/gauss-markov-mobility-model.cc
     model/geocentric-constant-position-mobility-model.cc
     model/geographic-positions.cc
+    model/hexagonal-wraparound-model.cc
     model/hierarchical-mobility-model.cc
     model/mobility-model.cc
     model/position-allocator.cc
@@ -22,6 +23,7 @@ build_lib(
     model/steady-state-random-waypoint-mobility-model.cc
     model/waypoint-mobility-model.cc
     model/waypoint.cc
+    model/wraparound-model.cc
   HEADER_FILES
     helper/group-mobility-helper.h
     helper/mobility-helper.h
@@ -34,6 +36,7 @@ build_lib(
     model/gauss-markov-mobility-model.h
     model/geocentric-constant-position-mobility-model.h
     model/geographic-positions.h
+    model/hexagonal-wraparound-model.h
     model/hierarchical-mobility-model.h
     model/mobility-model.h
     model/position-allocator.h
@@ -44,6 +47,7 @@ build_lib(
     model/steady-state-random-waypoint-mobility-model.h
     model/waypoint-mobility-model.h
     model/waypoint.h
+    model/wraparound-model.h
   LIBRARIES_TO_LINK ${libantenna}
                     ${libnetwork}
   TEST_SOURCES
@@ -57,4 +61,5 @@ build_lib(
     test/rectangle-closest-border-test.cc
     test/steady-state-random-waypoint-mobility-model-test.cc
     test/waypoint-mobility-model-test.cc
+    test/wraparound-model-test.cc
 )

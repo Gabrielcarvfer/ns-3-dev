@@ -14,6 +14,7 @@
 #include "ns3/object-factory.h"
 #include "ns3/output-stream-wrapper.h"
 #include "ns3/position-allocator.h"
+#include "ns3/wraparound-model.h"
 
 #include <vector>
 
@@ -218,6 +219,12 @@ class MobilityHelper
      */
     static double GetDistanceSquaredBetween(Ptr<Node> n1, Ptr<Node> n2);
 
+    /**
+     * @brief Set wraparound model to be installed into MobilityModels
+     * @param wraparound the wraparound model
+     */
+    void SetWraparoundModel(Ptr<WraparoundModel> wraparound);
+
   private:
     /**
      * Output course change events from mobility model to output stream
@@ -229,6 +236,7 @@ class MobilityHelper
     ObjectFactory m_mobility;                        //!< Object factory to create mobility objects
     Ptr<PositionAllocator>
         m_position; //!< Position allocator for use in hierarchical mobility model
+    Ptr<WraparoundModel> m_wraparound; //!< Wraparound model that will be installed to the nodes
 };
 
 /***************************************************************

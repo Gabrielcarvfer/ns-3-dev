@@ -16,6 +16,7 @@
 #include "ns3/position-allocator.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
+#include "ns3/wraparound-model.h"
 
 #include <iostream>
 
@@ -42,6 +43,12 @@ void
 MobilityHelper::SetPositionAllocator(Ptr<PositionAllocator> allocator)
 {
     m_position = allocator;
+}
+
+void
+MobilityHelper::SetWraparoundModel(Ptr<WraparoundModel> wraparound)
+{
+    m_wraparound = wraparound;
 }
 
 void
@@ -103,6 +110,11 @@ MobilityHelper::Install(Ptr<Node> node) const
     }
     Vector position = m_position->GetNext();
     model->SetPosition(position);
+
+    if (m_wraparound)
+    {
+        model->SetWraparoundModel(m_wraparound);
+    }
 }
 
 void

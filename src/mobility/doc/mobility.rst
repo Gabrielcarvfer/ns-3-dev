@@ -102,6 +102,13 @@ Describe base class
 - Position and Velocity attributes
 - GetDistanceFrom ()
 - CourseChangeNotification
+- SetWraparoundModel ()
+- GetVirtualPosition ()
+
+`GetVirtualPosition(const Vector& ref)` returns a virtual position of a node in respect to a reference point `ref`,
+using a model derived from `WraparoundModel`, if one is set via `SetWraparoundModel(Ptr<WraparoundModel> wraparound)`.
+More details abouts its use with the `HexagonalWraparoundModel` can be found in `Hexagonal wraparound model`_.
+
 
 MobilityModel Subclasses
 ########################
@@ -467,6 +474,99 @@ to create PNG images at one-second intervals, which can then be combined
 using an image processing program such as ImageMagick to form a
 basic animated gif of the mobility.  The example and animation program
 files have further instructions on how to run them.
+
+Hexagonal wraparound model
+##########################
+
+In the case of `HexagonalWraparoundModel`, it returns the virtual position of a node in respect to the different
+site centroids of an hexagonal deployment. In this way, nodes in border sites will be wrapped around
+the hexagonal deployment, interfering with nodes from sites on the opposite site of the hexagonal deployment
+[Panwar2017]_. This ensures each site has the same number of neighboring sites, generating more consistent
+result more efficiently, instead of requiring the simulation of an additional number of rings and then filtering
+nodes in the most external rings out [Panwar2017]_.
+
+The `HexagonalWraparoundModel` can be set up in simulations as follows:
+
+.. sourcecode:: cpp
+
+    // Ring 1 site coordinates
+    //        site04      site03
+    //
+    //  site05      site01      site02
+    //
+    //        site06      site07
+    std::vector<Vector3D> siteCoordinates = {
+        Vector3D(0, 0, 30),       // Site 01
+        Vector3D(1000, 0, 30),    // Site 02
+        Vector3D(500, 866, 30),   // Site 03
+        Vector3D(-500, 866, 30),  // Site 04
+        Vector3D(-1000, 0, 30),   // Site 05
+        Vector3D(-500, -866, 30), // Site 06
+        Vector3D(500, -866, 30),  // Site 07
+    };
+
+    // Create the HexagonalWraparoundModel, or some other Wraparound model
+    Ptr<HexagonalWraparoundModel> wraparoundModel = CreateObject<HexagonalWraparoundModel>();
+
+    // Configure the wraparound model with the site positions for ring 1
+    wraparoundModel->SetSiteDistance(1000);               // inter-site distance
+    wraparoundModel->SetNumSites(siteCoordinates.size()); // number of sites
+    wraparoundModel->SetSitePositions(siteCoordinates);   // add site coordinates
+
+    // Create position allocator for sites
+    Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator>();
+    for (auto coord : siteCoordinates)
+    {
+        positionAlloc->Add(coord);
+    }
+
+    // Configure Mobility helper, with mobility model, position allocator and
+    // the wraparound model
+    MobilityHelper mobilityHelper;
+    mobilityHelper.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+    mobilityHelper.SetPositionAllocator(positionAlloc);
+    mobilityHelper.SetWraparoundModel(wraparoundModel);
+
+    // Create site nodes
+    NodeContainer sites(7);
+
+    // Install mobility to nodes
+    mobilityHelper.Install(sites);
+
+    // Now we can create an user device
+    NodeContainer userDevice(1);
+    mobilityHelper.Install(userDevice);
+    auto userDeviceMobilityModel = userDevice.Get(0)->GetObject<MobilityModel>();
+
+    // Due to wraparound, if we put this user (*) at site02 plus (+800,+800), we should land on
+    // site04
+    //                                      site04      site03
+    //                                      *(1800, 800)
+    //        site04      site03      site05      site01      site02
+    //
+    //  site05      site01      site02
+    //              (0,0)       (1000,0)
+    //        site06      site07
+    const auto site02pos = siteCoordinates.at(1);
+    auto virtualDevicePos = site02pos;
+    virtualDevicePos.x += 800;
+    virtualDevicePos.y += 800;
+    userDeviceMobilityModel->SetPosition(virtualDevicePos);
+
+    // Check whether we are actually there in site04
+    int site = std::distance(siteCoordinates.begin(),
+                             std::find(siteCoordinates.begin(),
+                                       siteCoordinates.end(),
+                                       wraparoundModel->GetSitePosition(virtualDevicePos)));
+    auto nearestSitePos = wraparoundModel->GetSitePosition(virtualDevicePos);
+    std::cout << "Virtual device position " << virtualDevicePos << " corresponds to site " << site
+              << ", at position (" << nearestSitePos << ")=="
+              << "(" << siteCoordinates.at(site) << ")" << std::endl;
+    NS_ASSERT_MSG(site == 4, "Incorrect wrapped site");
+
+.. [Panwar2017] R. S. Panwar and K. M. Sivalingam. Implementation of wrap around mechanism for system level
+   simulation of LTE cellular networks in NS3," 2017 IEEE 18th International Symposium on A World of Wireless,
+   Mobile and Multimedia Networks (WoWMoM), Macau, 2017, pp. 1-9, doi: 10.1109/WoWMoM.2017.7974289.
 
 Validation
 **********
