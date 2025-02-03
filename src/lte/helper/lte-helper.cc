@@ -1128,6 +1128,7 @@ LteHelper::AttachToClosestEnb(Ptr<NetDevice> ueDevice, NetDeviceContainer enbDev
     for (auto i = enbDevices.Begin(); i != enbDevices.End(); ++i)
     {
         Vector enbpos = (*i)->GetNode()->GetObject<MobilityModel>()->GetPosition();
+        uepos = ueDevice->GetNode()->GetObject<MobilityModel>()->GetVirtualPosition(enbpos);
         double distance = CalculateDistance(uepos, enbpos);
         if (distance < minDistance)
         {
