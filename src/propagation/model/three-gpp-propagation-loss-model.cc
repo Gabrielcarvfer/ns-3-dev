@@ -134,7 +134,7 @@ GetBsUtDistancesAndHeights(ns3::Ptr<const ns3::MobilityModel> a,
                            ns3::Ptr<const ns3::MobilityModel> b)
 {
     auto aPos = a->GetPosition();
-    auto bPos = b->GetPosition();
+    auto bPos = b->GetVirtualPosition(aPos);
     double distance2D = ns3::ThreeGppChannelConditionModel::Calculate2dDistance(aPos, bPos);
     double distance3D = ns3::CalculateDistance(aPos, bPos);
     double hBs = std::max(aPos.z, bPos.z);
@@ -707,14 +707,15 @@ ThreeGppPropagationLossModel::GetVectorDifference(Ptr<MobilityModel> a, Ptr<Mobi
 {
     uint32_t x1 = a->GetObject<Node>()->GetId();
     uint32_t x2 = b->GetObject<Node>()->GetId();
-
+    auto aLoc = a->GetPosition();
+    auto bLoc = b->GetVirtualPosition(aLoc);
     if (x1 < x2)
     {
-        return b->GetPosition() - a->GetPosition();
+        return bLoc - aLoc;
     }
     else
     {
-        return a->GetPosition() - b->GetPosition();
+        return aLoc - bLoc;
     }
 }
 
@@ -896,13 +897,16 @@ ThreeGppRmaPropagationLossModel::GetShadowingStd(Ptr<MobilityModel> a,
     NS_LOG_FUNCTION(this);
     double shadowingStd;
 
+    auto wraparound = a->GetWraparoundModel();
+    auto aLoc = a->GetPosition();
+    auto bLoc = b->GetVirtualPosition(aLoc);
+
     if (cond == ChannelCondition::LosConditionValue::LOS)
     {
         // compute the 2D distance between the two nodes
-        double distance2d = Calculate2dDistance(a->GetPosition(), b->GetPosition());
-
+        double distance2d = Calculate2dDistance(aLoc, bLoc);
         // compute the breakpoint distance (see 3GPP TR 38.901, Table 7.4.1-1, note 5)
-        double distanceBp = GetBpDistance(m_frequency, a->GetPosition().z, b->GetPosition().z);
+        double distanceBp = GetBpDistance(m_frequency, aLoc.z, bLoc.z);
 
         if (distance2d <= distanceBp)
         {
