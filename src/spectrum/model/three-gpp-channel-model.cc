@@ -1157,8 +1157,13 @@ ThreeGppChannelModel::GetTypeId()
                           DoubleValue(0.0),
                           MakeDoubleAccessor(&ThreeGppChannelModel::m_vScatt),
                           MakeDoubleChecker<double>(0.0))
+            .AddAttribute("WraparoundModel",
+                          "Pointer to the wraparound model.",
+                          PointerValue(),
+                          MakePointerAccessor(&ThreeGppChannelModel::SetWraparoundModel,
+                                              &ThreeGppChannelModel::GetWraparoundModel),
+                          MakePointerChecker<WraparoundModel>());
 
-        ;
     return tid;
 }
 
@@ -1174,6 +1179,18 @@ ThreeGppChannelModel::GetChannelConditionModel() const
 {
     NS_LOG_FUNCTION(this);
     return m_channelConditionModel;
+}
+
+void
+ThreeGppChannelModel::SetWraparoundModel(Ptr<WraparoundModel> wraparound)
+{
+    m_wraparound = wraparound;
+}
+
+Ptr<WraparoundModel>
+ThreeGppChannelModel::GetWraparoundModel() const
+{
+    return m_wraparound;
 }
 
 void
@@ -1221,13 +1238,22 @@ ThreeGppChannelModel::GetThreeGppTable(const Ptr<const MobilityModel> aMob,
 {
     NS_LOG_FUNCTION(this);
 
+    auto aPos = aMob->GetPosition();
+    auto bPos = bMob->GetPosition();
+
+    if (m_wraparound)
+    {
+        // when m_wraparound model is configured then
+        // the relative position of bPos is calculated respective to aPos
+        bPos = m_wraparound->GetRelativeVirtualPosition(aPos, bPos);
+    }
+
     // NOTE we assume hUT = min (height(a), height(b)) and
     // hBS = max (height (a), height (b))
-    double hUT = std::min(aMob->GetPosition().z, bMob->GetPosition().z);
-    double hBS = std::max(aMob->GetPosition().z, bMob->GetPosition().z);
+    double hUT = std::min(aPos.z, bPos.z);
+    double hBS = std::max(aPos.z, bPos.z);
 
-    double distance2D = sqrt(pow(aMob->GetPosition().x - bMob->GetPosition().x, 2) +
-                             pow(aMob->GetPosition().y - bMob->GetPosition().y, 2));
+    double distance2D = sqrt(pow(aPos.x - bPos.x, 2) + pow(aPos.y - bPos.y, 2));
 
     double fcGHz = m_frequency / 1.0e9;
     Ptr<ParamsTable> table3gpp = Create<ParamsTable>();
@@ -2877,8 +2903,18 @@ ThreeGppChannelModel::GenerateChannelParameters(const Ptr<const ChannelCondition
         clusterZod.push_back(ZSD * angle);
     }
 
-    Angles sAngle(bMob->GetPosition(), aMob->GetPosition());
-    Angles uAngle(aMob->GetPosition(), bMob->GetPosition());
+    auto aLoc = aMob->GetPosition();
+    auto bLoc = bMob->GetPosition();
+
+    if (m_wraparound)
+    {
+        // when m_wraparound model is configured then
+        // the relative position of bLoc is calculated respective to aLoc
+        bLoc = m_wraparound->GetRelativeVirtualPosition(aLoc, bLoc);
+    }
+
+    Angles sAngle(bLoc, aLoc);
+    Angles uAngle(aLoc, bLoc);
 
     for (uint8_t cIndex = 0; cIndex < channelParams->m_reducedClusterNumber; cIndex++)
     {
@@ -3302,18 +3338,27 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
     NS_ASSERT(table3gpp->m_raysPerCluster <= rayAoaRadian[0].size());
     NS_ASSERT(table3gpp->m_raysPerCluster <= rayAodRadian[0].size());
 
-    double x = sMob->GetPosition().x - uMob->GetPosition().x;
-    double y = sMob->GetPosition().y - uMob->GetPosition().y;
-    double distance2D = sqrt(x * x + y * y);
+    auto sPos = sMob->GetPosition();
+    auto uPos = uMob->GetPosition();
+
+    if (m_wraparound)
+    {
+        // when m_wraparound model is configured then
+        // the relative position of uPos is calculated respective to sPos
+        uPos = m_wraparound->GetRelativeVirtualPosition(sPos, uPos);
+    }
+
+    double distance2D = sqrt(pow(sPos.x - uPos.x, 2) + pow(sPos.y - uPos.y, 2));
+
     // NOTE we assume hUT = min (height(a), height(b)) and
     // hBS = max (height (a), height (b))
-    double hUt = std::min(sMob->GetPosition().z, uMob->GetPosition().z);
-    double hBs = std::max(sMob->GetPosition().z, uMob->GetPosition().z);
+    double hUt = std::min(sPos.z, uPos.z);
+    double hBs = std::max(sPos.z, uPos.z);
     // compute the 3D distance using eq. 7.4-1
     double distance3D = std::sqrt(distance2D * distance2D + (hBs - hUt) * (hBs - hUt));
 
-    Angles sAngle(uMob->GetPosition(), sMob->GetPosition());
-    Angles uAngle(sMob->GetPosition(), uMob->GetPosition());
+    Angles sAngle(uPos, sPos);
+    Angles uAngle(sPos, uPos);
 
     Double2DVector sinCosA; // cached multiplications of sin and cos of the ZoA and AoA angles
     Double2DVector sinSinA; // cached multiplications of sines of the ZoA and AoA angles

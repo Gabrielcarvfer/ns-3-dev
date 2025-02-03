@@ -16,6 +16,7 @@
 #include "ns3/boolean.h"
 #include "ns3/channel-condition-model.h"
 #include "ns3/deprecated.h"
+#include "ns3/wraparound-model.h"
 
 #include <complex.h>
 #include <unordered_map>
@@ -126,6 +127,18 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * @return the number of stream indices assigned by this model
      */
     int64_t AssignStreams(int64_t stream);
+
+    /**
+     * @brief Set wraparound model
+     * @param wraparound the wraparound model
+     */
+    void SetWraparoundModel(Ptr<WraparoundModel> wraparound);
+
+    /**
+     * @brief Get wraparound model
+     * @return wraparound model
+     */
+    Ptr<WraparoundModel> GetWraparoundModel() const;
 
   protected:
     /**
@@ -377,9 +390,10 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     static const uint8_t PHI_INDEX = 0; //!< index of the PHI value in the m_nonSelfBlocking array
     static const uint8_t X_INDEX = 1;   //!< index of the X value in the m_nonSelfBlocking array
     static const uint8_t THETA_INDEX =
-        2;                            //!< index of the THETA value in the m_nonSelfBlocking array
-    static const uint8_t Y_INDEX = 3; //!< index of the Y value in the m_nonSelfBlocking array
-    static const uint8_t R_INDEX = 4; //!< index of the R value in the m_nonSelfBlocking array
+        2;                             //!< index of the THETA value in the m_nonSelfBlocking array
+    static const uint8_t Y_INDEX = 3;  //!< index of the Y value in the m_nonSelfBlocking array
+    static const uint8_t R_INDEX = 4;  //!< index of the R value in the m_nonSelfBlocking array
+    Ptr<WraparoundModel> m_wraparound; //!< Pointer to wraparound model
 };
 } // namespace ns3
 
