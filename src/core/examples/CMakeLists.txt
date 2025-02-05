@@ -13,6 +13,7 @@ set(base_examples
     sample-simulator
     system-path-examples
     test-string-value-formatting
+    adjacency-matrix-example
 )
 
 foreach(

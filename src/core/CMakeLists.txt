@@ -277,6 +277,7 @@ set(header_files
     model/simulator.h
     model/singleton.h
     model/string.h
+    model/symmetric-adjacency-matrix.h
     model/synchronizer.h
     model/system-path.h
     model/system-wall-clock-ms.h
@@ -308,6 +309,7 @@ set(header_files
 set(test_sources
     ${example_as_test_suite}
     ${gsl_test_sources}
+    test/adjacency-matrix-test-suite.cc
     test/attribute-container-test-suite.cc
     test/attribute-test-suite.cc
     test/build-profile-test-suite.cc
