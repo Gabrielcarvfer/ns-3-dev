@@ -48,6 +48,7 @@ The required Doxygen version for documentation generation is version 1.11.
 - (wifi) Add support for exchanging 802.11be Multi-Link Probe Request frames. Currently, the default association manager does not instruct the MAC to transmit a Multi-Link Probe Request frame, though.
 - (wifi) 2004! - Add Wi-Fi channel occupancy statistics helper
 - (wifi) 2009! - Added WifiTxStatsHelper for Wi-Fi MAC-level tracing.
+- (propagation) Add a new `HexagonalWraparoundModel` to `MobilityModel`, allowing users from border sites to communicate with opposite sites, given a hexagonal deployment of 0, 1 or 3 rings.
 
 ### Bugs fixed
 
