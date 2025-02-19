@@ -10,6 +10,7 @@
 
 #include "channel-condition-model.h"
 #include "propagation-loss-model.h"
+#include "wraparound-model.h"
 
 namespace ns3
 {
@@ -249,7 +250,19 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
      * @param b Second node
      * @return the difference between the node vector position
      */
-    static Vector GetVectorDifference(Ptr<MobilityModel> a, Ptr<MobilityModel> b);
+    Vector GetVectorDifference(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;
+
+    /**
+     * @brief Set wraparound model
+     * @param wraparound the wraparound model
+     */
+    void SetWraparoundModel(Ptr<WraparoundModel> wraparound);
+
+    /**
+     * @brief Get wraparound model
+     * @return wraparound model
+     */
+    Ptr<WraparoundModel> GetWraparoundModel() const;
 
   protected:
     void DoDispose() override;
@@ -261,6 +274,33 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
      * @return the 2D distance between a and b
      */
     static double Calculate2dDistance(Vector a, Vector b);
+
+    /**
+     * @brief Get the base station and user terminal relative distances and heights.
+     *
+     * @param a the mobility model of terminal a
+     * @param b the mobility model of terminal b
+     *
+     * @return The tuple [dist2D, dist3D, hBs, hUt], where dist2D and dist3D
+     * are the 2D and 3D distances between a and b, respectively, hBs is the bigger
+     * height and hUt the smallest.
+     */
+    std::tuple<double, double, double, double> GetBsUtDistancesAndHeights(
+        ns3::Ptr<const ns3::MobilityModel> a,
+        ns3::Ptr<const ns3::MobilityModel> b) const;
+
+    /**
+     * @brief Get the positions considering the wraparound model if it is set.
+     *
+     * @param a the mobility model of terminal a
+     * @param b the mobility model of terminal b
+     *
+     * @return The pair of the positions of the terminal a and b considering the wraparound
+     * model if it is set.
+     */
+
+    std::pair<Vector3D, Vector3D> GetPositions(ns3::Ptr<const ns3::MobilityModel> a,
+                                               ns3::Ptr<const ns3::MobilityModel> b) const;
 
     Ptr<ChannelConditionModel> m_channelConditionModel; //!< pointer to the channel condition model
     double m_frequency;                                 //!< operating frequency in Hz
@@ -300,6 +340,7 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     Ptr<NormalRandomVariable>
         m_normalO2iHighLossVar; //!< a normal random variable for the calculation of 02i high loss,
                                 //!< see TR38.901 Table 7.4.3-2
+    Ptr<WraparoundModel> m_wraparound; //!< Pointer to wraparound model
 };
 
 /**
