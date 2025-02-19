@@ -885,7 +885,7 @@ The test suite :cpp:class:`ChannelConditionModelsTestSuite` contains a single te
 * :cpp:class:`ThreeGppChannelConditionModelTestCase`, which tests all the 3GPP channel condition models. It determines the channel condition between two nodes multiple times, estimates the LOS probability, and compares it with the value given by the formulas in 3GPP TR 38.901 [38901]_, Table 7.4.2-1
 
 Hexagonal wraparound model
-##########################
+**************************
 
 Wraparound is a method adopted by 3GPP for simulations, evaluations and calibrations in cellular outdoor scenarios,
 which typically follow hexagonal deployments. According the wraparound method, the network is extended with additional copies of the
@@ -899,8 +899,11 @@ respect to the different site centroids of an hexagonal deployment. In this way,
 interfering with nodes from sites on the opposite site of the hexagonal deployment [Panwar2017]_.
 This ensures each site has the same number of neighboring sites, generating more consistent result more efficiently,
 instead of requiring the simulation of an additional number of rings and then filtering nodes in the most external rings out [Panwar2017]_.
+Currently, `HexagonalWraparoundModel` is supported by UMa, RMa, and UMi 3GPP propagation models that are implemented in `ThreeGppUmaPropagationLossModel`,
+`ThreeGppRmaPropagationLossModel`, and `ThreeGppUmiStreetCanyonPropagationLossModel`, respectively. `HexagonalWraparoundModel` supports
+hexagonal deployments of 0, 1 or 3 rings.
 
-The `HexagonalWraparoundModel` can be set up in simulations as follows:
+The `HexagonalWraparoundModel` can be configured in simulations as follows:
 
 .. sourcecode:: cpp
 

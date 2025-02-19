@@ -120,29 +120,6 @@ const std::map<int, float> troposphericScintillationLoss{
 };
 
 /**
- * @brief Get the base station and user terminal relative distances and heights
- *
- * @param a the mobility model of terminal a
- * @param b the mobility model of terminal b
- *
- * @return The tuple [dist2D, dist3D, hBs, hUt], where dist2D and dist3D
- * are the 2D and 3D distances between a and b, respectively, hBs is the bigger
- * height and hUt the smallest.
- */
-std::tuple<double, double, double, double>
-GetBsUtDistancesAndHeights(ns3::Ptr<const ns3::MobilityModel> a,
-                           ns3::Ptr<const ns3::MobilityModel> b)
-{
-    auto aPos = a->GetPosition();
-    auto bPos = b->GetPosition();
-    double distance2D = ns3::ThreeGppChannelConditionModel::Calculate2dDistance(aPos, bPos);
-    double distance3D = ns3::CalculateDistance(aPos, bPos);
-    double hBs = std::max(aPos.z, bPos.z);
-    double hUt = std::min(aPos.z, bPos.z);
-    return std::make_tuple(distance2D, distance3D, hBs, hUt);
-}
-
-/**
  * @brief Get the base station and user terminal heights for the UmiStreetCanyon scenario
  *
  * @param heightA the first height in meters
@@ -298,7 +275,13 @@ ThreeGppPropagationLossModel::GetTypeId()
                 "Enable/disable Building Penetration Losses.",
                 BooleanValue(true),
                 MakeBooleanAccessor(&ThreeGppPropagationLossModel::m_buildingPenLossesEnabled),
-                MakeBooleanChecker());
+                MakeBooleanChecker())
+            .AddAttribute("WraparoundModel",
+                          "Pointer to the wraparound model.",
+                          PointerValue(),
+                          MakePointerAccessor(&ThreeGppPropagationLossModel::SetWraparoundModel,
+                                              &ThreeGppPropagationLossModel::GetWraparoundModel),
+                          MakePointerChecker<WraparoundModel>());
     return tid;
 }
 
@@ -349,6 +332,18 @@ ThreeGppPropagationLossModel::GetChannelConditionModel() const
 {
     NS_LOG_FUNCTION(this);
     return m_channelConditionModel;
+}
+
+void
+ThreeGppPropagationLossModel::SetWraparoundModel(Ptr<WraparoundModel> wraparound)
+{
+    m_wraparound = wraparound;
+}
+
+Ptr<WraparoundModel>
+ThreeGppPropagationLossModel::GetWraparoundModel() const
+{
+    return m_wraparound;
 }
 
 void
@@ -681,11 +676,42 @@ ThreeGppPropagationLossModel::DoAssignStreams(int64_t stream)
 double
 ThreeGppPropagationLossModel::Calculate2dDistance(Vector a, Vector b)
 {
-    double x = a.x - b.x;
-    double y = a.y - b.y;
-    double distance2D = sqrt(x * x + y * y);
+    return ThreeGppChannelConditionModel::Calculate2dDistance(a, b);
+}
 
-    return distance2D;
+std::pair<Vector3D, Vector3D>
+ThreeGppPropagationLossModel::GetPositions(ns3::Ptr<const ns3::MobilityModel> a,
+                                           ns3::Ptr<const ns3::MobilityModel> b) const
+{
+    auto aLoc = a->GetPosition();
+    auto bLoc = b->GetPosition();
+    if (m_wraparound)
+    {
+        // the wrap-around model is currently supported only for typical hexagonal models
+        //  UMa, RMa, and UMi.
+        NS_ASSERT_MSG(
+            GetTypeId() == ThreeGppUmaPropagationLossModel::GetTypeId() ||
+                GetTypeId() == ThreeGppRmaPropagationLossModel::GetTypeId() ||
+                GetTypeId() == ThreeGppUmiStreetCanyonPropagationLossModel::GetTypeId(),
+            "The wrap-around model is currently only supported for UMa, RMa and UMi 3GPP models.");
+        // when m_wraparound model is configured then
+        // the relative position of b node is calculated respective to a node
+        bLoc = m_wraparound->GetRelativeVirtualPosition(aLoc, bLoc);
+    }
+    return std::make_pair(aLoc, bLoc);
+}
+
+std::tuple<double, double, double, double>
+ThreeGppPropagationLossModel::GetBsUtDistancesAndHeights(ns3::Ptr<const ns3::MobilityModel> a,
+                                                         ns3::Ptr<const ns3::MobilityModel> b) const
+{
+    // GetPositions considers if the wrap-around model is set for RMa, UMa or UMi
+    auto [aPos, bPos] = GetPositions(a, b);
+    double distance2D = Calculate2dDistance(aPos, bPos);
+    double distance3D = CalculateDistance(aPos, bPos);
+    double hBs = std::max(aPos.z, bPos.z);
+    double hUt = std::min(aPos.z, bPos.z);
+    return std::make_tuple(distance2D, distance3D, hBs, hUt);
 }
 
 uint32_t
@@ -703,18 +729,20 @@ ThreeGppPropagationLossModel::GetKey(Ptr<MobilityModel> a, Ptr<MobilityModel> b)
 }
 
 Vector
-ThreeGppPropagationLossModel::GetVectorDifference(Ptr<MobilityModel> a, Ptr<MobilityModel> b)
+ThreeGppPropagationLossModel::GetVectorDifference(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
 {
     uint32_t x1 = a->GetObject<Node>()->GetId();
     uint32_t x2 = b->GetObject<Node>()->GetId();
+    // GetPositions considers if the wrap-around model is set for RMa, UMa or UMi
+    auto [aLoc, bLoc] = GetPositions(a, b);
 
     if (x1 < x2)
     {
-        return b->GetPosition() - a->GetPosition();
+        return bLoc - aLoc;
     }
     else
     {
-        return a->GetPosition() - b->GetPosition();
+        return aLoc - bLoc;
     }
 }
 
@@ -896,13 +924,15 @@ ThreeGppRmaPropagationLossModel::GetShadowingStd(Ptr<MobilityModel> a,
     NS_LOG_FUNCTION(this);
     double shadowingStd;
 
+    // GetPositions considers if the wrap-around model is set for Rma
+    auto [aLoc, bLoc] = GetPositions(a, b);
+
     if (cond == ChannelCondition::LosConditionValue::LOS)
     {
         // compute the 2D distance between the two nodes
-        double distance2d = Calculate2dDistance(a->GetPosition(), b->GetPosition());
-
+        double distance2d = Calculate2dDistance(aLoc, bLoc);
         // compute the breakpoint distance (see 3GPP TR 38.901, Table 7.4.1-1, note 5)
-        double distanceBp = GetBpDistance(m_frequency, a->GetPosition().z, b->GetPosition().z);
+        double distanceBp = GetBpDistance(m_frequency, aLoc.z, bLoc.z);
 
         if (distance2d <= distanceBp)
         {
@@ -1258,10 +1288,11 @@ ThreeGppUmiStreetCanyonPropagationLossModel::GetLossLos(Ptr<MobilityModel> a,
                                                         Ptr<MobilityModel> b) const
 {
     NS_LOG_FUNCTION(this);
-
-    double distance2D = Calculate2dDistance(a->GetPosition(), b->GetPosition());
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [hBs, hUt] = GetBsUtHeightsUmiStreetCanyon(a->GetPosition().z, b->GetPosition().z);
+    // GetPositions considers if the wrap-around model is set for RMa, UMa or UMi
+    auto [aPos, bPos] = GetPositions(a, b);
+    double distance2D = Calculate2dDistance(aPos, bPos);
+    double distance3D = CalculateDistance(aPos, bPos);
+    auto [hBs, hUt] = GetBsUtHeightsUmiStreetCanyon(aPos.z, bPos.z);
 
     // check if hBS and hUT are within the validity range
     if (hUt < 1.5 || hUt >= 10.0)
@@ -1321,10 +1352,11 @@ ThreeGppUmiStreetCanyonPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a,
                                                          Ptr<MobilityModel> b) const
 {
     NS_LOG_FUNCTION(this);
-
-    double distance2D = Calculate2dDistance(a->GetPosition(), b->GetPosition());
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [hBs, hUt] = GetBsUtHeightsUmiStreetCanyon(a->GetPosition().z, b->GetPosition().z);
+    // GetPositions considers if the wrap-around model is set for RMa, UMa or UMi
+    auto [aPos, bPos] = GetPositions(a, b);
+    double distance2D = Calculate2dDistance(aPos, bPos);
+    double distance3D = CalculateDistance(aPos, bPos);
+    auto [hBs, hUt] = GetBsUtHeightsUmiStreetCanyon(aPos.z, bPos.z);
 
     // check if hBS and hUT are within the validity range
     if (hUt < 1.5 || hUt >= 10.0)
