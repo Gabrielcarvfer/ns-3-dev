@@ -46,6 +46,7 @@ class DefaultPowerSaveManager : public PowerSaveManager
     void DoNotifyReceivedFrameAfterPsPoll(Ptr<const WifiMpdu> mpdu, linkId_t linkId) override;
     void DoNotifyReceivedGroupcast(Ptr<const WifiMpdu> mpdu, linkId_t linkId) override;
     void DoNotifyRequestAccess(Ptr<Txop> txop, linkId_t linkId) override;
+    void DoNotifyChannelReleased(Ptr<Txop> txop, linkId_t linkId) override;
     void DoTxDropped(WifiMacDropReason reason, Ptr<const WifiMpdu> mpdu) override;
 
     std::map<linkId_t, EventId> m_wakeUpEvents; ///< events scheduled to wake up PHYs

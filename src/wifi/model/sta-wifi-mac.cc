@@ -1650,6 +1650,15 @@ StaWifiMac::NotifyRequestAccess(Ptr<Txop> txop, uint8_t linkId)
 }
 
 void
+StaWifiMac::NotifyChannelReleased(Ptr<Txop> txop, uint8_t linkId)
+{
+    if (m_powerSaveManager)
+    {
+        m_powerSaveManager->NotifyChannelReleased(txop, linkId);
+    }
+}
+
+void
 StaWifiMac::SetPmModeAfterAssociation(uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << linkId);

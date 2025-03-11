@@ -114,6 +114,14 @@ class PowerSaveManager : public Object
     void NotifyRequestAccess(Ptr<Txop> txop, linkId_t linkId);
 
     /**
+     * Notify that the given TXOP has released the channel on the given link.
+     *
+     * @param txop the DCF/EDCAF releasing the channel
+     * @param linkId the ID of the given link
+     */
+    void NotifyChannelReleased(Ptr<Txop> txop, linkId_t linkId);
+
+    /**
      * Notify that the given MPDU has been discarded for the given reason.
      *
      * @param reason the reason why the MPDU was dropped
@@ -212,6 +220,14 @@ class PowerSaveManager : public Object
      * @param linkId the ID of the given link
      */
     virtual void DoNotifyRequestAccess(Ptr<Txop> txop, linkId_t linkId) = 0;
+
+    /**
+     * Notify subclasses that the given TXOP is releasing the channel on the given link.
+     *
+     * @param txop the DCF/EDCAF releasing the channel
+     * @param linkId the ID of the given link
+     */
+    virtual void DoNotifyChannelReleased(Ptr<Txop> txop, linkId_t linkId) = 0;
 
     /**
      * Notify subclasses that the given MPDU has been discarded for the given reason.

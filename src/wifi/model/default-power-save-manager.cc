@@ -195,6 +195,14 @@ DefaultPowerSaveManager::DoNotifyRequestAccess(Ptr<Txop> txop, linkId_t linkId)
 }
 
 void
+DefaultPowerSaveManager::DoNotifyChannelReleased(Ptr<Txop> txop, linkId_t linkId)
+{
+    NS_LOG_FUNCTION(this << txop << linkId);
+
+    GoToSleepIfPossible(linkId);
+}
+
+void
 DefaultPowerSaveManager::DoTxDropped(WifiMacDropReason reason, Ptr<const WifiMpdu> mpdu)
 {
     NS_LOG_FUNCTION(this << reason << *mpdu);
