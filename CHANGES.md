@@ -159,6 +159,7 @@ The wimax module was removed and moved to the ns-3 App Store.
 * (docs) Models documentation format guidelines have been updated.
 * (zigbee) Adjust pedantic link cost requirement in ``NeighborTable::LookUpForBestParent``, a minimum link cost of 3 is not required now.
 * (wifi) Normal Ack, BlockAck and BlockAckReq frames are transmitted, if appropriate, as non-HT duplicate PPDUs on a bandwidth matching that of the data frame transmitted in the same frame exchange sequence.
+* (wifi) Association Request/Response and Probe Request/Response frames are transmitted using single protection setting, i.e., the NAV is set to protect just the reception of the Ack response rather than the entire TXOP (those frames are transmitted via VO AC, which normally has a non-zero TXOP limit). As a consequence, a CF-End frame is not transmitted after the reception of the Ack.
 
 ## Changes from ns-3.43 to ns-3.44
 
