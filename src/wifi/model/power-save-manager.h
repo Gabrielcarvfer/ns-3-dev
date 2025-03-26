@@ -50,6 +50,15 @@ class PowerSaveManager : public Object
     void SetWifiMac(Ptr<StaWifiMac> mac);
 
     /**
+     * Enable or disable Power Save mode on a given set of links. If this object is not initialized
+     * yet, the settings are recorded and notified to the STA wifi MAC upon initialization.
+     *
+     * @param linkIdEnableMap a link ID-indexed map indicating whether to enable or not power save
+     *                        mode on the link with the given ID
+     */
+    void SetPowerSaveMode(const std::map<linkId_t, bool>& linkIdEnableMap);
+
+    /**
      * Notify that the non-AP STA/MLD has completed association with an AP.
      */
     void NotifyAssocCompleted();
@@ -109,6 +118,7 @@ class PowerSaveManager : public Object
     void TxDropped(WifiMacDropReason reason, Ptr<const WifiMpdu> mpdu);
 
   protected:
+    void DoInitialize() override;
     void DoDispose() override;
 
     /**
@@ -140,6 +150,9 @@ class PowerSaveManager : public Object
   private:
     Ptr<StaWifiMac> m_staMac;              //!< MAC which is using this Power Save Manager
     std::map<linkId_t, StaInfo> m_staInfo; ///< link ID-indexed map of STA infos
+    std::map<linkId_t, bool>
+        m_linkIdEnableMap; ///< a link ID-indexed map indicating whether to enable or not power save
+                           ///< mode on the link with the given ID (used before initialization)
     TracedCallback<linkId_t, WifiPowerManagementMode>
         m_pmModeLogger; ///< link ID-indexed power management mode logger
 

@@ -18,6 +18,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### Changes to existing API
 
+* (wifi) The `PowerSaveMode` attribute of the `StaWifiMac` class has been deprecated in favor of the `PowerSaveMode` attribute of the `PowerSaveManager` class.
+
 ### Changes to build system
 
 ### Changed behavior
