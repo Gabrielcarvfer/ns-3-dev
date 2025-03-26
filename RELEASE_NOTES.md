@@ -36,6 +36,8 @@ been tested on Linux. As of this release, the latest known version to work with 
 
 ### New user-visible features
 
+- (wifi) Add support for Power Save mode.
+
 ### Bugs fixed
 
 - (spectrum) !2774 `MultiModelSpectrumChannel` will now omit an existing precoding matrix if its dimensions do not match those of the receiver. This is necessary because we do not convert it in the same way as the PSD.
