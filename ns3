@@ -1506,7 +1506,8 @@ def run_step(args, target_to_run, target_args):
             if target_to_run in ["mpiexec", "mpirun"] and os.getenv("MPI_CI"):
                 if shutil.which("ompi_info"):
                     target_args = ["--oversubscribe"] + target_args
-                target_args = ["--allow-run-as-root"] + target_args
+                if "--allow-run-as-root" in subprocess.check_output([target_to_run, "--help"]):
+                    target_args = ["--allow-run-as-root"] + target_args
 
     program_arguments = [*debugging_software, target_to_run, *target_args]
 
