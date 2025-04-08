@@ -8,6 +8,7 @@
 #ifndef NS3_SYMMETRIC_ADJACENCY_MATRIX_H
 #define NS3_SYMMETRIC_ADJACENCY_MATRIX_H
 
+#include <cstddef>
 #include <vector>
 
 namespace ns3
