@@ -511,5 +511,6 @@ main(int argc, char* argv[])
         MPI_Finalize();
     }
 
+    std::cout << "a" << std::endl;
     return 0;
 }
