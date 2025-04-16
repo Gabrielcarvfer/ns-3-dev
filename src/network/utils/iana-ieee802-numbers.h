@@ -29,9 +29,11 @@ namespace iana
 {
 namespace ieee802numbers
 {
-constexpr uint16_t IPV4 = 0x0800;   //!< IPv4 EtherType [RFC894]
-constexpr uint16_t ARP = 0x0806;    //!< ARP EtherType [RFC1700]
-constexpr uint16_t IPV6 = 0x86DD;   //!< IPv6 EtherType [RFC2464]
+constexpr uint16_t IPV4 = 0x0800;                      //!< IPv4 EtherType [RFC894]
+constexpr uint16_t ARP = 0x0806;                       //!< ARP EtherType [RFC1700]
+constexpr uint16_t IPV6 = 0x86DD;                      //!< IPv6 EtherType [RFC2464]
+constexpr uint16_t BRIDGE_LEARNING_ETHERTYPE = 0x88B5; //!< IEEE Std 802 Local Experimental
+                                                       //!< EtherType
 constexpr uint16_t LoWPAN = 0xA0ED; //!< LoWPAN EtherType (e.g., 6LowPan) [RFC7973]
 } // namespace ieee802numbers
 } // namespace iana

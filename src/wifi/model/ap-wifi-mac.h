@@ -776,6 +776,9 @@ class ApWifiMac : public WifiMac
                                     //!< frame or between two FD frames on 2.4GHz and 5GHz links
     bool m_sendUnsolProbeResp;      //!< send unsolicited Probe Response instead of FILS Discovery
 
+    bool m_forwardFrameOnAssoc; //!< whether to forward a synthetic broadcast frame up when a STA
+                                //!< completes association, to update a learning bridge
+
     /// store value and timestamp for each Buffer Status Report
     struct BsrType
     {

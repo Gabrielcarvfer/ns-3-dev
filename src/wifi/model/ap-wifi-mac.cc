@@ -30,6 +30,8 @@
 #include "ns3/eht-frame-exchange-manager.h"
 #include "ns3/he-configuration.h"
 #include "ns3/ht-configuration.h"
+#include "ns3/iana-ieee802-numbers.h"
+#include "ns3/llc-snap-header.h"
 #include "ns3/log.h"
 #include "ns3/packet.h"
 #include "ns3/pointer.h"
@@ -185,6 +187,16 @@ ApWifiMac::GetTypeId()
                           PointerValue(),
                           MakePointerAccessor(&ApWifiMac::GetGcrManager, &ApWifiMac::SetGcrManager),
                           MakePointerChecker<GcrManager>())
+            .AddAttribute(
+                "ForwardFrameOnAssoc",
+                "Whether the AP forwards a synthetic broadcast frame up when a STA completes "
+                "association. The frame has the STA address as source and causes a learning "
+                "bridge or switched distribution system connecting multiple APs to learn that "
+                "the STA is reachable through this AP. Enable this when such a distribution "
+                "system is used and immediate bridge learning after roaming is needed.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&ApWifiMac::m_forwardFrameOnAssoc),
+                MakeBooleanChecker())
             .AddTraceSource("AssociatedSta",
                             "A station associated with this access point.",
                             MakeTraceSourceAccessor(&ApWifiMac::m_assocLogger),
@@ -2149,9 +2161,9 @@ ApWifiMac::TxOk(Ptr<const WifiMpdu> mpdu)
             m_assocLogger(aid, hdr.GetAddr1());
         }
 
-        if (auto staMldAddress =
-                GetWifiRemoteStationManager(*linkId)->GetMldAddress(hdr.GetAddr1());
-            staMldAddress.has_value())
+        const auto staMldAddress =
+            GetWifiRemoteStationManager(*linkId)->GetMldAddress(hdr.GetAddr1());
+        if (staMldAddress.has_value())
         {
             /**
              * The STA is affiliated with an MLD. From Sec. 35.3.7.1.4 of 802.11be D3.0:
@@ -2181,6 +2193,18 @@ ApWifiMac::TxOk(Ptr<const WifiMpdu> mpdu)
 
             // Apply the negotiated TID-to-Link Mapping (if any) for DL direction
             ApplyTidLinkMapping(*staMldAddress, WifiDirection::DOWNLINK);
+        }
+
+        if (m_forwardFrameOnAssoc)
+        {
+            LlcSnapHeader llc;
+            llc.SetType(iana::ieee802numbers::BRIDGE_LEARNING_ETHERTYPE);
+            auto packet = Create<Packet>();
+            packet->AddHeader(llc);
+
+            const auto from = staMldAddress.value_or(hdr.GetAddr1());
+            NS_LOG_DEBUG("Forwarding up broadcast packet with src address " << from);
+            ForwardUp(packet, from, Mac48Address::GetBroadcast());
         }
 
         if (auto extendedCapabilities =
