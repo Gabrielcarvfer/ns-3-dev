@@ -1392,20 +1392,16 @@ StaWifiMac::ReceiveBeacon(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     MgtBeaconHeader beacon;
     mpdu->GetPacket()->PeekHeader(beacon);
     const auto& capabilities = beacon.m_capability;
-    NS_ASSERT(capabilities.IsEss());
-    bool goodBeacon;
-    if (IsWaitAssocResp() || IsAssociated())
+
+    auto beaconFromAssocAp =
+        (IsWaitAssocResp() || IsAssociated()) && (GetLink(linkId).bssid == hdr.GetAddr3());
+
+    // ignore Beacon if it is not sent by the AP we are associated with and does not support the
+    // rates required by the selected BSS membership selector
+    if (!beaconFromAssocAp && !CheckSupportedRates(beacon, linkId))
     {
-        // we have to process this Beacon only if sent by the AP we are associated
-        // with or from which we are waiting an Association Response frame
-        auto bssid = GetLink(linkId).bssid;
-        goodBeacon = bssid.has_value() && (hdr.GetAddr3() == *bssid);
-    }
-    else
-    {
-        // we retain this Beacon as candidate AP if the supported rates fit the
-        // configured BSS membership selector
-        goodBeacon = CheckSupportedRates(beacon, linkId);
+        NS_LOG_DEBUG("Ignore Beacon: supported rates do not fit the BSS membership selector");
+        return;
     }
 
     SnrTag snrTag;
@@ -1423,15 +1419,21 @@ StaWifiMac::ReceiveBeacon(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         m_beaconInfo(apInfo);
     }
 
+    if (capabilities.IsIbss())
+    {
+        NS_LOG_LOGIC("Beacon is from IBSS");
+        return;
+    }
+
     RecordCapabilities(beacon, from, linkId);
     RecordOperations(beacon, from, linkId);
 
-    if (!goodBeacon)
+    if (!beaconFromAssocAp)
     {
-        NS_LOG_LOGIC("Beacon is not for us");
-        return;
+        NS_LOG_DEBUG("Beacon received from " << from);
+        m_assocManager->NotifyApInfo(std::move(apInfo));
     }
-    if (m_state == ASSOCIATED)
+    else if (m_state == ASSOCIATED)
     {
         m_beaconArrival(Simulator::Now());
         Time delay = MicroSeconds(std::get<MgtBeaconHeader>(apInfo.m_frame).m_beaconInterval *
@@ -1442,11 +1444,6 @@ StaWifiMac::ReceiveBeacon(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         {
             m_powerSaveManager->NotifyReceivedBeacon(mpdu, linkId);
         }
-    }
-    else
-    {
-        NS_LOG_DEBUG("Beacon received from " << hdr.GetAddr2());
-        m_assocManager->NotifyApInfo(std::move(apInfo));
     }
 }
 
