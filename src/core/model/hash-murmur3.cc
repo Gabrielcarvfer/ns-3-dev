@@ -26,6 +26,7 @@
 
 #include "log.h"
 
+#include <cstring>
 #include <iomanip>
 
 /**
@@ -109,21 +110,29 @@ inline uint64_t rotl64 ( uint64_t x, int8_t r )
 /**
  * Block read
  *
- * If your platform needs to do endian-swapping or can only
- * handle aligned reads, do the conversion here.
+ * If your platform needs to do endian-swapping, do the conversion here.
+ *
+ * The data may not be aligned for a uint32_t (e.g. the characters of a
+ * std::string held in its short string buffer), so the word is copied
+ * rather than read through a uint32_t pointer, which would be undefined
+ * behavior. Compilers turn the copy into a single (unaligned) load.
  *
  * \param [in] p Block base address.
- * \param [in] i Index into the block.
+ * \param [in] i Index of the word in the block.
  * \returns The \c i'th word from the block.
  */
-inline uint32_t getblock ( const uint32_t * p, std::size_t i )
+inline uint32_t getblock32 ( const uint8_t * p, std::size_t i )
 {
-  return p[i];
+  uint32_t word;
+  std::memcpy (&word, p + i * sizeof (word), sizeof (word));
+  return word;
 }
-/** \copydoc getblock(const uint32_t*,std::size_t) */
-inline uint64_t getblock ( const uint64_t * p, std::size_t i )
+/** \copydoc getblock32(const uint8_t*,std::size_t) */
+inline uint64_t getblock64 ( const uint8_t * p, std::size_t i )
 {
-  return p[i];
+  uint64_t word;
+  std::memcpy (&word, p + i * sizeof (word), sizeof (word));
+  return word;
 }
 
 //-----------------------------------------------------------------------------
@@ -205,12 +214,12 @@ void MurmurHash3_x86_32_incr ( const void * key, std::size_t len,
   // body
 
   //PDB: const uint32_t * blocks = (const uint32_t *)(data + nblocks*4);
-  const uint32_t * blocks = reinterpret_cast<const uint32_t*>(data); //PDB cast
+  const uint8_t * blocks = data;
 
   //PDB: for(int i = -nblocks; i; i++)
   for(std::size_t i = 0; i < nblocks; i++)
   {
-    uint32_t k1 = getblock(blocks,i);
+    uint32_t k1 = getblock32(blocks,i);
 
     k1 *= c1;
     k1 = rotl32(k1,15);
@@ -317,15 +326,15 @@ void MurmurHash3_x86_128_incr ( const void * key, const std::size_t len,
   // body
 
   //PDB: const uint32_t * blocks = (const uint32_t *)(data + nblocks*16);
-  const uint32_t* blocks = reinterpret_cast<const uint32_t*>(data); //PDB cast
+  const uint8_t* blocks = data;
 
   //PDB: for(int i = -nblocks; i; i++)
   for(std::size_t i = 0; i < nblocks; i++)
   {
-    uint32_t k1 = getblock(blocks,i*4+0);
-    uint32_t k2 = getblock(blocks,i*4+1);
-    uint32_t k3 = getblock(blocks,i*4+2);
-    uint32_t k4 = getblock(blocks,i*4+3);
+    uint32_t k1 = getblock32(blocks,i*4+0);
+    uint32_t k2 = getblock32(blocks,i*4+1);
+    uint32_t k3 = getblock32(blocks,i*4+2);
+    uint32_t k4 = getblock32(blocks,i*4+3);
 
     k1 *= c1; k1  = rotl32(k1,15); k1 *= c2; h1 ^= k1;
 
@@ -436,12 +445,12 @@ void MurmurHash3_x64_128 ( const void * key, const std::size_t len,
   //----------
   // body
 
-  const uint64_t * blocks = reinterpret_cast<const uint64_t *>(data); //PDB cast
+  const uint8_t * blocks = data;
 
   for(std::size_t i = 0; i < nblocks; i++)  //PDB: was int i
   {
-    uint64_t k1 = getblock(blocks,i*2+0);
-    uint64_t k2 = getblock(blocks,i*2+1);
+    uint64_t k1 = getblock64(blocks,i*2+0);
+    uint64_t k2 = getblock64(blocks,i*2+1);
 
     k1 *= c1; k1  = rotl64(k1,31); k1 *= c2; h1 ^= k1;
 

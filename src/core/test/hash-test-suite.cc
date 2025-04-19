@@ -9,6 +9,8 @@
 #include "ns3/hash.h"
 #include "ns3/test.h"
 
+#include <algorithm>
+#include <array>
 #include <iomanip>
 #include <string>
 
@@ -242,6 +244,22 @@ Murmur3TestCase::DoRun()
 
     hash64Reference = 0xa750412079d53e04ULL;
     Check("murmur3", hasher.clear().GetHash64(key));
+
+    // The key's address must not matter: hash it from every offset within a
+    // word, so its blocks are not aligned for a uint32_t or uint64_t (as in
+    // the short string buffer of some std::string implementations).
+    std::array<char, 128> buffer{};
+    for (std::size_t offset = 0; offset < sizeof(uint64_t); ++offset)
+    {
+        std::copy(key.begin(), key.end(), buffer.begin() + offset);
+        const char* unaligned = buffer.data() + offset;
+        hash32Reference = 0x463d70e2;
+        Check("murmur3 at offset " + std::to_string(offset),
+              hasher.clear().GetHash32(unaligned, key.size()));
+        hash64Reference = 0xa750412079d53e04ULL;
+        Check("murmur3 at offset " + std::to_string(offset),
+              hasher.clear().GetHash64(unaligned, key.size()));
+    }
 }
 
 /**
