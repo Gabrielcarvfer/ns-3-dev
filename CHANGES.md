@@ -19,6 +19,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 ### Changes to existing API
 
 * (wifi) The `PowerSaveMode` attribute of the `StaWifiMac` class has been deprecated in favor of the `PowerSaveMode` attribute of the `PowerSaveManager` class.
+* (wifi) The `BeaconJitter` attribute of the `ApWifiMac` class is no longer constrained to be a uniform random variable, but it can be a random variable of any type (provided that generated values are comprised between 0 and 1).
 
 ### Changes to build system
 
