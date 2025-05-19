@@ -66,7 +66,8 @@ output_sign(const cairo_int128_t sa,
 void
 int64x64_t::Mul(const int64x64_t& o)
 {
-    cairo_uint128_t a, b;
+    cairo_uint128_t a;
+    cairo_uint128_t b;
     bool sign = output_sign(_v, o._v, a, b);
     cairo_uint128_t result = Umul(a, b);
     _v = sign ? _cairo_uint128_negate(result) : result;
@@ -76,8 +77,11 @@ cairo_uint128_t
 int64x64_t::Umul(const cairo_uint128_t a, const cairo_uint128_t b)
 {
     cairo_uint128_t result;
-    cairo_uint128_t hiPart, loPart, midPart;
-    cairo_uint128_t res1, res2;
+    cairo_uint128_t hiPart;
+    cairo_uint128_t loPart;
+    cairo_uint128_t midPart;
+    cairo_uint128_t res1;
+    cairo_uint128_t res2;
 
     // Multiplying (a.h 2^64 + a.l) x (b.h 2^64 + b.l) =
     //             2^128 a.h b.h + 2^64*(a.h b.l+b.h a.l) + a.l b.l
@@ -111,7 +115,8 @@ int64x64_t::Umul(const cairo_uint128_t a, const cairo_uint128_t b)
 void
 int64x64_t::Div(const int64x64_t& o)
 {
-    cairo_uint128_t a, b;
+    cairo_uint128_t a;
+    cairo_uint128_t b;
     bool sign = output_sign(_v, o._v, a, b);
     cairo_uint128_t result = Udiv(a, b);
     _v = sign ? _cairo_uint128_negate(result) : result;
@@ -194,7 +199,8 @@ cairo_uint128_t
 int64x64_t::UmulByInvert(const cairo_uint128_t a, const cairo_uint128_t b)
 {
     cairo_uint128_t result;
-    cairo_uint128_t hi, mid;
+    cairo_uint128_t hi;
+    cairo_uint128_t mid;
     hi = _cairo_uint64x64_128_mul(a.hi, b.hi);
     mid = _cairo_uint128_add(_cairo_uint64x64_128_mul(a.hi, b.lo),
                              _cairo_uint64x64_128_mul(a.lo, b.hi));
@@ -208,7 +214,8 @@ int64x64_t
 int64x64_t::Invert(const uint64_t v)
 {
     NS_ASSERT(v > 1);
-    cairo_uint128_t a, factor;
+    cairo_uint128_t a;
+    cairo_uint128_t factor;
     a.hi = 1;
     a.lo = 0;
     factor.hi = 0;

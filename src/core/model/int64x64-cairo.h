@@ -96,8 +96,8 @@ class int64x64_t
         //   TestSuite int64x64
         const long double round = 0.5;
         flo = flo * HP_MAX_64 + round;
-        cairo_int64_t hi = (cairo_int64_t)fhi;
-        const cairo_uint64_t lo = (cairo_uint64_t)flo;
+        auto hi = (cairo_int64_t)fhi;
+        const auto lo = (cairo_uint64_t)flo;
         if (flo >= HP_MAX_64)
         {
             // conversion to uint64 rolled over
@@ -205,7 +205,7 @@ class int64x64_t
     {
         const bool negative = _cairo_int128_negative(_v);
         const cairo_int128_t value = negative ? _cairo_int128_negate(_v) : _v;
-        const long double fhi = static_cast<long double>(value.hi);
+        const auto fhi = static_cast<long double>(value.hi);
         const long double flo = value.lo / HP_MAX_64;
         long double retval = fhi;
         retval += flo;
