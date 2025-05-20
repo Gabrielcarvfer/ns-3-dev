@@ -13,15 +13,20 @@
 #include "ns3/eht-configuration.h"
 #include "ns3/emlsr-manager.h"
 #include "ns3/enum.h"
+#include "ns3/frame-capture-model.h"
 #include "ns3/frame-exchange-manager.h"
 #include "ns3/gcr-manager.h"
+#include "ns3/interference-helper.h"
+#include "ns3/mobility-model.h"
 #include "ns3/multi-user-scheduler.h"
 #include "ns3/pointer.h"
+#include "ns3/preamble-detection-model.h"
 #include "ns3/wifi-ack-manager.h"
 #include "ns3/wifi-assoc-manager.h"
 #include "ns3/wifi-mac-queue-scheduler.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/wifi-protection-manager.h"
+#include "ns3/wifi-radio-energy-model.h"
 
 #include <sstream>
 #include <vector>

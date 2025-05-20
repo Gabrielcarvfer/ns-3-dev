@@ -12,6 +12,7 @@
 #define OFDM_PPDU_H
 
 #include "ns3/wifi-phy-band.h"
+#include "ns3/wifi-phy.h"
 #include "ns3/wifi-ppdu.h"
 
 /**

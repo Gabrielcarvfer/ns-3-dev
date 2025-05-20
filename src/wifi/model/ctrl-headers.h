@@ -10,11 +10,19 @@
 #define CTRL_HEADERS_H
 
 #include "block-ack-type.h"
+#include "frame-capture-model.h"
+#include "interference-helper.h"
+#include "preamble-detection-model.h"
+#include "wifi-net-device.h"
 #include "wifi-phy-common.h"
+#include "wifi-phy-state-helper.h"
+#include "wifi-phy.h"
+#include "wifi-radio-energy-model.h"
 #include "wifi-ru.h"
 
 #include "ns3/header.h"
 #include "ns3/mac48-address.h"
+#include "ns3/mobility-model.h"
 
 #include <list>
 #include <optional>

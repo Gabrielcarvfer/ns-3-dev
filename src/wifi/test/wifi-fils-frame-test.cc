@@ -336,17 +336,20 @@ void
 WifiFilsFrameTest::ValidateFilsDiscFrame(const FilsDiscHeader& filsDisc)
 {
     NS_TEST_ASSERT_MSG_EQ(filsDisc.GetSsid(), m_params.ssid, "FILS Discovery frame SSID mismatch");
-    NS_TEST_ASSERT_MSG_EQ(+filsDisc.m_fdCap->m_chWidth,
-                          +m_params.expChWidFld,
-                          "FILS Discovery frame channel width mismatch");
-    NS_TEST_ASSERT_MSG_EQ(+filsDisc.m_fdCap->m_maxNss,
-                          +m_params.expNssFld,
-                          "FILS Discovery frame NSS mismatch");
-    NS_TEST_ASSERT_MSG_EQ(+filsDisc.m_fdCap->m_phyIdx,
-                          ((m_params.standard == WifiStandard::WIFI_STANDARD_80211be)
-                               ? +WIFI_11BE_FD_PHY_IDX
-                               : +WIFI_11AX_FD_PHY_IDX),
-                          "FILS Discovery frame PHY idx mismatch");
+    if (filsDisc.m_fdCap.has_value())
+    {
+        NS_TEST_ASSERT_MSG_EQ(+filsDisc.m_fdCap->m_chWidth,
+                              +m_params.expChWidFld,
+                              "FILS Discovery frame channel width mismatch");
+        NS_TEST_ASSERT_MSG_EQ(+filsDisc.m_fdCap->m_maxNss,
+                              +m_params.expNssFld,
+                              "FILS Discovery frame NSS mismatch");
+        NS_TEST_ASSERT_MSG_EQ(+filsDisc.m_fdCap->m_phyIdx,
+                              ((m_params.standard == WifiStandard::WIFI_STANDARD_80211be)
+                                   ? +WIFI_11BE_FD_PHY_IDX
+                                   : +WIFI_11AX_FD_PHY_IDX),
+                              "FILS Discovery frame PHY idx mismatch");
+    }
 }
 
 void

@@ -10,7 +10,14 @@
 #define SIMPLE_FRAME_CAPTURE_MODEL_H
 
 #include "frame-capture-model.h"
+#include "preamble-detection-model.h"
+#include "wifi-net-device.h"
+#include "wifi-phy-state-helper.h"
+#include "wifi-phy.h"
+#include "wifi-radio-energy-model.h"
 #include "wifi-units.h"
+
+#include "ns3/mobility-model.h"
 
 namespace ns3
 {
