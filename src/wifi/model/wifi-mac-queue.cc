@@ -11,7 +11,11 @@
 
 #include "wifi-mac-queue.h"
 
+#include "frame-capture-model.h"
+#include "interference-helper.h"
 #include "wifi-mac-queue-scheduler.h"
+#include "wifi-net-device.h"
+#include "wifi-radio-energy-model.h"
 
 #include "ns3/simulator.h"
 

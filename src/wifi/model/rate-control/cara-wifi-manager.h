@@ -10,6 +10,8 @@
 #define CARA_WIFI_MANAGER_H
 
 #include "ns3/traced-value.h"
+#include "ns3/wifi-phy-state-helper.h"
+#include "ns3/wifi-phy.h"
 #include "ns3/wifi-remote-station-manager.h"
 
 namespace ns3

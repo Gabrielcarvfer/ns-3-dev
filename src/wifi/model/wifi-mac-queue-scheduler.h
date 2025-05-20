@@ -9,8 +9,11 @@
 #ifndef WIFI_MAC_QUEUE_SCHEDULER_H
 #define WIFI_MAC_QUEUE_SCHEDULER_H
 
+#include "preamble-detection-model.h"
 #include "qos-utils.h"
 #include "wifi-mac-queue-container.h"
+#include "wifi-phy-state-helper.h"
+#include "wifi-phy.h"
 
 #include "ns3/object.h"
 

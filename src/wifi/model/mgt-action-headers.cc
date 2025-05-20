@@ -1639,7 +1639,7 @@ FilsDiscHeader::Deserialize(Buffer::Iterator start)
     {
         m_len = i.ReadU8();
     }
-    if (m_frameCtl.m_capPresenceInd)
+    if (m_frameCtl.m_capPresenceInd && m_fdCap.has_value())
     {
         nOctets = m_fdCap->Deserialize(i);
         i.Next(nOctets);

@@ -20,6 +20,7 @@
 #include "ns3/event-id.h"
 #include "ns3/nstime.h"
 #include "ns3/simple-ref-count.h"
+#include "ns3/wifi-export.h"
 
 #include <list>
 #include <map>
@@ -60,7 +61,7 @@ class WifiPpdu;
  * to be used by each PHY entity, corresponding to
  * the different amendments of the IEEE 802.11 standard.
  */
-class PhyEntity : public SimpleRefCount<PhyEntity>
+class WIFI_EXPORT PhyEntity : public SimpleRefCount<PhyEntity>
 {
   public:
     /**

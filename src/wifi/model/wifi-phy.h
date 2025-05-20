@@ -16,6 +16,7 @@
 #include "wifi-standards.h"
 
 #include "ns3/error-model.h"
+#include "ns3/wifi-export.h"
 
 #include <limits>
 
@@ -51,7 +52,7 @@ class WifiMacHeader;
  * @ingroup wifi
  *
  */
-class WifiPhy : public Object
+class WIFI_EXPORT WifiPhy : public Object
 {
   public:
     friend class PhyEntity;

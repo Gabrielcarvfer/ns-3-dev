@@ -10,6 +10,8 @@
 #define GCR_MANAGER_H
 
 #include "qos-utils.h"
+#include "wifi-phy-state-helper.h"
+#include "wifi-phy.h"
 
 #include "ns3/mac48-address.h"
 #include "ns3/object.h"

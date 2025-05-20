@@ -106,6 +106,10 @@ WifiMacQueueContainer::GetQueueId(Ptr<const WifiMpdu> mpdu)
 const WifiMacQueueContainer::ContainerQueue&
 WifiMacQueueContainer::GetQueue(const WifiContainerQueueId& queueId) const
 {
+    if (m_queues.find(queueId) == m_queues.end())
+    {
+        m_queues[queueId] = ContainerQueue();
+    }
     return m_queues[queueId];
 }
 
