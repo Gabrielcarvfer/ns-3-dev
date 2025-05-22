@@ -1250,6 +1250,7 @@ HtFrameExchangeManager::SendPsdu()
             }
         }
 
+        m_psdu->SetDuration(GetPsduDurationId(txDuration, m_txParams));
         Simulator::Schedule(txDuration, [=, this]() {
             if ((!m_apMac || !m_apMac->UseGcr(m_psdu->GetHeader(0))) &&
                 (tids.empty() ||

@@ -609,6 +609,11 @@ FrameExchangeManager::SendMpdu()
 
         if (!m_mpdu->GetHeader().IsPsPoll())
         {
+            m_mpdu->GetHeader().SetDuration(
+                GetFrameDurationId(m_mpdu->GetHeader(),
+                                   GetPsduSize(m_mpdu, m_txParams.m_txVector),
+                                   m_txParams,
+                                   m_fragmentedPacket));
             Simulator::Schedule(txDuration, [=, this]() {
                 if ((!m_apMac || !m_apMac->UseGcr(m_mpdu->GetHeader())) &&
                     (!m_mpdu->GetHeader().IsQosData() ||

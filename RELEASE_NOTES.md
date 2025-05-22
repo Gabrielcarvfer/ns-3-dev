@@ -52,6 +52,7 @@ been tested on Linux. As of this release, the latest known version to work with 
 - (zigbee) In the NWK, broadcast initiator devices are now registered in the BTT to avoid receiving retransmissions.
 - (wifi) !2945 CTS-to-self frames are now transmitted over the bandwidth of the frame they protect, so that transmissions in the rest of the TXOP are no longer limited to 20 MHz.
 - (wifi) !2938 A DL MU PPDU transmitted in a non-initial frame exchange of a TXOP is now protected by an MU-RTS if any of its receivers is unprotected; previously the decision was made per MPDU and such a PPDU could be sent without the configured protection (debug builds failed an assert).
+- (wifi) Fix Duration/ID for group addressed frames sent under multiple protection setting
 
 ## Release 3.48
 
