@@ -83,8 +83,10 @@ build_lib(
   LIBNAME spectrum
   SOURCE_FILES ${source_files}
   HEADER_FILES ${header_files}
-  LIBRARIES_TO_LINK ${libpropagation}
-                    ${libantenna}
+  LIBRARIES_TO_LINK
+    ${libpropagation}
+    ${libantenna}
+    ${libbuildings}
   TEST_SOURCES
     test/two-ray-splm-test-suite.cc
     test/spectrum-ideal-phy-test.cc

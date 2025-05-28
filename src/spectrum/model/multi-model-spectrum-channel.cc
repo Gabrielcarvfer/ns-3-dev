@@ -17,6 +17,7 @@
 #include "ns3/antenna-model.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
+#include "ns3/mobility-building-info.h"
 #include "ns3/mobility-model.h"
 #include "ns3/net-device.h"
 #include "ns3/node.h"
@@ -33,8 +34,58 @@
 
 namespace ns3
 {
-
 NS_LOG_COMPONENT_DEFINE("MultiModelSpectrumChannel");
+
+class WraparoundModel : public Object
+{
+  public:
+    WraparoundModel() = default;
+    static TypeId GetTypeId();
+
+    Ptr<MobilityModel> GetVirtualMobilityModel(Ptr<const MobilityModel> tx,
+                                               Ptr<const MobilityModel> rx)
+    {
+        NS_LOG_DEBUG("Transmitter using virtual mobility model. Real position "
+                     << tx->GetPosition() << ", receiver position " << rx->GetPosition()
+                     << ", wrapped position "
+                     << GetVirtualPosition(tx->GetPosition(), rx->GetPosition()) << ".");
+        auto virtualMm = tx->Copy();
+        // Set the transmitter to its virtual position respective to receiver
+        virtualMm->SetPosition(GetVirtualPosition(tx->GetPosition(), rx->GetPosition()));
+        // Unidirectionally aggregate NodeId to it, so it can be fetched later by
+        // propagation models
+        auto node = tx->GetObject<Node>();
+        if (node)
+        {
+            virtualMm->UnidirectionalAggregateObject(node);
+        }
+
+        // Some mobility models access building info related to mobility model
+        auto mbi = tx->GetObject<MobilityBuildingInfo>();
+        if (mbi)
+        {
+            virtualMm->UnidirectionalAggregateObject(mbi);
+        }
+        return virtualMm;
+    }
+
+    Vector3D GetVirtualPosition(Vector3D tx, Vector3D rx)
+    {
+        return tx; // Placeholder, you are supposed to implement whatever wraparound model you want
+    }
+};
+
+NS_OBJECT_ENSURE_REGISTERED(WraparoundModel);
+
+TypeId
+WraparoundModel::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::WraparoundModel")
+                            .SetParent<Object>()
+                            .SetGroupName("Spectrum")
+                            .AddConstructor<WraparoundModel>();
+    return tid;
+}
 
 NS_OBJECT_ENSURE_REGISTERED(MultiModelSpectrumChannel);
 
@@ -73,6 +124,8 @@ MultiModelSpectrumChannel::MultiModelSpectrumChannel()
     : m_numDevices{0}
 {
     NS_LOG_FUNCTION(this);
+    Ptr<WraparoundModel> wrap = CreateObject<WraparoundModel>();
+    AggregateObject(wrap);
 }
 
 void
@@ -225,7 +278,10 @@ MultiModelSpectrumChannel::StartTx(Ptr<SpectrumSignalParameters> txParams)
                                            // potential underlying DynamicCasts)
     m_txSigParamsTrace(txParamsTrace);
 
-    auto txMobility = txParams->txPhy->GetMobility();
+    auto wraparound = GetObject<WraparoundModel>();
+    auto refTxMobility = txParams->txPhy->GetMobility();
+    txParams->txMobility = refTxMobility;
+    auto txMobility = refTxMobility;
     const auto txSpectrumModelUid = txParams->psd->GetSpectrumModelUid();
     NS_LOG_LOGIC("txSpectrumModelUid " << txSpectrumModelUid);
 
@@ -321,6 +377,14 @@ MultiModelSpectrumChannel::StartTx(Ptr<SpectrumSignalParameters> txParams)
 
                 if (txMobility && receiverMobility)
                 {
+                    if (wraparound)
+                    {
+                        // Use virtual mobility model instead
+                        txMobility =
+                            wraparound->GetVirtualMobilityModel(refTxMobility, receiverMobility);
+                        rxParams->txMobility = txMobility;
+                    }
+
                     if (rxParams->txAntenna)
                     {
                         Angles txAngles(receiverMobility->GetPosition(), txMobility->GetPosition());
@@ -413,7 +477,7 @@ MultiModelSpectrumChannel::StartRx(
         }
     }
 
-    auto txMobility = params->txPhy->GetMobility();
+    auto txMobility = params->txMobility;
     auto rxMobility = receiver->GetMobility();
     if (txMobility && rxMobility)
     {

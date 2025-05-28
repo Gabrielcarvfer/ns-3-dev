@@ -37,6 +37,7 @@ class MOBILITY_EXPORT MobilityModel : public Object
     MobilityModel();
     ~MobilityModel() override = 0;
 
+    virtual Ptr<MobilityModel> Copy() const = 0;
     /**
      * @return the current position
      */

@@ -61,6 +61,11 @@ class RandomWalk2dOutdoorMobilityModel : public MobilityModel
         MODE_TIME
     };
 
+    Ptr<MobilityModel> Copy() const override
+    {
+        return CreateObject<RandomWalk2dOutdoorMobilityModel>(*this);
+    }
+
   private:
     /**
      * @brief Performs the rebound of the node if it reaches a boundary
