@@ -18,6 +18,7 @@ namespace ns3
 class SpectrumPhy;
 class SpectrumValue;
 class AntennaModel;
+class MobilityModel;
 
 /**
  * @ingroup spectrum
@@ -113,6 +114,11 @@ struct SpectrumSignalParameters : public SimpleRefCount<SpectrumSignalParameters
      * the number of TX streams, the number of RBs.
      */
     Ptr<const ComplexMatrixArray> precodingMatrix;
+
+    /**
+     * The transmitter mobility model
+     */
+    Ptr<MobilityModel> txMobility;
 };
 
 } // namespace ns3

@@ -78,6 +78,12 @@ class GaussMarkovMobilityModel : public MobilityModel
     GaussMarkovMobilityModel();
     ~GaussMarkovMobilityModel() override;
 
+    // Implement the Copy method
+    Ptr<MobilityModel> Copy() const override
+    {
+        return CreateObject<GaussMarkovMobilityModel>(*this);
+    }
+
   private:
     /**
      * Initialize the model and calculate new velocity, direction, and pitch
