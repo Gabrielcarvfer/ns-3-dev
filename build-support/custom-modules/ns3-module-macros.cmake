@@ -167,8 +167,42 @@ function(build_lib)
     )
   endif()
 
-  # Create the module shared library
-  add_library(${BLIB_LIBNAME} SHARED "${BLIB_SOURCE_FILES}")
+  if(WIN32)
+    set(export_file ${CMAKE_CURRENT_BINARY_DIR}/${BLIB_LIBNAME}-export.def)
+    # In case of windows, we need some extra trickery because of the sheer
+    # number of exported symbols 1. create an object library (.dll.a) that we
+    # will use to extract exported symbols
+    add_library(${BLIB_LIBNAME}-obj STATIC "${BLIB_SOURCE_FILES}")
+    target_link_libraries(${BLIB_LIBNAME}-obj PRIVATE ${BLIB_LIBRARIES_TO_LINK})
+    set_target_properties(
+      ${BLIB_LIBNAME}-obj
+      PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                 ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR}
+                 ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR}
+                 ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO
+                 ${CMAKE_CURRENT_BINARY_DIR}
+                 ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_CURRENT_BINARY_DIR}
+                 WINDOWS_EXPORT_ALL_SYMBOLS TRUE
+    )
+
+    # 1. export .dll.a symbols, create the export module.def file
+    add_custom_target(
+      export-${BLIB_LIBNAME}-symbols
+      COMMAND
+        ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/build-support/filter-module-symbols-to-export.py
+        "${BLIB_LIBNAME}" "$<TARGET_FILE:${BLIB_LIBNAME}-obj>" "${export_file}"
+      DEPENDS ${BLIB_LIBNAME}-obj
+      BYPRODUCTS ${export_file}
+    )
+
+    # 1. create the shared library (.dll) with the export file
+    add_library(${BLIB_LIBNAME} SHARED ${BLIB_SOURCE_FILES} ${export_file})
+    add_dependencies(${BLIB_LIBNAME} export-${BLIB_LIBNAME}-symbols)
+  else()
+    # Create the module shared library
+    add_library(${BLIB_LIBNAME} SHARED "${BLIB_SOURCE_FILES}")
+  endif()
 
   # Set alias
   add_library(ns3::${BLIB_LIBNAME} ALIAS ${BLIB_LIBNAME})
