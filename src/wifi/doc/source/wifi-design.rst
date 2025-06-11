@@ -891,11 +891,140 @@ interval between two consecutive Beacon frames.
 Roaming
 #######
 
-Roaming at layer-2 (i.e. a STA migrates its association from one AP to
-another) is not presently supported. Because of that, the Min/Max channel
-dwelling time implementation as described by the IEEE 802.11 standard
-[ieee80211]_ is also omitted, since it is only meaningful on the context
-of channel roaming.
+Layer-2 roaming, in which a non-AP STA migrates its association from one AP to another, can be
+modeled as a break-before-make procedure: the STA disassociates from its current AP and then uses
+the normal scanning and association procedures to connect to an AP. This procedure also supports
+roaming between AP MLDs and reassociating with the same AP, possibly using a different set of
+links.
+
+|ns3| does not provide a roaming policy that autonomously decides when a STA should leave its
+current AP. Such a decision has to be made by the simulation program, for example based on the
+position of the STA, a timer, or trace information.
+
+Triggering disassociation
+-------------------------
+
+A simulation can trigger the procedure by calling ``StaWifiMac::ForceDisassociation`` or by
+setting the ``ForceDisassociation`` attribute at run time. The boolean argument or attribute value
+controls whether the current AP is notified:
+
+* If it is true, the STA enqueues a Disassociation frame on one of the setup links. The STA remains
+  associated until the frame is acknowledged or the ``DisassocTimeout`` timer expires. The default
+  timeout is 50 ms.
+* If it is false, the STA locally disassociates immediately and does not send a Disassociation
+  frame.
+
+The request has no effect if the STA is not associated. ``ForceDisassociation`` is an action
+attribute and cannot be set when the ``StaWifiMac`` is constructed; it must be set after device
+creation, when the roam is to start. The ``DeAssoc`` and ``Assoc`` trace sources report when local
+disassociation and the subsequent association complete, respectively.
+
+Notifying the AP allows both endpoints to discard state which must not survive disassociation. If
+the AP is not notified and the STA moves to a different AP, the old AP can continue to consider the
+STA associated and can retain frames queued for it. A timeout while waiting for the acknowledgment
+of a Disassociation frame has the same local cleanup semantics as disassociating without notifying
+the AP, because the STA cannot know whether the AP received the frame.
+
+Selecting the next AP
+---------------------
+
+After local disassociation, all the STA PHY links are switched on and the Association Manager is
+asked to start scanning. While the STA is associated, Beacon frames received from other eligible
+APs are also forwarded to the Association Manager. Therefore, the default Association Manager can
+maintain candidate AP information between scanning procedures.
+
+By default, ``WifiDefaultAssocManager::SkipScanningIfApInfoAvail`` is true. If at least one
+candidate is stored when roaming starts, scanning is skipped and the candidate with the highest
+recorded SNR is selected immediately. Information from a newly received Beacon replaces older
+information for the same BSSID, but stored entries do not otherwise expire. Setting
+``SkipScanningIfApInfoAvail`` to false discards the stored candidates and performs a new active or
+passive scan, as selected by ``StaWifiMac::ActiveProbing``. This is useful when the previously
+recorded SNR values may no longer represent the position of a mobile STA.
+
+The STA sends a new Association Request to the selected AP. The Association Manager and the
+``AssocType`` attribute determine whether this results in legacy association or multi-link setup,
+as described in the previous section.
+
+Queue and Block Ack state
+-------------------------
+
+Already queued data frames are retained while the STA is unassociated, but their transmission is
+blocked. New packets passed to the MAC while the STA is unassociated cannot be forwarded and are
+reported by the ``MacTxDrop`` trace source. After successful association, queue-to-link information
+is configured for the new setup links and frames are marked as not in flight so that channel access
+can restart. If the STA has moved to a different AP, the receiver and transmitter addresses of
+queued data frames are updated to refer to the new AP and obsolete control frames are dropped.
+Management frames tied to the old association are always dropped. Block Ack agreements and other
+control frames are handled according to whether disassociation was confirmed, as summarized below.
+
+.. _table-disassoc-and-reassoc:
+
+.. table:: Disassociation and reassociation
+
+   +--------------------------------+-------------------------------------------------------------+
+   |     ``Event``                  | ``Actions``                                                 |
+   +================================+=============================================================+
+   | STA is requested to            | - Transmissions of all unicast frames, but management       |
+   | disassociate without           |   frames, on all setup links are blocked                    |
+   | notifying the AP, or the       | - Management frames are dropped                             |
+   | Disassociation frame is not    | - Control frames having link addresses are dropped if       |
+   | acknowledged before timeout    |   ML setup was performed                                    |
+   |                                | - Block Ack agreements are retained                         |
+   |                                | - A new scanning procedure is started                       |
+   +--------------------------------+-------------------------------------------------------------+
+   | STA's Disassociation frame is  | - Transmissions of all unicast frames, but management       |
+   | acknowledged                   |   frames, on all setup links are blocked                    |
+   |                                | - Management and control frames are dropped                 |
+   |                                | - Block Ack agreements are destroyed                        |
+   |                                | - A new scanning procedure is started                       |
+   +--------------------------------+-------------------------------------------------------------+
+   | AP receives a Disassociation   | - The STA is removed from the set of associated STAs        |
+   | frame from an associated STA   | - Transmissions of all unicast frames, but management       |
+   |                                |   frames, to the STA on all setup links are blocked         |
+   |                                | - Management and control frames are dropped                 |
+   |                                | - Block Ack agreements with the STA are destroyed           |
+   +--------------------------------+-------------------------------------------------------------+
+   | AP receives an Association     | - If the STA is currently associated with the AP:           |
+   | Request from a STA             |                                                             |
+   |                                |   - The previous setup links are torn down                  |
+   |                                |   - Transmissions of all unicast frames, but management     |
+   |                                |     frames, to the STA on all setup links are blocked       |
+   |                                |   - Management frames are dropped                           |
+   |                                |   - Control frames having link addresses are dropped if     |
+   |                                |     ML setup was performed                                  |
+   |                                |                                                             |
+   |                                | - Information about the STA stored in the remote station    |
+   |                                |   managers of the AP is reset                               |
+   +--------------------------------+-------------------------------------------------------------+
+   | STA that was previously        | - If the STA associates with a different AP:                |
+   | associated with an AP receives |                                                             |
+   | an Association Response in     |   - RA and TA for all queued data frames are replaced to    |
+   | response to an Association     |     match the addresses of the new AP                       |
+   | Request                        |   - Control frames are dropped                              |
+   |                                |                                                             |
+   |                                | - Link information for non-empty queues containing data     |
+   |                                |   frames and control frames is reset and reconfigured       |
+   |                                | - All queued frames are marked as not inflight              |
+   +--------------------------------+-------------------------------------------------------------+
+
+Roaming through a bridged distribution system
+----------------------------------------------
+
+When multiple APs are connected through a learning bridge, the bridge may still associate the
+STA's MAC address with the port of the old AP after a roam. Setting
+``ApWifiMac::ForwardFrameOnAssoc`` to true makes an AP forward a synthetic broadcast frame up after
+association completes, using the STA address as the source and the IEEE 802 Local Experimental
+EtherType. This causes the bridge to learn the port of the new AP without waiting for an uplink data
+packet from the STA. Enable this attribute when multiple APs are connected through a learning
+bridge or switched distribution system and immediate bridge learning after roaming is needed. The
+default value is false because other distribution systems do not require this frame.
+
+The ``wifi-roaming`` example in ``examples/wireless/wifi-roaming.cc`` demonstrates this procedure.
+It connects two APs and a server through a CSMA bridge, moves the STA from the first AP toward
+the second AP at a configurable time, and calls ``ForceDisassociation``. The example can generate
+uplink or downlink UDP or TCP traffic, can notify or not notify the old AP, supports legacy and
+multi-link configurations, and reports throughput and MAC queue drops before and after the roam.
+
 
 Channel access
 ##############
