@@ -3439,6 +3439,76 @@ class NS3QualityControlTestCase(unittest.TestCase):
         )
         self.assertEqual(return_code, 0)
 
+    def test_05_CheckForSimulatorStopInExamples(self):
+        """!
+        Check examples contain Simulator::Stop.
+        @return None
+        """
+
+        def InspectFileContainsSimulatorStop(file):
+            with open(file, "r") as f:
+                contents = f.read()
+                # Check if we have simulator stop
+                if contents.find("Simulator::Stop") == -1:
+                    # If not, we also check if we have Simulator::Run
+                    # In case we do have Simulator::Run, we return false indicating a mismatching setup
+                    if contents.find("Simulator::Run") != -1:
+                        return False
+                return True
+
+        # Search all .cc files
+        example_files = glob.glob(f"{ns3_path}/**/*.cc", recursive=True)
+        # Then filter out non-examples
+        example_files = list(filter(lambda x: "example" in x, example_files))
+        example_files = list(filter(lambda x: "/test/" not in x, example_files))
+        example_files = list(filter(lambda x: "/build-support/" not in x, example_files))
+        example_files = list(filter(lambda x: "/model/" not in x, example_files))
+        example_files = list(filter(lambda x: "helper" not in x, example_files))
+
+        # For examples in subdirectories inside examples, a single Simulator::Stop should suffice
+        subdir_example_files = list(
+            filter(
+                lambda x: ("contrib/" in x or "src/" in x)
+                and (x.split("examples")[-1].count("/") > 1),
+                example_files,
+            )
+        )
+
+        # Group files by their parent directories
+        grouped_subdir_example_files = {}
+        for file in subdir_example_files:
+            parent_directory = os.path.dirname(file)
+            if parent_directory not in grouped_subdir_example_files:
+                grouped_subdir_example_files[parent_directory] = []
+            grouped_subdir_example_files[parent_directory].append(file)
+
+        # Inspect each group file, and remove entire group in case one contains Simulator::Stop
+        for subdir in list(grouped_subdir_example_files.keys()):
+            files_with_sim_stop = list(
+                filter(InspectFileContainsSimulatorStop, grouped_subdir_example_files[subdir])
+            )
+            if len(files_with_sim_stop) > 0:
+                example_files = list(
+                    filter(lambda x: x not in grouped_subdir_example_files[subdir], example_files)
+                )
+                grouped_subdir_example_files.pop(subdir)
+
+        # Exclude exceptions
+        exceptions = [
+            "zigbee-nwk-association-join.cc",  # runtime is very long, need to check with Alberto
+            "wifi-phy-configuration.cc",  # Simulator::Start is just a comment
+        ]
+        example_files = list(filter(lambda x: os.path.basename(x) not in exceptions, example_files))
+
+        # Open and inspect files for Simulator::Stop clause
+        example_files = list(
+            filter(lambda x: not InspectFileContainsSimulatorStop(x), example_files)
+        )
+        example_files = list(sorted(example_files))
+        self.assertListEqual(
+            [], example_files, msg=f"Files without Simulator::Stop: {example_files}"
+        )
+
 
 def main():
     """!
