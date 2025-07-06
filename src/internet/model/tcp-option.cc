@@ -50,7 +50,6 @@ TcpOption::CreateOption(uint8_t kind)
         TypeId tid;
     };
 
-    static ObjectFactory objectFactory;
     static KindToTid toTid[] = {
         {TcpOption::END, TcpOptionEnd::GetTypeId()},
         {TcpOption::MSS, TcpOptionMSS::GetTypeId()},
@@ -66,6 +65,7 @@ TcpOption::CreateOption(uint8_t kind)
     {
         if (toTid[i].kind == kind)
         {
+            ObjectFactory objectFactory;
             objectFactory.SetTypeId(toTid[i].tid);
             return objectFactory.Create<TcpOption>();
         }

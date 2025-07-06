@@ -11,6 +11,7 @@
 #define SIMPLE_REF_COUNT_H
 
 #include "assert.h"
+#include "atomic-counter.h"
 #include "default-deleter.h"
 
 #include <limits>
@@ -114,9 +115,11 @@ class SimpleRefCount : public PARENT
      */
     inline void Unref() const
     {
-        m_count--;
-        if (m_count == 0)
+        if (m_count-- == 1)
         {
+#ifdef NS3_MTP
+            std::atomic_thread_fence(std::memory_order_acquire);
+#endif
             DELETER::Delete(static_cast<T*>(const_cast<SimpleRefCount*>(this)));
         }
     }
@@ -140,7 +143,11 @@ class SimpleRefCount : public PARENT
      * Note we make this mutable so that the const methods can still
      * change it.
      */
+#ifdef NS3_MTP
+    mutable AtomicCounter m_count;
+#else
     mutable uint32_t m_count;
+#endif
 };
 
 } // namespace ns3

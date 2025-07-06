@@ -72,6 +72,7 @@ option(NS3_MONOLIB
        "Build a single shared ns-3 library and link it against executables" OFF
 )
 option(NS3_MPI "Build with MPI support" OFF)
+option(NS3_MTP "Build with Multithreaded simulation support" OFF)
 option(NS3_NATIVE_OPTIMIZATIONS "Build with -march=native -mtune=native" OFF)
 option(
   NS3_NINJA_TRACING

@@ -35,3 +35,43 @@ build_lib_example(
     ${libcsma}
     ${libapplications}
 )
+
+build_lib_example(
+  NAME fat-tree-mpi
+  SOURCE_FILES fat-tree-mpi.cc
+  LIBRARIES_TO_LINK
+    ${libmpi}
+    ${libpoint-to-point}
+    ${libinternet}
+    ${libnix-vector-routing}
+    ${libapplications}
+    ${libflow-monitor}
+)
+
+if(${ENABLE_MTP})
+  build_lib_example(
+    NAME simple-hybrid
+    SOURCE_FILES simple-hybrid.cc
+                 mpi-test-fixtures.cc
+    LIBRARIES_TO_LINK
+      ${libmpi}
+      ${libpoint-to-point}
+      ${libinternet}
+      ${libnix-vector-routing}
+      ${libapplications}
+      ${libmtp}
+  )
+
+  build_lib_example(
+    NAME fat-tree-hybrid
+    SOURCE_FILES fat-tree-hybrid.cc
+    LIBRARIES_TO_LINK
+      ${libmpi}
+      ${libmtp}
+      ${libpoint-to-point}
+      ${libinternet}
+      ${libnix-vector-routing}
+      ${libapplications}
+      ${libflow-monitor}
+  )
+endif()

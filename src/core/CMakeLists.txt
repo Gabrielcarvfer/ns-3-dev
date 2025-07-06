@@ -210,6 +210,7 @@ set(header_files
     model/ascii-file.h
     model/ascii-test.h
     model/assert.h
+    model/atomic-counter.h
     model/attribute-accessor-helper.h
     model/attribute-construction-list.h
     model/attribute-container.h
