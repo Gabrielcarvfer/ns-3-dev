@@ -82,6 +82,9 @@ operator==(const Ipv4FlowClassifier::FiveTuple& t1, const Ipv4FlowClassifier::Fi
 
 Ipv4FlowClassifier::Ipv4FlowClassifier()
 {
+#ifdef NS3_MTP
+    m_lock.store(false, std::memory_order_relaxed);
+#endif
 }
 
 bool
@@ -133,6 +136,12 @@ Ipv4FlowClassifier::Classify(const Ipv4Header& ipHeader,
     tuple.sourcePort = srcPort;
     tuple.destinationPort = dstPort;
 
+#ifdef NS3_MTP
+    while (m_lock.exchange(true, std::memory_order_acquire))
+    {
+    };
+#endif
+
     // try to insert the tuple, but check if it already exists
     auto insert = m_flowMap.insert(std::pair<FiveTuple, FlowId>(tuple, 0));
 
@@ -162,6 +171,10 @@ Ipv4FlowClassifier::Classify(const Ipv4Header& ipHeader,
 
     *out_flowId = insert.first->second;
     *out_packetId = m_flowPktIdMap[*out_flowId];
+
+#ifdef NS3_MTP
+    m_lock.store(false, std::memory_order_release);
+#endif
 
     return true;
 }

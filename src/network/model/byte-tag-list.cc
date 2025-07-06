@@ -7,13 +7,17 @@
  */
 #include "byte-tag-list.h"
 
+#include "ns3/atomic-counter.h"
 #include "ns3/log.h"
 
 #include <cstring>
 #include <limits>
 #include <vector>
 
+#ifndef NS3_MTP
 #define USE_FREE_LIST 1
+#endif
+
 #define FREE_LIST_SIZE 1000
 #define OFFSET_MAX (std::numeric_limits<int32_t>::max())
 
@@ -31,8 +35,12 @@ NS_LOG_COMPONENT_DEFINE("ByteTagList");
  */
 struct ByteTagListData
 {
-    uint32_t size;   //!< size of the data
-    uint32_t count;  //!< use counter (for smart deallocation)
+    uint32_t size; //!< size of the data
+#ifdef NS3_MTP
+    AtomicCounter count;
+#else
+    uint32_t count; //!< use counter (for smart deallocation)
+#endif
     uint32_t dirty;  //!< number of bytes actually in use
     uint8_t data[4]; //!< data
 };
@@ -396,8 +404,8 @@ ByteTagListData*
 ByteTagList::Allocate(uint32_t size)
 {
     NS_LOG_FUNCTION(this << size);
-    uint8_t* buffer = new uint8_t[size + sizeof(ByteTagListData) - 4];
-    ByteTagListData* data = (ByteTagListData*)buffer;
+    auto* buffer = new uint8_t[size + sizeof(ByteTagListData) - 4];
+    auto* data = (ByteTagListData*)buffer;
     data->count = 1;
     data->size = size;
     data->dirty = 0;
@@ -408,14 +416,16 @@ void
 ByteTagList::Deallocate(ByteTagListData* data)
 {
     NS_LOG_FUNCTION(this << data);
-    if (data == 0)
+    if (data == nullptr)
     {
         return;
     }
-    data->count--;
-    if (data->count == 0)
+    if (data->count-- == 1)
     {
-        uint8_t* buffer = (uint8_t*)data;
+#ifdef NS3_MTP
+        std::atomic_thread_fence(std::memory_order_acquire);
+#endif
+        auto* buffer = (uint8_t*)data;
         delete[] buffer;
     }
 }

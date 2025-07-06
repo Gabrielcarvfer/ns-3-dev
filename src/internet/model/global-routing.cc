@@ -7,6 +7,7 @@
 #include "global-routing.h"
 
 #include "global-route-manager.h"
+#include "ipv4-queue-disc-item.h"
 #include "ipv4-route.h"
 #include "ipv4-routing-table-entry.h"
 #include "ipv6-route.h"
@@ -47,6 +48,13 @@ GlobalRouting<T>::GetTypeId()
                     MakeBooleanAccessor(&GlobalRouting<T>::m_randomEcmpRouting),
                     MakeBooleanChecker())
                 .AddAttribute(
+                    "FlowEcmpRouting",
+                    "Set to true if flows are routed among ECMP based on the flow hash; set to "
+                    "false for using only one route consistently",
+                    BooleanValue(false),
+                    MakeBooleanAccessor(&GlobalRouting<T>::m_flowEcmpRouting),
+                    MakeBooleanChecker())
+                .AddAttribute(
                     "RespondToInterfaceEvents",
                     "Set to true if you want to dynamically recompute the global routes upon "
                     "Interface notification events (up/down, or add/remove address)",
@@ -83,6 +91,7 @@ GlobalRouting<T>::GetTypeId()
 template <typename T>
 GlobalRouting<T>::GlobalRouting()
     : m_randomEcmpRouting(false),
+      m_flowEcmpRouting(false),
       m_respondToInterfaceEvents(false)
 {
     NS_LOG_FUNCTION(this);
@@ -201,7 +210,7 @@ GlobalRouting<T>::AddASExternalRouteTo(IpAddress network,
 
 template <typename T>
 Ptr<typename GlobalRouting<T>::IpRoute>
-GlobalRouting<T>::LookupGlobal(IpAddress dest, Ptr<NetDevice> oif)
+GlobalRouting<T>::LookupGlobal(IpAddress dest, uint32_t flowHash, Ptr<NetDevice> oif)
 {
     NS_LOG_FUNCTION(this << dest << oif);
     NS_LOG_LOGIC("Looking for route for destination " << dest);
@@ -314,7 +323,11 @@ GlobalRouting<T>::LookupGlobal(IpAddress dest, Ptr<NetDevice> oif)
         // ECMP routing is enabled, or always select the first route
         // consistently if random ECMP routing is disabled
         uint32_t selectIndex;
-        if (m_randomEcmpRouting)
+        if (m_flowEcmpRouting)
+        {
+            selectIndex = flowHash % allRoutes.size();
+        }
+        else if (m_randomEcmpRouting)
         {
             selectIndex = m_rand->GetInteger(0, allRoutes.size() - 1);
         }
@@ -589,6 +602,14 @@ GlobalRouting<T>::RouteOutput(Ptr<Packet> p,
                               Socket::SocketErrno& sockerr)
 {
     NS_LOG_FUNCTION(this << p << &header << oif << &sockerr);
+    uint32_t flowHash = 0;
+    if constexpr (IsIpv4)
+    {
+        if (m_flowEcmpRouting)
+        {
+            flowHash = Ipv4QueueDiscItem(p, Address(), header.GetProtocol(), header).Hash(0);
+        }
+    }
     //
     // First, see if this is a multicast packet we have a route for.  If we
     // have a route, then send the packet down each of the specified interfaces.
@@ -602,7 +623,7 @@ GlobalRouting<T>::RouteOutput(Ptr<Packet> p,
     // See if this is a unicast packet we have a route for.
     //
     NS_LOG_LOGIC("Unicast destination- looking up");
-    Ptr<IpRoute> rtentry = LookupGlobal(header.GetDestination(), oif);
+    Ptr<IpRoute> rtentry = LookupGlobal(header.GetDestination(), flowHash, oif);
     if (rtentry)
     {
         sockerr = Socket::ERROR_NOTERROR;
@@ -626,6 +647,15 @@ GlobalRouting<T>::RouteInput(Ptr<const Packet> p,
 {
     NS_LOG_FUNCTION(this << p << header << header.GetSource() << header.GetDestination() << idev
                          << &lcb << &ecb);
+    uint32_t flowHash = 0;
+    if constexpr (IsIpv4)
+    {
+        if (m_flowEcmpRouting)
+        {
+            flowHash =
+                Ipv4QueueDiscItem(p->Copy(), Address(), header.GetProtocol(), header).Hash(0);
+        }
+    }
     // Check if input device supports IP
     NS_ASSERT(m_ip->GetInterfaceForDevice(idev) >= 0);
     uint32_t iif = m_ip->GetInterfaceForDevice(idev);
@@ -664,7 +694,7 @@ GlobalRouting<T>::RouteInput(Ptr<const Packet> p,
     }
     // Next, try to find a route
     NS_LOG_LOGIC("Unicast destination- looking up global route");
-    Ptr<IpRoute> rtentry = LookupGlobal(header.GetDestination());
+    Ptr<IpRoute> rtentry = LookupGlobal(header.GetDestination(), flowHash);
     if (rtentry)
     {
         NS_LOG_LOGIC("Found unicast destination- calling unicast callback");

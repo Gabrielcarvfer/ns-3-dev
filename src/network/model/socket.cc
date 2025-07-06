@@ -795,6 +795,8 @@ SocketIpTosTag::GetTos() const
     return m_ipTos;
 }
 
+NS_OBJECT_ENSURE_REGISTERED(SocketIpTosTag);
+
 TypeId
 SocketIpTosTag::GetTypeId()
 {
@@ -851,6 +853,8 @@ SocketPriorityTag::GetPriority() const
     return m_priority;
 }
 
+NS_OBJECT_ENSURE_REGISTERED(SocketPriorityTag);
+
 TypeId
 SocketPriorityTag::GetTypeId()
 {
@@ -906,6 +910,8 @@ SocketIpv6TclassTag::GetTclass() const
 {
     return m_ipv6Tclass;
 }
+
+NS_OBJECT_ENSURE_REGISTERED(SocketIpv6TclassTag);
 
 TypeId
 SocketIpv6TclassTag::GetTypeId()

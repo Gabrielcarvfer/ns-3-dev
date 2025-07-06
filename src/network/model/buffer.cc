@@ -132,12 +132,15 @@ Buffer::Create(uint32_t dataSize)
     NS_ASSERT(data->m_count == 1);
     return data;
 }
-#else  /* BUFFER_FREE_LIST */
+#else /* BUFFER_FREE_LIST */
 void
 Buffer::Recycle(Buffer::Data* data)
 {
     NS_LOG_FUNCTION(data);
     NS_ASSERT(data->m_count == 0);
+#ifdef NS3_MTP
+    std::atomic_thread_fence(std::memory_order_acquire);
+#endif
     Deallocate(data);
 }
 
@@ -255,8 +258,7 @@ Buffer::operator=(const Buffer& o)
     if (m_data != o.m_data)
     {
         // not assignment to self.
-        m_data->m_count--;
-        if (m_data->m_count == 0)
+        if (m_data->m_count-- == 1)
         {
             Recycle(m_data);
         }
@@ -278,8 +280,7 @@ Buffer::~Buffer()
     NS_LOG_FUNCTION(this);
     NS_ASSERT(CheckInternalState());
     g_recommendedStart = std::max(g_recommendedStart, m_maxZeroAreaStart);
-    m_data->m_count--;
-    if (m_data->m_count == 0)
+    if (m_data->m_count-- == 1)
     {
         Recycle(m_data);
     }
@@ -322,8 +323,7 @@ Buffer::AddAtStart(uint32_t start)
         uint32_t newSize = GetInternalSize() + start;
         Buffer::Data* newData = Buffer::Create(newSize);
         memcpy(newData->m_data + start, m_data->m_data + m_start, GetInternalSize());
-        m_data->m_count--;
-        if (m_data->m_count == 0)
+        if (m_data->m_count-- == 1)
         {
             Buffer::Recycle(m_data);
         }
@@ -368,8 +368,7 @@ Buffer::AddAtEnd(uint32_t end)
         uint32_t newSize = GetInternalSize() + end;
         Buffer::Data* newData = Buffer::Create(newSize);
         memcpy(newData->m_data, m_data->m_data + m_start, GetInternalSize());
-        m_data->m_count--;
-        if (m_data->m_count == 0)
+        if (m_data->m_count-- == 1)
         {
             Buffer::Recycle(m_data);
         }

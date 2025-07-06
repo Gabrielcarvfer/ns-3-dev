@@ -517,6 +517,8 @@ class GlobalRouting : public std::enable_if_t<std::is_same_v<Ipv4RoutingProtocol
     /// Set to true if packets are randomly routed among ECMP; set to false for using only one route
     /// consistently
     bool m_randomEcmpRouting;
+    /// Set to true if flows are routed among ECMP based on the flow hash (IPv4 only)
+    bool m_flowEcmpRouting;
     /// Set to true if this interface should respond to interface events by globally recomputing
     /// routes
     bool m_respondToInterfaceEvents;
@@ -547,10 +549,11 @@ class GlobalRouting : public std::enable_if_t<std::is_same_v<Ipv4RoutingProtocol
     /**
      * @brief Lookup in the forwarding table for destination.
      * @param dest destination address
+     * @param flowHash flow hash used for per-flow ECMP routing
      * @param oif output interface if any (put 0 otherwise)
      * @return Ipv4Route to route the packet to reach dest address
      */
-    Ptr<IpRoute> LookupGlobal(IpAddress dest, Ptr<NetDevice> oif = nullptr);
+    Ptr<IpRoute> LookupGlobal(IpAddress dest, uint32_t flowHash = 0, Ptr<NetDevice> oif = nullptr);
 
     HostRoutes m_hostRoutes;             //!< Routes to hosts
     NetworkRoutes m_networkRoutes;       //!< Routes to networks

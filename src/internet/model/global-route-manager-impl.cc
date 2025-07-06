@@ -741,12 +741,14 @@ GlobalRouteManagerImpl<T>::InitializeRoutes()
         //
         Ptr<GlobalRouter<IpManager>> rtr = node->GetObject<GlobalRouter<IpManager>>();
 
+#ifdef NS3_MPI
         uint32_t systemId = Simulator::GetSystemId();
         // Ignore nodes that are not assigned to our systemId (distributed sim)
         if (node->GetSystemId() != systemId)
         {
             continue;
         }
+#endif
 
         //
         // if the node has a global router interface, then run the global routing

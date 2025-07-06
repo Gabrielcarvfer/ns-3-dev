@@ -77,6 +77,9 @@ FlowMonitor::FlowMonitor()
     : m_enabled(false)
 {
     NS_LOG_FUNCTION(this);
+#ifdef NS3_MTP
+    m_lock.store(false, std::memory_order_relaxed);
+#endif
 }
 
 void
@@ -141,6 +144,13 @@ FlowMonitor::ReportFirstTx(Ptr<FlowProbe> probe,
         return;
     }
     Time now = Simulator::Now();
+
+#ifdef NS3_MTP
+    while (m_lock.exchange(true, std::memory_order_acquire))
+    {
+    };
+#endif
+
     TrackedPacket& tracked = m_trackedPackets[std::make_pair(flowId, packetId)];
     tracked.firstSeenTime = now;
     tracked.lastSeenTime = tracked.firstSeenTime;
@@ -158,6 +168,10 @@ FlowMonitor::ReportFirstTx(Ptr<FlowProbe> probe,
         stats.timeFirstTxPacket = now;
     }
     stats.timeLastTxPacket = now;
+
+#ifdef NS3_MTP
+    m_lock.store(false, std::memory_order_release);
+#endif
 }
 
 void
@@ -172,12 +186,22 @@ FlowMonitor::ReportForwarding(Ptr<FlowProbe> probe,
         NS_LOG_DEBUG("FlowMonitor not enabled; returning");
         return;
     }
+
+#ifdef NS3_MTP
+    while (m_lock.exchange(true, std::memory_order_acquire))
+    {
+    };
+#endif
+
     std::pair<FlowId, FlowPacketId> key(flowId, packetId);
     auto tracked = m_trackedPackets.find(key);
     if (tracked == m_trackedPackets.end())
     {
         NS_LOG_WARN("Received packet forward report (flowId="
                     << flowId << ", packetId=" << packetId << ") but not known to be transmitted.");
+#ifdef NS3_MTP
+        m_lock.store(false, std::memory_order_release);
+#endif
         return;
     }
 
@@ -186,6 +210,10 @@ FlowMonitor::ReportForwarding(Ptr<FlowProbe> probe,
 
     Time delay = (Simulator::Now() - tracked->second.firstSeenTime);
     probe->AddPacketStats(flowId, packetSize, delay);
+
+#ifdef NS3_MTP
+    m_lock.store(false, std::memory_order_release);
+#endif
 }
 
 void
@@ -200,11 +228,21 @@ FlowMonitor::ReportLastRx(Ptr<FlowProbe> probe,
         NS_LOG_DEBUG("FlowMonitor not enabled; returning");
         return;
     }
+
+#ifdef NS3_MTP
+    while (m_lock.exchange(true, std::memory_order_acquire))
+    {
+    };
+#endif
+
     auto tracked = m_trackedPackets.find(std::make_pair(flowId, packetId));
     if (tracked == m_trackedPackets.end())
     {
         NS_LOG_WARN("Received packet last-tx report (flowId="
                     << flowId << ", packetId=" << packetId << ") but not known to be transmitted.");
+#ifdef NS3_MTP
+        m_lock.store(false, std::memory_order_release);
+#endif
         return;
     }
 
@@ -262,6 +300,10 @@ FlowMonitor::ReportLastRx(Ptr<FlowProbe> probe,
                                                                   << packetId << ").");
 
     m_trackedPackets.erase(tracked); // we don't need to track this packet anymore
+
+#ifdef NS3_MTP
+    m_lock.store(false, std::memory_order_release);
+#endif
 }
 
 void
@@ -277,6 +319,12 @@ FlowMonitor::ReportDrop(Ptr<FlowProbe> probe,
         NS_LOG_DEBUG("FlowMonitor not enabled; returning");
         return;
     }
+
+#ifdef NS3_MTP
+    while (m_lock.exchange(true, std::memory_order_acquire))
+    {
+    };
+#endif
 
     probe->AddPacketDropStats(flowId, packetSize, reasonCode);
 
@@ -301,6 +349,10 @@ FlowMonitor::ReportDrop(Ptr<FlowProbe> probe,
                                                                     << packetId << ").");
         m_trackedPackets.erase(tracked);
     }
+
+#ifdef NS3_MTP
+    m_lock.store(false, std::memory_order_release);
+#endif
 }
 
 const FlowMonitor::FlowStatsContainer&

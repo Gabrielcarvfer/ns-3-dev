@@ -264,25 +264,41 @@ Hasher& GetStaticHash();
 inline uint32_t
 Hash32(const char* buffer, const std::size_t size)
 {
+#ifdef NS3_MTP
+    return Hasher().GetHash32(buffer, size);
+#else
     return GetStaticHash().GetHash32(buffer, size);
+#endif
 }
 
 inline uint64_t
 Hash64(const char* buffer, const std::size_t size)
 {
+#ifdef NS3_MTP
+    return Hasher().GetHash64(buffer, size);
+#else
     return GetStaticHash().GetHash64(buffer, size);
+#endif
 }
 
 inline uint32_t
 Hash32(const std::string s)
 {
+#ifdef NS3_MTP
+    return Hasher().GetHash32(s);
+#else
     return GetStaticHash().GetHash32(s);
+#endif
 }
 
 inline uint64_t
 Hash64(const std::string s)
 {
+#ifdef NS3_MTP
+    return Hasher().GetHash64(s);
+#else
     return GetStaticHash().GetHash64(s);
+#endif
 }
 
 } // namespace ns3
