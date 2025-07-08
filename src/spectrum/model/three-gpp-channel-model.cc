@@ -2469,6 +2469,9 @@ ThreeGppChannelModel::AntennaSetupChanged(Ptr<const PhasedArrayModel> aAntenna,
            aAntenna->IsChannelOutOfDate(bAntenna);
 }
 
+std::mutex g_chanParamMapMutex;
+std::mutex g_chanMatMapMutex;
+
 Ptr<const MatrixBasedChannelModel::ChannelMatrix>
 ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
                                  Ptr<const MobilityModel> bMob,
@@ -2496,16 +2499,19 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
     Ptr<ChannelMatrix> channelMatrix;
     Ptr<ThreeGppChannelParams> channelParams;
 
-    if (m_channelParamsMap.find(channelParamsKey) != m_channelParamsMap.end())
     {
-        channelParams = m_channelParamsMap[channelParamsKey];
-        // check if it has to be updated
-        updateParams = ChannelParamsNeedsUpdate(channelParams, condition);
-    }
-    else
-    {
-        NS_LOG_DEBUG("channel params not found");
-        notFoundParams = true;
+        std::lock_guard<std::mutex> lg(g_chanParamMapMutex);
+        if (m_channelParamsMap.find(channelParamsKey) != m_channelParamsMap.end())
+        {
+            channelParams = m_channelParamsMap[channelParamsKey];
+            // check if it has to be updated
+            updateParams = ChannelParamsNeedsUpdate(channelParams, condition);
+        }
+        else
+        {
+            NS_LOG_DEBUG("channel params not found");
+            notFoundParams = true;
+        }
     }
 
     // get the 3GPP parameters
@@ -2523,21 +2529,25 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
         // Step 10: Draw initial phases
         channelParams = GenerateChannelParameters(condition, table3gpp, aMob, bMob);
         // store or replace the channel parameters
+        std::lock_guard<std::mutex> lg(g_chanParamMapMutex);
         m_channelParamsMap[channelParamsKey] = channelParams;
     }
 
-    if (m_channelMatrixMap.find(channelMatrixKey) != m_channelMatrixMap.end())
     {
-        // channel matrix present in the map
-        NS_LOG_DEBUG("channel matrix present in the map");
-        channelMatrix = m_channelMatrixMap[channelMatrixKey];
-        updateMatrix = ChannelMatrixNeedsUpdate(channelParams, channelMatrix);
-        updateMatrix |= AntennaSetupChanged(aAntenna, bAntenna, channelMatrix);
-    }
-    else
-    {
-        NS_LOG_DEBUG("channel matrix not found");
-        notFoundMatrix = true;
+        std::lock_guard<std::mutex> lg(g_chanMatMapMutex);
+        if (m_channelMatrixMap.find(channelMatrixKey) != m_channelMatrixMap.end())
+        {
+            // channel matrix present in the map
+            NS_LOG_DEBUG("channel matrix present in the map");
+            channelMatrix = m_channelMatrixMap[channelMatrixKey];
+            updateMatrix = ChannelMatrixNeedsUpdate(channelParams, channelMatrix);
+            updateMatrix |= AntennaSetupChanged(aAntenna, bAntenna, channelMatrix);
+        }
+        else
+        {
+            NS_LOG_DEBUG("channel matrix not found");
+            notFoundMatrix = true;
+        }
     }
 
     // If the channel is not present in the map or if it has to be updated
@@ -2552,6 +2562,7 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
                                                // antennas at the moment of the channel generation
 
         // store or replace the channel matrix in the channel map
+        std::lock_guard<std::mutex> lg(g_chanMatMapMutex);
         m_channelMatrixMap[channelMatrixKey] = channelMatrix;
     }
 
