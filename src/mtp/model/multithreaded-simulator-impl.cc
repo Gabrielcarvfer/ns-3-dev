@@ -25,6 +25,8 @@
 #include "ns3/simulator.h"
 #include "ns3/type-id.h"
 #include "ns3/uinteger.h"
+#include "ns3/channel-list.h"
+#include "ns3/spectrum-channel.h"
 
 #include <algorithm>
 #include <queue>
@@ -297,6 +299,26 @@ MultithreadedSimulatorImpl::Partition()
     if (m_minLookahead == TimeStep(0))
     {
         std::vector<Time> delays;
+        for (auto i = 0; i < ChannelList::GetNChannels(); i++)
+        {
+            auto chan = ChannelList::GetChannel(i);
+            auto specChan = DynamicCast<SpectrumChannel>(chan);
+            if(!specChan)
+            {
+                continue;
+            }
+            auto delayModel = specChan->GetPropagationDelayModel();
+            for (std::size_t j = 0; j < specChan->GetNDevices(); j++)
+            {
+                auto jMob = specChan->GetDevice(j)->GetNode()->GetObject<MobilityModel>();
+                for (std::size_t k = j+1; k < specChan->GetNDevices(); k++)
+                {
+                    // Compute propagation delay between nodes j-k
+                    auto kMob = specChan->GetDevice(k)->GetNode()->GetObject<MobilityModel>();
+                    delays.push_back(delayModel->GetDelay(jMob, kMob));
+                }
+            }
+        }
         for (auto it = nodes.Begin(); it != nodes.End(); it++)
         {
             Ptr<Node> node = *it;
@@ -334,6 +356,7 @@ MultithreadedSimulatorImpl::Partition()
     }
 
     // perform a BFS on the whole network topo to assign each node a systemId
+    /*
     for (auto it = nodes.Begin(); it != nodes.End(); it++)
     {
         Ptr<Node> node = *it;
@@ -383,7 +406,7 @@ MultithreadedSimulatorImpl::Partition()
                 }
             }
         }
-    }
+    }*/
     delete[] visited;
 
     // after the partition, we finally know the system count (# of LPs)
