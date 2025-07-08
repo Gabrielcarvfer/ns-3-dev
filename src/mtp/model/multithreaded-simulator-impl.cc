@@ -295,6 +295,11 @@ MultithreadedSimulatorImpl::Partition()
     bool* visited = new bool[nodes.GetN()]{false};
     std::queue<Ptr<Node>> q;
 
+    for(int i = 0; i < nodes.GetN(); i++)
+    {
+        nodes.Get(i)->SetSystemId(i);
+    }
+    systemId = nodes.GetN();
     // if m_minLookahead is not set, calculate the median of delay for every link
     if (m_minLookahead == TimeStep(0))
     {
