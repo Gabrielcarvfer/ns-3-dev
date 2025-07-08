@@ -118,6 +118,7 @@ void
 MtpInterface::EnableNew(const uint32_t newSystemCount)
 {
     const LogicalProcess* oldSystems = g_systems;
+    g_mailboxMutexes = std::vector<std::mutex>(g_systemCount + newSystemCount + 1);
     g_systems = new LogicalProcess[g_systemCount + newSystemCount + 1];
     for (uint32_t i = 0; i <= g_systemCount; i++)
     {

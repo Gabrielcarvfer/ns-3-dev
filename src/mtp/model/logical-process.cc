@@ -253,6 +253,8 @@ LogicalProcess::ScheduleAt(const uint32_t context, const Time& time, EventImpl* 
     m_events->Insert(ev);
 }
 
+std::vector<std::mutex> g_mailboxMutexes;
+
 void
 LogicalProcess::ScheduleWithContext(LogicalProcess* remote,
                                     const uint32_t context,
@@ -273,6 +275,7 @@ LogicalProcess::ScheduleWithContext(LogicalProcess* remote,
     else
     {
         ev.key.m_uid = EventId::UID::INVALID;
+        std::lock_guard<std::mutex> lg(g_mailboxMutexes.at(m_systemId));
         remote->m_mailbox[m_systemId].emplace_back(m_currentTs, m_systemId, m_uid, ev);
     }
 }

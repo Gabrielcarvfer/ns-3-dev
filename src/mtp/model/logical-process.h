@@ -182,6 +182,7 @@ class LogicalProcess
     std::chrono::nanoseconds::rep m_executionTime;
 };
 
+extern std::vector<std::mutex> g_mailboxMutexes;
 } // namespace ns3
 
 #endif /* LOGICAL_PROCESS_H */
