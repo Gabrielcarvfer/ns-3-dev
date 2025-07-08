@@ -393,6 +393,10 @@ macro(process_options)
     )
   endif()
 
+  set(CMAKE_CXX_FLAGS
+          "${CMAKE_CXX_FLAGS} -fsanitize=thread -Wno-tsan"
+  )
+
   if(${NS3_SANITIZE_MEMORY})
     if(${CLANG})
       set(blacklistfile ${PROJECT_SOURCE_DIR}/memory-sanitizer-blacklist.txt)
