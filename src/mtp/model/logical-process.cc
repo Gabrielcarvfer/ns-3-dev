@@ -21,6 +21,8 @@
 #include "ns3/channel.h"
 #include "ns3/node-container.h"
 #include "ns3/simulator.h"
+#include "ns3/channel-list.h"
+#include "ns3/spectrum-channel.h"
 
 #include <algorithm>
 
@@ -132,6 +134,37 @@ LogicalProcess::CalculateLookAhead()
                 }
                 // add the neighbour to the mailbox
                 m_mailbox[remoteNode->GetSystemId()];
+            }
+        }
+        for (auto i = 0; i < ChannelList::GetNChannels(); i++)
+        {
+            auto chan = ChannelList::GetChannel(i);
+            auto specChan = DynamicCast<SpectrumChannel>(chan);
+            if(!specChan)
+            {
+                continue;
+            }
+            auto delayModel = specChan->GetPropagationDelayModel();
+            for (std::size_t j = 0; j < specChan->GetNDevices(); j++)
+            {
+                auto jNode = specChan->GetDevice(j)->GetNode();
+                auto jMob = jNode->GetObject<MobilityModel>();
+                for (std::size_t k = j+1; k < specChan->GetNDevices(); k++)
+                {
+                    // Compute propagation delay between nodes j-k
+                    auto kNode = specChan->GetDevice(k)->GetNode();
+                    auto kMob = kNode->GetObject<MobilityModel>();
+                    auto delay = delayModel->GetDelay(jMob, kMob);
+                    if (jNode->GetSystemId() == m_systemId || kNode->GetSystemId() == m_systemId)
+                    {
+                        if (delay < m_lookAhead)
+                        {
+                            m_lookAhead = delay;
+                        }
+                        auto remoteNodeSystemId = kNode->GetSystemId() != m_systemId ? kNode->GetSystemId() : jNode->GetSystemId();
+                        m_mailbox[remoteNodeSystemId];
+                    }
+                }
             }
         }
     }
