@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <thread>
 
 namespace ns3
 {
@@ -231,6 +232,7 @@ MtpInterface::ProcessOneRound()
     // logical process barrier synchronization
     while (g_finishedSystemCount.load(std::memory_order_acquire) != g_systemCount)
     {
+        sched_yield();
     };
 
     // stage 2: process the public LP
@@ -324,6 +326,7 @@ MtpInterface::ThreadFunc(void* arg)
         {
             while (g_systemIndex.load(std::memory_order_acquire) >= g_systemCount)
             {
+                std::this_thread::sleep_for(std::chrono::milliseconds (100));
             };
             continue;
         }
