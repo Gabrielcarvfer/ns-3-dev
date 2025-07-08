@@ -228,7 +228,7 @@ MtpInterface::ProcessOneRound()
         g_finishedSystemCount.fetch_add(1, std::memory_order_release);
     }
 
-    // logical process barriar synchronization
+    // logical process barrier synchronization
     while (g_finishedSystemCount.load(std::memory_order_acquire) != g_systemCount)
     {
     };
@@ -252,7 +252,7 @@ MtpInterface::ProcessOneRound()
         g_finishedSystemCount.fetch_add(1, std::memory_order_release);
     }
 
-    // logical process barriar synchronization
+    // logical process barrier synchronization
     while (g_finishedSystemCount.load(std::memory_order_acquire) != g_systemCount)
     {
     };
