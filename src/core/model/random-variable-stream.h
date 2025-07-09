@@ -144,6 +144,9 @@ class RandomVariableStream : public Object
     // The base implementation returns `(uint32_t)GetValue()`
     virtual uint32_t GetInteger();
 
+    static void CheckUnassignedStreams();
+    static void TeardownCheckUnassignedStreams();
+
   protected:
     /**
      * @brief Get the pointer to the underlying RngStream.
