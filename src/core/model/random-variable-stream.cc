@@ -27,6 +27,10 @@
 #include <iostream>
 #include <numbers>
 
+#ifdef STACKTRACE_LIBRARY_IS_LINKED
+#include <stacktrace>
+#endif
+
 /**
  * @file
  * @ingroup randomvariable
@@ -39,6 +43,18 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("RandomVariableStream");
 
 NS_OBJECT_ENSURE_REGISTERED(RandomVariableStream);
+
+/**
+ *  Log of automatically assigned RNG streams.
+ *
+ *  The log will be printed at the end of the simulation if the environment variable
+ *  NS_CHECK_AUTOMATIC_STREAMS is set.
+ *
+ *  \p void* The RandomVariableStream address
+ *  \p string TypeId name
+ *  \p string Stack trace (if that is linked in/enabled)
+ */
+std::unordered_map<void*, std::pair<std::string, std::string>> g_automaticStreams;
 
 TypeId
 RandomVariableStream::GetTypeId()
@@ -111,7 +127,18 @@ RandomVariableStream::SetStream(int64_t stream)
         // number assignment.
         uint64_t nextStream = RngSeedManager::GetNextStreamIndex();
         NS_ASSERT(nextStream <= ((1ULL) << 63));
+#ifdef STACKTRACE_LIBRARY_IS_LINKED
+        // To be more useful for the user, we inspect stacktrace to inform user which particular
+        // object forgot to initialize the random stream
+        NS_LOG_INFO(GetInstanceTypeId().GetName()
+                    << " automatic stream: " << nextStream << ", instantiated in:\n"
+                    << std::stacktrace::current());
+        g_automaticStreams[this] = {GetInstanceTypeId().GetName(),
+                                    std::to_string(std::stacktrace::current())};
+#else
         NS_LOG_INFO(GetInstanceTypeId().GetName() << " automatic stream: " << nextStream);
+        g_automaticStreams[this] = {GetInstanceTypeId().GetName(), ""};
+#endif
         m_rng = new RngStream(RngSeedManager::GetSeed(), nextStream, RngSeedManager::GetRun());
     }
     else
@@ -121,6 +148,8 @@ RandomVariableStream::SetStream(int64_t stream)
         uint64_t base = ((1ULL) << 63);
         uint64_t target = base + stream;
         NS_LOG_INFO(GetInstanceTypeId().GetName() << " configured stream: " << stream);
+        // Remove stream from the automatically assigned list
+        g_automaticStreams.erase(this);
         m_rng = new RngStream(RngSeedManager::GetSeed(), target, RngSeedManager::GetRun());
     }
     m_stream = stream;
@@ -136,6 +165,31 @@ RngStream*
 RandomVariableStream::Peek() const
 {
     return m_rng;
+}
+
+/* static */
+void
+RandomVariableStream::CheckAutomaticStreams()
+{
+    if (!g_automaticStreams.empty())
+    {
+        for (const auto& [rng, data] : g_automaticStreams)
+        {
+            const auto& [tidName, stack] = data;
+            std::cout << "Automatic variable stream: " << tidName << ", instantiated in:\n"
+                      << stack << std::endl;
+        }
+        NS_ABORT_MSG("NS_CHECK_AUTOMATIC_STREAMS: " << g_automaticStreams.size()
+                                                    << " automatic variable streams");
+    }
+    NS_LOG_UNCOND("NS_CHECK_AUTOMATIC_STREAMS: No automatic variable streams");
+}
+
+/* static */
+void
+RandomVariableStream::DisposeGAutoStreams()
+{
+    g_automaticStreams.clear();
 }
 
 NS_OBJECT_ENSURE_REGISTERED(UniformRandomVariable);
