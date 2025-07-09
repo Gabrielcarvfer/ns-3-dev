@@ -7,6 +7,9 @@
  */
 #include "simulator.h"
 
+#include "assert.h"
+#include "des-metrics.h"
+#include "environment-variable.h"
 #include "event-impl.h"
 #include "fatal-error.h"
 #include "global-value.h"
@@ -14,6 +17,7 @@
 #include "map-scheduler.h"
 #include "object-factory.h"
 #include "ptr.h"
+#include "random-variable-stream.h"
 #include "scheduler.h"
 #include "simulator-impl.h"
 #include "string.h"
@@ -171,6 +175,13 @@ Simulator::Stop()
     NS_LOG_FUNCTION_NOARGS();
     NS_LOG_LOGIC("stop");
     GetImpl()->Stop();
+
+    auto [check, dummy] = EnvironmentVariable::Get("NS_CHECK_AUTOMATIC_STREAMS");
+    if (check)
+    {
+        RandomVariableStream::CheckAutomaticStreams();
+    }
+    RandomVariableStream::DisposeGAutoStreams();
 }
 
 EventId

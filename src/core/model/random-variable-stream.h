@@ -144,6 +144,46 @@ class RandomVariableStream : public Object
     // The base implementation returns `(uint32_t)GetValue()`
     virtual uint32_t GetInteger();
 
+    /**
+     * @brief Checks for automatically assigned RNG streams.
+     *
+     * This static function iterates through all automatically assigned random
+     * variable streams stored in `g_automaticStreams` and logs their details
+     * (stream address, type name, and stack trace if available). If any automatic
+     * streams are found, it outputs their information to the console and triggers
+     * an abort with the total count of detected streams.
+     *
+     * If no automatic streams are found, a log message indicating the absence of
+     * such streams is printed.
+     *
+     * This function is typically used for debugging or validating that no
+     * unexpected automatic streams are being instantiated. The environment
+     * variable `NS_CHECK_AUTOMATIC_STREAMS` can be used to control this behavior.
+     * By default, the check is executed after the simulator stops. If you are
+     * testing exclusively on configuration time, call CheckAutomaticStreams() manually.
+     *
+     * @see RandomVariableStream
+     * @see g_automaticStreams
+     */
+    static void CheckAutomaticStreams();
+
+    /**
+     * @brief Clears the container of automatically assigned RNG streams.
+     *
+     * This static function clears all entries stored in `g_automaticStreams`,
+     * effectively releasing references to automatically allocated random variable
+     * streams. This operation is typically invoked during cleanup to ensure
+     * no residual automatic streams remain in memory.
+     *
+     * @note This function does not free the memory of dynamically allocated
+     * RandomVariableStream instances; it only clears the log of automatically
+     * tracked streams.
+     *
+     * @see RandomVariableStream
+     * @see g_automaticStreams
+     */
+    static void DisposeGAutoStreams();
+
   protected:
     /**
      * @brief Get the pointer to the underlying RngStream.
