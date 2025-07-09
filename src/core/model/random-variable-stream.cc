@@ -29,6 +29,10 @@
 #include <iostream>
 #include <numbers>
 
+#ifdef STACKTRACE_LIBRARY_IS_LINKED
+#include <stacktrace>
+#endif
+
 /**
  * @file
  * @ingroup randomvariable
@@ -41,6 +45,8 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("RandomVariableStream");
 
 NS_OBJECT_ENSURE_REGISTERED(RandomVariableStream);
+
+std::unordered_map<void*, std::pair<std::string, std::string>> m_automaticallyAssignedStreams;
 
 TypeId
 RandomVariableStream::GetTypeId()
@@ -113,7 +119,18 @@ RandomVariableStream::SetStream(int64_t stream)
         // number assignment.
         uint64_t nextStream = RngSeedManager::GetNextStreamIndex();
         NS_ASSERT(nextStream <= ((1ULL) << 63));
+#ifdef STACKTRACE_LIBRARY_IS_LINKED
+        // To be more useful for the user, we inspect stacktrace to inform user which particular
+        // object forgot to initialize the random stream
+        NS_LOG_INFO(GetInstanceTypeId().GetName()
+                    << " automatic stream: " << nextStream << ", with origin in:\n"
+                    << std::stacktrace::current());
+        m_automaticallyAssignedStreams[this] = {GetInstanceTypeId().GetName(),
+                                                std::to_string(std::stacktrace::current())};
+#else
         NS_LOG_INFO(GetInstanceTypeId().GetName() << " automatic stream: " << nextStream);
+        m_automaticallyAssignedStreams[this] = {GetInstanceTypeId().GetName(), ""};
+#endif
         m_rng = new RngStream(RngSeedManager::GetSeed(), nextStream, RngSeedManager::GetRun());
     }
     else
@@ -123,6 +140,11 @@ RandomVariableStream::SetStream(int64_t stream)
         uint64_t base = ((1ULL) << 63);
         uint64_t target = base + stream;
         NS_LOG_INFO(GetInstanceTypeId().GetName() << " configured stream: " << stream);
+        // Remove stream from the automatically assigned list
+        if (m_automaticallyAssignedStreams.find(this) != m_automaticallyAssignedStreams.end())
+        {
+            m_automaticallyAssignedStreams.erase(this);
+        }
         m_rng = new RngStream(RngSeedManager::GetSeed(), target, RngSeedManager::GetRun());
     }
     m_stream = stream;
@@ -138,6 +160,29 @@ RngStream*
 RandomVariableStream::Peek() const
 {
     return m_rng;
+}
+
+void
+RandomVariableStream::CheckUnassignedStreams()
+{
+    if (!m_automaticallyAssignedStreams.empty())
+    {
+        for (auto stack : m_automaticallyAssignedStreams)
+        {
+            std::cout << "Unassigned variable stream: " << stack.second.first
+                      << ", with origin in:\n"
+                      << stack.second.second << std::endl;
+        }
+        NS_ABORT_MSG("CHECK_UNASSIGNED_STREAMS: " << m_automaticallyAssignedStreams.size()
+                                                  << " unassigned variable streams");
+    }
+    NS_ABORT_MSG("CHECK_UNASSIGNED_STREAMS: No unassigned variable streams");
+}
+
+void
+RandomVariableStream::TeardownCheckUnassignedStreams()
+{
+    m_automaticallyAssignedStreams.clear();
 }
 
 NS_OBJECT_ENSURE_REGISTERED(UniformRandomVariable);

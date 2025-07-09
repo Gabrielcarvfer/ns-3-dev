@@ -15,6 +15,7 @@
 #include "map-scheduler.h"
 #include "object-factory.h"
 #include "ptr.h"
+#include "random-variable-stream.h"
 #include "scheduler.h"
 #include "simulator-impl.h"
 #include "string.h"
@@ -167,6 +168,15 @@ void
 Simulator::Run()
 {
     NS_LOG_FUNCTION_NOARGS();
+    auto check = getenv("CHECK_UNASSIGNED_STREAMS");
+    if (check)
+    {
+        RandomVariableStream::CheckUnassignedStreams();
+    }
+    else
+    {
+        RandomVariableStream::TeardownCheckUnassignedStreams();
+    }
     Time::ClearMarkedTimes();
     GetImpl()->Run();
 }
