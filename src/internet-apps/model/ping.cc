@@ -659,7 +659,7 @@ Ping::PrintReport()
         }
 
         // note: integer math to match Linux implementation and avoid turning a 99.9% into a 100%.
-        os << ((m_seq - m_recv) * 100 / m_seq) << "% packet loss, "
+        os << ((m_seq - m_recv) * 100 / std::max<uint16_t>(m_seq, 1)) << "% packet loss, "
            << "time " << (Simulator::Now() - m_started).GetMilliSeconds() << "ms\n";
 
         if (m_avgRtt.Count() > 0)
@@ -673,7 +673,7 @@ Ping::PrintReport()
     report.m_transmitted = m_seq;
     report.m_received = m_recv;
     // note: integer math to match Linux implementation and avoid turning a 99.9% into a 100%.
-    report.m_loss = (m_seq - m_recv) * 100 / m_seq;
+    report.m_loss = (m_seq - m_recv) * 100 / std::max<uint16_t>(m_seq, 1);
     report.m_duration = (Simulator::Now() - m_started);
     report.m_rttMin = m_avgRtt.Min();
     report.m_rttAvg = m_avgRtt.Avg();
