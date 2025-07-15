@@ -272,7 +272,7 @@ static ns3::GlobalValue g_nFloors("nFloors",
 /// How many macro sites there are
 static ns3::GlobalValue g_nMacroEnbSites("nMacroEnbSites",
                                          "How many macro sites there are",
-                                         ns3::UintegerValue(3),
+                                         ns3::UintegerValue(7),
                                          ns3::MakeUintegerChecker<uint32_t>());
 
 /// (minimum) number of sites along the X-axis of the hex grid
@@ -638,7 +638,12 @@ main(int argc, char* argv[])
     lteHelper->SetEnbDeviceAttribute("UlBandwidth", UintegerValue(macroEnbBandwidth));
     NetDeviceContainer macroEnbDevs =
         lteHexGridEnbTopologyHelper->SetPositionAndInstallEnbDevice(macroEnbs);
-
+    Ptr<WraparoundModel> wraparoundModel = lteHexGridEnbTopologyHelper->GetWraparoundModel();
+    if (wraparoundModel)
+    {
+        lteHelper->GetDownlinkSpectrumChannel()->UnidirectionalAggregateObject(wraparoundModel);
+        lteHelper->GetUplinkSpectrumChannel()->UnidirectionalAggregateObject(wraparoundModel);
+    }
     if (epc)
     {
         // this enables handover for macro eNBs
