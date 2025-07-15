@@ -37,6 +37,7 @@ set(source_files
     model/tv-spectrum-transmitter.cc
     model/waveform-generator.cc
     utils/wraparound-model.cc
+    utils/hexagonal-wraparound-model.cc
 )
 
 set(header_files
@@ -79,6 +80,7 @@ set(header_files
     model/waveform-generator.h
     utils/spectrum-test.h
     utils/wraparound-model.h
+    utils/hexagonal-wraparound-model.h
 )
 
 build_lib(
@@ -98,4 +100,5 @@ build_lib(
     test/tv-helper-distribution-test.cc
     test/tv-spectrum-transmitter-test.cc
     test/two-ray-splm-test-suite.cc
+    test/wraparound-model-test.cc
 )
