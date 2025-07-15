@@ -11,16 +11,11 @@
 #ifndef AP_WIFI_MAC_H
 #define AP_WIFI_MAC_H
 
-#include "frame-capture-model.h"
-#include "interference-helper.h"
-#include "preamble-detection-model.h"
 #include "wifi-mac-header.h"
 #include "wifi-mac.h"
-#include "wifi-radio-energy-model.h"
 
 #include "ns3/attribute-container.h"
 #include "ns3/enum.h"
-#include "ns3/mobility-model.h"
 #include "ns3/pair.h"
 
 #include <unordered_map>

@@ -10,12 +10,8 @@
 #define WIFI_REMOTE_STATION_MANAGER_H
 
 #include "extended-capabilities.h"
-#include "frame-capture-model.h"
-#include "interference-helper.h"
 #include "qos-utils.h"
 #include "wifi-mode.h"
-#include "wifi-net-device.h"
-#include "wifi-radio-energy-model.h"
 #include "wifi-remote-station-info.h"
 #include "wifi-utils.h"
 
@@ -29,7 +25,6 @@
 #include "ns3/ht-capabilities.h"
 #include "ns3/ht-operation.h"
 #include "ns3/mac48-address.h"
-#include "ns3/mobility-model.h"
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"
 #include "ns3/vht-capabilities.h"

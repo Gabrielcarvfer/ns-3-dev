@@ -9,18 +9,11 @@
 #ifndef WIFI_PHY_STATE_HELPER_H
 #define WIFI_PHY_STATE_HELPER_H
 
-#include "frame-capture-model.h"
-#include "interference-helper.h"
-#include "phy-entity.h"
-#include "preamble-detection-model.h"
-#include "wifi-net-device.h"
 #include "wifi-phy-common.h"
 #include "wifi-phy-state.h"
 #include "wifi-ppdu.h"
-#include "wifi-radio-energy-model.h"
 
 #include "ns3/callback.h"
-#include "ns3/mobility-model.h"
 #include "ns3/nstime.h"
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"

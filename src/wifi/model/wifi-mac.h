@@ -9,18 +9,13 @@
 #ifndef WIFI_MAC_H
 #define WIFI_MAC_H
 
-#include "frame-capture-model.h"
-#include "interference-helper.h"
 #include "mgt-headers.h"
 #include "qos-utils.h"
 #include "ssid.h"
 #include "wifi-mac-queue-scheduler.h"
-#include "wifi-net-device.h"
-#include "wifi-radio-energy-model.h"
 #include "wifi-remote-station-manager.h"
 #include "wifi-standards.h"
 
-#include "ns3/mobility-model.h"
 #include "ns3/uniform-random-bit-generator.h"
 
 #include <functional>
