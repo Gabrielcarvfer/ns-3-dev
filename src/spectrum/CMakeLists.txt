@@ -36,6 +36,7 @@ set(source_files
     model/trace-fading-loss-model.cc
     model/tv-spectrum-transmitter.cc
     model/waveform-generator.cc
+    utils/wraparound-model.cc
 )
 
 set(header_files
@@ -77,14 +78,17 @@ set(header_files
     model/tv-spectrum-transmitter.h
     model/waveform-generator.h
     utils/spectrum-test.h
+    utils/wraparound-model.h
 )
 
 build_lib(
   LIBNAME spectrum
   SOURCE_FILES ${source_files}
   HEADER_FILES ${header_files}
-  LIBRARIES_TO_LINK ${libpropagation}
-                    ${libantenna}
+  LIBRARIES_TO_LINK
+    ${libpropagation}
+    ${libantenna}
+    ${libbuildings}
   TEST_SOURCES
     test/spectrum-ideal-phy-test.cc
     test/spectrum-interference-test.cc
