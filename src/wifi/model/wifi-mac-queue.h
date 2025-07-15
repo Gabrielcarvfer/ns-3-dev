@@ -16,7 +16,6 @@
 #include "wifi-mac-queue-container.h"
 #include "wifi-mpdu.h"
 
-#include "ns3/mobility-model.h"
 #include "ns3/queue.h"
 
 #include <functional>

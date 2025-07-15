@@ -215,7 +215,7 @@ PhyEntity::GetAddressedPsduInPpdu(Ptr<const WifiPpdu> ppdu) const
     return ppdu->GetPsdu();
 }
 
-PhyEntity::PhyHeaderSections
+PhyHeaderSections
 PhyEntity::GetPhyHeaderSections(const WifiTxVector& txVector, Time ppduStart) const
 {
     PhyHeaderSections map;
@@ -260,7 +260,7 @@ PhyEntity::GetDurationUpToField(WifiPpduField field, const WifiTxVector& txVecto
         .first; // return the start time of field relatively to the beginning of the PPDU
 }
 
-PhyEntity::SnrPer
+SnrPer
 PhyEntity::GetPhyHeaderSnrPer(WifiPpduField field, Ptr<Event> event) const
 {
     const auto measurementChannelWidth = GetMeasurementChannelWidth(event->GetPpdu());
