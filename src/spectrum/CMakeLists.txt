@@ -86,7 +86,6 @@ build_lib(
   LIBRARIES_TO_LINK ${libpropagation}
                     ${libantenna}
   TEST_SOURCES
-    test/two-ray-splm-test-suite.cc
     test/spectrum-ideal-phy-test.cc
     test/spectrum-interference-test.cc
     test/spectrum-value-test.cc
@@ -94,4 +93,5 @@ build_lib(
     test/three-gpp-channel-test-suite.cc
     test/tv-helper-distribution-test.cc
     test/tv-spectrum-transmitter-test.cc
+    test/two-ray-splm-test-suite.cc
 )
