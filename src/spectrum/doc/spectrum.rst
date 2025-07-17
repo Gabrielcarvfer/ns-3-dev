@@ -64,6 +64,9 @@ information for a signal being transmitted/received by PHY devices:
 
 * a reference to the transmitting PHY device
 
+* a reference to the transmitting mobility model, which should be used in StartRx
+  instead of retrieving it from PHY in order to wraparound models to work
+
 * a reference to the antenna model used by the transmitting PHY device
   to transmit this signal
 
@@ -139,6 +142,9 @@ Spectrum Channel implementations
 The module provides two ``SpectrumChannel`` implementations:
 ``SingleModelSpectrumChannel`` and ``MultiModelSpectrumChannel``. They
 both provide this functionality:
+
+ * If a wraparound model is aggregated to the channel, automatically apply it
+   to transmitting nodes.
 
  * Propagation loss modeling, in three forms:
 
@@ -1139,3 +1145,83 @@ References
    100 GHz. V.15.0.0. (2018-06).
 
 .. [3GPPTR38811] 3GPP. 2018. TR 38.811, Study on New Radio (NR) to support non-terrestrial networks, V15.4.0. (2020-09).
+
+
+Wraparound Models
+=================
+The wrap around mechanism is a simulation technique used in cellular network modeling to eliminate
+edge effects and create a more realistic interference environment. The most common setup used by 3GPP
+is the hexagonal deployment wraparound, which transforms a finite hexagonal cellular cluster into what
+appears to be an infinite network by creating virtual copies of the cluster around the original one.
+
+This also can significantly reduce memory and computational requirements of simulations to achieve similar
+results in respect to interference, avoiding the simulation of additional rings and then filtering only
+central rings with equivalent interference.
+
+WraparoundModel Implementation
+##############################
+When a wraparound model is aggregated to the ``SingleModelSpectrumChannel`` or ``MultiModelSpectrumChannel``,
+the base class ``WraparoundModel`` creates a virtual ``MobilityModel`` for the transmitter, in respect to each
+receiver.
+
+The virtual ``MobilityModel`` is carried via the ``SpectrumSignalParameters`` to the receiver, which
+must use that model to retrieve the transmitter position, ``NodeId`` and buildings related information during ``StartRx``.
+
+The base ``WraparoundModel`` only reuses the existing transmitter mobility model, while its children classes may
+implement different wraparound techniques.
+
+HexagonalWraparoundModel Implementation
+########################################
+
+``HexagonalWraparoundModel`` implements wraparound for the standard cellular network setups using hexagonal clusters,
+and is based on [Panwar]_. Without wraparound, only the central cells experience symmetric interference from all
+directions. Edge cells receive unrealistic interference patterns because they lack neighboring cells on certain sides,
+making their performance data statistically invalid for real-world analysis. The wrap around mechanism addresses
+this "edge effect" problem by ensuring all cells in the simulation experience equivalent interference conditions.
+For this reason, wraparound is mandatory for 5G NR calibration of selected scenarios, as defined in [TR38901]_.
+
+.. figure:: figures/hexagonal-wraparound-cdf-comparison.png
+    :align: center
+    :width: 600
+
+    Interference with ring 1 and wraparound is higher than even ring 3, and much higher than ring 1 without
+    wraparound. As a result, throughput without wraparound is unrealistically high.
+
+The wrap around mechanism operates by creating six additional virtual copies of the original hexagonal cluster,
+positioned symmetrically around the central cluster. It usually follows these steps:
+
+* Virtual Cluster Creation: Six copies of the original cluster are mathematically placed around the central cluster to simulate an infinite grid
+* Distance Calculation: For each signal transmission, the system calculates seven different distances - one to the actual transmitter and six to the virtual transmitter positions
+* Minimum Distance Selection: The shortest distance is used for path loss and signal strength calculations, ensuring realistic propagation effects
+* UE Mobility Handling: When a user device moves to connect with a virtual cell, it's automatically repositioned within the central cluster while maintaining the same relative position to its serving cell (moving UE to central cluster is not currently implemented)
+
+
+.. figure:: figures/hexagonal-wraparound-topology.png
+    :align: center
+    :width: 400
+
+    Virtual cell clusters (white and green) around real cell cluster (red). Virtual distances are shown as dashed arrows.
+    The virtual transmitter position that results in the smallest distance to receiver is used
+    in the virtual mobility model. [`Panwar`_]
+
+The technique is implemented using geometric distance calculations with specific equations for different cluster sizes:
+- ring 3: 19-site clusters: Standard configuration with 2-tier interference (57 cells for tri-sector antennas)
+- ring 1: 7-site clusters: Smaller configuration with 1-tier interference (21 cells for tri-sector antennas)
+- ring 0: 3-site clusters: Minimal configuration for quick testing (9 cells for tri-sector antennas)
+
+Before start transmitting, each site position needs to be registered to the ``HexagonalWraparoundModel`` via
+``AddSitePosition(Vector3D position)``. The number of sites should also be set via ``SetNumSites(uint8_t sites)``.
+Finally, the inter-site distance (ISD) must be set via ``SetSiteDistance(double isd_in_meters)``.
+
+This can be automatically done by hexagonal deployment helpers of LTE and NR, by setting the ``EnableWraparound``
+attribute to true. After setting up the hexagonal deployment, the user should call ``GetWraparoundModel`` method
+of the hexagonal deployment helper, and then aggregate that model to the spectrum channel model.
+
+References
+##########
+
+.. [Panwar] R. S. Panwar and K. M. Sivalingam, "Implementation of wrap
+    around mechanism for system level simulation of LTE cellular
+    networks in NS3," 2017 IEEE 18th International Symposium on
+    A World of Wireless, Mobile and Multimedia Networks (WoWMoM),
+    Macau, 2017, pp. 1-9, doi: 10.1109/WoWMoM.2017.7974289
