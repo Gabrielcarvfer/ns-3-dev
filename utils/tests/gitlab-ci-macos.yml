@@ -6,11 +6,13 @@
 
 .build-macos-base:
   extends: .base-build
-  variables:
-    MAINTAINERS: '/biljkus|edalm|Gabrielcarvfer|pdbj|sderonne|stavallo|sebastienderonne|tomhenderson|tommypec/i'
   tags:
-    - macos
-    - nsnam
+     - saas-macos-medium-m1
+  #  - saas-macos-large-m2pro
+  image: macos-14-xcode-15
+  #tags:
+  #  - macos
+  #  - nsnam
   before_script:
     - brew update
     - brew upgrade
@@ -18,54 +20,67 @@
   rules:
     - if: $RELEASE == "weekly"
     - if: $RELEASE == "daily"
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $GITLAB_USER_LOGIN =~ $MAINTAINERS
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      allow_failure: true
+  variables:
+    EXTRA_OPTIONS: --disable-mpi
+    COMPILER: clang++
+
+daily-macos:
+  rules:
+    - if: $RELEASE == "weekly"
+    - if: $RELEASE == "daily"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: manual
       allow_failure: true
+  stage: pre-build
+  script:
+    - echo "Starting MacOS jobs"
 
-build-macos-debug:
+daily-build-macos-debug:
   extends: .build-macos-base
+  needs: [ "daily-macos" ]
   stage: build
   variables:
     MODE: debug
-    COMPILER: clang++
 
-build-macos-default:
+daily-build-macos-default:
   extends: .build-macos-base
+  needs: [ "daily-macos" ]
   stage: build
   variables:
     MODE: default
-    COMPILER: clang++
 
-build-macos-optimized:
+daily-build-macos-optimized:
   extends: .build-macos-base
+  needs: [ "daily-macos" ]
   stage: build
   variables:
     MODE: optimized
-    COMPILER: clang++
 
-test-macos-debug:
+daily-test-macos-debug:
   extends: .build-macos-base
   stage: test
+  needs: ["daily-build-macos-debug"]
   dependencies:
-    - build-macos-debug
+    - daily-build-macos-debug
   variables:
     MODE: debug
-    COMPILER: clang++
 
-test-macos-default:
+daily-test-macos-default:
   extends: .build-macos-base
   stage: test
+  needs: [ "daily-build-macos-default" ]
   dependencies:
-    - build-macos-default
+    - daily-build-macos-default
   variables:
     MODE: default
-    COMPILER: clang++
 
-test-macos-optimized:
+daily-test-macos-optimized:
   extends: .build-macos-base
   stage: test
+  needs: [ "daily-build-macos-optimized" ]
   dependencies:
-    - build-macos-optimized
+    - daily-build-macos-optimized
   variables:
     MODE: optimized
-    COMPILER: clang++
