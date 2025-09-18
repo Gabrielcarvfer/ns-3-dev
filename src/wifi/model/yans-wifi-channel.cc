@@ -136,8 +136,10 @@ YansWifiChannel::Receive(Ptr<YansWifiPhy> phy, Ptr<const WifiPpdu> ppdu, dBm_u r
     }
     RxPowerWattPerChannelBand rxPowerW;
 
-    rxPowerW.insert(
-        {{{{0, 0}}, {{Hz_u{0}, Hz_u{0}}}}, (DbmToW(totalRxPower))}); // dummy band for YANS
+    WifiSpectrumBandInfo band;
+    band.indices = {{0, 0}};
+    band.frequencies = {{Hz_u{0}, Hz_u{0}}};
+    rxPowerW.insert({band.GetBandId(), (DbmToW(totalRxPower))}); // dummy band for YANS
     phy->StartReceivePreamble(ppdu, rxPowerW, ppdu->GetTxDuration());
 }
 

@@ -82,7 +82,7 @@ Event::GetRxPower() const
 Watt_u
 Event::GetRxPower(const WifiSpectrumBandInfo& band) const
 {
-    const auto it = m_rxPowerW.find(band);
+    const auto it = m_rxPowerW.find(band.GetBandId());
     NS_ASSERT(it != m_rxPowerW.cend());
     return it->second;
 }
@@ -162,6 +162,7 @@ InterferenceHelper::InterferenceHelper()
       m_numRxAntennas(1)
 {
     NS_LOG_FUNCTION(this);
+    Simulator::ScheduleDestroy(&WifiSpectrumBandInfo::ClearWifiSpectrumBandInfoToIdMap);
 }
 
 InterferenceHelper::~InterferenceHelper()
@@ -229,30 +230,30 @@ InterferenceHelper::HasBands() const
 bool
 InterferenceHelper::HasBand(const WifiSpectrumBandInfo& band) const
 {
-    return m_niChanges.contains(band);
+    return m_niChanges.contains(band.GetBandId());
 }
 
 void
 InterferenceHelper::AddBand(const WifiSpectrumBandInfo& band)
 {
     NS_LOG_FUNCTION(this << band);
-    NS_ASSERT(!m_niChanges.contains(band));
-    NS_ASSERT(!m_firstPowers.contains(band));
+    NS_ASSERT(!m_niChanges.contains(band.GetBandId()));
+    NS_ASSERT(!m_firstPowers.contains(band.GetBandId()));
     NiChanges niChanges;
-    auto result = m_niChanges.insert({band, niChanges});
+    auto result = m_niChanges.insert({band.GetBandId(), niChanges});
     NS_ASSERT(result.second);
     // Always have a zero power noise event in the list
     AddNiChangeEvent(Time(0), NiChange(Watt_u{0}, nullptr), result.first);
-    m_firstPowers.insert({band, Watt_u{0}});
+    m_firstPowers.insert({band.GetBandId(), Watt_u{0}});
 }
 
 void
 InterferenceHelper::RemoveBand(const WifiSpectrumBandInfo& band)
 {
     NS_LOG_FUNCTION(this << band);
-    NS_ASSERT(m_firstPowers.count(band) != 0);
-    m_firstPowers.erase(band);
-    auto it = m_niChanges.find(band);
+    NS_ASSERT(m_firstPowers.count(band.GetBandId()) != 0);
+    m_firstPowers.erase(band.GetBandId());
+    auto it = m_niChanges.find(band.GetBandId());
     NS_ASSERT(it != std::end(m_niChanges));
     it->second.clear();
     m_niChanges.erase(it);
@@ -266,11 +267,12 @@ InterferenceHelper::UpdateBands(const std::vector<WifiSpectrumBandInfo>& bands,
     std::vector<WifiSpectrumBandInfo> bandsToRemove{};
     for (auto it = m_niChanges.begin(); it != m_niChanges.end(); ++it)
     {
-        if (!IsBandInFrequencyRange(it->first, freqRange))
+        auto& band = WifiSpectrumBandInfo::GetBandInfoFromId(it->first);
+        if (!IsBandInFrequencyRange(band, freqRange))
         {
             continue;
         }
-        const auto frequencies = it->first.frequencies;
+        const auto frequencies = band.frequencies;
         const auto found =
             std::find_if(bands.cbegin(), bands.cend(), [frequencies](const auto& item) {
                 return frequencies == item.frequencies;
@@ -278,7 +280,7 @@ InterferenceHelper::UpdateBands(const std::vector<WifiSpectrumBandInfo>& bands,
         if (!found)
         {
             // band does not belong to the new bands, erase it
-            bandsToRemove.emplace_back(it->first);
+            bandsToRemove.emplace_back(band);
         }
     }
     for (const auto& band : bandsToRemove)
@@ -324,7 +326,7 @@ InterferenceHelper::GetEnergyDuration(Watt_u energy, const WifiSpectrumBandInfo&
 {
     NS_LOG_FUNCTION(this << energy << band);
     Time now = Simulator::Now();
-    auto niIt = m_niChanges.find(band);
+    auto niIt = m_niChanges.find(band.GetBandId());
     NS_ABORT_IF(niIt == m_niChanges.end());
     auto i = GetPreviousPosition(now, niIt);
     Time end = i->first;
@@ -435,10 +437,10 @@ InterferenceHelper::CalculateNoiseInterferenceW(Ptr<Event> event,
                                                 const WifiSpectrumBandInfo& band) const
 {
     NS_LOG_FUNCTION(this << band);
-    auto firstPower_it = m_firstPowers.find(band);
+    auto firstPower_it = m_firstPowers.find(band.GetBandId());
     NS_ABORT_IF(firstPower_it == m_firstPowers.end());
     auto noiseInterference = firstPower_it->second;
-    auto niIt = m_niChanges.find(band);
+    auto niIt = m_niChanges.find(band.GetBandId());
     NS_ABORT_IF(niIt == m_niChanges.end());
     const auto now = Simulator::Now();
     auto it = niIt->second.find(event->GetStartTime());
@@ -467,7 +469,7 @@ InterferenceHelper::CalculateNoiseInterferenceW(Ptr<Event> event,
     {
         ;
     }
-    auto& ni = nis[band];
+    auto& ni = nis[band.GetBandId()];
     ni.emplace(event->GetStartTime(), NiChange(Watt_u{0}, event));
     while (++it != niIt->second.end() && it->second.GetEvent() != event)
     {
@@ -483,7 +485,7 @@ Watt_u
 InterferenceHelper::CalculateMuMimoPowerW(Ptr<const Event> event,
                                           const WifiSpectrumBandInfo& band) const
 {
-    auto niIt = m_niChanges.find(band);
+    auto niIt = m_niChanges.find(band.GetBandId());
     NS_ASSERT(niIt != m_niChanges.end());
     auto it = niIt->second.begin();
     ++it;
@@ -569,7 +571,7 @@ InterferenceHelper::CalculatePayloadPer(Ptr<const Event> event,
 {
     NS_LOG_FUNCTION(this << channelWidth << band << staId << window.first << window.second);
     double psr = 1.0; /* Packet Success Rate */
-    const auto& niIt = nis->find(band)->second;
+    const auto& niIt = nis->find(band.GetBandId())->second;
     auto j = niIt.cbegin();
     auto previous = j->first;
     Watt_u muMimoPower{0.0};
@@ -588,8 +590,8 @@ InterferenceHelper::CalculatePayloadPer(Ptr<const Event> event,
     }
     const auto windowStart = phyPayloadStart + window.first;
     const auto windowEnd = phyPayloadStart + window.second;
-    NS_ABORT_IF(!m_firstPowers.contains(band));
-    auto noiseInterference = m_firstPowers.at(band);
+    NS_ABORT_IF(!m_firstPowers.contains(band.GetBandId()));
+    auto noiseInterference = m_firstPowers.at(band.GetBandId());
     auto power = event->GetRxPower(band);
     while (++j != niIt.cend())
     {
@@ -649,7 +651,7 @@ InterferenceHelper::CalculatePhyHeaderSectionPsr(Ptr<const Event> event,
 {
     NS_LOG_FUNCTION(this << band);
     double psr = 1.0; /* Packet Success Rate */
-    auto niIt = nis->find(band)->second;
+    auto niIt = nis->find(band.GetBandId())->second;
     auto j = niIt.begin();
 
     NS_ASSERT(!phyHeaderSections.empty());
@@ -660,8 +662,8 @@ InterferenceHelper::CalculatePhyHeaderSectionPsr(Ptr<const Event> event,
     }
 
     auto previous = j->first;
-    NS_ABORT_IF(!m_firstPowers.contains(band));
-    auto noiseInterference = m_firstPowers.at(band);
+    NS_ABORT_IF(!m_firstPowers.contains(band.GetBandId()));
+    auto noiseInterference = m_firstPowers.at(band.GetBandId());
     const auto power = event->GetRxPower(band);
     while (++j != niIt.end())
     {
@@ -711,7 +713,7 @@ InterferenceHelper::CalculatePhyHeaderPer(Ptr<const Event> event,
                                           WifiPpduField header) const
 {
     NS_LOG_FUNCTION(this << band << header);
-    auto niIt = nis->find(band)->second;
+    auto niIt = nis->find(band.GetBandId())->second;
     auto phyEntity =
         WifiPhy::GetStaticPhyEntity(event->GetPpdu()->GetTxVector().GetModulationClass());
 
@@ -822,7 +824,8 @@ InterferenceHelper::NotifyRxEnd(Time endTime, const FrequencyRange& freqRange)
     // Update m_firstPowers for frame capture
     for (auto niIt = m_niChanges.begin(); niIt != m_niChanges.end(); ++niIt)
     {
-        if (!IsBandInFrequencyRange(niIt->first, freqRange))
+        if (!IsBandInFrequencyRange(WifiSpectrumBandInfo::GetBandInfoFromId(niIt->first),
+                                    freqRange))
         {
             continue;
         }

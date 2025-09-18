@@ -17,6 +17,36 @@
 namespace ns3
 {
 
+std::map<WifiSpectrumBandInfo, WifiSpectrumBandInfoId>
+    WifiSpectrumBandInfo::m_wifiSpectrumBandInfoToIdMap{};
+std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo*>
+    WifiSpectrumBandInfo::m_wifiSpectrumBandIdToInfoMap{};
+
+WifiSpectrumBandInfoId
+WifiSpectrumBandInfo::GetBandId() const
+{
+    if (m_wifiSpectrumBandInfoToIdMap.find(*this) == m_wifiSpectrumBandInfoToIdMap.end())
+    {
+        auto id = m_wifiSpectrumBandInfoToIdMap.size();
+        m_wifiSpectrumBandInfoToIdMap[*this] = id;
+        m_wifiSpectrumBandIdToInfoMap[id] = &m_wifiSpectrumBandInfoToIdMap.rbegin()->first;
+    }
+    return m_wifiSpectrumBandInfoToIdMap.at(*this);
+}
+
+const WifiSpectrumBandInfo&
+WifiSpectrumBandInfo::GetBandInfoFromId(WifiSpectrumBandInfoId id)
+{
+    return *m_wifiSpectrumBandIdToInfoMap.at(id);
+}
+
+void
+WifiSpectrumBandInfo::ClearWifiSpectrumBandInfoToIdMap()
+{
+    m_wifiSpectrumBandIdToInfoMap.clear();
+    m_wifiSpectrumBandInfoToIdMap.clear();
+}
+
 Time
 GetGuardIntervalForMode(WifiMode mode, const Ptr<WifiNetDevice> device)
 {

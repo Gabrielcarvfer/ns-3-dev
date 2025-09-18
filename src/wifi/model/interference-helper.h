@@ -27,7 +27,7 @@ class ErrorRateModel;
 /**
  * A map of the received power for each band
  */
-using RxPowerWattPerChannelBand = std::map<WifiSpectrumBandInfo, Watt_u>;
+using RxPowerWattPerChannelBand = std::map<WifiSpectrumBandInfoId, Watt_u>;
 
 /**
  * @ingroup wifi
@@ -407,12 +407,12 @@ class InterferenceHelper : public Object
     /**
      * Map of NiChanges per band
      */
-    using NiChangesPerBand = std::map<WifiSpectrumBandInfo, NiChanges>;
+    using NiChangesPerBand = std::map<WifiSpectrumBandInfoId, NiChanges>;
 
     /**
      * Map of first power per band
      */
-    using FirstPowerPerBand = std::map<WifiSpectrumBandInfo, Watt_u>;
+    using FirstPowerPerBand = std::map<WifiSpectrumBandInfoId, Watt_u>;
 
     NiChangesPerBand m_niChanges; //!< NI Changes for each band
 

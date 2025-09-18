@@ -92,9 +92,9 @@ class ExtInterferenceHelper : public InterferenceHelper
      */
     bool IsBandTracked(const std::vector<WifiSpectrumBandFrequencies>& startStopFreqs) const
     {
-        for (const auto& [band, nis] : m_niChanges)
+        for (const auto& [bandId, nis] : m_niChanges)
         {
-            if (band.frequencies == startStopFreqs)
+            if (WifiSpectrumBandInfo::GetBandInfoFromId(bandId).frequencies == startStopFreqs)
             {
                 return true;
             }
@@ -563,7 +563,7 @@ SpectrumWifiPhyFilterTest::RxCallback(Ptr<const Packet> p, RxPowerWattPerChannel
 
     MHz_u channelWidth = std::min(m_txChannelWidth, m_rxChannelWidth);
     auto band = m_rxPhy->GetBand(channelWidth, 0);
-    auto it = rxPowersW.find(band);
+    auto it = rxPowersW.find(band.GetBandId());
     NS_LOG_INFO("powerW total band: " << it->second << " (" << WToDbm(it->second) << " dBm)");
     int totalRxPower = static_cast<int>(WToDbm(it->second) + 0.5);
     int expectedTotalRxPower;
@@ -586,7 +586,7 @@ SpectrumWifiPhyFilterTest::RxCallback(Ptr<const Packet> p, RxPowerWattPerChannel
     if ((m_txChannelWidth <= m_rxChannelWidth) && (channelWidth >= MHz_u{20}))
     {
         band = m_rxPhy->GetBand(MHz_u{20}, 0); // primary 20 MHz
-        it = rxPowersW.find(band);
+        it = rxPowersW.find(band.GetBandId());
         NS_LOG_INFO("powerW in primary 20 MHz channel: " << it->second << " (" << WToDbm(it->second)
                                                          << " dBm)");
         const auto rxPowerPrimaryChannel20 = static_cast<int>(WToDbm(it->second) + 0.5);

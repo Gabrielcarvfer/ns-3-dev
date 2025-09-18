@@ -1622,12 +1622,10 @@ WifiPrimaryChannelsTestSuite::WifiPrimaryChannelsTestSuite()
         AddTestCase(new WifiPrimaryChannelsTest(standard, MHz_u{160}, false),
                     TestCase::Duration::TAKES_FOREVER);
     }
-    // TODO: activate WifiPrimaryChannelsTest for 320 MHz channels once PHY operations are optimized
-    // to run faster, otherwise run-time is too long
-    /*AddTestCase(new WifiPrimaryChannelsTest(WIFI_STANDARD_80211be, MHz_u{320}, true),
+    AddTestCase(new WifiPrimaryChannelsTest(WIFI_STANDARD_80211be, MHz_u{320}, true),
                 TestCase::Duration::TAKES_FOREVER);
     AddTestCase(new WifiPrimaryChannelsTest(WIFI_STANDARD_80211be, MHz_u{320}, false),
-                TestCase::Duration::TAKES_FOREVER);*/
+                TestCase::Duration::TAKES_FOREVER);
     AddTestCase(new Wifi20MHzChannelIndicesTest(), TestCase::Duration::QUICK);
 }
 
