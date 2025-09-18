@@ -45,7 +45,7 @@ namespace ns3
 /**
  * A map of the received power for each band
  */
-using RxPowerWattPerChannelBand = std::map<WifiSpectrumBandInfo, Watt_u>;
+using RxPowerWattPerChannelBand = std::map<WifiSpectrumBandInfoId, Watt_u>;
 
 class WifiMpdu;
 class WifiPhy;

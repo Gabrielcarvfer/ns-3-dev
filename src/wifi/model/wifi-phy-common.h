@@ -17,6 +17,7 @@
 
 #include "ns3/fatal-error.h"
 #include "ns3/ptr.h"
+#include "ns3/wifi-export.h"
 
 #include <ostream>
 #include <set>
@@ -46,12 +47,41 @@ class Time;
 using WifiSpectrumBandFrequencies = std::pair<Hz_u, Hz_u>;
 
 /// WifiSpectrumBandInfo structure containing info about a spectrum band
-struct WifiSpectrumBandInfo
+using WifiSpectrumBandInfoId = std::size_t;
+
+class WIFI_EXPORT WifiSpectrumBandInfo
 {
+  public:
+    WifiSpectrumBandInfo() = default;
     std::vector<WifiSpectrumBandIndices>
         indices; //!< the start and stop indices for each segment of the band
     std::vector<WifiSpectrumBandFrequencies>
         frequencies; //!< the start and stop frequencies for each segment of the band
+
+    /**
+     * @brief Retrieve id from band.
+     *
+     * @returns the id from the band
+     */
+    WifiSpectrumBandInfoId GetBandId() const;
+
+    /**
+     * @brief Retrieve band from id.
+     *
+     * @param id Band Id
+     * @returns a reference to the band
+     */
+    static const WifiSpectrumBandInfo& GetBandInfoFromId(WifiSpectrumBandInfoId id);
+
+    /**
+     * @brief Clear spectrumBandInfo to id map (meant for use at ScheduleDestroy).
+     */
+    static void ClearWifiSpectrumBandInfoToIdMap();
+
+  private:
+    static std::map<WifiSpectrumBandInfo, WifiSpectrumBandInfoId> m_wifiSpectrumBandInfoToIdMap;
+    static std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo*>
+        m_wifiSpectrumBandIdToInfoMap;
 };
 
 /// vector of spectrum bands
