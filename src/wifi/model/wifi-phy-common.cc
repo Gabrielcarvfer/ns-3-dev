@@ -17,6 +17,35 @@
 namespace ns3
 {
 
+std::map<WifiSpectrumBandInfo, WifiSpectrumBandInfoId>
+    WifiSpectrumBandInfo::m_wifiSpectrumBandInfoToIdMap{};
+
+WifiSpectrumBandInfoId
+WifiSpectrumBandInfo::GetBandId() const
+{
+    if (m_wifiSpectrumBandInfoToIdMap.find(*this) == m_wifiSpectrumBandInfoToIdMap.end())
+    {
+        m_wifiSpectrumBandInfoToIdMap[*this] = m_wifiSpectrumBandInfoToIdMap.size();
+    }
+    return m_wifiSpectrumBandInfoToIdMap.at(*this);
+}
+
+const WifiSpectrumBandInfo&
+WifiSpectrumBandInfo::GetBandInfoFromId(WifiSpectrumBandInfoId id)
+{
+    auto it = std::find_if(m_wifiSpectrumBandInfoToIdMap.cbegin(),
+                           m_wifiSpectrumBandInfoToIdMap.cend(),
+                           [id](const auto& bandInfo) { return bandInfo.second == id; });
+    NS_ABORT_MSG_IF(it == m_wifiSpectrumBandInfoToIdMap.cend(), "WifiSpectrumBand was expected");
+    return it->first;
+}
+
+void
+WifiSpectrumBandInfo::ClearWifiSpectrumBandInfoToIdMap()
+{
+    m_wifiSpectrumBandInfoToIdMap.clear();
+}
+
 Time
 GetGuardIntervalForMode(WifiMode mode, const Ptr<WifiNetDevice> device)
 {
