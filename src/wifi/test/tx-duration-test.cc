@@ -120,8 +120,8 @@ class TxDurationTest : public TestCase
      *
      * @return true if values correspond, false otherwise
      */
-    static bool CheckMuTxDuration(std::list<uint32_t> sizes,
-                                  std::list<HeMuUserInfo> userInfos,
+    static bool CheckMuTxDuration(const std::list<uint32_t>& sizes,
+                                  const std::list<HeMuUserInfo>& userInfos,
                                   MHz_u channelWidth,
                                   Time guardInterval,
                                   WifiPreamble preamble,
@@ -141,9 +141,9 @@ class TxDurationTest : public TestCase
      *
      * @return the overall Tx duration for the list of sizes (SU or MU PPDU)
      */
-    static Time CalculateTxDurationUsingList(std::list<uint32_t> sizes,
-                                             std::list<uint16_t> staIds,
-                                             WifiTxVector txVector,
+    static Time CalculateTxDurationUsingList(const std::list<uint32_t>& sizes,
+                                             const std::list<uint16_t>& staIds,
+                                             const WifiTxVector& txVector,
                                              WifiPhyBand band);
 };
 
@@ -264,8 +264,8 @@ TxDurationTest::CheckTxDuration(uint32_t size,
 }
 
 bool
-TxDurationTest::CheckMuTxDuration(std::list<uint32_t> sizes,
-                                  std::list<HeMuUserInfo> userInfos,
+TxDurationTest::CheckMuTxDuration(const std::list<uint32_t>& sizes,
+                                  const std::list<HeMuUserInfo>& userInfos,
                                   MHz_u channelWidth,
                                   Time guardInterval,
                                   WifiPreamble preamble,
@@ -357,9 +357,9 @@ TxDurationTest::CheckMuTxDuration(std::list<uint32_t> sizes,
 }
 
 Time
-TxDurationTest::CalculateTxDurationUsingList(std::list<uint32_t> sizes,
-                                             std::list<uint16_t> staIds,
-                                             WifiTxVector txVector,
+TxDurationTest::CalculateTxDurationUsingList(const std::list<uint32_t>& sizes,
+                                             const std::list<uint16_t>& staIds,
+                                             const WifiTxVector& txVector,
                                              WifiPhyBand band)
 {
     NS_ASSERT(sizes.size() == staIds.size());
