@@ -15,6 +15,7 @@
 #include "time-printer.h"
 
 #include <iostream>
+#include <optional>
 #include <stdint.h>
 #include <string>
 #include <type_traits>
@@ -465,6 +466,15 @@ class ParameterLogger
     template <typename T>
     ParameterLogger& operator<<(const std::vector<T>& vector);
 
+    /**
+     * Overload for optional values, to print the stored value (if any).
+     *
+     * @param [in] optValue The optional value
+     * @return This ParameterLogger, so it's chainable.
+     */
+    template <typename T>
+    ParameterLogger& operator<<(const std::optional<T>& optValue);
+
   private:
     /** Add `, ` before every parameter after the first. */
     void CommaRest();
@@ -513,6 +523,21 @@ ParameterLogger::operator<<(const std::vector<T>& vector)
     for (const auto& i : vector)
     {
         *this << i;
+    }
+    return *this;
+}
+
+template <typename T>
+ParameterLogger&
+ParameterLogger::operator<<(const std::optional<T>& optValue)
+{
+    if (optValue.has_value())
+    {
+        *this << optValue.value();
+    }
+    else
+    {
+        *this << "";
     }
     return *this;
 }
