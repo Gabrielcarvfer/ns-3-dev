@@ -8,6 +8,7 @@
 #ifndef THREE_GPP_PROPAGATION_LOSS_MODEL_H
 #define THREE_GPP_PROPAGATION_LOSS_MODEL_H
 
+#include "../../core/model/ptr.h"
 #include "channel-condition-model.h"
 #include "propagation-loss-model.h"
 
@@ -74,6 +75,13 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
      * @return True for low loss, false for high
      */
     bool IsO2iLowPenetrationLoss(Ptr<const ChannelCondition> cond) const;
+
+    /**
+     * @brief Clear cached O2I Building Penetration loss.
+     *        Triggers a recomputation of losses.
+     *        Used for testing.
+     */
+    void ClearO2iLossCacheMap();
 
   private:
     /**
@@ -187,6 +195,20 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
                                              ChannelCondition::LosConditionValue cond) const;
 
     /**
+     * @brief Computes the o2i vehicular penetration loss by looking at m_o2iVehicularUtLossMap.
+     *        The loss is composed by the sum of losses for each UT, if vehicles,
+     *        as implied by their speed (30-120 km/h).
+     *        The loss for each UT is defined in 3GPP TR 38.901 7.4.3.2.
+     *
+     * @param a tx mobility model (used for the key calculation)
+     * @param b rx mobility model (used for the key calculation)
+     * @param cond the O2I channel condition (O2I, O2O)
+     * @return vehicular o2iLoss
+     */
+    double GetO2iVehicularLoss(Ptr<MobilityModel> a,
+                               Ptr<MobilityModel> b,
+                               ChannelCondition::O2iConditionValue cond) const;
+    /**
      * @brief Indicates the condition of the o2i building penetration loss
      *        (defined in 3GPP TR 38.901 7.4.3.1).
      *        The default implementation returns the condition as set
@@ -295,8 +317,9 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     Ptr<ChannelConditionModel> m_channelConditionModel; //!< pointer to the channel condition model
     double m_frequency;                                 //!< operating frequency in Hz
     bool m_shadowingEnabled;                            //!< enable/disable shadowing
-    bool m_enforceRanges;                           //!< strictly enforce TR 38.901 parameter ranges
-    bool m_buildingPenLossesEnabled;                //!< enable/disable building penetration losses
+    bool m_enforceRanges;            //!< strictly enforce TR 38.901 parameter ranges
+    bool m_buildingPenLossesEnabled; //!< enable/disable building penetration losses
+    double m_meanVehicleO2iLoss; //!< normal cars (9dB), cars with metal coated glass panels (20dB)
     Ptr<NormalRandomVariable> m_normRandomVariable; //!< normal random variable
 
     /** Define a struct for the m_shadowingMap entries */
@@ -320,6 +343,10 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     mutable std::unordered_map<uint32_t, O2iLossMapItem>
         m_o2iLossMap; //!< map to store the o2i Loss values
 
+    mutable std::unordered_map<uint32_t, double>
+        m_o2iVehicularUtLossMap; //!< vehicular O2I loss for each individual UT >= km/h, addressed
+                                 //!< by NodeId
+
     Ptr<UniformRandomVariable> m_randomO2iVar1; //!< a uniform random variable for the calculation
                                                 //!< of the indoor loss, see TR38.901 Table 7.4.3-2
     Ptr<UniformRandomVariable> m_randomO2iVar2; //!< a uniform random variable for the calculation
@@ -330,6 +357,10 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     Ptr<NormalRandomVariable>
         m_normalO2iHighLossVar; //!< a normal random variable for the calculation of 02i high loss,
                                 //!< see TR38.901 Table 7.4.3-2
+
+    Ptr<NormalRandomVariable>
+        m_normalO2iVehicularLossVar; //!< a normal random variable for the calculation of
+                                     //!< penetration loss for vehicles see TR38.901 section 7.4.3.2
 };
 
 /**
