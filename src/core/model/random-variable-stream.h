@@ -191,6 +191,7 @@ class RandomVariableStream : public Object
      */
     RngStream* Peek() const;
 
+    bool m_used{false}; //!< Variable indicates whether stream called GetValue once or more times
   private:
     /** Pointer to the underlying RngStream. */
     RngStream* m_rng;
