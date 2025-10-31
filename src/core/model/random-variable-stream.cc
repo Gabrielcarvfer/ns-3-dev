@@ -55,8 +55,10 @@ NS_OBJECT_ENSURE_REGISTERED(RandomVariableStream);
  *  \p void* The RandomVariableStream address
  *  \p string TypeId name
  *  \p string Stack trace (if that is linked in/enabled)
+ *  \p function<bool()> Function that returns true if the stream was used
  */
-std::unordered_map<void*, std::pair<std::string, std::string>> g_automaticStreams;
+std::unordered_map<void*, std::tuple<std::string, std::string, std::function<bool()>>>
+    g_automaticStreams;
 
 TypeId
 RandomVariableStream::GetTypeId()
@@ -136,10 +138,11 @@ RandomVariableStream::SetStream(int64_t stream)
                     << " automatic stream: " << nextStream << ", instantiated in:\n"
                     << std::stacktrace::current());
         g_automaticStreams[this] = {GetInstanceTypeId().GetName(),
-                                    std::to_string(std::stacktrace::current())};
+                                    std::to_string(std::stacktrace::current()),
+                                    [this]() { return m_used; }};
 #else
         NS_LOG_INFO(GetInstanceTypeId().GetName() << " automatic stream: " << nextStream);
-        g_automaticStreams[this] = {GetInstanceTypeId().GetName(), ""};
+        g_automaticStreams[this] = {GetInstanceTypeId().GetName(), "", [this]() { return m_used; }};
 #endif
         m_rng = new RngStream(RngSeedManager::GetSeed(), nextStream, RngSeedManager::GetRun());
     }
@@ -175,13 +178,21 @@ RandomVariableStream::CheckAutomaticStreams()
 {
     if (!g_automaticStreams.empty())
     {
+        std::size_t automaticStreamsCount = 0;
         for (const auto& [rng, data] : g_automaticStreams)
         {
-            const auto& [tidName, stack] = data;
-            std::cout << "Automatic variable stream: " << tidName << ", instantiated in:\n"
-                      << stack << std::endl;
+            const auto& [tidName, stack, getUsedFunc] = data;
+            // If function was statically initialized and was used at least once, then we consider
+            // it.
+            bool staticInitialized = stack.find("call_main") == std::string::npos;
+            if (!staticInitialized || (staticInitialized && getUsedFunc()))
+            {
+                std::cout << "Automatic variable stream: " << tidName << ", instantiated in:\n"
+                          << stack << std::endl;
+                automaticStreamsCount++;
+            }
         }
-        NS_ABORT_MSG("NS_CHECK_AUTOMATIC_STREAMS: " << g_automaticStreams.size()
+        NS_ABORT_MSG("NS_CHECK_AUTOMATIC_STREAMS: " << automaticStreamsCount
                                                     << " automatic variable streams");
     }
     NS_LOG_UNCOND("NS_CHECK_AUTOMATIC_STREAMS: No automatic variable streams");
@@ -238,6 +249,7 @@ UniformRandomVariable::GetMax() const
 double
 UniformRandomVariable::GetValue(double min, double max)
 {
+    m_used = true;
     double v = min + Peek()->RandU01() * (max - min);
     if (IsAntithetic())
     {
@@ -306,6 +318,7 @@ double
 ConstantRandomVariable::GetValue(double constant)
 {
     NS_LOG_DEBUG("value: " << constant << " stream: " << GetStream());
+    m_used = true;
     return constant;
 }
 
@@ -392,6 +405,7 @@ SequentialRandomVariable::GetConsecutive() const
 double
 SequentialRandomVariable::GetValue()
 {
+    m_used = true;
     // Set the current sequence value if it hasn't been set.
     if (!m_isCurrentSet)
     {
@@ -459,6 +473,7 @@ ExponentialRandomVariable::GetBound() const
 double
 ExponentialRandomVariable::GetValue(double mean, double bound)
 {
+    m_used = true;
     while (true)
     {
         // Get a uniform random variable in [0,1].
@@ -556,6 +571,7 @@ ParetoRandomVariable::GetBound() const
 double
 ParetoRandomVariable::GetValue(double scale, double shape, double bound)
 {
+    m_used = true;
     while (true)
     {
         // Get a uniform random variable in [0,1].
@@ -665,6 +681,7 @@ WeibullRandomVariable::GetMean() const
 double
 WeibullRandomVariable::GetValue(double scale, double shape, double bound)
 {
+    m_used = true;
     double exponent = 1.0 / shape;
     while (true)
     {
@@ -774,6 +791,7 @@ NormalRandomVariable::GetBound() const
 double
 NormalRandomVariable::GetValue(double mean, double variance, double bound)
 {
+    m_used = true;
     if (m_nextValid)
     { // use previously generated
         m_nextValid = false;
@@ -904,6 +922,7 @@ LogNormalRandomVariable::GetSigma() const
 double
 LogNormalRandomVariable::GetValue(double mu, double sigma)
 {
+    m_used = true;
     if (m_nextValid)
     { // use previously generated
         m_nextValid = false;
@@ -1027,6 +1046,7 @@ GammaRandomVariable::GetBeta() const
 double
 GammaRandomVariable::GetValue(double alpha, double beta)
 {
+    m_used = true;
     if (alpha < 1)
     {
         double u = Peek()->RandU01();
@@ -1201,6 +1221,7 @@ ErlangRandomVariable::GetLambda() const
 double
 ErlangRandomVariable::GetValue(uint32_t k, double lambda)
 {
+    m_used = true;
     double mean = lambda;
     double bound = 0.0;
 
@@ -1311,6 +1332,7 @@ TriangularRandomVariable::GetMax() const
 double
 TriangularRandomVariable::GetValue(double mean, double min, double max)
 {
+    m_used = true;
     // Calculate the mode.
     double mode = 3.0 * mean - min - max;
 
@@ -1397,6 +1419,7 @@ ZipfRandomVariable::GetAlpha() const
 double
 ZipfRandomVariable::GetValue(uint32_t n, double alpha)
 {
+    m_used = true;
     // Calculate the normalization constant c.
     m_c = 0.0;
     for (uint32_t i = 1; i <= n; i++)
@@ -1477,6 +1500,7 @@ ZetaRandomVariable::GetAlpha() const
 double
 ZetaRandomVariable::GetValue(double alpha)
 {
+    m_used = true;
     m_b = std::pow(2.0, alpha - 1.0);
 
     double u;
@@ -1584,6 +1608,7 @@ DeterministicRandomVariable::SetValueArray(const double* values, std::size_t len
 double
 DeterministicRandomVariable::GetValue()
 {
+    m_used = true;
     // Make sure the array has been set.
     NS_ASSERT(m_count > 0);
 
@@ -1665,6 +1690,7 @@ EmpiricalRandomVariable::PreSample(double& value)
 double
 EmpiricalRandomVariable::GetValue()
 {
+    m_used = true;
     double value;
     if (PreSample(value))
     {
@@ -1832,6 +1858,7 @@ BinomialRandomVariable::BinomialRandomVariable()
 double
 BinomialRandomVariable::GetValue(uint32_t trials, double probability)
 {
+    m_used = true;
     double successes = 0;
 
     for (uint32_t i = 0; i < trials; ++i)
@@ -1894,6 +1921,7 @@ BernoulliRandomVariable::BernoulliRandomVariable()
 double
 BernoulliRandomVariable::GetValue(double probability)
 {
+    m_used = true;
     double v = Peek()->RandU01();
     if (IsAntithetic())
     {
@@ -1979,6 +2007,7 @@ LaplacianRandomVariable::GetValue(double location, double scale, double bound)
 {
     NS_LOG_FUNCTION(this << location << scale << bound);
     NS_ABORT_MSG_IF(scale <= 0, "Scale parameter should be larger than 0");
+    m_used = true;
 
     while (true)
     {
@@ -2075,6 +2104,7 @@ LargestExtremeValueRandomVariable::GetValue(double location, double scale)
 {
     NS_LOG_FUNCTION(this << location << scale);
     NS_ABORT_MSG_IF(scale <= 0, "Scale parameter should be larger than 0");
+    m_used = true;
 
     // Get a uniform random variable in [0,1].
     auto v = Peek()->RandU01();
