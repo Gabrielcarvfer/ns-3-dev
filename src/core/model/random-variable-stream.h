@@ -186,6 +186,12 @@ class RandomVariableStream : public Object
 
   protected:
     /**
+     * @brief Specifies the stream number for the RngStream from m_stream.
+     * If -1, it will be allocated automatically.
+     * If >= 0, it will be used as the stream number.
+     */
+    void InitializeStream();
+    /**
      * @brief Get the pointer to the underlying RngStream.
      * @return The underlying RngStream
      */
