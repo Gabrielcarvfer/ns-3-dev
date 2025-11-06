@@ -26,6 +26,7 @@
 #include <cmath>
 #include <iostream>
 #include <numbers>
+#include <unordered_set>
 
 #ifdef STACKTRACE_LIBRARY_IS_LINKED
 #include <stacktrace>
@@ -65,12 +66,13 @@ RandomVariableStream::GetTypeId()
                             .SetParent<Object>()
                             .SetGroupName("Core")
                             .AddAttribute("Stream",
-                                          "The stream number for this RNG stream. -1 means "
+                                          "The stream number for this RNG stream. -2 means"
+                                          "\"lazily allocate a stream automatically\", -1 means "
                                           "\"allocate a stream automatically\". "
                                           "Note that if -1 is set, Get will return -1 so that it "
                                           "is not possible to know which "
                                           "value was automatically allocated.",
-                                          IntegerValue(-1),
+                                          IntegerValue(-2),
                                           MakeIntegerAccessor(&RandomVariableStream::SetStream,
                                                               &RandomVariableStream::GetStream),
                                           MakeIntegerChecker<int64_t>())
@@ -117,11 +119,27 @@ RandomVariableStream::GetInteger()
 }
 
 void
+RandomVariableStream::InitializeStream()
+{
+    if (!m_used)
+    {
+        SetStream(m_stream);
+        m_used = true;
+    }
+}
+
+void
 RandomVariableStream::SetStream(int64_t stream)
 {
     NS_LOG_FUNCTION(this << stream);
     // negative values are not legal.
-    NS_ASSERT(stream >= -1);
+    NS_ASSERT(stream >= -2);
+    // -2 is a special value that indicates that the stream should be lazily set
+    if (stream == -2)
+    {
+        m_stream = -1;
+        return;
+    }
     delete m_rng;
     if (stream == -1)
     {
@@ -176,21 +194,18 @@ RandomVariableStream::CheckAutomaticStreams()
 {
     if (!g_automaticStreams.empty())
     {
-        std::size_t automaticStreamsCount = 0;
+        std::unordered_set<std::size_t> uniqueStacks;
         for (const auto& [rng, data] : g_automaticStreams)
         {
             const auto& [tidName, stack, getUsedFunc] = data;
-            // If function was statically initialized and was used at least once, then we consider
-            // it.
-            bool staticInitialized = stack.find("call_main") == std::string::npos;
-            if (!staticInitialized || (staticInitialized && getUsedFunc()))
+            if (uniqueStacks.count(std::hash<std::string>{}(stack)) == 0)
             {
                 std::cout << "Automatic variable stream: " << tidName << ", instantiated in:\n"
                           << stack << std::endl;
-                automaticStreamsCount++;
+                uniqueStacks.insert(std::hash<std::string>{}(stack));
             }
         }
-        NS_ABORT_MSG("NS_CHECK_AUTOMATIC_STREAMS: " << automaticStreamsCount
+        NS_ABORT_MSG("NS_CHECK_AUTOMATIC_STREAMS: " << uniqueStacks.size()
                                                     << " automatic variable streams");
     }
     NS_LOG_UNCOND("NS_CHECK_AUTOMATIC_STREAMS: No automatic variable streams");
@@ -247,7 +262,7 @@ UniformRandomVariable::GetMax() const
 double
 UniformRandomVariable::GetValue(double min, double max)
 {
-    m_used = true;
+    InitializeStream();
     double v = min + Peek()->RandU01() * (max - min);
     if (IsAntithetic())
     {
@@ -316,7 +331,7 @@ double
 ConstantRandomVariable::GetValue(double constant)
 {
     NS_LOG_DEBUG("value: " << constant << " stream: " << GetStream());
-    m_used = true;
+    InitializeStream();
     return constant;
 }
 
@@ -403,7 +418,7 @@ SequentialRandomVariable::GetConsecutive() const
 double
 SequentialRandomVariable::GetValue()
 {
-    m_used = true;
+    InitializeStream();
     // Set the current sequence value if it hasn't been set.
     if (!m_isCurrentSet)
     {
@@ -471,7 +486,7 @@ ExponentialRandomVariable::GetBound() const
 double
 ExponentialRandomVariable::GetValue(double mean, double bound)
 {
-    m_used = true;
+    InitializeStream();
     while (true)
     {
         // Get a uniform random variable in [0,1].
@@ -569,7 +584,7 @@ ParetoRandomVariable::GetBound() const
 double
 ParetoRandomVariable::GetValue(double scale, double shape, double bound)
 {
-    m_used = true;
+    InitializeStream();
     while (true)
     {
         // Get a uniform random variable in [0,1].
@@ -679,7 +694,7 @@ WeibullRandomVariable::GetMean() const
 double
 WeibullRandomVariable::GetValue(double scale, double shape, double bound)
 {
-    m_used = true;
+    InitializeStream();
     double exponent = 1.0 / shape;
     while (true)
     {
@@ -789,7 +804,7 @@ NormalRandomVariable::GetBound() const
 double
 NormalRandomVariable::GetValue(double mean, double variance, double bound)
 {
-    m_used = true;
+    InitializeStream();
     if (m_nextValid)
     { // use previously generated
         m_nextValid = false;
@@ -920,7 +935,7 @@ LogNormalRandomVariable::GetSigma() const
 double
 LogNormalRandomVariable::GetValue(double mu, double sigma)
 {
-    m_used = true;
+    InitializeStream();
     if (m_nextValid)
     { // use previously generated
         m_nextValid = false;
@@ -1044,7 +1059,7 @@ GammaRandomVariable::GetBeta() const
 double
 GammaRandomVariable::GetValue(double alpha, double beta)
 {
-    m_used = true;
+    InitializeStream();
     if (alpha < 1)
     {
         double u = Peek()->RandU01();
@@ -1219,7 +1234,7 @@ ErlangRandomVariable::GetLambda() const
 double
 ErlangRandomVariable::GetValue(uint32_t k, double lambda)
 {
-    m_used = true;
+    InitializeStream();
     double mean = lambda;
     double bound = 0.0;
 
@@ -1330,7 +1345,7 @@ TriangularRandomVariable::GetMax() const
 double
 TriangularRandomVariable::GetValue(double mean, double min, double max)
 {
-    m_used = true;
+    InitializeStream();
     // Calculate the mode.
     double mode = 3.0 * mean - min - max;
 
@@ -1417,7 +1432,7 @@ ZipfRandomVariable::GetAlpha() const
 double
 ZipfRandomVariable::GetValue(uint32_t n, double alpha)
 {
-    m_used = true;
+    InitializeStream();
     // Calculate the normalization constant c.
     m_c = 0.0;
     for (uint32_t i = 1; i <= n; i++)
@@ -1498,7 +1513,7 @@ ZetaRandomVariable::GetAlpha() const
 double
 ZetaRandomVariable::GetValue(double alpha)
 {
-    m_used = true;
+    InitializeStream();
     m_b = std::pow(2.0, alpha - 1.0);
 
     double u;
@@ -1606,7 +1621,7 @@ DeterministicRandomVariable::SetValueArray(const double* values, std::size_t len
 double
 DeterministicRandomVariable::GetValue()
 {
-    m_used = true;
+    InitializeStream();
     // Make sure the array has been set.
     NS_ASSERT(m_count > 0);
 
@@ -1688,7 +1703,7 @@ EmpiricalRandomVariable::PreSample(double& value)
 double
 EmpiricalRandomVariable::GetValue()
 {
-    m_used = true;
+    InitializeStream();
     double value;
     if (PreSample(value))
     {
@@ -1856,7 +1871,7 @@ BinomialRandomVariable::BinomialRandomVariable()
 double
 BinomialRandomVariable::GetValue(uint32_t trials, double probability)
 {
-    m_used = true;
+    InitializeStream();
     double successes = 0;
 
     for (uint32_t i = 0; i < trials; ++i)
@@ -1919,7 +1934,7 @@ BernoulliRandomVariable::BernoulliRandomVariable()
 double
 BernoulliRandomVariable::GetValue(double probability)
 {
-    m_used = true;
+    InitializeStream();
     double v = Peek()->RandU01();
     if (IsAntithetic())
     {
@@ -2005,7 +2020,7 @@ LaplacianRandomVariable::GetValue(double location, double scale, double bound)
 {
     NS_LOG_FUNCTION(this << location << scale << bound);
     NS_ABORT_MSG_IF(scale <= 0, "Scale parameter should be larger than 0");
-    m_used = true;
+    InitializeStream();
 
     while (true)
     {
@@ -2102,7 +2117,7 @@ LargestExtremeValueRandomVariable::GetValue(double location, double scale)
 {
     NS_LOG_FUNCTION(this << location << scale);
     NS_ABORT_MSG_IF(scale <= 0, "Scale parameter should be larger than 0");
-    m_used = true;
+    InitializeStream();
 
     // Get a uniform random variable in [0,1].
     auto v = Peek()->RandU01();
