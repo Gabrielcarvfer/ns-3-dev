@@ -235,10 +235,10 @@ class EhtPhy : public HePhy
 
     /**
      * Calculate the rate in bps of the non-HT Reference Rate corresponding
-     * to the supplied HE MCS index. This function calls CalculateNonHtReferenceRate
+     * to the supplied EHT MCS index. This function calls CalculateNonHtReferenceRate
      * and is used as a callback for WifiMode operation.
      *
-     * @param mcsValue the HE MCS index
+     * @param mcsValue the EHT MCS index
      * @return the rate in bps of the non-HT Reference Rate.
      */
     static uint64_t GetNonHtReferenceRate(uint8_t mcsValue);
@@ -280,7 +280,7 @@ class EhtPhy : public HePhy
      *
      * To convert an HE MCS to its corresponding non-HT Reference Rate
      * use the modulation and coding rate of the HT MCS
-     * and lookup in Table 10-10 of IEEE P802.11ax/D6.0.
+     * and lookup in Table 10-10 of IEEE 802.11be-2024.
      */
     static uint64_t CalculateNonHtReferenceRate(WifiCodeRate codeRate, uint16_t constellationSize);
 
