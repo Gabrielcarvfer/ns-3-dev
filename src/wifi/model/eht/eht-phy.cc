@@ -353,7 +353,7 @@ EhtPhy::GetPhyRate(uint8_t mcsValue, MHz_u channelWidth, Time guardInterval, uin
 {
     const auto codeRate = GetCodeRate(mcsValue);
     const auto dataRate = GetDataRate(mcsValue, channelWidth, guardInterval, nss);
-    return HtPhy::CalculatePhyRate(codeRate, dataRate);
+    return HePhy::CalculatePhyRate(codeRate, dataRate);
 }
 
 uint64_t
