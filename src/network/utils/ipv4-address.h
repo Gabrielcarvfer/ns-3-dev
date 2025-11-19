@@ -251,6 +251,10 @@ class Ipv4Address
  * Ipv4Mask ("255.255.255.255"), Ipv4Mask ("/32"), and Ipv4Mask (0xffffffff)
  * are all equivalent.
  *
+ * A mask must have all the 1 bits contiguous, i.e., "255.255.0.255" is not
+ * valid, in accordance with \RFC{4632}. Note that in \RFC{950} a non-contiguous
+ * mask was not forbidden, but discouraged. Nowadays it's forbidden.
+ *
  * @see attribute_Ipv4Mask
  */
 class Ipv4Mask
@@ -325,6 +329,15 @@ class Ipv4Mask
     constexpr std::strong_ordering operator<=>(const Ipv4Mask& a) const = default;
 
   private:
+    /**
+     * @brief Checks if the mask is valid, i.e., if it's in the form n-1 + m-0.
+     *
+     * This function is used in the constructors, to prevent misuse.
+     *
+     * @returns true if the mask is valid
+     */
+    constexpr bool IsValid() const;
+
     uint32_t m_mask{0}; //!< IP mask
 };
 
