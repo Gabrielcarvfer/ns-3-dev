@@ -47,7 +47,7 @@ class Time;
 using WifiSpectrumBandFrequencies = std::pair<Hz_u, Hz_u>;
 
 /// WifiSpectrumBandInfo structure containing info about a spectrum band
-using WifiSpectrumBandInfoId = std::size_t;
+using WifiSpectrumBandInfoId = uint64_t;
 
 class WIFI_EXPORT WifiSpectrumBandInfo
 {
@@ -79,8 +79,7 @@ class WIFI_EXPORT WifiSpectrumBandInfo
     static void ClearWifiSpectrumBandInfoToIdMap();
 
   private:
-    static std::map<WifiSpectrumBandInfo, WifiSpectrumBandInfoId> m_wifiSpectrumBandInfoToIdMap;
-    static std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo*>
+    static std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo>
         m_wifiSpectrumBandIdToInfoMap;
 };
 

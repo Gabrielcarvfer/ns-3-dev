@@ -17,34 +17,41 @@
 namespace ns3
 {
 
-std::map<WifiSpectrumBandInfo, WifiSpectrumBandInfoId>
-    WifiSpectrumBandInfo::m_wifiSpectrumBandInfoToIdMap{};
-std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo*>
+std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo>
     WifiSpectrumBandInfo::m_wifiSpectrumBandIdToInfoMap{};
 
 WifiSpectrumBandInfoId
 WifiSpectrumBandInfo::GetBandId() const
 {
-    if (m_wifiSpectrumBandInfoToIdMap.find(*this) == m_wifiSpectrumBandInfoToIdMap.end())
+    uint64_t bandId = 0;
+    for (auto& freqPair: frequencies)
     {
-        auto id = m_wifiSpectrumBandInfoToIdMap.size();
-        m_wifiSpectrumBandInfoToIdMap[*this] = id;
-        m_wifiSpectrumBandIdToInfoMap[id] = &m_wifiSpectrumBandInfoToIdMap.rbegin()->first;
+        union
+        {
+            uint64_t integer;
+            float real[2];
+        } temp;
+        temp.real[0] = freqPair.first;
+        temp.real[1] = freqPair.second;
+        bandId ^= temp.integer;
     }
-    return m_wifiSpectrumBandInfoToIdMap.at(*this);
+    if (m_wifiSpectrumBandIdToInfoMap.find(bandId) == m_wifiSpectrumBandIdToInfoMap.end())
+    {
+        m_wifiSpectrumBandIdToInfoMap.insert(std::make_pair(bandId,*this));
+    }
+    return bandId;
 }
 
 const WifiSpectrumBandInfo&
 WifiSpectrumBandInfo::GetBandInfoFromId(WifiSpectrumBandInfoId id)
 {
-    return *m_wifiSpectrumBandIdToInfoMap.at(id);
+    return m_wifiSpectrumBandIdToInfoMap.at(id);
 }
 
 void
 WifiSpectrumBandInfo::ClearWifiSpectrumBandInfoToIdMap()
 {
     m_wifiSpectrumBandIdToInfoMap.clear();
-    m_wifiSpectrumBandInfoToIdMap.clear();
 }
 
 Time
