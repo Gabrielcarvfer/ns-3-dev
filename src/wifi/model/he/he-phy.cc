@@ -756,7 +756,7 @@ HePhy::IsConfigSupported(Ptr<const WifiPpdu> ppdu) const
     if (txVector.IsDlMu())
     {
         NS_ASSERT(txVector.GetModulationClass() >= WIFI_MOD_CLASS_HE);
-        for (auto info : txVector.GetHeMuUserInfoMap())
+        for (const auto& info : txVector.GetHeMuUserInfoMap())
         {
             if (info.first == staId)
             {
