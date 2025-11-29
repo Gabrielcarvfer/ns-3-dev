@@ -71,16 +71,10 @@ class WIFI_EXPORT WifiSpectrumBandInfo
      * @param id Band Id
      * @returns a reference to the band
      */
-    static const WifiSpectrumBandInfo& GetBandInfoFromId(WifiSpectrumBandInfoId id);
-
-    /**
-     * @brief Clear spectrumBandInfo to id map (meant for use at ScheduleDestroy).
-     */
-    static void ClearWifiSpectrumBandInfoToIdMap();
-
+    static const WifiSpectrumBandInfo GetBandInfoFromId(WifiSpectrumBandInfoId id);
+    static void SetRxSpectrumModel(Ptr<const SpectrumModel> rxSpectrumModel);
   private:
-    static std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo>
-        m_wifiSpectrumBandIdToInfoMap;
+    static Ptr<const SpectrumModel> m_rxSpectrumModel; ///< Spectrum model mapping indices int frequencies
 };
 
 /// vector of spectrum bands

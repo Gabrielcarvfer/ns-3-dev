@@ -7,6 +7,7 @@
  */
 
 #include "wifi-spectrum-phy-interface.h"
+#include "wifi-phy-common.h"
 
 #include "ns3/log.h"
 #include "ns3/mobility-model.h"
@@ -115,6 +116,7 @@ WifiSpectrumPhyInterface::SetRxSpectrumModel(const std::vector<MHz_u>& centerFre
                                                                   channelWidth,
                                                                   bandBandwidth,
                                                                   guardBandwidth);
+    WifiSpectrumBandInfo::SetRxSpectrumModel(m_rxSpectrumModel);
 }
 
 Ptr<SpectrumChannel>

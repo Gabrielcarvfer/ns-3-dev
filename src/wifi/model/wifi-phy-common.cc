@@ -16,43 +16,69 @@
 
 namespace ns3
 {
-
-std::unordered_map<WifiSpectrumBandInfoId, const WifiSpectrumBandInfo>
-    WifiSpectrumBandInfo::m_wifiSpectrumBandIdToInfoMap{};
+Ptr<const SpectrumModel> WifiSpectrumBandInfo::m_rxSpectrumModel = nullptr;
 
 WifiSpectrumBandInfoId
 WifiSpectrumBandInfo::GetBandId() const
 {
-    uint64_t bandId = 0;
-    for (auto& freqPair: frequencies)
+    // According to Stefano, current wifi standard only has up to two sub-bands per band,
+    // for 80MHz+80MHz if I understood it correctly. Based on 320MHz, we had 12k something bands
+    // in spectrum model. Which is less than 64k that we can hold in 16 bits.
+    // Which means we can easily store the 4 sub-band indices in 64 bits,
+    // avoiding duplicating frequencies plus indices (4*32 bits + 4*64 bits).
+    // We retrieve frequencies later from spectrum model with indices.
+    union
     {
-        union
-        {
-            uint64_t integer;
-            float real[2];
-        } temp;
-        temp.real[0] = freqPair.first;
-        temp.real[1] = freqPair.second;
-        bandId ^= temp.integer;
-    }
-    if (m_wifiSpectrumBandIdToInfoMap.find(bandId) == m_wifiSpectrumBandIdToInfoMap.end())
+        uint64_t bandId;
+        uint16_t indices[4];
+    } temp;
+    temp.bandId = 0;
+    uint8_t offset = 0;
+    for (auto& indicesPair: indices)
     {
-        m_wifiSpectrumBandIdToInfoMap.insert(std::make_pair(bandId,*this));
+        temp.indices[offset] = indicesPair.first;
+        temp.indices[offset+1] = indicesPair.second;
+        offset+=2;
     }
-    return bandId;
+    return temp.bandId;
 }
 
-const WifiSpectrumBandInfo&
+const WifiSpectrumBandInfo
 WifiSpectrumBandInfo::GetBandInfoFromId(WifiSpectrumBandInfoId id)
 {
-    return m_wifiSpectrumBandIdToInfoMap.at(id);
+    NS_ASSERT_MSG(m_rxSpectrumModel, "Expected valid spectrum model");
+    union
+    {
+        uint64_t bandId;
+        uint16_t indices[4];
+    } temp;
+    temp.bandId = id;
+    WifiSpectrumBandInfo tempInfo;
+    double frequencies[4]{};
+    // Retrieve frequencies for bands
+    for(uint8_t i = 0; i < 4; i++)
+    {
+        frequencies[i] = (m_rxSpectrumModel->Begin()+temp.indices[i])->fc;
+    }
+
+    // Reassemble WifiSpectrumBandInfo
+    tempInfo.indices.push_back({temp.indices[0], temp.indices[1]});
+    tempInfo.frequencies.push_back({frequencies[0], frequencies[1]});
+    if (temp.indices[2] != temp.indices[3])
+    {
+        tempInfo.indices.push_back({temp.indices[2], temp.indices[3]});
+        tempInfo.frequencies.push_back({frequencies[2], frequencies[3]});
+    }
+    return tempInfo;
 }
 
 void
-WifiSpectrumBandInfo::ClearWifiSpectrumBandInfoToIdMap()
+WifiSpectrumBandInfo::SetRxSpectrumModel(Ptr<const SpectrumModel> rxSpectrumModel)
 {
-    m_wifiSpectrumBandIdToInfoMap.clear();
+    NS_ASSERT_MSG(rxSpectrumModel, "Expected valid spectrum model");
+    WifiSpectrumBandInfo::m_rxSpectrumModel = rxSpectrumModel;
 }
+
 
 Time
 GetGuardIntervalForMode(WifiMode mode, const Ptr<WifiNetDevice> device)

@@ -162,7 +162,6 @@ InterferenceHelper::InterferenceHelper()
       m_numRxAntennas(1)
 {
     NS_LOG_FUNCTION(this);
-    Simulator::ScheduleDestroy(&WifiSpectrumBandInfo::ClearWifiSpectrumBandInfoToIdMap);
 }
 
 InterferenceHelper::~InterferenceHelper()
