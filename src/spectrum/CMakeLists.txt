@@ -82,6 +82,53 @@ set(header_files
     model/wraparound-model.h
     utils/spectrum-test.h
 )
+check_deps(
+  sionna_deps
+  PYTHON_PACKAGES
+  sionna.rt # Requires patches to compute HOSVD for a complex tensor. Use
+  # pip install git+https://gitlab.com/cttc-lena/pyttb
+  pybind11
+)
+if(NOT
+   ("${sionna_deps}"
+    STREQUAL
+    "")
+   OR WIN32
+)
+  message(
+    STATUS
+      "Building sionna RT module with pybind11 support"
+  )
+else()
+  set(PYBIND11_FINDPYTHON
+      ON
+  )
+  disable_cmake_warnings()
+  find_package(
+    pybind11
+    REQUIRED
+  )
+  enable_cmake_warnings()
+  link_libraries(
+    pybind11::headers
+    pybind11::embed
+    ${CMAKE_DL_LIBS}
+  )
+  list(
+    APPEND
+    source_files
+    model/sionna-rt-channel-model.cc
+    model/sionna-rt-spectrum-propagation-loss-model.cc
+  )
+  list(
+    APPEND
+    header_files
+    model/sionna-rt-channel-model.h
+    model/sionna-rt-spectrum-propagation-loss-model.h
+  )
+  add_compile_definitions(SIONNA_RT=1)
+endif()
+
 
 build_lib(
   LIBNAME spectrum
