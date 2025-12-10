@@ -99,6 +99,12 @@ if(NOT
 )
   message(STATUS "Sionna supports requires extra dependencies: ${sionna_deps}")
 else()
+  set(sionna_deps
+      ${sionna_deps}
+      CACHE STRING
+            ""
+            FORCE
+  )
   set(PYBIND11_FINDPYTHON
       ON
   )
