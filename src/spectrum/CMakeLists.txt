@@ -82,12 +82,14 @@ set(header_files
     model/wraparound-model.h
     utils/spectrum-test.h
 )
+
 check_deps(
   sionna_deps
   PYTHON_PACKAGES
-  sionna.rt # Requires patches to compute HOSVD for a complex tensor. Use
-  # pip install git+https://gitlab.com/cttc-lena/pyttb
-  pybind11
+  cppyy # Not actually required by Sionna, but required to enable python
+        # bindings/dependencies search in current venv
+  sionna.rt # Main sionna package
+  pybind11 # Dependency to call sionna from c++
 )
 if(NOT
    ("${sionna_deps}"
@@ -95,10 +97,7 @@ if(NOT
     "")
    OR WIN32
 )
-  message(
-    STATUS
-      "Building sionna RT module with pybind11 support"
-  )
+  message(STATUS "Sionna supports requires extra dependencies: ${sionna_deps}")
 else()
   set(PYBIND11_FINDPYTHON
       ON
@@ -128,7 +127,6 @@ else()
   )
   add_compile_definitions(SIONNA_RT=1)
 endif()
-
 
 build_lib(
   LIBNAME spectrum
