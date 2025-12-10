@@ -34,12 +34,26 @@ function(check_deps missing_deps)
   endforeach()
 
   foreach(package ${DEPS_PYTHON_PACKAGES})
+    if(NOT (DEFINED ENV{LD_LIBRARY_PATH}))
+      set(LD_LIBRARY_PATH)
+    endif()
     execute_process(
       COMMAND ${Python3_EXECUTABLE} -c "import ${package}"
-      RESULT_VARIABLE return_code OUTPUT_QUIET ERROR_QUIET
+      RESULT_VARIABLE return_code
+      OUTPUT_VARIABLE py_stdouterr
+      ERROR_VARIABLE py_stdouterr
     )
-    if(NOT (${return_code} EQUAL 0))
+    string(TOLOWER "${py_stdouterr}" py_stdouterr_lower)
+
+    if(NOT (${return_code} EQUAL 0) OR ("${py_stdouterr_lower}" MATCHES
+                                        "(error|exception)[: ]")
+    )
       list(APPEND local_missing_deps ${package})
+      if(${NS3_VERBOSE})
+        message(
+          WARNING "check_deps: ${package} checking returned: ${py_stdouterr}"
+        )
+      endif()
     else()
       # To make sure CMake import files can be found from venv site packages, we
       # manually add them to CMAKE_PREFIX_PATH
