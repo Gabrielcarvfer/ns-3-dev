@@ -146,6 +146,17 @@ DoBeamforming(Ptr<NetDevice> thisDevice,
 }
 
 /**
+ * Print the python executable and version
+ */
+static void
+PrintPythonExecutable()
+{
+    py::object sys = py::module_::import("sys");
+    py::print("Python executable:", sys.attr("executable"));
+    py::print("Python version:", sys.attr("version"));
+}
+
+/**
  * Compute the average SNR
  * @param params A structure that holds the parameters that are needed to perform calculations in
  * ComputeSnr
@@ -200,6 +211,9 @@ int
 main(int argc, char* argv[])
 {
     py::scoped_interpreter guard{}; // Python stays alive for whole program
+
+    // to check the python executable and version
+    PrintPythonExecutable();
 
     double frequency = 30e9;  // operating frequency in Hz (corresponds to EARFCN 2100)
     double txPow = 49.0;      // tx power in dBm
