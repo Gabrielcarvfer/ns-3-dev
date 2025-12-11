@@ -229,7 +229,7 @@ main(int argc, char* argv[])
     bool enableGnbDualPolarized = true; // enable dual-polarized elements at gNB
     bool enableUeDualPolarized = true;  // enable dual-polarized elements at UE
 
-    bool IsImageRenderedEnabled = true;                // enable rendering of scene images to file
+    bool IsImageRenderedEnabled = false;               // enable rendering of scene images to file
     Vector CameraPosition(Vector(70.0, -20.0, 190.0)); // Camera position
     Vector CameraLookAt(Vector(0.0, 0.0, 4.0));        // Camera look-at point
     std::string filename = "sionna-rt-scene3-";        // output file name for scene images
