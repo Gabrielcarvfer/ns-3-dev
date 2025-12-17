@@ -579,7 +579,7 @@ class ApWifiMac : public WifiMac
      */
     void ProcessPowerManagementFlag(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
     /**
-     * Perform the necessary actions when a given station switches from active mode
+     * Perform the necessary actions when a given station that is in active mode switches
      * to powersave mode.
      *
      * @param staAddr the MAC address of the given station
@@ -587,8 +587,8 @@ class ApWifiMac : public WifiMac
      */
     void StaSwitchingToPsMode(const Mac48Address& staAddr, uint8_t linkId);
     /**
-     * Perform the necessary actions when a given station deassociates or switches
-     * from powersave mode to active mode.
+     * Perform the necessary actions when a given station that is in powersave mode deassociates
+     * or switches to active mode.
      *
      * @param staAddr the MAC address of the given station
      * @param linkId the ID of the link on which the given station is operating

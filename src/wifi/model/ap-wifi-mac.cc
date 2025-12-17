@@ -2333,11 +2333,18 @@ ApWifiMac::StaSwitchingToPsMode(const Mac48Address& staAddr, uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << staAddr << linkId);
 
-    GetWifiRemoteStationManager(linkId)->SetPsMode(staAddr, true);
+    auto rsm = GetWifiRemoteStationManager(linkId);
+    if (rsm->IsInPsMode(staAddr))
+    {
+        NS_LOG_DEBUG(staAddr << " is already in PS mode, nothing to do");
+        return;
+    }
+
+    rsm->SetPsMode(staAddr, true);
 
     // Block frames addressed to the STA in PS mode
     NS_LOG_DEBUG("Block destination " << staAddr << " on link " << +linkId);
-    auto staMldAddr = GetWifiRemoteStationManager(linkId)->GetMldAddress(staAddr).value_or(staAddr);
+    auto staMldAddr = rsm->GetMldAddress(staAddr).value_or(staAddr);
     BlockUnicastTxOnLinks(WifiQueueBlockedReason::POWER_SAVE_MODE, staMldAddr, {linkId});
 
     if (GetLink(linkId).nStationsInPsMode++ == 0)
@@ -2361,6 +2368,12 @@ void
 ApWifiMac::StaSwitchingToActiveModeOrDeassociated(const Mac48Address& staAddr, uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << staAddr << linkId);
+
+    if (!GetWifiRemoteStationManager(linkId)->IsInPsMode(staAddr))
+    {
+        NS_LOG_DEBUG(staAddr << " is already in active mode, nothing to do");
+        return;
+    }
 
     GetWifiRemoteStationManager(linkId)->SetPsMode(staAddr, false);
 

@@ -42,6 +42,7 @@ been tested on Linux. As of this release, the latest known version to work with 
 - (tcp) #1319 TCP CongestionStateSet() was not being called upon entering or leaving CA_CWR state
 - (wifi) APs unblock transmissions to stations that are in power save mode when they disassociate, otherwise they will not be able to associate again
 - (wifi) APs record disassociation on all links setup with a non-AP MLD
+- (wifi) Prevent AP's counter of STAs in PS mode from being updated incorrectly
 
 ## Release 3.47
 
