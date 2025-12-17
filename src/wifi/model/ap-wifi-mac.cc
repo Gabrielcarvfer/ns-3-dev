@@ -2393,6 +2393,12 @@ ApWifiMac::StaSwitchingToActiveModeOrDeassociated(const Mac48Address& staAddr, u
     }
 }
 
+std::size_t
+ApWifiMac::GetNStationsInPsMode(linkId_t linkId) const
+{
+    return GetLink(linkId).nStationsInPsMode;
+}
+
 std::optional<uint8_t>
 ApWifiMac::IsAssociated(const Mac48Address& address) const
 {

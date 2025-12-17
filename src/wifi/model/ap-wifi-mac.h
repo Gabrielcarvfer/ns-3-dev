@@ -148,6 +148,14 @@ class ApWifiMac : public WifiMac
     std::optional<Mac48Address> GetMldOrLinkAddressByAid(uint16_t aid) const;
 
     /**
+     * Get the number of STAs associated on the given link that are in PowerSave mode.
+     *
+     * @param linkId the ID of the given link
+     * @return the number of STAs associated on the given link that are in PowerSave mode
+     */
+    std::size_t GetNStationsInPsMode(linkId_t linkId) const;
+
+    /**
      * Check whether the AP MLD has buffered (QoS) data frame(s) for the given destination
      * because non-AP STAs operating on links where those (QoS) data frames could be transmitted
      * are in powersave mode. If a link ID is defined, it must be possible for the returned buffered

@@ -110,6 +110,12 @@ class WifiStaticSetupHelper
                                             Ptr<ApWifiMac> apMac,
                                             linkId_t apLinkId);
 
+    /// Align the knowledge that the AP has about the PM mode of the STAs affiliated with the
+    /// client device to their actual PM modes.
+    /// @param apMac the AP MAC
+    /// @param clientMac the client MAC
+    static void AlignApViewOfStaPmMode(Ptr<ApWifiMac> apMac, Ptr<StaWifiMac> clientMac);
+
     /// Bypass ADDBA Request-Response exchange sequence between AP and STAs for given TIDs.
     /// Static setup will be performed in both uplink and downlink.
     /// @param apDev AP device

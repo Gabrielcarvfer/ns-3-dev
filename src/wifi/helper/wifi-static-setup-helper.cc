@@ -160,6 +160,17 @@ WifiStaticSetupHelper::SetStaticAssocPostInit(Ptr<ApWifiMac> apMac, Ptr<StaWifiM
 
     NS_LOG_DEBUG("Assoc success AP addr=" << apMldAddr << ", STA addr=" << clientMldAddr);
 
+    // Note that the call above to StaWifiMac::ReceiveAssocResp() triggers a call to
+    // StaWifiMac::SetPmModeAfterAssociation(), which sets a callback to intercept the Ack sent in
+    // response to the AssocResp and, at the end of the Ack transmission, schedule the transmission
+    // of Data Null frames to notify the AP about the power management mode each STA has to switch
+    // to based on the value of the StaLinkEntity::pmMode field (which defaults to WIFI_PM_ACTIVE
+    // and can be set via the PowerSaveMode attribute of the PowerSaveManager). When using the
+    // static setup helper, however, no AssocResp is sent, hence no Ack is sent and the transmission
+    // of Data Null frames is not scheduled. Therefore, we need to make the AP aware of the PM mode
+    // of the STAs affiliated with the client device without actually sending Data Null frames.
+    AlignApViewOfStaPmMode(apMac, clientMac);
+
     if (isMldAssoc)
     {
         // Update TID-to-Link Mapping in MAC queues
@@ -279,6 +290,23 @@ WifiStaticSetupHelper::GetAssocReq(Ptr<StaWifiMac> clientMac, linkId_t linkId, b
     }
 
     return assocReq;
+}
+
+void
+WifiStaticSetupHelper::AlignApViewOfStaPmMode(Ptr<ApWifiMac> apMac, Ptr<StaWifiMac> clientMac)
+{
+    const auto setupLinks = clientMac->GetSetupLinkIds();
+    for (const auto linkId : setupLinks)
+    {
+        if (clientMac->GetPmMode(linkId) == WIFI_PM_ACTIVE)
+        {
+            apMac->StaSwitchingToActiveModeOrDeassociated(clientMac->GetAddress(), linkId);
+        }
+        else
+        {
+            apMac->StaSwitchingToPsMode(clientMac->GetAddress(), linkId);
+        }
+    }
 }
 
 void
