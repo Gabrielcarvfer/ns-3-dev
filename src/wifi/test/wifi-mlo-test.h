@@ -352,6 +352,13 @@ class MultiLinkOperationsTestBase : public TestCase
  * switch PHY band (if any). The links that are expected to be setup are also provided as input
  * parameters. This test verifies that the management frames exchanged during ML discovery
  * and ML setup contain the expected values and that the two MLDs setup the expected links.
+ * Also, it is verified that, when the AP MLD receives the Ack following the Association Response:
+ * (i) the AP MLD considers the STA affiliated with the non-AP MLD and operating on the link used
+ * for association as in active mode and the other STAs affiliated with the non-AP MLD as in
+ * PowerSave mode; (ii) the STA affiliated with the non-AP MLD and operating on the link used for
+ * association is in active mode, while the other STAs affiliated with the non-AP MLD are switching
+ * to active mode, as they were in PowerSave mode and scheduled the transmission of a Data Null
+ * frame to switch to active mode.
  *
  * The negotiated TID-to-link mapping is tested by verifying that generated QoS data frames of
  * a given TID are transmitted on links which the TID is mapped to. Specifically, the following
@@ -409,6 +416,20 @@ class MultiLinkSetupTest : public MultiLinkOperationsTestBase
      * Check correctness of Multi-Link Setup procedure.
      */
     void CheckMlSetup();
+
+    /**
+     * This function is connected to the ApWifiMac's AssociatedSta trace source and checks that:
+     * (i) the AP MLD considers the STA affiliated with the non-AP MLD and operating on the link
+     * used for association as in active mode and the other STAs affiliated with the non-AP MLD as
+     * in PowerSave mode; (ii) the STA affiliated with the non-AP MLD and operating on the link used
+     * for association is in active mode, while the other STAs affiliated with the non-AP MLD are
+     * switching to active mode, as they were in PowerSave mode and scheduled the transmission of a
+     * Data Null frame to switch to active mode.
+     *
+     * @param aid the AID assigned to the associated STA
+     * @param staAddr the MAC link address of the associated STA
+     */
+    void CheckPmMode(uint16_t aid, Mac48Address staAddr);
 
     /**
      * Check that links that are not setup on the non-AP MLD are disabled. Also, on the AP side,
@@ -486,6 +507,7 @@ class MultiLinkSetupTest : public MultiLinkOperationsTestBase
     std::vector<std::size_t>
         m_qosFrames2;       //!< indices of QoS frames of the optional set in the vector of TX PSDUs
     bool m_support160MHzOp; //!< whether non-AP MLDs support 160 MHz operations
+    bool m_assocCompleted;  //!< whether non-AP MLD has completed association
 };
 
 /**

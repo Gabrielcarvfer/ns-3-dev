@@ -847,7 +847,8 @@ MultiLinkSetupTest::MultiLinkSetupTest(const BaseParams& baseParams,
       m_apNegSupport(apNegSupport),
       m_dlTidLinkMappingStr(dlTidToLinkMapping),
       m_ulTidLinkMappingStr(ulTidToLinkMapping),
-      m_support160MHzOp(support160MHzOp)
+      m_support160MHzOp(support160MHzOp),
+      m_assocCompleted(false)
 {
     NS_TEST_ASSERT_MSG_EQ(m_setupLinks.size(),
                           m_staSetupLinks.size(),
@@ -965,6 +966,9 @@ MultiLinkSetupTest::DoSetup()
             staMac->GetWifiPhy(linkId++)->SetAttribute("ChannelSettings", StringValue(str));
         }
     }
+
+    m_apMac->TraceConnectWithoutContext("AssociatedSta",
+                                        MakeCallback(&MultiLinkSetupTest::CheckPmMode, this));
 }
 
 void
@@ -1560,6 +1564,31 @@ MultiLinkSetupTest::CheckMlSetup()
     checkStoredMapping(m_apMac, m_staMacs[0], WifiDirection::UPLINK, storedMapping);
     checkStoredMapping(m_staMacs[0], m_apMac, WifiDirection::DOWNLINK, storedMapping);
     checkStoredMapping(m_staMacs[0], m_apMac, WifiDirection::UPLINK, storedMapping);
+}
+
+void
+MultiLinkSetupTest::CheckPmMode(uint16_t aid, Mac48Address staAddr)
+{
+    // this callback is fired for every STA affiliated with the non-AP MLD that has completed
+    // association; the first STA is the one operating on the link used for association.
+    // Checks are scheduled now because this callback is fired by the AP before setting the PM mode.
+    Simulator::ScheduleNow([=, this, isAssocLink = !m_assocCompleted] {
+        // AP MLD side
+        const auto apLinkId = m_apMac->IsAssociated(staAddr);
+        NS_TEST_ASSERT_MSG_EQ(apLinkId.has_value(), true, staAddr << " is not associated");
+        NS_TEST_EXPECT_MSG_EQ(m_apMac->GetWifiRemoteStationManager(*apLinkId)->IsInPsMode(staAddr),
+                              !isAssocLink,
+                              "Unexpected PM mode for " << staAddr << " (AP MLD side)");
+        // non-AP MLD side
+        const auto staLinkId = m_staMacs[0]->GetLinkIdByAddress(staAddr);
+        NS_TEST_ASSERT_MSG_EQ(staLinkId.has_value(),
+                              true,
+                              staAddr << " is not a link address of the non-AP MLD");
+        NS_TEST_EXPECT_MSG_EQ(m_staMacs[0]->GetPmMode(*staLinkId),
+                              (isAssocLink ? WIFI_PM_ACTIVE : WIFI_PM_SWITCHING_TO_ACTIVE),
+                              "Unexpected PM mode for " << staAddr << " (non-AP MLD side)");
+    });
+    m_assocCompleted = true;
 }
 
 void
