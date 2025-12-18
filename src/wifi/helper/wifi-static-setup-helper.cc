@@ -523,6 +523,16 @@ WifiStaticSetupHelper::SetStaticEmlsrPostInit(Ptr<WifiNetDevice> apDev,
         return;
     }
 
+    // The call below to EmlsrManager::ChangeEmlsrMode() triggers a call to
+    // StaWifiMac::NotifyEmlsrModeChanged(), which switches all STAs operating on an EMLSR link to
+    // the active mode, thus possibly overriding settings configured via the PowerSave manager and
+    // already applied after ML setup. Save the current settings so that they can be restored later
+    std::map<linkId_t, WifiPowerManagementMode> pmModes;
+    for (const auto linkId : setupLinks)
+    {
+        pmModes[linkId] = clientMac->GetPmMode(linkId);
+    }
+
     auto emlsrManager = clientMac->GetEmlsrManager();
     NS_ASSERT_MSG(emlsrManager, "EMLSR Manager not set");
     emlsrManager->ComputeOperatingChannels();
@@ -534,6 +544,17 @@ WifiStaticSetupHelper::SetStaticEmlsrPostInit(Ptr<WifiNetDevice> apDev,
     NS_ASSERT_MSG(apMac, "Expected ApWifiMac");
     apMac->ReceiveEmlOmn(emlOmnReq, clientLinkAddr, emlsrLinkId);
     apMac->EmlOmnExchangeCompleted(emlOmnReq, clientLinkAddr, emlsrLinkId);
+
+    // restore PM modes for STAs affiliated with the client device
+    for (const auto& [linkId, pmMode] : pmModes)
+    {
+        clientMac->GetLink(linkId).pmMode = pmMode;
+    }
+
+    // ApWifiMac::EmlOmnExchangeCompleted() (called above) causes the AP to consider all STAs
+    // affiliated with the client device and operating on an EMLSR link as in active mode, thus
+    // possibly overriding settings applied after ML setup. Align the views of the PM modes again
+    AlignApViewOfStaPmMode(apMac, clientMac);
 }
 
 void
