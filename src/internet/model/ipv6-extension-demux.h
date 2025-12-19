@@ -69,6 +69,8 @@ class Ipv6ExtensionDemux : public Object
      */
     void Remove(Ptr<Ipv6Extension> extension);
 
+    int64_t AssignStreams(int64_t stream);
+
   protected:
     /**
      * @brief Dispose object.
