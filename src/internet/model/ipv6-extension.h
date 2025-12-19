@@ -578,6 +578,7 @@ class Ipv6ExtensionRoutingDemux : public Object
      * @param extensionRouting pointer on the extension to remove
      */
     void Remove(Ptr<Ipv6ExtensionRouting> extensionRouting);
+    int64_t AssignStreams(int64_t stream);
 
   protected:
     /**
