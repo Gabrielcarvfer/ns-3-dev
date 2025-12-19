@@ -1358,9 +1358,10 @@ ThreeGppUmaPropagationLossModel::DoAssignStreams(int64_t stream)
 {
     NS_LOG_FUNCTION(this);
 
-    int64_t streams = ThreeGppPropagationLossModel::DoAssignStreams(stream);
-    m_uniformVar->SetStream(stream + streams);
-    return streams + 1;
+    int64_t assignedStreams = 0;
+    assignedStreams += ThreeGppPropagationLossModel::DoAssignStreams(stream);
+    m_uniformVar->SetStream(stream + assignedStreams);
+    return assignedStreams + 1;
 }
 
 // ------------------------------------------------------------------------- //

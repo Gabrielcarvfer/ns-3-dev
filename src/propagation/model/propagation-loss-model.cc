@@ -75,13 +75,13 @@ PropagationLossModel::CalcRxPower(double txPowerDbm,
 int64_t
 PropagationLossModel::AssignStreams(int64_t stream)
 {
-    int64_t currentStream = stream;
-    currentStream += DoAssignStreams(stream);
+    int64_t assignedStreams = 0;
+    assignedStreams += DoAssignStreams(stream);
     if (m_next)
     {
-        currentStream += m_next->AssignStreams(currentStream);
+        assignedStreams += m_next->AssignStreams(stream + assignedStreams);
     }
-    return (currentStream - stream);
+    return assignedStreams;
 }
 
 // ------------------------------------------------------------------------- //
