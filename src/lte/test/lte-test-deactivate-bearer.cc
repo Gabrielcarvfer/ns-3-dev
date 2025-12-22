@@ -206,7 +206,7 @@ LenaDeactivateBearerTestCase::DoRun()
     // Create Devices and install them in the Nodes (eNB and UE)
     NetDeviceContainer enbDevs;
     NetDeviceContainer ueDevs;
-    int64_t stream = 1;
+    int64_t stream = 2;
 
     lteHelper->SetSchedulerType("ns3::PssFfMacScheduler");
     enbDevs = lteHelper->InstallEnbDevice(enbNodes);
@@ -234,6 +234,9 @@ LenaDeactivateBearerTestCase::DoRun()
 
     // Install the IP stack on the UEs
     internet.Install(ueNodes);
+    stream += internet.AssignStreams(ueNodes, stream);
+    stream += internet.AssignStreams(remoteHostContainer, stream);
+
     Ipv4InterfaceContainer ueIpIface;
     ueIpIface = epcHelper->AssignUeIpv4Address(NetDeviceContainer(ueDevs));
 
