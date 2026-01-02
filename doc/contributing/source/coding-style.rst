@@ -337,6 +337,29 @@ When running clang-tidy, please note that:
 
 - Enabling clang-tidy will add time to the build process (in the order of minutes).
 
+clang-tidy integration with GitLab CI/CD
+========================================
+
+To ensure that the |ns3| codebase follows the guidelines enforced by clang-tidy,
+there are two clang-tidy jobs in the GitLab CI/CD pipeline.
+
+* ``clang-tidy-smart-scan``: This job runs a smart clang-tidy scan on Merge Requests (MRs),
+  and only scans the files modified by the MR. In case the MR modifies clang-tidy
+  or CI/CD configurations, this job runs a full scan on the entire codebase.
+* ``clang-tidy-full-scan``: This job runs a clang-tidy scan on all C++ files.
+  It runs automatically whenever new commits are pushed to the master branch and in
+  scheduled pipelines.
+
+The ``clang-tidy-full-scan`` job can also be run in MR pipelines by manually triggering
+the job in the GitLab UI.
+Although it is not necessary in most cases, this job can be useful in MRs with large
+refactorings or changes to class constructors, which might trigger warnings in files
+that were not directly modified by the MR, but which might be affected by its changes
+(for example, modernize-use-auto warnings).
+
+To start the job, go to the MR's Pipelines tab, click on the ``code linting`` stage,
+and then click on the "play button" of the ``clang-tidy-full-scan`` job.
+
 Disable clang-tidy analysis in specific lines
 =============================================
 
