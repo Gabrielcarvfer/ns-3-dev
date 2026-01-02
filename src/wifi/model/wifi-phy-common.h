@@ -71,10 +71,10 @@ class WIFI_EXPORT WifiSpectrumBandInfo
      * @param id Band Id
      * @returns a reference to the band
      */
-    static const WifiSpectrumBandInfo GetBandInfoFromId(WifiSpectrumBandInfoId id);
+    static const WifiSpectrumBandInfo GetBandInfoFromId(SpectrumModelUid_t spectrumUid, WifiSpectrumBandInfoId id);
     static void SetRxSpectrumModel(Ptr<const SpectrumModel> rxSpectrumModel);
   private:
-    static Ptr<const SpectrumModel> m_rxSpectrumModel; ///< Spectrum model mapping indices int frequencies
+    static std::vector<std::pair<SpectrumModelUid_t, Ptr<const SpectrumModel>>> m_rxSpectrumModels; ///< Spectrum model mapping indices int frequencies
 };
 
 /// vector of spectrum bands

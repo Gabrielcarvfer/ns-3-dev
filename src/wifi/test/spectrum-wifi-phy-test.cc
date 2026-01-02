@@ -94,7 +94,7 @@ class ExtInterferenceHelper : public InterferenceHelper
     {
         for (const auto& [bandId, nis] : m_niChanges)
         {
-            if (WifiSpectrumBandInfo::GetBandInfoFromId(bandId).frequencies == startStopFreqs)
+            if (WifiSpectrumBandInfo::GetBandInfoFromId(0, bandId).frequencies == startStopFreqs)
             {
                 return true;
             }

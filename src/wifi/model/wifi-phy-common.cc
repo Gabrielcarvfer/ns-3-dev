@@ -16,7 +16,7 @@
 
 namespace ns3
 {
-Ptr<const SpectrumModel> WifiSpectrumBandInfo::m_rxSpectrumModel = nullptr;
+std::vector<std::pair<SpectrumModelUid_t, Ptr<const SpectrumModel>>> WifiSpectrumBandInfo::m_rxSpectrumModels;
 
 WifiSpectrumBandInfoId
 WifiSpectrumBandInfo::GetBandId() const
@@ -44,30 +44,43 @@ WifiSpectrumBandInfo::GetBandId() const
 }
 
 const WifiSpectrumBandInfo
-WifiSpectrumBandInfo::GetBandInfoFromId(WifiSpectrumBandInfoId id)
+WifiSpectrumBandInfo::GetBandInfoFromId(SpectrumModelUid_t spectrumUid, WifiSpectrumBandInfoId id)
 {
-    NS_ASSERT_MSG(m_rxSpectrumModel, "Expected valid spectrum model");
-    union
-    {
-        uint64_t bandId;
-        uint16_t indices[4];
-    } temp;
-    temp.bandId = id;
     WifiSpectrumBandInfo tempInfo;
-    double frequencies[4]{};
-    // Retrieve frequencies for bands
-    for(uint8_t i = 0; i < 4; i++)
+    if (m_rxSpectrumModels.empty())
     {
-        frequencies[i] = (m_rxSpectrumModel->Begin()+temp.indices[i])->fc;
+        // YANS channel path
+        tempInfo.indices = {{0, 0}};
+        tempInfo.frequencies = {{Hz_u{0}, Hz_u{0}}};
     }
-
-    // Reassemble WifiSpectrumBandInfo
-    tempInfo.indices.push_back({temp.indices[0], temp.indices[1]});
-    tempInfo.frequencies.push_back({frequencies[0], frequencies[1]});
-    if (temp.indices[2] != temp.indices[3])
+    else
     {
-        tempInfo.indices.push_back({temp.indices[2], temp.indices[3]});
-        tempInfo.frequencies.push_back({frequencies[2], frequencies[3]});
+        // Spectrum channel path
+        union
+        {
+            uint64_t bandId;
+            uint16_t indices[4];
+        } temp;
+        temp.bandId = id;
+        double frequencies[4]{};
+        auto it = std::find_if(m_rxSpectrumModels.begin(), m_rxSpectrumModels.end(),[spectrumUid](auto& pair)
+        {
+            return pair.first == spectrumUid;
+        });
+        // Retrieve frequencies for bands
+        for(uint8_t i = 0; i < 4; i++)
+        {
+            frequencies[i] = (it->second->Begin()+temp.indices[i])->fc;
+        }
+
+        // Reassemble WifiSpectrumBandInfo
+        tempInfo.indices.push_back({temp.indices[0], temp.indices[1]});
+        tempInfo.frequencies.push_back({frequencies[0], frequencies[1]});
+        if (temp.indices[2] != temp.indices[3])
+        {
+            tempInfo.indices.push_back({temp.indices[2], temp.indices[3]});
+            tempInfo.frequencies.push_back({frequencies[2], frequencies[3]});
+        }
     }
     return tempInfo;
 }
@@ -76,7 +89,23 @@ void
 WifiSpectrumBandInfo::SetRxSpectrumModel(Ptr<const SpectrumModel> rxSpectrumModel)
 {
     NS_ASSERT_MSG(rxSpectrumModel, "Expected valid spectrum model");
-    WifiSpectrumBandInfo::m_rxSpectrumModel = rxSpectrumModel;
+    if (!m_rxSpectrumModel)
+    {
+        m_rxSpectrumModel = rxSpectrumModel;
+    }
+    else
+    {
+        Bands bands;
+        for (auto bi = m_rxSpectrumModel->Begin(); bi != m_rxSpectrumModel->End(); bi++)
+        {
+            bands.push_back(*bi);
+        }
+        for (auto bi = rxSpectrumModel->Begin(); bi != rxSpectrumModel->End(); bi++)
+        {
+            bands.push_back(*bi);
+        }
+        m_rxSpectrumModel = Create<SpectrumModel>(bands);
+    }
 }
 
 
