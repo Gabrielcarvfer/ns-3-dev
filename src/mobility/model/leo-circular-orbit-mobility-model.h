@@ -86,8 +86,8 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
 
     /**
      * @brief Orders the calculation of the node position, notifies course change, advances
-     * the node index at the Progress Vector and schedules the next update event.
-     * @return position that will be returned upon next call to DoGetPosition
+     * the node index at the Progress Vector, and schedules the next update event.
+     * @return position that will be returned upon the next call to DoGetPosition
      */
     Vector UpdateNodePositionAndScheduleEvent();
 
@@ -123,7 +123,7 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     Time m_precision;
 
     /// The index of the node in the Progress Vector
-    uint16_t m_nodeIndexAtProgressVector = 0;
+    uint16_t m_nodeIndexAtProgressVector{0};
 
     /// A pointer to a progress vector that is shared among all nodes that have the same altitude
     std::shared_ptr<std::vector<double>> m_progressVector;
