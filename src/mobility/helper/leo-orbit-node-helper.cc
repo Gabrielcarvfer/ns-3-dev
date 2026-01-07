@@ -139,13 +139,13 @@ LeoOrbitNodeHelper::Install(const vector<LeoOrbit>& orbits)
     return nodes;
 }
 
-constexpr double M_TO_KM = 1000; ///< Meters in a kilometer
+constexpr double KM_TO_M = 1000; ///< Meters in a kilometer
 
 std::shared_ptr<std::vector<double>>
 LeoOrbitNodeHelper::GenerateProgressVector(const LeoOrbit& orbit) const
 {
     // sqrt((km^3/s^2) / km) => sqrt(km^2/s^2) => km/s * 1000m/km = m/s
-    const auto earthRadiusKm = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / M_TO_KM);
+    const auto earthRadiusKm = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / KM_TO_M);
     const auto orbitHeight = earthRadiusKm + orbit.alt;             // km
     double nodeSpeed = sqrt(LEO_EARTH_GGC / orbitHeight);           // km/s
     double orbitPerimeter = (earthRadiusKm + orbit.alt) * 2 * M_PI; // 2*pi*r km

@@ -60,13 +60,13 @@ LeoCircularOrbitMobilityModel::LeoCircularOrbitMobilityModel()
 }
 
 /// meters in a kilometer
-constexpr double M_TO_KM = 1000;
+constexpr double M_PER_KM = 1000;
 
 double
 LeoCircularOrbitMobilityModel::GetSpeed() const
 {
     // sqrt((km^3/s^2) / km) => sqrt(km^2/s^2) => km/s * 1000m/km = m/s
-    return sqrt(LEO_EARTH_GGC / m_orbitHeight) * M_TO_KM;
+    return sqrt(LEO_EARTH_GGC / m_orbitHeight) * M_PER_KM;
 }
 
 Vector
@@ -108,7 +108,7 @@ LeoCircularOrbitMobilityModel::CalcPosition(Time t) const
 {
     double lat = CalcLatitude(t);
     // account for orbit latitude and earth rotation offset
-    Vector3D x = (m_orbitHeight * M_TO_KM *
+    Vector3D x = (m_orbitHeight * M_PER_KM *
                   Vector3D(cos(m_inclination) * cos(lat),
                            cos(m_inclination) * sin(lat),
                            sin(m_inclination)));
@@ -168,13 +168,13 @@ LeoCircularOrbitMobilityModel::DoSetPosition(const Vector& position)
 double
 LeoCircularOrbitMobilityModel::GetAltitude() const
 {
-    return m_orbitHeight - (GeographicPositions::EARTH_SEMIMAJOR_AXIS / M_TO_KM);
+    return m_orbitHeight - (GeographicPositions::EARTH_SEMIMAJOR_AXIS / M_PER_KM);
 }
 
 void
 LeoCircularOrbitMobilityModel::SetAltitude(double h)
 {
-    m_orbitHeight = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / M_TO_KM) + h;
+    m_orbitHeight = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / M_PER_KM) + h;
 }
 
 double
