@@ -156,6 +156,9 @@ LeoOrbitNodeHelper::Install(const vector<LeoOrbit>& orbits)
 
 constexpr double KM_TO_M = 1000; ///< Meters in a kilometer
 
+/// geocentric gravitational constant in KM^3/s^2 https://ntrs.nasa.gov/citations/19760058274
+constexpr double LEO_EARTH_GGC = 398600.7;
+
 std::shared_ptr<std::vector<double>>
 LeoOrbitNodeHelper::GenerateProgressVector(const LeoOrbit& orbit) const
 {

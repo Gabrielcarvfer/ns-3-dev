@@ -22,9 +22,6 @@
  * Declaration of LeoCircularOrbitMobilityModel
  */
 
-/// geocentric gravitational constant in KM^3/s^2 https://ntrs.nasa.gov/citations/19760058274
-constexpr double LEO_EARTH_GGC = 398600.7;
-
 namespace ns3
 {
 
