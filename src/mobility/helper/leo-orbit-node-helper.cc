@@ -106,16 +106,31 @@ LeoOrbitNodeHelper::Install(const std::string& orbitFile)
 {
     NS_LOG_FUNCTION(this << orbitFile);
 
+    // Read orbit file contents
+    std::ifstream orbitsf;
+    orbitsf.open(orbitFile);
+    std::vector<LeoOrbit> orbits;
+    std::string line;
+    while (std::getline(orbitsf, line))
+    {
+        LeoOrbit orbit;
+        std::stringstream(line) >> orbit;
+        // Filter out comments and headers
+        if (orbit.alt != 0)
+        {
+            orbits.push_back(orbit);
+        }
+    }
+    orbitsf.close();
+
+    NS_ABORT_MSG_IF(orbits.empty(), "Orbit files is empty or badly formatted.");
+
     NodeContainer nodes;
-    ifstream orbitsf;
-    orbitsf.open(orbitFile, ifstream::in);
-    LeoOrbit orbit;
-    while ((orbitsf >> orbit))
+    for (auto& orbit : orbits)
     {
         nodes.Add(Install(orbit));
         NS_LOG_DEBUG("Added orbit plane");
     }
-    orbitsf.close();
 
     NS_LOG_DEBUG("Added " << nodes.GetN() << " nodes");
 
