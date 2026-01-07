@@ -37,16 +37,4 @@ operator>>(std::istream& is, LeoOrbit& orbit)
     return is;
 }
 
-LeoOrbit::LeoOrbit()
-    : alt(0),
-      inc(0),
-      planes(0),
-      sats(0)
-{
-}
-
-LeoOrbit::~LeoOrbit()
-{
-}
-
 }; // namespace ns3

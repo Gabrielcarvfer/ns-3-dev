@@ -73,7 +73,7 @@ class LeoOrbit
 {
   public:
     /// constructor
-    LeoOrbit();
+    LeoOrbit() = default;
 
     /**
      * @brief Constructor
@@ -90,8 +90,6 @@ class LeoOrbit
     {
     }
 
-    /// destructor
-    virtual ~LeoOrbit();
     /// Altitude of orbit (km, from earth surface)
     double alt;
     /// Inclination of orbit (degrees)
