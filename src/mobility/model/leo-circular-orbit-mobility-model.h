@@ -65,13 +65,13 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
 
     /**
      * @brief Gets the inclination
-     * @return the inclination
+     * @return the inclination in degrees
      */
     double GetInclination() const;
 
     /**
      * @brief Sets the inclination
-     * @param incl the inclination
+     * @param incl the inclination in degrees
      */
     void SetInclination(double incl);
 
