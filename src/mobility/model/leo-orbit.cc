@@ -13,7 +13,7 @@ namespace ns3
 std::ostream&
 operator<<(std::ostream& os, const LeoOrbit& orbit)
 {
-    os << orbit.alt << ":" << orbit.inc << ":" << orbit.planes << ":" << orbit.sats;
+    os << orbit.alt << "," << orbit.inc << "," << orbit.planes << "," << orbit.sats;
     return os;
 }
 
@@ -24,9 +24,15 @@ operator>>(std::istream& is, LeoOrbit& orbit)
     char c2;
     char c3;
     is >> orbit.alt >> c1 >> orbit.inc >> c2 >> orbit.planes >> c3 >> orbit.sats;
-    if (c1 != ':' || c2 != ':' || c3 != ':')
+    // If not comma separated, error out
+    if (c1 != ',' || c2 != ',' || c3 != ',')
     {
         is.setstate(std::ios_base::failbit);
+    }
+    // If failed to parse orbital values, reset failure to skip line
+    if (is.fail())
+    {
+        is.clear();
     }
     return is;
 }

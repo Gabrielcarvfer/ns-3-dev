@@ -667,14 +667,15 @@ The ``LeoOrbit`` class is used to hold values used to parameterize the instantia
 and orbits - its values are, in order, altitude in meters, inclination
 angle in degrees, number of planes and number of satellite nodes per plane.
 
-A file can be used as a source of information for the program to know how many orbits to instantiate.
+A CSV file can be used as a source of information for the program to know how many orbits to instantiate.
 Typically, a file path must be passed via command line. This is how such a file would look like:
 
 .. sourcecode:: text
 
-    1150.0:53.0:32:50
-    1110.0:53.8:32:50
-    1130.0:74.0:8:50
+    altitudeKm,inclinationDegrees,numberOfPlanes,numberOfSatellitesPerPlane
+    1150.0,53.0,32,50
+    1110.0,53.8,32,50
+    1130.0,74.0,8,50
     (...)
 
 Precision
@@ -732,7 +733,7 @@ To execute it, with duration in seconds and precision in milliseconds:
     --orbitFile=/path/to/orbit-parameters.csv \
     --traceFile=/path/to/orbit-trace.csv
 
-To use the Starlink constellation, point ``orbit-parameters.csv`` to ``./src/mobility/examples/starlink.csv``:
+To use the Starlink constellation, use ``--orbitFile=./src/mobility/examples/starlink.csv``:
 
 .. sourcecode:: bash
 
