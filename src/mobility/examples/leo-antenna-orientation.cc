@@ -143,8 +143,8 @@ CourseChange(Ptr<const MobilityModel> mob)
     Ptr<UniformPlanarArray> ant = node->GetObject<UniformPlanarArray>();
     const Vector newP = GeneratePoint(pos, ant->GetAlpha(), ant->GetBeta());
 
-    std::cout << Simulator::Now() << ":" << node->GetId() << ":" << pos.x << ":" << pos.y << ":"
-              << pos.z << ":" << newP.x << ":" << newP.y << ":" << newP.z << std::endl;
+    std::cout << Simulator::Now() << "," << node->GetId() << "," << pos.x << "," << pos.y << ","
+              << pos.z << "," << newP.x << "," << newP.y << "," << newP.z << std::endl;
 }
 
 int

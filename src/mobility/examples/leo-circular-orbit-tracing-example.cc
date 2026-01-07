@@ -24,8 +24,8 @@ CourseChange(Ptr<const MobilityModel> mob)
 {
     const Vector pos = mob->GetPosition();
     Ptr<const Node> node = mob->GetObject<Node>();
-    std::cout << Simulator::Now() << ":" << node->GetId() << ":" << pos.x << ":" << pos.y << ":"
-              << pos.z << ":" << mob->GetVelocity().GetLength() << std::endl;
+    std::cout << Simulator::Now() << "," << node->GetId() << "," << pos.x << "," << pos.y << ","
+              << pos.z << "," << mob->GetVelocity().GetLength() << std::endl;
 }
 
 int
