@@ -33,7 +33,7 @@ namespace ns3
  * @brief Keep track of the orbital position and velocity of a satellite.
  *
  * This uses simple circular orbits based on the inclination of the orbital
- * plane and the height of the satellite.
+ * plane and the altitude of the satellite.
  */
 class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityModel
 {
