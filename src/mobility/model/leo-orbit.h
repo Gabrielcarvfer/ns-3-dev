@@ -47,8 +47,8 @@ class LeoOrbit
 
     /**
      * @brief Constructor
-     * @param a altitude
-     * @param i inclination
+     * @param a altitude (km, from earth surface)
+     * @param i inclination (degrees)
      * @param p number planes
      * @param s number of satellites in plane
      */
@@ -62,9 +62,9 @@ class LeoOrbit
 
     /// destructor
     virtual ~LeoOrbit();
-    /// Altitude of orbit
+    /// Altitude of orbit (km, from earth surface)
     double alt;
-    /// Inclination of orbit
+    /// Inclination of orbit (degrees)
     double inc;
     /// Number of planes with that altitude and inclination
     uint16_t planes;
