@@ -70,8 +70,7 @@ LeoOrbitNodeHelper::Install(const LeoOrbit& orbit)
     // - It tries to distribute nodes evenly within the Progress Vector, by diluting the remainder
     // space between the first nodes.
 
-    uint32_t truncatedRegularStepSize = progressVector->size() / orbit.sats;
-    int32_t remainder = progressVector->size() % orbit.sats;
+    auto [truncatedRegularStepSize, remainder] = std::div(progressVector->size(), orbit.sats);
     uint64_t progressVectorIndex;
 
     NodeContainer satelliteContainer;
