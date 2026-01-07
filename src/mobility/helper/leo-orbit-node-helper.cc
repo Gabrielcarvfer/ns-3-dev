@@ -71,7 +71,7 @@ LeoOrbitNodeHelper::Install(const LeoOrbit& orbit)
     // space between the first nodes.
 
     auto [truncatedRegularStepSize, remainder] = std::div(progressVector->size(), orbit.sats);
-    uint64_t progressVectorIndex;
+    uint64_t progressVectorIndex{0};
 
     NodeContainer satelliteContainer;
     for (uint16_t i = 0; i < orbit.planes; i++)
@@ -158,7 +158,7 @@ std::shared_ptr<std::vector<double>>
 LeoOrbitNodeHelper::GenerateProgressVector(const LeoOrbit& orbit) const
 {
     // sqrt((km^3/s^2) / km) => sqrt(km^2/s^2) => km/s * 1000m/km = m/s
-    const auto earthRadiusKm = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / KM_TO_M);
+    constexpr auto earthRadiusKm = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / KM_TO_M);
     const auto orbitHeight = earthRadiusKm + orbit.alt;             // km
     double nodeSpeed = sqrt(LEO_EARTH_GGC / orbitHeight);           // km/s
     double orbitPerimeter = (earthRadiusKm + orbit.alt) * 2 * M_PI; // 2*pi*r km
