@@ -15,6 +15,29 @@
 #include "ns3/leo-orbit-node-helper.h"
 #include "ns3/uniform-planar-array.h"
 
+/**
+ * @file
+ * This example demonstrates a geocentric satellite orbit simulation using the LEO
+ * orbital mobility model. It configures a ground station and a set of satellite nodes,
+ * attaches isotropic antenna panels to the satellites, and dynamically updates antenna
+ * panel physical orientation to point toward the ground station as the satellites move.
+ *
+ * Key features:
+ * - Reads orbit parameters from a CSV file or uses a predefined Leo orbit.
+ * - Updates satellite antenna orientation at a configurable period to continue pointing antenna
+ * panel to a fixed position on the earth's surface.
+ * - Converts positions between ECEF, GEO, and topocentric frames for accurate geometry.
+ * - Outputs a mobility trace with timestamps and satellite positions for analysis.
+ *
+ * Usage:
+ * - Provide an orbit CSV with orbitFile, or rely on the default LeoOrbit.
+ * - Optionally specify a traceFile to capture mobility updates.
+ * - Adjust duration and precision (mobility update interval) as needed.
+ *
+ * This example is intended for researchers exploring satellite-ground communications,
+ * antenna pointing models, and ns-3 mobility with geocentric/ECEF representations.
+ */
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LeoAntennaOrientationExample");
