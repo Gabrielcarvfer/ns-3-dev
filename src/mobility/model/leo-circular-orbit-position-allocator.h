@@ -51,12 +51,12 @@ class LeoCircularOrbitAllocator : public PositionAllocator
     int64_t AssignStreams(int64_t stream) override;
 
   private:
-    /// Number of orbits two distribute the satellites on
+    /// Number of orbits to distribute the satellites on
     uint64_t m_numOrbits;
     /// Number of satellites per orbit
     uint64_t m_numSatellites;
 
-    /// The last orit that has been assigned
+    /// The last orbit that has been assigned
     mutable uint64_t m_lastOrbit;
     /// The last position inside the orbit that has been assigned
     mutable uint64_t m_lastSatellite;
