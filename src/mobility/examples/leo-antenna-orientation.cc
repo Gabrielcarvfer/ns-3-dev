@@ -224,7 +224,7 @@ main(int argc, char* argv[])
         std::cout.rdbuf(out.rdbuf());
     }
 
-    std::cout << "Time:Satellite:x:y:z:x_2:y_2:z_2" << std::endl;
+    std::cout << "Time,Satellite,x,y,z,x_2,y_2,z_2" << std::endl;
 
     Simulator::Stop(Time(Seconds(duration)));
     Simulator::Run();
