@@ -26,7 +26,7 @@ def main():
 
     args = parser.parse_args()
 
-    df = pd.read_csv(args.input, sep=":")
+    df = pd.read_csv(args.input)
     # Convert from ns to s
     df["Time"] = df["Time"].str.replace("ns", "").astype(float) * 1e-9
 
