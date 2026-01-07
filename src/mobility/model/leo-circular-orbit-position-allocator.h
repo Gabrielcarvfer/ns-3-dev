@@ -48,6 +48,8 @@ class LeoCircularOrbitAllocator : public PositionAllocator
      * @return the next latitude, longitude pair
      */
     Vector GetNext() const override;
+
+    // Inherited
     int64_t AssignStreams(int64_t stream) override;
 
   private:
