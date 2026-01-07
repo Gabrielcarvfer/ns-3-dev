@@ -11,6 +11,7 @@
 #include "mobility-helper.h"
 
 #include "ns3/config.h"
+#include "ns3/csv-reader.h"
 #include "ns3/double.h"
 #include "ns3/geographic-positions.h"
 #include "ns3/integer.h"
@@ -111,12 +112,16 @@ LeoOrbitNodeHelper::Install(const std::string& orbitFile)
     orbitsf.open(orbitFile);
     std::vector<LeoOrbit> orbits;
     std::string line;
-    while (std::getline(orbitsf, line))
+    CsvReader csv(orbitFile);
+    while (csv.FetchNextRow())
     {
-        LeoOrbit orbit;
-        std::stringstream(line) >> orbit;
-        // Filter out comments and headers
-        if (orbit.alt != 0)
+        LeoOrbit orbit{};
+
+        bool ok = csv.GetValue(0, orbit.alt);
+        ok &= csv.GetValue(1, orbit.inc);
+        ok &= csv.GetValue(2, orbit.planes);
+        ok &= csv.GetValue(3, orbit.sats);
+        if (ok)
         {
             orbits.push_back(orbit);
         }
@@ -125,16 +130,7 @@ LeoOrbitNodeHelper::Install(const std::string& orbitFile)
 
     NS_ABORT_MSG_IF(orbits.empty(), "Orbit files is empty or badly formatted.");
 
-    NodeContainer nodes;
-    for (auto& orbit : orbits)
-    {
-        nodes.Add(Install(orbit));
-        NS_LOG_DEBUG("Added orbit plane");
-    }
-
-    NS_LOG_DEBUG("Added " << nodes.GetN() << " nodes");
-
-    return nodes;
+    return Install(orbits);
 }
 
 NodeContainer
