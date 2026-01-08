@@ -11,12 +11,36 @@
 
 #include <fstream>
 
+/**
+ * @file
+ *
+ * This example simulates a satellite (Leo) moving along circular orbits
+ * and traces its mobility over time.
+ *
+ * It performs the following:
+ * - reads orbital parameters from a CSV file (orbitFile) to configure
+ *   LeoOrbitMobilityModel instances for one or more satellites
+ * - optionally uses a provided trace file (traceFile) to redirect
+ *   standard output so mobility traces are written to disk
+ * - prints a mobility trace header: "Time,Satellite,x,y,z,Speed"
+ * - outputs per-event mobility data whenever a mobility CourseChange occurs:
+ *   time, node ID, position (x, y, z), and speed (magnitude of velocity)
+ *
+ * Command line parameters:
+ * - orbitFile: path to a CSV containing orbit parameters for satellites
+ * - traceFile: path to a CSV file to store mobility trace; if omitted or
+ *              empty, traces are written to the console
+ * - precision: mobility model time precision in milliseconds (defines the distance between
+ * satellite steps in its orbital path)
+ * - duration: total simulation time in seconds
+ */
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LeoCircularOrbitTracingExample");
 
 /**
- * Print simulation time, node Id, position and velocity associated with a mobility model
+ * Print simulation time, node Id, position, and velocity associated with a mobility model
  * @param mob the mobility model for the satellite node
  */
 void
@@ -68,7 +92,7 @@ main(int argc, char* argv[])
         std::cout.rdbuf(out.rdbuf());
     }
 
-    std::cout << "Time:Satellite:x:y:z:Speed" << std::endl;
+    std::cout << "Time,Satellite,x,y,z,Speed" << std::endl;
 
     Simulator::Stop(Time(Seconds(duration)));
     Simulator::Run();
