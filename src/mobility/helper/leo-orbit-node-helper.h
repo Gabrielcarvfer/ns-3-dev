@@ -43,7 +43,7 @@ class LeoOrbitNodeHelper
     virtual ~LeoOrbitNodeHelper();
 
     /**
-     * @brief Install orbits from orbitFile.
+     * @brief Install orbits from orbitFile with orbital parameters of constellation.
      *
      * Install orbits from orbitFile containing one or more lines, each with 4 columns separated by
      * commas (,). The columns contain the following:
@@ -64,14 +64,14 @@ class LeoOrbitNodeHelper
     NodeContainer Install(const std::string& orbitFile);
 
     /**
-     *
+     * @brief Install orbits from vector of orbital parameters
      * @param orbits orbit definitions
      * @returns a node container containing nodes using the specified attributes
      */
     NodeContainer Install(const std::vector<LeoOrbit>& orbits);
 
     /**
-     *
+     * @brief Install orbit from orbital parameters
      * @param orbit orbit definition
      * @returns a node container containing nodes using the specified attributes
      */
