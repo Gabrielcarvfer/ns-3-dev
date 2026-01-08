@@ -382,7 +382,13 @@ SOURCEFIGS = \
 	$(SRC)/zigbee/doc/figures/manyToOne.dia \
 	$(SRC)/zigbee/doc/figures/mesh.dia \
 	$(SRC)/internet-apps/doc/figures/dhcpv6-message-exchange.dia \
-	$(SRC)/internet-apps/doc/figures/stateful-dhcpv6-format.dia
+	$(SRC)/internet-apps/doc/figures/stateful-dhcpv6-format.dia \
+	$(SRC)/mobility/doc/figures/leo-orbit-res-1s.png \
+	$(SRC)/mobility/doc/figures/leo-orbit-res-60s.png \
+	$(SRC)/mobility/doc/figures/leo-orbit-res-600s.png \
+	$(SRC)/mobility/doc/figures/leo-orbit-res-600s-inc-30deg-raan-0deg.png \
+	$(SRC)/mobility/doc/figures/leo-orbit-res-600s-inc-30deg-raan-180deg.png \
+	$(SRC)/mobility/doc/figures/leo-orbit-res-600s-inc-30deg-raan-0deg-planeRot-60deg.png
 
 # specify figures from which .png and .pdf figures need to be
 # generated (all dia and eps figures)

@@ -52,7 +52,7 @@ class LeoOrbitNodeHelper
      *   - number of orbital planes
      *   - number of satellites per plane
      *
-     * Planes are evenly spaced by 180 degrees divided by the number of planes, starting from the
+     * Planes are evenly spaced by 360 degrees divided by the number of planes, starting from the
      * prime meridian.
      *
      * One example: 1150.0,53.0,32,50, represents 32 orbits with 50 satellites each, with 53 degrees

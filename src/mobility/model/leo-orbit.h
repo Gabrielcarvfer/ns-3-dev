@@ -28,7 +28,7 @@ class LeoOrbit;
  *   - number of orbital planes
  *   - number of satellites per plane
  *
- * Planes are evenly spaced by 180 degrees divided by the number of planes, starting from the prime
+ * Planes are evenly spaced by 360 degrees divided by the number of planes, starting from the prime
  * meridian.
  *
  * Example: "700,98,2,12" (700 km altitude, 98 degrees of inclination, 2 planes, 12
@@ -49,7 +49,7 @@ std::ostream& operator<<(std::ostream& os, const LeoOrbit& orbit);
  *   - number of orbital planes
  *   - number of satellites per plane
  *
- * Planes are evenly spaced by 180 degrees divided by the number of planes, starting from the prime
+ * Planes are evenly spaced by 360 degrees divided by the number of planes, starting from the prime
  * meridian.
  *
  * Example: "700,98,2,12" (700 km altitude, 98 degrees of inclination, 2 planes, 12

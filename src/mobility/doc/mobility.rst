@@ -639,6 +639,77 @@ Characteristics & Assumptions
 * **Static Earth**: While the model takes into consideration Earth’s rotation, it does not consider Earth’s orbit around the sun; i.e., the Earth is static.
 * In the plots, Earth is modelled as a perfect sphere.
 
+The model works in 3 steps:
+
+- First step: Precompute a single ``ProgressVector`` per orbit, containing all possible positions a
+  satellite can assume in a particular orbit height.
+- Second step: Apply orbital plane inclination referent to equator and rotation referent to the RAAN.
+- Third step: Apply orbital plane rotation.
+
+The ``ProgressVector`` is shared among all orbital planes of the same orbit, to save up on memory
+and trigonometric computations. An important parameter of this arrangement is that we need to define
+a resolution, which along with orbital speed (automatically selected based on orbital height/altitude of satellites),
+will define the spacing between satellites.
+
+Examples of such progress vector and different resolutions are shown in the figures below.
+
+Figure :ref:`leo-orbit-res-600s` shows a coarser resolution, where ``ProgressVector`` contains
+the angles to the positions a satellite would assume every 600 seconds. Figure :ref:`leo-orbit-res-60s`
+shows a finer resolution, with a new position for every 60 seconds. And Figure :ref:`leo-orbit-res-1s`
+shows an even finer resolution, with a new position for every second.
+
+.. _leo-orbit-res-600s:
+
+.. figure:: figures/leo-orbit-res-600s.*
+
+   LEO Orbit with 600s resolution
+
+.. _leo-orbit-res-60s:
+
+.. figure:: figures/leo-orbit-res-60s.*
+
+   LEO Orbit with 60s resolution
+
+.. _leo-orbit-res-1s:
+
+.. figure:: figures/leo-orbit-res-1s.*
+
+   LEO Orbit with 1s resolution
+
+After precomputing these, we apply the plane inclination regarding the equator, as shown in
+Figure :ref:`leo-orbit-res-600s-inc-30deg-raan-0deg`, where we add a 30 degree inclination to the
+orbital plane referent to the equator.
+
+.. _leo-orbit-res-600s-inc-30deg-raan-0deg:
+
+.. figure:: figures/leo-orbit-res-600s-inc-30deg-raan-0deg.*
+
+   LEO Orbit 30 degrees of inclination
+
+When we have multiple orbital planes per orbit, we divide 360 degrees by the number of planes, and apply
+a Z-axis rotation referent to the RAAN, starting from the prime meridian.
+
+.. _leo-orbit-res-600s-inc-30deg-raan-180deg:
+
+.. figure:: figures/leo-orbit-res-600s-inc-30deg-raan-180deg.*
+
+   LEO Orbit 30 degrees of inclination and 180 degrees of RAAN rotation
+
+For example, with two orbital planes, we would have them separated by 180 degrees, as shown in
+Figure :ref:`leo-orbit-res-600s-inc-30deg-raan-0deg` and Figure :ref:`leo-orbit-res-600s-inc-30deg-raan-180deg`.
+
+The third and final step is to apply a rotation around the orbital plane normal vector,
+like adjusting a volume dial, to emulate the orbital movement of the satellite in its orbit.
+For example, compare Figure :ref:`leo-orbit-res-600s-inc-30deg-raan-0deg` and
+Figure :ref:`leo-orbit-res-600s-inc-30deg-raan-0deg-planeRot-60deg`.
+
+.. _leo-orbit-res-600s-inc-30deg-raan-0deg-planeRot-60deg:
+
+.. figure:: figures/leo-orbit-res-600s-inc-30deg-raan-0deg-planeRot-60deg.*
+
+   LEO Orbit 30 degrees of inclination, 0 degrees of RAAN rotation and 60 degrees of plane rotation
+
+
 Usage
 ~~~~~
 
@@ -687,7 +758,8 @@ of a satellite in a given orbit. A smaller period results in more steps, or high
 with smaller position jumps. Higher resolution is needed by higher orbital speeds.
 
 leo-circular-orbit-tracing-example
-==================================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 This example provides a demonstration of how to trace the motion of LEO
 satellites using the ``LeoCircularOrbitMobilityModel``. The example has
 also been ported from [_mobilityRef4]_ project. It illustrates how satellite
@@ -711,7 +783,8 @@ To execute the it (duration in s, resolution in ms):
 
 
 leo-antenna-orientation
-=======================
+~~~~~~~~~~~~~~~~~~~~~~~
+
 This example builds upon the ``leo-circular-orbit-tracing-example``, with the addition of
 a function that enforces the antenna aggregated to the satellite node to be always pointing
 towards a place. To support different types of strategies, perhaps this function could
@@ -742,8 +815,9 @@ To use the Starlink constellation, use ``--orbitFile=./src/mobility/examples/sta
     --orbitFile=./src/mobility/examples/starlink.csv \
     --traceFile=starlink-orbit-trace
 
-utils/plot-orbital-traces.py
-============================
+model/plot-orbital-traces.py
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 With this script we are able to generate animated plots which we can use to
 validate whether the implementations/programs are correctly placing satellite
 nodes in the initial positions, and whether their positions are being correctly
