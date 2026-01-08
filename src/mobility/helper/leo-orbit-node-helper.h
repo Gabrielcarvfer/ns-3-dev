@@ -27,8 +27,6 @@ namespace ns3
  * @ingroup leo
  * @brief Builds a node container of nodes with LEO positions using a list of
  * orbit definitions.
- *
- * Adds orbits with from a file for each node.
  */
 class LeoOrbitNodeHelper
 {
