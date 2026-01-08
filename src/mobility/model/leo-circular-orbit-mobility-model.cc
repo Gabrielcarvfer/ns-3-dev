@@ -41,11 +41,10 @@ LeoCircularOrbitMobilityModel::GetTypeId()
                           MakeDoubleAccessor(&LeoCircularOrbitMobilityModel::SetInclination,
                                              &LeoCircularOrbitMobilityModel::GetInclination),
                           MakeDoubleChecker<double>())
-            .AddAttribute("Precision",
-                          "The time precision with which to compute position updates. 0 means "
-                          "arbitrary precision",
+            .AddAttribute("Resolution",
+                          "Time resolution step between precomputed orbital positions",
                           TimeValue(Seconds(1)),
-                          MakeTimeAccessor(&LeoCircularOrbitMobilityModel::m_precision),
+                          MakeTimeAccessor(&LeoCircularOrbitMobilityModel::m_resolutionTimeStep),
                           MakeTimeChecker());
     return tid;
 }
@@ -129,9 +128,9 @@ LeoCircularOrbitMobilityModel::UpdateNodePositionAndScheduleEvent()
     // has been completed.
     m_nodeIndexAtProgressVector = (m_nodeIndexAtProgressVector + 1) % m_progressVector->size();
 
-    if (m_precision > Seconds(0))
+    if (m_resolutionTimeStep > Seconds(0))
     {
-        Simulator::Schedule(m_precision,
+        Simulator::Schedule(m_resolutionTimeStep,
                             &LeoCircularOrbitMobilityModel::UpdateNodePositionAndScheduleEvent,
                             this);
     }
@@ -148,7 +147,7 @@ LeoCircularOrbitMobilityModel::DoGetGeocentricPosition() const
 Vector
 LeoCircularOrbitMobilityModel::DoGetPosition() const
 {
-    if (m_precision == Time(0))
+    if (m_resolutionTimeStep == Time(0))
     {
         // Notice: NotifyCourseChange () will not be called.
         return CalcPosition(Simulator::Now());

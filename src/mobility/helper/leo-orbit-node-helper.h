@@ -34,7 +34,7 @@ class LeoOrbitNodeHelper
     /**
      * Construct a LEO Orbit Node Helper which is used to make life easier when working
      * with mobility models.
-     * @param timeStep the time precision for the mobility, which determines the granularity of
+     * @param timeStep the time resolution for the mobility, which determines the granularity of
      * positions generated in a given orbit (the faster the orbital speed, the smallest
      */
     LeoOrbitNodeHelper(const Time& timeStep);

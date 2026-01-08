@@ -119,8 +119,8 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     /// Current position
     Vector3D m_position;
 
-    /// Time precision for positions
-    Time m_precision;
+    /// Time resolution step between precomputed orbital positions
+    Time m_resolutionTimeStep;
 
     /// The index of the node in the Progress Vector
     uint16_t m_nodeIndexAtProgressVector{0};

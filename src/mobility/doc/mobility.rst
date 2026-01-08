@@ -646,7 +646,7 @@ The module offers a helper model (``LeoOrbitNodeHelper``) to ease the instantiat
 
 .. sourcecode:: cpp
 
-    LeoOrbitNodeHelper orbit(Time(MilliSeconds(precision)));
+    LeoOrbitNodeHelper orbit(resolutionTimeStep);
 
     // creates the satellite nodes and put them into a container
     NodeContainer satellites;
@@ -678,8 +678,8 @@ Typically, a file path must be passed via command line. This is how such a file 
     1130.0,74.0,8,50
     (...)
 
-Precision
-~~~~~~~~~
+Resolution
+~~~~~~~~~~
 
 An important parameter that needs to be set appropriately during the construction of ``LeoOrbitNodeHelper``
 is the ``TimeStep``. The term itself may be a bit vague, but it is related to the period between positions
@@ -693,19 +693,19 @@ satellites using the ``LeoCircularOrbitMobilityModel``. The example has
 also been ported from [_mobilityRef4]_ project. It illustrates how satellite
 positions evolve over time in circular orbits and generates output traces in
 ECEF(Earth-Centered, Earth-Fixed) coordinates at each simulation timestep
-defined by the attribute ``precision``.
+defined by the attribute ``resolution``.
 
 The program instantiates satellite nodes using the ``LeoOrbitNodeHelper``
 and connects the ``CourseChange`` callback function to the ``$ns3::MobilityModel/CourseChange``
 trace source. The callback function is responsible for outputting the satellite node
 position to the console or to a trace file specified via command line (`--traceFile=<path_to_file>`).
 
-To execute the it (duration in s, precision in ms):
+To execute the it (duration in s, resolution in ms):
 
 .. sourcecode:: bash
 
     $ ./ns3 run leo-circular-orbit-tracing-example --duration=10 \
-    --precision=500 \
+    --resolution=500 \
     --orbitFile=/path/to/orbit-parameters.csv \
     --traceFile=/path/to/orbit-trace.csv
 
@@ -724,12 +724,12 @@ to the node position, and an additional coordinate representing the point where 
 antenna must point to. These two coordinates can be used to with ``model/plot-orbital-traces.py``,
 to generate an animated plot displaying the antenna orientation vector and satellite motion.
 
-To execute it, with duration in seconds and precision in milliseconds:
+To execute it, with duration in seconds and resolution in milliseconds:
 
 .. sourcecode:: bash
 
     $ ./ns3 run leo-antenna-orientation -- --duration=10 \
-    --precision=500 \
+    --resolution=500ms \
     --orbitFile=/path/to/orbit-parameters.csv \
     --traceFile=/path/to/orbit-trace.csv
 
@@ -738,7 +738,7 @@ To use the Starlink constellation, use ``--orbitFile=./src/mobility/examples/sta
 .. sourcecode:: bash
 
     ~/ns-3-dev/$ ./ns3 run leo-antenna-orientation -- --duration=1000 \
-    --precision=500 \
+    --resolution=500ms \
     --orbitFile=./src/mobility/examples/starlink.csv \
     --traceFile=starlink-orbit-trace
 

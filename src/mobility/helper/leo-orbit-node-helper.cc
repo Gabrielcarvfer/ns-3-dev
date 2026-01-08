@@ -83,6 +83,10 @@ LeoOrbitNodeHelper::Install(const LeoOrbit& orbit)
             auto node = m_nodeFactory.Create<Node>();
             mobility.Install(node);
             auto currentNodeMobModel = node->GetObject<LeoCircularOrbitMobilityModel>();
+
+            // set time step resolution to match progress vector
+            currentNodeMobModel->SetAttribute("Resolution", TimeValue(m_timeStep));
+
             // associates the progress vector to the node
             currentNodeMobModel->SetProgressVectorPointer(progressVector);
             currentNodeMobModel->SetNodeIndexAtProgressVector(progressVectorIndex);

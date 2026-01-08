@@ -30,7 +30,7 @@
  * - orbitFile: path to a CSV containing orbit parameters for satellites
  * - traceFile: path to a CSV file to store mobility trace; if omitted or
  *              empty, traces are written to the console
- * - precision: mobility model time precision in milliseconds (defines the distance between
+ * - resolution: mobility model time step resolution in milliseconds (defines the distance between
  * satellite steps in its orbital path)
  * - duration: total simulation time in seconds
  */
@@ -58,18 +58,17 @@ main(int argc, char* argv[])
     CommandLine cmd(__FILE__);
     std::string orbitFile;
     std::string traceFile;
-    uint32_t duration = 60;    // seconds
-    uint32_t precision = 1000; // milliseconds
+    Time duration = Seconds(60);                       // seconds
+    Time orbitTimeStepResolution = MilliSeconds(1000); // milliseconds
     cmd.AddValue("orbitFile", "CSV file with orbit parameters", orbitFile);
     cmd.AddValue("traceFile", "CSV file to store mobility trace in", traceFile);
-    cmd.AddValue("precision", "Mobility model time precision in milliseconds", precision);
+    cmd.AddValue("resolution",
+                 "Mobility model time resolution step in milliseconds",
+                 orbitTimeStepResolution);
     cmd.AddValue("duration", "Duration of the simulation in seconds", duration);
     cmd.Parse(argc, argv);
 
-    Config::SetDefault("ns3::LeoCircularOrbitMobilityModel::Precision",
-                       TimeValue(MilliSeconds(precision)));
-
-    LeoOrbitNodeHelper orbit(Time(MilliSeconds(precision)));
+    LeoOrbitNodeHelper orbit(orbitTimeStepResolution);
     NodeContainer satellites;
     if (!orbitFile.empty())
     {
@@ -94,7 +93,7 @@ main(int argc, char* argv[])
 
     std::cout << "Time,Satellite,x,y,z,Speed" << std::endl;
 
-    Simulator::Stop(Time(Seconds(duration)));
+    Simulator::Stop(duration);
     Simulator::Run();
     Simulator::Destroy();
 
