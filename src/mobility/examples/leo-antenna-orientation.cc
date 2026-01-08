@@ -32,7 +32,7 @@
  * Usage:
  * - Provide an orbit CSV with orbitFile, or rely on the default LeoOrbit.
  * - Optionally specify a traceFile to capture mobility updates.
- * - Adjust duration and precision (mobility update interval) as needed.
+ * - Adjust duration of simulation and resolution of orbit (mobility update interval) as needed.
  *
  * This example is intended for researchers exploring satellite-ground communications,
  * antenna pointing models, and ns-3 mobility with geocentric/ECEF representations.
@@ -156,19 +156,17 @@ main(int argc, char* argv[])
     CommandLine cmd(__FILE__);
     std::string orbitFile;
     std::string traceFile;
-    uint32_t duration = 60;    // seconds
-    uint32_t precision = 1000; // milliseconds
+    Time duration = Seconds(60);                       // seconds
+    Time orbitTimeStepResolution = MilliSeconds(1000); // milliseconds
     cmd.AddValue("orbitFile", "CSV file with orbit parameters", orbitFile);
     cmd.AddValue("traceFile", "CSV file to store mobility trace in", traceFile);
-    cmd.AddValue("precision", "Mobility model time precision in milliseconds", precision);
+    cmd.AddValue("resolution",
+                 "Mobility model time resolution step in milliseconds",
+                 orbitTimeStepResolution);
     cmd.AddValue("duration", "Duration of the simulation in seconds", duration);
     cmd.Parse(argc, argv);
 
-    // sets the time precision for the mobility model, i.e. how often its position will be updated
-    Config::SetDefault("ns3::LeoCircularOrbitMobilityModel::Precision",
-                       TimeValue(MilliSeconds(precision)));
-
-    LeoOrbitNodeHelper orbit(Time(MilliSeconds(precision)));
+    LeoOrbitNodeHelper orbit(orbitTimeStepResolution);
 
     // creates the satellite nodes and put them into a container
     NodeContainer satellites;
@@ -226,7 +224,7 @@ main(int argc, char* argv[])
 
     std::cout << "Time,Satellite,x,y,z,x_2,y_2,z_2" << std::endl;
 
-    Simulator::Stop(Time(Seconds(duration)));
+    Simulator::Stop(duration);
     Simulator::Run();
     Simulator::Destroy();
 
