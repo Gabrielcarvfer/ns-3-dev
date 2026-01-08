@@ -48,10 +48,14 @@ class LeoOrbitNodeHelper
      * @brief Install orbits from orbitFile.
      *
      * Install orbits from orbitFile containing one or more lines, each with 4 columns separated by
-     * commas (,). The first column contains the orbit altitude (from the surface of the earth). The
-     * second column contains the orbital plane inclination. The third column contains the number of
-     * orbital planes, uniformly distributed (180/orbital planes). The fourth column contains the
-     * number of satellites per orbital plane.
+     * commas (,). The columns contain the following:
+     *   - altitude (km, from earth surface)
+     *   - inclination (degrees relative to equator)
+     *   - number of orbital planes
+     *   - number of satellites per plane
+     *
+     * Planes are evenly spaced by 180 degrees divided by the number of planes, starting from the
+     * prime meridian.
      *
      * One example: 1150.0,53.0,32,50, represents 32 orbits with 50 satellites each, with 53 degrees
      * of inclination in respect to the equator, and with an altitude of 1150 km.
