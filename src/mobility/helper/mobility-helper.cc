@@ -203,6 +203,14 @@ MobilityHelper::EnableAsciiAll(Ptr<OutputStreamWrapper> stream)
 }
 
 int64_t
+MobilityHelper::AssignStreams(int64_t stream)
+{
+    int64_t currentStream = stream;
+    currentStream += m_position->AssignStreams(currentStream);
+    return currentStream - stream;
+}
+
+int64_t
 MobilityHelper::AssignStreams(NodeContainer c, int64_t stream)
 {
     int64_t currentStream = stream;

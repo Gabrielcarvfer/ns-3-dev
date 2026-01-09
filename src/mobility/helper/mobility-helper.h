@@ -191,6 +191,14 @@ class MobilityHelper
      * will not result in any output.
      */
     static void EnableAsciiAll(Ptr<OutputStreamWrapper> stream);
+
+    /**
+     * Assign a fixed random variable stream number to the random variables
+     * used by the position allocator. This should be called before the Install()
+     * method.
+     */
+    int64_t AssignStreams(int64_t stream);
+
     /**
      * Assign a fixed random variable stream number to the random variables
      * used by the mobility models on these nodes. Return the number of
