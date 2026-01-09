@@ -106,7 +106,9 @@ MobilityModel::NotifyCourseChange() const
 int64_t
 MobilityModel::AssignStreams(int64_t start)
 {
-    return DoAssignStreams(start);
+    int64_t currentStream = start;
+    currentStream += DoAssignStreams(currentStream);
+    return currentStream - start;
 }
 
 // Default implementation does nothing
