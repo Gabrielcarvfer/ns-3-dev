@@ -110,7 +110,11 @@ OutdoorRandomWalkTestCase::DoRun()
     nodes.Create(1);
 
     // set the RandomWalk2dOutdoorMobilityModel mobility model
+    int32_t currentStream = 0;
+
     MobilityHelper mobility;
+    currentStream += mobility.AssignStreams(currentStream);
+
     mobility.SetMobilityModel(
         "ns3::RandomWalk2dOutdoorMobilityModel",
         "Bounds",
@@ -122,12 +126,18 @@ OutdoorRandomWalkTestCase::DoRun()
     // create an OutdoorPositionAllocator and set its boundaries to match those of the mobility
     // model
     Ptr<OutdoorPositionAllocator> position = CreateObject<OutdoorPositionAllocator>();
+    currentStream += position->AssignStreams(currentStream);
+
     Ptr<UniformRandomVariable> xPos = CreateObject<UniformRandomVariable>();
     xPos->SetAttribute("Min", DoubleValue(-streetWidth));
     xPos->SetAttribute("Max", DoubleValue(maxAxisX));
+    xPos->SetStream(++currentStream);
+
     Ptr<UniformRandomVariable> yPos = CreateObject<UniformRandomVariable>();
     yPos->SetAttribute("Min", DoubleValue(-streetWidth));
     yPos->SetAttribute("Max", DoubleValue(maxAxisY));
+    yPos->SetStream(++currentStream);
+
     position->SetAttribute("X", PointerValue(xPos));
     position->SetAttribute("Y", PointerValue(yPos));
     mobility.SetPositionAllocator(position);
@@ -135,6 +145,8 @@ OutdoorRandomWalkTestCase::DoRun()
     mobility.Install(nodes.Get(0));
 
     auto mobilityModel = nodes.Get(0)->GetObject<RandomWalk2dOutdoorMobilityModel>();
+    currentStream += mobilityModel->AssignStreams(currentStream);
+    currentStream += mobility.AssignStreams(nodes, currentStream);
 
     // get MAX_CHECKS positions, check if they are outdoors
     for (int i = 0; i < MAX_CHECKS; i++)
