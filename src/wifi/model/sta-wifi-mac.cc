@@ -308,6 +308,12 @@ StaWifiMac::SetPowerSaveManager(Ptr<PowerSaveManager> powerSaveManager)
     m_powerSaveManager->SetWifiMac(this);
 }
 
+Ptr<PowerSaveManager>
+StaWifiMac::GetPowerSaveManager() const
+{
+    return m_powerSaveManager;
+}
+
 void
 StaWifiMac::SetEmlsrManager(Ptr<EmlsrManager> emlsrManager)
 {
@@ -982,23 +988,32 @@ StaWifiMac::ScanningTimeout(const std::optional<ApInfo>& bestAp)
     SwapLinks(swapInfo);
 
     // lambda to get beacon interval from Beacon or Probe Response
-    auto getBeaconInterval = [](auto&& frame) {
+    auto getBeaconIntervalAndTimestamp = [](auto&& frame) {
         using T = std::decay_t<decltype(frame)>;
         if constexpr (std::is_same_v<T, MgtBeaconHeader> ||
                       std::is_same_v<T, MgtProbeResponseHeader>)
         {
-            return MicroSeconds(frame.m_beaconInterval);
+            return std::make_pair(MicroSeconds(frame.m_beaconInterval),
+                                  MicroSeconds(frame.GetTimestamp()));
         }
         else
         {
             NS_ABORT_MSG("Unexpected frame type");
-            return Seconds(0);
+            return std::make_pair(Seconds(0), Seconds(0));
         }
     };
-    Time beaconInterval = std::visit(getBeaconInterval, bestAp->m_frame);
+    const auto [beaconInterval, timestamp] =
+        std::visit(getBeaconIntervalAndTimestamp, bestAp->m_frame);
     Time delay = beaconInterval * m_maxMissedBeacons;
     // restart beacon watchdog
     RestartBeaconWatchdog(delay);
+
+    if (m_powerSaveManager)
+    {
+        m_powerSaveManager->NotifyBeaconIntervalAndTimestamp(beaconInterval,
+                                                             timestamp,
+                                                             bestAp->m_linkId);
+    }
 
     SetState(WAIT_ASSOC_RESP);
     SendAssociationRequest(false);

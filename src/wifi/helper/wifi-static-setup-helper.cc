@@ -20,6 +20,7 @@
 #include "ns3/mgt-headers.h"
 #include "ns3/net-device-container.h"
 #include "ns3/packet.h"
+#include "ns3/power-save-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/sta-wifi-mac.h"
 #include "ns3/wifi-net-device.h"
@@ -170,6 +171,28 @@ WifiStaticSetupHelper::SetStaticAssocPostInit(Ptr<ApWifiMac> apMac, Ptr<StaWifiM
     // of Data Null frames is not scheduled. Therefore, we need to make the AP aware of the PM mode
     // of the STAs affiliated with the client device without actually sending Data Null frames.
     AlignApViewOfStaPmMode(apMac, clientMac);
+
+    // The callback that is set by StaWifiMac::SetPmModeAfterAssociation() to intercept the Ack sent
+    // in response to the AssocResp also schedules a call to notify the Power Save Manager that
+    // association is completed at the end of the transmission of the Ack. Given that no AssocResp
+    // is sent when using the static setup helper, we need to explicitly make the relevant calls
+    // here.
+    if (clientMac->m_powerSaveManager)
+    {
+        for (const auto apLinkId : apMac->GetLinkIds())
+        {
+            if (const auto& beaconEvent = apMac->GetLink(apLinkId).beaconEvent;
+                beaconEvent.IsPending())
+            {
+                clientMac->m_powerSaveManager->NotifyBeaconIntervalAndTimestamp(
+                    apMac->GetBeaconInterval(),
+                    Simulator::Now() + Simulator::GetDelayLeft(beaconEvent) -
+                        apMac->GetBeaconInterval(),
+                    apLinkId);
+            }
+        }
+        clientMac->m_powerSaveManager->NotifyAssocCompleted();
+    }
 
     if (isMldAssoc)
     {

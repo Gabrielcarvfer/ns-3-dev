@@ -103,6 +103,16 @@ void
 DefaultPowerSaveManager::DoNotifyAssocCompleted()
 {
     NS_LOG_FUNCTION(this);
+
+    const auto linkIds = GetStaMac()->GetSetupLinkIds();
+    for (const auto linkId : linkIds)
+    {
+        NS_LOG_DEBUG("PM mode for link " << +linkId << ": " << GetStaMac()->GetPmMode(linkId));
+        if (GetStaMac()->GetPmMode(linkId) == WifiPowerManagementMode::WIFI_PM_POWERSAVE)
+        {
+            GoToSleepIfPossible(linkId);
+        }
+    }
 }
 
 void

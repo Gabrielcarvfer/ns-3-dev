@@ -209,6 +209,11 @@ class StaWifiMac : public WifiMac
     void SetPowerSaveManager(Ptr<PowerSaveManager> powerSaveManager);
 
     /**
+     * @return the Power Save Manager
+     */
+    Ptr<PowerSaveManager> GetPowerSaveManager() const;
+
+    /**
      * Set the EMLSR Manager.
      *
      * @param emlsrManager the EMLSR Manager

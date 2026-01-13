@@ -9,6 +9,7 @@
 #ifndef POWER_SAVE_MANAGER_H
 #define POWER_SAVE_MANAGER_H
 
+#include "wifi-types.h"
 #include "wifi-utils.h"
 
 #include "ns3/nstime.h"
@@ -16,6 +17,7 @@
 #include "ns3/traced-callback.h"
 
 #include <map>
+#include <optional>
 
 namespace ns3
 {
@@ -61,6 +63,27 @@ class PowerSaveManager : public Object
 
     /// @return the Listen interval
     uint32_t GetListenInterval() const;
+
+    /**
+     * This function is normally used to notify the Beacon interval and timestamp included in the
+     * last Beacon frame advertised by the AP this device is going to associate with. The purpose is
+     * to be able to put the PHY operating on the given link to sleep (if needed) right after
+     * association is completed.
+     *
+     * @param beaconInterval the Beacon interval
+     * @param timestamp the timestamp included in the Beacon frame
+     * @param linkId the ID of the link on which the Beacon frame was sent
+     */
+    void NotifyBeaconIntervalAndTimestamp(const Time& beaconInterval,
+                                          const Time& timestamp,
+                                          linkId_t linkId);
+
+    /**
+     * @param linkId the ID of the given link
+     * @return the remaining time until the next Target Beacon Transmission Time (TBTT) on the given
+     *         link, if known
+     */
+    std::optional<Time> GetTimeUntilNextTbtt(linkId_t linkId) const;
 
     /**
      * Notify that the non-AP STA/MLD has completed association with an AP.

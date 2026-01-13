@@ -154,15 +154,39 @@ PowerSaveManager::SetPowerSaveMode(const std::map<linkId_t, bool>& linkIdEnableM
 }
 
 void
+PowerSaveManager::NotifyBeaconIntervalAndTimestamp(const Time& beaconInterval,
+                                                   const Time& timestamp,
+                                                   linkId_t linkId)
+{
+    NS_LOG_FUNCTION(this << beaconInterval << timestamp << linkId);
+    m_staInfo[linkId] = {.beaconInterval = beaconInterval, .lastBeaconTimestamp = timestamp};
+}
+
+std::optional<Time>
+PowerSaveManager::GetTimeUntilNextTbtt(linkId_t linkId) const
+{
+    const auto staInfoIt = m_staInfo.find(linkId);
+
+    if ((staInfoIt == m_staInfo.cend()) || staInfoIt->second.beaconInterval.IsZero())
+    {
+        return std::nullopt;
+    }
+
+    const auto sinceLastTbtt = (Simulator::Now() - staInfoIt->second.lastBeaconTimestamp) %
+                               staInfoIt->second.beaconInterval;
+
+    return sinceLastTbtt.IsZero() ? Time{0} : staInfoIt->second.beaconInterval - sinceLastTbtt;
+}
+
+void
 PowerSaveManager::NotifyAssocCompleted()
 {
     NS_LOG_FUNCTION(this);
 
-    m_staInfo.clear();
     const auto linkIds = m_staMac->GetSetupLinkIds();
     for (const auto linkId : linkIds)
     {
-        m_staInfo[linkId] = StaInfo{};
+        m_staInfo.try_emplace(linkId, StaInfo{});
     }
 
     DoNotifyAssocCompleted();
