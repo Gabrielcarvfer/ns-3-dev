@@ -51,8 +51,9 @@ class DefaultPowerSaveManager : public PowerSaveManager
 
     std::map<linkId_t, EventId> m_wakeUpEvents; ///< events scheduled to wake up PHYs
     std::map<linkId_t, EventId> m_sleepEvents;  ///< events scheduled to set PHYs to sleep
-    Time m_psmTimeout; ///< the extra time during which the PHY is kept in active state before
-                       ///< being put to sleep state
+    Time m_psmTimeout;    ///< the extra time during which the PHY is kept in active state before
+                          ///< being put to sleep state
+    Time m_listenAdvance; ///< the amount of time the STA wakes up in advance prior to the TBTT
 };
 
 } // namespace ns3

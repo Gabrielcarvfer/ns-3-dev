@@ -38,6 +38,12 @@ DefaultPowerSaveManager::GetTypeId()
                           "Simulation Scenarios document IEEE 802.11-14/0980r16.",
                           TimeValue(Time{0}),
                           MakeTimeAccessor(&DefaultPowerSaveManager::m_psmTimeout),
+                          MakeTimeChecker(Time{0}))
+            .AddAttribute("ListenAdvance",
+                          "The amount of time the STA wakes up in advance prior to the Target "
+                          "Beacon Transmission Time.",
+                          TimeValue(Time{0}),
+                          MakeTimeAccessor(&DefaultPowerSaveManager::m_listenAdvance),
                           MakeTimeChecker(Time{0}));
     return tid;
 }
@@ -122,6 +128,8 @@ DefaultPowerSaveManager::GoToSleepIfPossible(linkId_t linkId)
         auto delay = (Simulator::Now() - staInfo.lastBeaconTimestamp) % staInfo.beaconInterval;
         delay = staInfo.beaconInterval - delay;
         delay += (GetListenInterval() - 1) * staInfo.beaconInterval;
+        delay -= m_listenAdvance;
+        delay = Max(delay, Time{0});
 
         NS_LOG_DEBUG("Scheduling PHY on link " << +linkId << " to wake up in "
                                                << delay.As(Time::US));
