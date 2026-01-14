@@ -25,10 +25,20 @@ NS_OBJECT_ENSURE_REGISTERED(DefaultPowerSaveManager);
 TypeId
 DefaultPowerSaveManager::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::DefaultPowerSaveManager")
-                            .SetParent<PowerSaveManager>()
-                            .SetGroupName("Wifi")
-                            .AddConstructor<DefaultPowerSaveManager>();
+    static TypeId tid =
+        TypeId("ns3::DefaultPowerSaveManager")
+            .SetParent<PowerSaveManager>()
+            .SetGroupName("Wifi")
+            .AddConstructor<DefaultPowerSaveManager>()
+            .AddAttribute("PsmTimeout",
+                          "The length of the extra time during which the PHY is kept in active "
+                          "state before being put to sleep state. If channel access is requested "
+                          "(to transmit a frame) during such extra time, the PHY is kept in active "
+                          "state to attempt to gain channel access and transmit. See the TGax "
+                          "Simulation Scenarios document IEEE 802.11-14/0980r16.",
+                          TimeValue(Time{0}),
+                          MakeTimeAccessor(&DefaultPowerSaveManager::m_psmTimeout),
+                          MakeTimeChecker(Time{0}));
     return tid;
 }
 
@@ -73,10 +83,31 @@ DefaultPowerSaveManager::GoToSleepIfPossible(linkId_t linkId)
         return;
     }
 
-    // if nothing to do, put PHY to sleep
-    if (!staInfo.pendingUnicast && !staInfo.pendingGroupcast &&
-        !HasRequestedOrGainedChannel(linkId))
+    if (staInfo.pendingUnicast)
     {
+        NS_LOG_DEBUG("AP has pending unicast frames, do not put PHY to sleep");
+        return;
+    }
+
+    if (staInfo.pendingGroupcast)
+    {
+        NS_LOG_DEBUG("AP has pending groupcast frames, do not put PHY to sleep");
+        return;
+    }
+
+    if (HasRequestedOrGainedChannel(linkId))
+    {
+        NS_LOG_DEBUG("Channel access requested or gained, do not put PHY to sleep");
+        return;
+    }
+
+    if (m_sleepEvents[linkId].IsPending())
+    {
+        NS_LOG_DEBUG("Already scheduled a sleep event, do nothing");
+        return;
+    }
+
+    auto putToSleep = [=, this] {
         NS_LOG_DEBUG("PHY operating on link " << +linkId << " is put to sleep");
         GetStaMac()->GetWifiPhy(linkId)->SetSleepMode(true);
 
@@ -96,7 +127,11 @@ DefaultPowerSaveManager::GoToSleepIfPossible(linkId_t linkId)
                                                << delay.As(Time::US));
         m_wakeUpEvents[linkId] =
             Simulator::Schedule(delay, &WifiPhy::ResumeFromSleep, GetStaMac()->GetWifiPhy(linkId));
-    }
+    };
+
+    NS_LOG_DEBUG("Scheduling sleep state for PHY on link " << +linkId << "at time "
+                                                           << Simulator::Now() + m_psmTimeout);
+    m_sleepEvents[linkId] = Simulator::Schedule(m_psmTimeout, putToSleep);
 }
 
 void
@@ -125,6 +160,10 @@ DefaultPowerSaveManager::DoNotifyDisassociation()
     {
         event.Cancel();
     }
+    for (auto& [linkId, event] : m_sleepEvents)
+    {
+        event.Cancel();
+    }
 }
 
 void
@@ -134,8 +173,12 @@ DefaultPowerSaveManager::DoNotifyPmModeChanged(WifiPowerManagementMode pmMode, l
 
     if (pmMode == WifiPowerManagementMode::WIFI_PM_ACTIVE)
     {
-        // base class has resumed the PHY from sleep; here we have to cancel the timer
+        // base class has resumed the PHY from sleep; here we have to cancel the timers
         if (const auto it = m_wakeUpEvents.find(linkId); it != m_wakeUpEvents.cend())
+        {
+            it->second.Cancel();
+        }
+        if (const auto it = m_sleepEvents.find(linkId); it != m_sleepEvents.cend())
         {
             it->second.Cancel();
         }
@@ -190,6 +233,8 @@ void
 DefaultPowerSaveManager::DoNotifyRequestAccess(Ptr<Txop> txop, linkId_t linkId)
 {
     NS_LOG_FUNCTION(this << txop << linkId);
+
+    m_sleepEvents[linkId].Cancel();
 
     // if channel access is being requested, it means that the MAC has frames to transmit on the
     // given link, hence wake up the PHY if it is in sleep state

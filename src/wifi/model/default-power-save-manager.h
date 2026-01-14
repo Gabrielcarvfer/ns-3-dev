@@ -50,6 +50,9 @@ class DefaultPowerSaveManager : public PowerSaveManager
     void DoTxDropped(WifiMacDropReason reason, Ptr<const WifiMpdu> mpdu) override;
 
     std::map<linkId_t, EventId> m_wakeUpEvents; ///< events scheduled to wake up PHYs
+    std::map<linkId_t, EventId> m_sleepEvents;  ///< events scheduled to set PHYs to sleep
+    Time m_psmTimeout; ///< the extra time during which the PHY is kept in active state before
+                       ///< being put to sleep state
 };
 
 } // namespace ns3

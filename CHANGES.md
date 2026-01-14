@@ -16,6 +16,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### New API
 
+* (wifi) Add the `PsmTimeout` attribute to `DefaultPowerSaveManager` to keep STAs in PS mode awake for extra time before going to sleep
+
 ### Changes to existing API
 
 * (wifi) The `PowerSaveMode` attribute of the `StaWifiMac` class has been deprecated in favor of the `PowerSaveMode` attribute of the `PowerSaveManager` class.
