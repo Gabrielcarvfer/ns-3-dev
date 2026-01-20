@@ -170,6 +170,15 @@ class PowerSaveManager : public Object
     virtual void DoNotifyDisassociation() = 0;
 
     /**
+     * Notify subclasses that the Power Management mode of the non-AP STA operating on the given
+     * link has changed.
+     *
+     * @param pmMode the new PM mode
+     * @param linkId the ID of the given link
+     */
+    virtual void DoNotifyPmModeChanged(WifiPowerManagementMode pmMode, linkId_t linkId) = 0;
+
+    /**
      * Notify subclasses that a Beacon frame has been received from the associated AP on the given
      * link.
      *

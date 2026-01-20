@@ -41,6 +41,7 @@ class DefaultPowerSaveManager : public PowerSaveManager
 
     void DoNotifyAssocCompleted() override;
     void DoNotifyDisassociation() override;
+    void DoNotifyPmModeChanged(WifiPowerManagementMode pmMode, linkId_t linkId) override;
     void DoNotifyReceivedBeacon(const MgtBeaconHeader& beacon, linkId_t linkId) override;
     void DoNotifyReceivedFrameAfterPsPoll(Ptr<const WifiMpdu> mpdu, linkId_t linkId) override;
     void DoNotifyReceivedGroupcast(Ptr<const WifiMpdu> mpdu, linkId_t linkId) override;

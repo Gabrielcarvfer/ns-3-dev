@@ -200,6 +200,8 @@ PowerSaveManager::NotifyPmModeChanged(WifiPowerManagementMode pmMode, linkId_t l
         }
     }
     m_pmModeLogger(linkId, pmMode);
+
+    DoNotifyPmModeChanged(pmMode, linkId);
 }
 
 void

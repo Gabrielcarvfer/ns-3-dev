@@ -118,6 +118,21 @@ DefaultPowerSaveManager::DoNotifyDisassociation()
 }
 
 void
+DefaultPowerSaveManager::DoNotifyPmModeChanged(WifiPowerManagementMode pmMode, linkId_t linkId)
+{
+    NS_LOG_FUNCTION(this << pmMode << linkId);
+
+    if (pmMode == WifiPowerManagementMode::WIFI_PM_ACTIVE)
+    {
+        // base class has resumed the PHY from sleep; here we have to cancel the timer
+        if (const auto it = m_wakeUpEvents.find(linkId); it != m_wakeUpEvents.cend())
+        {
+            it->second.Cancel();
+        }
+    }
+}
+
+void
 DefaultPowerSaveManager::DoNotifyReceivedBeacon(const MgtBeaconHeader& beacon, linkId_t linkId)
 {
     NS_LOG_FUNCTION(this << beacon << linkId);
