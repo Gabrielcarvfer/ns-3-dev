@@ -309,3 +309,12 @@ build_example(
     ${libapplications}
     ${libinternet}
 )
+
+build_example(
+  NAME wifi-ps-mode
+  SOURCE_FILES wifi-ps-mode.cc
+  LIBRARIES_TO_LINK
+    ${libwifi}
+    ${libapplications}
+    ${libflow-monitor}
+)

@@ -339,6 +339,11 @@ cpp_examples = [
         "True",
         "True",
     ),
+    (
+        "wifi-ps-mode --dlLoad=10Mbps --ulLoad=25Mbps --simulationTime=500ms --nStas=2 --staticSetup=1 --psMode=0:true,1:true --channels=36,0,BAND_5GHZ,0:100,0,BAND_5GHZ,0",
+        "True",
+        "True",
+    ),
 ]
 
 # A list of Python examples to run in order to ensure that they remain
