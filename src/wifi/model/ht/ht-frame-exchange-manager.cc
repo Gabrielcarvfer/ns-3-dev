@@ -1252,13 +1252,15 @@ HtFrameExchangeManager::SendPsdu()
                 DequeuePsdu(m_psdu);
             }
         }
-        else if (tids.empty() || m_psdu->GetAckPolicyForTid(*tids.begin()) == WifiMacHeader::NO_ACK)
-        {
-            // No acknowledgment, hence dequeue the PSDU if it is stored in a queue
-            DequeuePsdu(m_psdu);
-        }
 
         Simulator::Schedule(txDuration, [=, this]() {
+            if ((!m_apMac || !m_apMac->UseGcr(m_psdu->GetHeader(0))) &&
+                (tids.empty() ||
+                 m_psdu->GetAckPolicyForTid(*tids.begin()) == WifiMacHeader::NO_ACK))
+            {
+                // No acknowledgment, hence dequeue the PSDU if it is stored in a queue
+                DequeuePsdu(m_psdu);
+            }
             TransmissionSucceeded();
             m_psdu = nullptr;
         });
@@ -1348,12 +1350,6 @@ HtFrameExchangeManager::SendPsdu()
     {
         NS_ASSERT(m_sentFrameTo.empty());
         m_sentFrameTo = {m_psdu->GetAddr1()};
-    }
-
-    if (m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE)
-    {
-        // we are done in case the A-MPDU does not require acknowledgment
-        m_psdu = nullptr;
     }
 }
 

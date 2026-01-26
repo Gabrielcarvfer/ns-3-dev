@@ -606,16 +606,17 @@ FrameExchangeManager::SendMpdu()
                           m_txParams.m_txVector);
             m_channelAccessManager->NotifyAckTimeoutStartNow(timeout);
         }
-        else if (!m_mpdu->GetHeader().IsQosData() ||
-                 m_mpdu->GetHeader().GetQosAckPolicy() == WifiMacHeader::NO_ACK)
-        {
-            // No acknowledgment, hence dequeue the MPDU if it is stored in a queue
-            DequeueMpdu(m_mpdu);
-        }
 
         if (!m_mpdu->GetHeader().IsPsPoll())
         {
             Simulator::Schedule(txDuration, [=, this]() {
+                if ((!m_apMac || !m_apMac->UseGcr(m_mpdu->GetHeader())) &&
+                    (!m_mpdu->GetHeader().IsQosData() ||
+                     m_mpdu->GetHeader().GetQosAckPolicy() == WifiMacHeader::NO_ACK))
+                {
+                    // No acknowledgment, hence dequeue the MPDU if it is stored in a queue
+                    DequeueMpdu(m_mpdu);
+                }
                 TransmissionSucceeded();
                 m_mpdu = nullptr;
             });
