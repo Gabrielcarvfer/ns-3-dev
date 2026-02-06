@@ -579,11 +579,14 @@ macro(process_options)
     find_package(Eigen3 QUIET)
     enable_cmake_warnings()
 
-    if(${EIGEN3_FOUND})
+    if(${Eigen3_FOUND})
       set(ENABLE_EIGEN True)
       add_definitions(-DHAVE_EIGEN3)
       add_definitions(-DEIGEN_MPL2_ONLY)
       if(NOT ${NS3_FORCE_LOCAL_DEPENDENCIES})
+        get_target_property(
+          EIGEN3_INCLUDE_DIR Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES
+        )
         include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
       endif()
     else()
