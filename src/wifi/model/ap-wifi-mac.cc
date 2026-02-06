@@ -22,6 +22,7 @@
 #include "wifi-mac-queue-scheduler.h"
 #include "wifi-mac-queue.h"
 #include "wifi-net-device.h"
+#include "wifi-ns3-constants.h"
 #include "wifi-phy.h"
 
 #include "ns3/ap-emlsr-manager.h"
@@ -57,7 +58,7 @@ ApWifiMac::GetTypeId()
             .AddAttribute(
                 "BeaconInterval",
                 "Delay between two beacons",
-                TimeValue(MicroSeconds(102400)),
+                TimeValue(DEFAULT_BEACON_INTERVAL),
                 MakeTimeAccessor(&ApWifiMac::GetBeaconInterval, &ApWifiMac::SetBeaconInterval),
                 MakeTimeChecker())
             .AddAttribute("BeaconJitter",

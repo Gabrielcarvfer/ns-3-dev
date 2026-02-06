@@ -27,6 +27,7 @@
 #include "ns3/test.h"
 #include "ns3/wifi-mac-header.h"
 #include "ns3/wifi-net-device.h"
+#include "ns3/wifi-ns3-constants.h"
 #include "ns3/wifi-ppdu.h"
 #include "ns3/wifi-psdu.h"
 
@@ -360,7 +361,7 @@ WifiTxopTest::DoRun()
         "Ssid",
         SsidValue(Ssid("wifi-txop-ssid")),
         "BeaconInterval",
-        TimeValue(MicroSeconds(102400)),
+        TimeValue(DEFAULT_BEACON_INTERVAL),
         "EnableBeaconJitter",
         BooleanValue(false),
         "AifsnsForSta",
@@ -387,7 +388,7 @@ WifiTxopTest::DoRun()
     for (uint16_t i = 1; i < m_nStations; i++)
     {
         dev = DynamicCast<WifiNetDevice>(m_staDevices.Get(i));
-        Simulator::Schedule(i * MicroSeconds(102400),
+        Simulator::Schedule(i * DEFAULT_BEACON_INTERVAL,
                             &WifiMac::SetSsid,
                             dev->GetMac(),
                             Ssid("wifi-txop-ssid"));

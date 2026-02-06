@@ -28,6 +28,7 @@
 #include "ns3/wifi-mac-header.h"
 #include "ns3/wifi-mac.h"
 #include "ns3/wifi-net-device.h"
+#include "ns3/wifi-ns3-constants.h"
 #include "ns3/wifi-ppdu.h"
 #include "ns3/wifi-psdu.h"
 #include "ns3/wifi-tx-stats-helper.h"
@@ -217,7 +218,7 @@ WifiTxStatsHelperTest::DoRun()
                     "Ssid",
                     SsidValue(Ssid("test-ssid")),
                     "BeaconInterval",
-                    TimeValue(MicroSeconds(102400)),
+                    TimeValue(DEFAULT_BEACON_INTERVAL),
                     "EnableBeaconJitter",
                     BooleanValue(false));
         apDevices = wifi.Install(phy, mac, m_wifiApNode);
@@ -291,7 +292,7 @@ WifiTxStatsHelperTest::DoRun()
                     "Ssid",
                     SsidValue(Ssid("test-ssid")),
                     "BeaconInterval",
-                    TimeValue(MicroSeconds(102400)),
+                    TimeValue(DEFAULT_BEACON_INTERVAL),
                     "EnableBeaconJitter",
                     BooleanValue(false));
         apDevices = wifi.Install(phy, mac, m_wifiApNode);

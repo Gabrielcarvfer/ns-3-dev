@@ -9,6 +9,8 @@
 #ifndef WIFI_NS3_CONSTANTS_H
 #define WIFI_NS3_CONSTANTS_H
 
+#include "ns3/nstime.h"
+
 /**
  * @file
  * @ingroup wifi
@@ -23,6 +25,9 @@ static constexpr bool DEFAULT_WIFI_UL_MU_DATA_DISABLE{false};
 
 /// UL MU Data Disable Rx support at AP
 static constexpr bool DEFAULT_WIFI_UL_MU_DATA_DISABLE_RX{true};
+
+/// Default Beacon interval
+inline const Time DEFAULT_BEACON_INTERVAL = MicroSeconds(102400);
 
 } // namespace ns3
 
