@@ -23,7 +23,7 @@ namespace ns3
 
 /// Wi-Fi Time Unit value in microseconds (see IEEE 802.11-2020 sec. 3.1)
 /// Used to initialize WIFI_TU
-WIFI_EXPORT inline const Time WIFI_TU = MicroSeconds(1024);
+inline const Time WIFI_TU = MicroSeconds(1024);
 
 /// aRxPHYStartDelay value to use when waiting for a new frame in the context of EMLSR operations
 /// (Sec. 35.3.17 of 802.11be D3.1)
@@ -60,10 +60,10 @@ inline const Time DSSS_SIFS_TIME = MicroSeconds(10);
 inline const Time DSSS_SLOT_TIME = MicroSeconds(20);
 
 /// maximum propagation delay
-WIFI_EXPORT inline const Time MAX_PROPAGATION_DELAY = MicroSeconds(1);
+inline const Time MAX_PROPAGATION_DELAY = MicroSeconds(1);
 
 /// The aMediumSyncThreshold defined by Sec. 35.3.16.18.1 of 802.11be D4.0
-WIFI_EXPORT inline const Time MEDIUM_SYNC_THRESHOLD = MicroSeconds(72);
+inline const Time MEDIUM_SYNC_THRESHOLD = MicroSeconds(72);
 
 /// minimum TX power level value
 static constexpr uint8_t WIFI_MIN_TX_PWR_LEVEL{1};
