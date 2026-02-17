@@ -1001,10 +1001,11 @@ class GlobalRouter : public Object
     IpAddress m_routerId;                                    //!< router ID (its IPv4 address)
     Ptr<GlobalRouting<IpRoutingProtocol>> m_routingProtocol; //!< the Ipv4GlobalRouting in use
 
-    typedef std::list<IpRoutingTableEntry*> InjectedRoutes; //!< container of Ipv4RoutingTableEntry
-    typedef std::list<IpRoutingTableEntry*>::const_iterator
+    typedef typename std::list<IpRoutingTableEntry*>
+        InjectedRoutes; //!< container of Ipv4RoutingTableEntry
+    typedef typename std::list<IpRoutingTableEntry*>::const_iterator
         InjectedRoutesCI; //!< Const Iterator to container of Ipv4RoutingTableEntry
-    typedef std::list<IpRoutingTableEntry*>::iterator
+    typedef typename std::list<IpRoutingTableEntry*>::iterator
         InjectedRoutesI;             //!< Iterator to container of Ipv4RoutingTableEntry
     InjectedRoutes m_injectedRoutes; //!< Routes we are exporting
 

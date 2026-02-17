@@ -508,25 +508,25 @@ class GlobalRouting : public std::enable_if_t<std::is_same_v<Ipv4RoutingProtocol
     Ptr<UniformRandomVariable> m_rand;
 
     /// container of Ipv4RoutingTableEntry (routes to hosts)
-    typedef std::list<IpRoutingTableEntry*> HostRoutes;
+    typedef typename std::list<IpRoutingTableEntry*> HostRoutes;
     /// const iterator of container of Ipv4RoutingTableEntry (routes to hosts)
-    typedef std::list<IpRoutingTableEntry*>::const_iterator HostRoutesCI;
+    typedef typename std::list<IpRoutingTableEntry*>::const_iterator HostRoutesCI;
     /// iterator of container of Ipv4RoutingTableEntry (routes to hosts)
-    typedef std::list<IpRoutingTableEntry*>::iterator HostRoutesI;
+    typedef typename std::list<IpRoutingTableEntry*>::iterator HostRoutesI;
 
     /// container of Ipv4RoutingTableEntry (routes to networks)
-    typedef std::list<IpRoutingTableEntry*> NetworkRoutes;
+    typedef typename std::list<IpRoutingTableEntry*> NetworkRoutes;
     /// const iterator of container of Ipv4RoutingTableEntry (routes to networks)
-    typedef std::list<IpRoutingTableEntry*>::const_iterator NetworkRoutesCI;
+    typedef typename std::list<IpRoutingTableEntry*>::const_iterator NetworkRoutesCI;
     /// iterator of container of Ipv4RoutingTableEntry (routes to networks)
-    typedef std::list<IpRoutingTableEntry*>::iterator NetworkRoutesI;
+    typedef typename std::list<IpRoutingTableEntry*>::iterator NetworkRoutesI;
 
     /// container of Ipv4RoutingTableEntry (routes to external AS)
-    typedef std::list<IpRoutingTableEntry*> ASExternalRoutes;
+    typedef typename std::list<IpRoutingTableEntry*> ASExternalRoutes;
     /// const iterator of container of Ipv4RoutingTableEntry (routes to external AS)
-    typedef std::list<IpRoutingTableEntry*>::const_iterator ASExternalRoutesCI;
+    typedef typename std::list<IpRoutingTableEntry*>::const_iterator ASExternalRoutesCI;
     /// iterator of container of Ipv4RoutingTableEntry (routes to external AS)
-    typedef std::list<IpRoutingTableEntry*>::iterator ASExternalRoutesI;
+    typedef typename std::list<IpRoutingTableEntry*>::iterator ASExternalRoutesI;
 
     /**
      * @brief Lookup in the forwarding table for destination.
