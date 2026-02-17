@@ -9,6 +9,7 @@
 #define BUFFER_H
 
 #include "ns3/assert.h"
+#include "ns3/deprecated.h"
 
 #include <ostream>
 #include <stdint.h>
@@ -31,6 +32,14 @@ namespace ns3
  * by creating new Buffers of the maximum size ever used.
  * The correct maximum size is learned at runtime during use by
  * recording the maximum size of each packet.
+ *
+ * Some of the features of this class depend on the byte order
+ * of the device running ns-3 (big-endian or little-endian).
+ * For example, `WriteU16/32/64` on a little-endian host should
+ * work as `WriteHton16/32/64` on a big-endian host and vice versa.
+ * At the moment, all systems supported by ns-3 are little-endian,
+ * and behavior on big-endian systems is not tested. Hence,
+ * special care is needed when running ns-3 on a big-endian host.
  *
  * @internal
  * The implementation of the Buffer class uses a COW (Copy On Write)
@@ -152,8 +161,8 @@ class Buffer
          *
          * Write the data in buffer and advance the iterator position
          * by two bytes. The format of the data written in the byte
-         * buffer is non-portable. We only ensure that readU16 will
-         * return exactly what we wrote with writeU16 if the program
+         * buffer is little-endian. We ensure that ReadU16 will
+         * return exactly what we wrote with WriteU16 if the program
          * is run on the same machine.
          */
         void WriteU16(uint16_t data);
@@ -162,8 +171,8 @@ class Buffer
          *
          * Write the data in buffer and advance the iterator position
          * by four bytes. The format of the data written in the byte
-         * buffer is non-portable. We only ensure that readU32 will
-         * return exactly what we wrote with writeU32 if the program
+         * buffer is little-endian. We ensure that ReadU32 will
+         * return exactly what we wrote with WriteU32 if the program
          * is run on the same machine.
          */
         void WriteU32(uint32_t data);
@@ -172,8 +181,8 @@ class Buffer
          *
          * Write the data in buffer and advance the iterator position
          * by eight bytes. The format of the data written in the byte
-         * buffer is non-portable. We only ensure that readU64 will
-         * return exactly what we wrote with writeU64 if the program
+         * buffer is little-endian. We ensure that ReadU64 will
+         * return exactly what we wrote with WriteU64 if the program
          * is run on the same machine.
          */
         void WriteU64(uint64_t data);
@@ -184,6 +193,7 @@ class Buffer
          * by two bytes. The data is written in least significant byte order and the
          * input data is expected to be in host order.
          */
+        NS_DEPRECATED_3_48("Use Buffer::Iterator::WriteU16 instead")
         void WriteHtolsbU16(uint16_t data);
         /**
          * @param data data to write in buffer
@@ -192,6 +202,7 @@ class Buffer
          * by four bytes. The data is written in least significant byte order and the
          * input data is expected to be in host order.
          */
+        NS_DEPRECATED_3_48("Use Buffer::Iterator::WriteU32 instead")
         void WriteHtolsbU32(uint32_t data);
         /**
          * @param data data to write in buffer
@@ -200,13 +211,14 @@ class Buffer
          * by eight bytes. The data is written in least significant byte order and the
          * input data is expected to be in host order.
          */
+        NS_DEPRECATED_3_48("Use Buffer::Iterator::WriteU64 instead")
         void WriteHtolsbU64(uint64_t data);
         /**
          * @param data data to write in buffer
          *
          * Write the data in buffer and advance the iterator position
-         * by two bytes. The data is written in network order and the
-         * input data is expected to be in host order.
+         * by two bytes. The data is written in network order (big-endian)
+         * and the input data is expected to be in host order.
          *
          * @hidecaller
          */
@@ -215,16 +227,16 @@ class Buffer
          * @param data data to write in buffer
          *
          * Write the data in buffer and advance the iterator position
-         * by four bytes. The data is written in network order and the
-         * input data is expected to be in host order.
+         * by four bytes. The data is written in network order (big-endian)
+         * and the input data is expected to be in host order.
          */
         inline void WriteHtonU32(uint32_t data);
         /**
          * @param data data to write in buffer
          *
          * Write the data in buffer and advance the iterator position
-         * by eight bytes. The data is written in network order and the
-         * input data is expected to be in host order.
+         * by eight bytes. The data is written in network order (big-endian)
+         * and the input data is expected to be in host order.
          */
         void WriteHtonU64(uint64_t data);
         /**
@@ -269,7 +281,7 @@ class Buffer
          *
          * Read data and advance the Iterator by the number of bytes
          * read.
-         * The data is read in the format written by writeU16.
+         * The data is read in the format written by WriteU16.
          */
         inline uint16_t ReadU16();
         /**
@@ -277,7 +289,7 @@ class Buffer
          *
          * Read data and advance the Iterator by the number of bytes
          * read.
-         * The data is read in the format written by writeU32.
+         * The data is read in the format written by WriteU32.
          */
         uint32_t ReadU32();
         /**
@@ -285,7 +297,7 @@ class Buffer
          *
          * Read data and advance the Iterator by the number of bytes
          * read.
-         * The data is read in the format written by writeU64.
+         * The data is read in the format written by WriteU64.
          */
         uint64_t ReadU64();
         /**
@@ -321,6 +333,7 @@ class Buffer
          * read.
          * The data is read in least significant byte format and returned in host format.
          */
+        NS_DEPRECATED_3_48("Use Buffer::Iterator::ReadU16 instead")
         uint16_t ReadLsbtohU16();
         /**
          * @return the four bytes read in the buffer.
@@ -329,6 +342,7 @@ class Buffer
          * read.
          * The data is read in least significant byte format and returned in host format.
          */
+        NS_DEPRECATED_3_48("Use Buffer::Iterator::ReadU32 instead")
         uint32_t ReadLsbtohU32();
         /**
          * @return the eight bytes read in the buffer.
@@ -337,6 +351,7 @@ class Buffer
          * read.
          * The data is read in least significant byte format and returned in host format.
          */
+        NS_DEPRECATED_3_48("Use Buffer::Iterator::ReadU64 instead")
         uint64_t ReadLsbtohU64();
         /**
          * @param buffer buffer to copy data into

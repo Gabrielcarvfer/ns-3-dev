@@ -53,7 +53,7 @@ HeOperation::HeOperationParams::Serialize(Buffer::Iterator& start) const
     uint16_t twoBytes = m_defaultPeDuration | (m_twtRequired << 3) | (m_txopDurRtsThresh << 4) |
                         (m_vhOpPresent << 14) | (m_coHostedBss << 15);
     uint8_t oneByte = m_erSuDisable | ((m_6GHzOpPresent ? 1 : 0) << 1);
-    start.WriteHtolsbU16(twoBytes);
+    start.WriteU16(twoBytes);
     start.WriteU8(oneByte);
 }
 
@@ -61,7 +61,7 @@ uint16_t
 HeOperation::HeOperationParams::Deserialize(Buffer::Iterator& start)
 {
     Buffer::Iterator tmp = start;
-    uint16_t twoBytes = start.ReadLsbtohU16();
+    uint16_t twoBytes = start.ReadU16();
     uint8_t oneByte = start.ReadU8();
     m_defaultPeDuration = twoBytes & 0x07;
     m_twtRequired = (twoBytes >> 3) & 0x01;
@@ -207,7 +207,7 @@ HeOperation::SerializeInformationField(Buffer::Iterator start) const
 {
     m_heOpParams.Serialize(start);
     m_bssColorInfo.Serialize(start);
-    start.WriteHtolsbU16(m_basicHeMcsAndNssSet);
+    start.WriteU16(m_basicHeMcsAndNssSet);
     if (m_6GHzOpInfo)
     {
         m_6GHzOpInfo->Serialize(start);
@@ -221,7 +221,7 @@ HeOperation::DeserializeInformationField(Buffer::Iterator start, uint16_t length
     Buffer::Iterator i = start;
     m_heOpParams.Deserialize(i);
     m_bssColorInfo.Deserialize(i);
-    m_basicHeMcsAndNssSet = i.ReadLsbtohU16();
+    m_basicHeMcsAndNssSet = i.ReadU16();
     if (m_heOpParams.m_6GHzOpPresent)
     {
         OpInfo6GHz opInfo6GHz;

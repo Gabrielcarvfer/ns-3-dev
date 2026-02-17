@@ -255,7 +255,7 @@ BasicMultiLinkElementTest::DoRun()
 
     auto i = buffer.Begin();
     i = CapabilityInformation().Deserialize(i);
-    i.ReadLsbtohU16(); // Listen interval
+    i.ReadU16(); // Listen interval
 
     auto tmp = i;
     i = Ssid().DeserializeIfPresent(tmp);
@@ -279,7 +279,7 @@ BasicMultiLinkElementTest::DoRun()
                           IE_EXT_MULTI_LINK_ELEMENT,
                           "IE_EXT_MULTI_LINK_ELEMENT expected");
 
-    uint16_t mlControl = i.ReadLsbtohU16();
+    uint16_t mlControl = i.ReadU16();
     auto nBytes = CommonInfoBasicMle().Deserialize(i, mlControl >> 4);
     i.Next(nBytes);
 
@@ -287,9 +287,9 @@ BasicMultiLinkElementTest::DoRun()
     NS_TEST_EXPECT_MSG_EQ(i.ReadU8(),
                           MultiLinkElement::PER_STA_PROFILE_SUBELEMENT_ID,
                           "PER_STA_PROFILE_SUBELEMENT_ID expected");
-    i.ReadU8();        // length
-    i.ReadLsbtohU16(); // STA Control field
-    i.ReadU8();        // STA Info Length
+    i.ReadU8();  // length
+    i.ReadU16(); // STA Control field
+    i.ReadU8();  // STA Info Length
     // no STA address
     i = CapabilityInformation().Deserialize(i);
     // no Information Element
@@ -298,9 +298,9 @@ BasicMultiLinkElementTest::DoRun()
     NS_TEST_EXPECT_MSG_EQ(i.ReadU8(),
                           MultiLinkElement::PER_STA_PROFILE_SUBELEMENT_ID,
                           "PER_STA_PROFILE_SUBELEMENT_ID expected");
-    i.ReadU8();        // length
-    i.ReadLsbtohU16(); // STA Control field
-    i.ReadU8();        // STA Info Length
+    i.ReadU8();  // length
+    i.ReadU16(); // STA Control field
+    i.ReadU8();  // STA Info Length
     Mac48Address address;
     ReadFrom(i, address);
     i = CapabilityInformation().Deserialize(i);
@@ -334,9 +334,9 @@ BasicMultiLinkElementTest::DoRun()
     NS_TEST_EXPECT_MSG_EQ(i.ReadU8(),
                           MultiLinkElement::PER_STA_PROFILE_SUBELEMENT_ID,
                           "PER_STA_PROFILE_SUBELEMENT_ID expected");
-    i.ReadU8();        // length
-    i.ReadLsbtohU16(); // STA Control field
-    i.ReadU8();        // STA Info Length
+    i.ReadU8();  // length
+    i.ReadU16(); // STA Control field
+    i.ReadU8();  // STA Info Length
     ReadFrom(i, address);
     i = CapabilityInformation().Deserialize(i);
     // no Listen interval

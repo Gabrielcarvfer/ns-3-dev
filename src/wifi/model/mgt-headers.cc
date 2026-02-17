@@ -107,8 +107,8 @@ MgtProbeResponseHeader::SerializeImpl(Buffer::Iterator start) const
     SetMleContainingFrame();
 
     Buffer::Iterator i = start;
-    i.WriteHtolsbU64(Simulator::Now().GetMicroSeconds());
-    i.WriteHtolsbU16(static_cast<uint16_t>(m_beaconInterval / 1024));
+    i.WriteU64(Simulator::Now().GetMicroSeconds());
+    i.WriteU16(static_cast<uint16_t>(m_beaconInterval / 1024));
     i = m_capability.Serialize(i);
     WifiMgtHeader<MgtProbeResponseHeader, ProbeResponseElems>::SerializeImpl(i);
 }
@@ -117,8 +117,8 @@ uint32_t
 MgtProbeResponseHeader::DeserializeImpl(Buffer::Iterator start)
 {
     Buffer::Iterator i = start;
-    m_timestamp = i.ReadLsbtohU64();
-    m_beaconInterval = i.ReadLsbtohU16();
+    m_timestamp = i.ReadU64();
+    m_beaconInterval = i.ReadU16();
     m_beaconInterval *= 1024;
     i = m_capability.Deserialize(i);
     auto distance = i.GetDistanceFrom(start);
@@ -232,7 +232,7 @@ MgtAssocRequestHeader::SerializeImpl(Buffer::Iterator start) const
 
     Buffer::Iterator i = start;
     i = m_capability.Serialize(i);
-    i.WriteHtolsbU16(m_listenInterval);
+    i.WriteU16(m_listenInterval);
     WifiMgtHeader<MgtAssocRequestHeader, AssocRequestElems>::SerializeImpl(i);
 }
 
@@ -251,7 +251,7 @@ MgtAssocRequestHeader::DeserializeImpl(Buffer::Iterator start)
 {
     Buffer::Iterator i = start;
     i = m_capability.Deserialize(i);
-    m_listenInterval = i.ReadLsbtohU16();
+    m_listenInterval = i.ReadU16();
     auto distance = i.GetDistanceFrom(start) +
                     WifiMgtHeader<MgtAssocRequestHeader, AssocRequestElems>::DeserializeImpl(i);
     if (auto& mle = Get<MultiLinkElement>())
@@ -416,7 +416,7 @@ MgtReassocRequestHeader::SerializeImpl(Buffer::Iterator start) const
 
     Buffer::Iterator i = start;
     i = m_capability.Serialize(i);
-    i.WriteHtolsbU16(m_listenInterval);
+    i.WriteU16(m_listenInterval);
     WriteTo(i, m_currentApAddr);
     WifiMgtHeader<MgtReassocRequestHeader, AssocRequestElems>::SerializeImpl(i);
 }
@@ -436,7 +436,7 @@ MgtReassocRequestHeader::DeserializeImpl(Buffer::Iterator start)
 {
     Buffer::Iterator i = start;
     i = m_capability.Deserialize(i);
-    m_listenInterval = i.ReadLsbtohU16();
+    m_listenInterval = i.ReadU16();
     ReadFrom(i, m_currentApAddr);
     auto distance = i.GetDistanceFrom(start) +
                     WifiMgtHeader<MgtReassocRequestHeader, AssocRequestElems>::DeserializeImpl(i);
@@ -574,7 +574,7 @@ MgtAssocResponseHeader::SerializeImpl(Buffer::Iterator start) const
     Buffer::Iterator i = start;
     i = m_capability.Serialize(i);
     i = m_code.Serialize(i);
-    i.WriteHtolsbU16(m_aid);
+    i.WriteU16(m_aid);
     WifiMgtHeader<MgtAssocResponseHeader, AssocResponseElems>::SerializeImpl(i);
 }
 
@@ -595,7 +595,7 @@ MgtAssocResponseHeader::DeserializeImpl(Buffer::Iterator start)
     Buffer::Iterator i = start;
     i = m_capability.Deserialize(i);
     i = m_code.Deserialize(i);
-    m_aid = i.ReadLsbtohU16();
+    m_aid = i.ReadU16();
     auto distance = i.GetDistanceFrom(start) +
                     WifiMgtHeader<MgtAssocResponseHeader, AssocResponseElems>::DeserializeImpl(i);
     if (auto& mle = Get<MultiLinkElement>())
