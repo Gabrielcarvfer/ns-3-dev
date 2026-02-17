@@ -71,22 +71,22 @@ def main(argv):
         "--constrain=performance",
         "-d",
         "--duration",
-        "-e socket-options-ipv6",
-        "--example=socket-options-ipv6",
+        "-e wifi-ap",
+        "--example=wifi-ap",
         "-u",
         "--update-data",
         "-f EXTENSIVE",
         "--fullness=EXTENSIVE",
-        "-g",
-        "--grind",
+        "-g -e wifi-ap",
+        "--grind -e wifi-ap",
         "-l",
         "--list",
         "-m",
         "--multiple",
         "-n",
         "--no-build",
-        "-p first",
-        "--pyexample=first",
+        "-p first.py",
+        "--pyexample=first.py",
         "-r",
         "--retain",
         "-s ns3-tcp-state",
@@ -105,7 +105,10 @@ def main(argv):
         '--example="wifi-phy-configuration --testCase=0"',
     ]
 
-    configure_string = sys.executable + " ns3 configure --enable-tests --enable-examples"
+    configure_string = (
+        sys.executable
+        + ' ns3 configure -d release --enable-tests --enable-examples --filter-module-examples-and-tests="wifi" --enable-python-bindings'
+    )
     clean_string = sys.executable + " ns3 clean"
     cmd_execute_list = [
         "%s && %s test.py %s && %s" % (configure_string, sys.executable, option, clean_string)
