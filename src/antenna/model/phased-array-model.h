@@ -33,6 +33,14 @@ class PhasedArrayModel : public Object
     PhasedArrayModel();
 
     /**
+     * @brief Copy constructor
+     * The copy has a different antenna ID than the original for proper disambiguation
+     *
+     * @param other PhaseArrayModel to copy
+     */
+    PhasedArrayModel(const PhasedArrayModel& other);
+
+    /**
      * Destructor
      */
     ~PhasedArrayModel() override;

@@ -32,6 +32,16 @@ PhasedArrayModel::PhasedArrayModel()
     m_outOfDateAntennaPairChannel.SetValueAdjacent(m_id, true);
 }
 
+PhasedArrayModel::PhasedArrayModel(const PhasedArrayModel& other)
+    : m_beamformingVector(other.m_beamformingVector),
+      m_antennaElement{other.m_antennaElement},
+      m_isBfVectorValid{other.m_isBfVectorValid}
+{
+    m_id = m_idCounter++;
+    m_outOfDateAntennaPairChannel.AddRow();
+    m_outOfDateAntennaPairChannel.SetValueAdjacent(m_id, true);
+}
+
 PhasedArrayModel::~PhasedArrayModel()
 {
 }
