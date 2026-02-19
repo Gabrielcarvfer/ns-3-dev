@@ -420,7 +420,7 @@ WifiTxVector::SetRuAllocation(const RuAllocation& ruAlloc, uint8_t p20Index)
 const RuAllocation&
 WifiTxVector::GetRuAllocation(uint8_t p20Index) const
 {
-    if (ns3::IsDlMu(m_preamble) && m_ruAllocation.empty())
+    if (ns3::IsDlMu(m_preamble) && !m_muUserInfos.empty() && m_ruAllocation.empty())
     {
         m_ruAllocation = DeriveRuAllocation(p20Index);
     }
