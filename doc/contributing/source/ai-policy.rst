@@ -10,8 +10,52 @@
 AI tool policy
 --------------
 
+Motivation
+**********
+
+As a community |ns3| values contributions from new as well as experienced developers,
+as discussed in our
+[Code of Conduct Policy](https://www.nsnam.org/about/governance/policies/).
+We expect that participating in |ns3| will be a learning experience,
+especially for new contributors, and we strive to support that learning
+throughout our code review process.
+
+As a project we rely on various external tools to support development,
+and encourage developers to use whatever tools improve their productivity
+and quality of contributions, including AI-type tools.  There is a downside,
+however, in over-reliance on AI tools, when contributors don't fully understand
+what the tool has generated, haven't reviewed it fully themselves,
+and are not committed to learning themselves.
+
+As a project we recognize that code reviews are not free;
+they _do_ consume reviewers' and maintainers' time and effort.
+Therefore we strive to find a balance between supporting new contributors
+and being judicious in committing reviewers time.
+
+We believe a key factor in achieving that balance is to recognize
+that participation in |ns3| is fundamentally a _human_ process.
+Therefore we value interacting with human contributors to enhance submissions,
+enabling contributor learning, and maintaining high quality |ns3| code.
+When contributors rely excessively on AI tools they put |ns3| reviewers
+in the position of refining the AI output, through the mediation of the submitter,
+rather than working directly with an engaged contributor.  This does not contribute
+to learning, by contributors or maintainers, nor to efficient enhancement of |ns3|.
+
+Therefore the project has adopted this policy guiding use of AI tools.
+
 This policy is mostly copied from a proposal being discussed for
 `LLVM <https://github.com/llvm/llvm-project/pull/154441>`_.
+
+Summary of the policy
+=====================
+
+The main principles of this policy are
+* Contributors can use whatever tools they would like
+* There must be a *human in the loop*
+* Contributors must read and review all generated contributions _before_ asking for review
+* Contributions containing substantial generated content should be labeled
+* Agents **must not** take action in our digital spaces without human approval
+* Issues labeled "good first issue" are strictly for humans; AI tools must not be used
 
 Policy
 ******
@@ -61,8 +105,9 @@ tool assistance.
 
 An important implication of this policy is that it bans agents that take action
 in our digital spaces without human approval, such as the `GitHub @claude
-agent <https://github.com/claude/>`_. Similarly, automated review tools that
-publish comments without human review are not allowed. However, an opt-in
+agent <https://github.com/claude/>`_. Automated review tools that may publish
+review comments without human review can be considered by the ns-3 project as a
+possible exception to this policy on a case-by-case basis. However, an opt-in
 review tool that *keeps a human in the loop* is acceptable under this policy.
 As another example, using an LLM to generate documentation, which a contributor
 manually reviews for correctness, edits, and then posts as a MR, is an approved
@@ -107,7 +152,8 @@ they should paste the following response to request changes:
 
 .. code-block:: text
 
-    This MR doesn't appear to comply with our policy on tool-generated content,
+    This MR doesn't appear to comply with our [our policy on tool-generated
+    content](https://www.nsnam.org/docs/contributing/html/general.html#ai-policy),
     and requires additional justification for why it is valuable enough to the
     project for us to review it. Please see our developer policy on
     AI-generated contributions: (URL TBD)
@@ -137,6 +183,10 @@ contributors are responsible for ensuring that such material does not appear in
 their contributions. Contributions found to violate this policy will be removed
 just like any other offending contribution.
 
+Agents should explicitly warn the user if external code being proposed or
+integrated for ns-3 is observed to be licensed under a license incompatible
+with the GNU GPLv2-only license.
+
 Examples of when to mention tool use
 ************************************
 
@@ -159,13 +209,15 @@ you, or if you instead asked it to review and tidy up something that you
 generated largely by yourself. If the former, disclose the tool use, but
 otherwise, use need not be mentioned.
 
-Here are some examples of contributions that demonstrate how to apply
+Here are some examples of commit messages that demonstrate how to apply
 the principles of this policy:
 
 .. code-block:: text
 
-  Examples to be provided
+   core: Create mp-units attribute wrappers
+   Claude Code assisted with implementation
 
+Other examples will be provided at a later date.
 
 Use of LLMs to review merge requests
 ************************************
