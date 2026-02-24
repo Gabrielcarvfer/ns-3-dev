@@ -34,10 +34,43 @@ function(check_deps missing_deps)
   endforeach()
 
   foreach(package ${DEPS_PYTHON_PACKAGES})
-    execute_process(
-      COMMAND ${Python3_EXECUTABLE} -c "import ${package}"
-      RESULT_VARIABLE return_code OUTPUT_QUIET ERROR_QUIET
+    # Retrieve python prefix
+    if(NOT DEFINED ENV{SYS_PREFIX})
+      execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "import sys; print(sys.prefix)"
+        OUTPUT_VARIABLE venv_prefix
+      )
+      set(ENV{SYS_PREFIX} ${venv_prefix})
+    endif()
+
+    # Set virtual env in case prefix contains substring "venv"
+    if(NOT DEFINED ENV{VIRTUAL_ENV})
+      if($ENV{SYS_PREFIX} MATCHES "(venv|Venv)")
+        set(ENV{VIRTUAL_ENV} $ENV{SYS_PREFIX})
+      endif()
+    endif()
+
+    set(venv_command_preamble "${CMAKE_COMMAND}" -E env
+                              PATH="$ENV{SYS_PREFIX}/bin:$ENV{PATH}"
     )
+    if(DEFINED ENV{VIRTUAL_ENV})
+      set(venv_command_preamble ${venv_command_preamble}
+                                VIRTUAL_ENV=$ENV{VIRTUAL_ENV}
+      )
+    endif()
+
+    # Activate venv before checking for package
+    execute_process(
+      COMMAND ${venv_command_preamble} ${Python3_EXECUTABLE} -c
+              "import ${package}" RESULT_VARIABLE return_code # OUTPUT_QUIET
+                                                              # ERROR_QUIET
+    )
+    # Leaving for debugging purposes execute_process( COMMAND
+    # ${venv_command_preamble} ${Python3_EXECUTABLE} -c "import sys, os;
+    # print(f\"SYS_PREFIX={sys.prefix}\");
+    # print(f\"VIRTUAL_ENV={os.environ.get('VIRTUAL_ENV', '')}\")"
+    # RESULT_VARIABLE return_code #OUTPUT_QUIET ERROR_QUIET )
+    # message(FATAL_ERROR "")
     if(NOT (${return_code} EQUAL 0))
       list(APPEND local_missing_deps ${package})
     else()
@@ -45,7 +78,7 @@ function(check_deps missing_deps)
       # manually add them to CMAKE_PREFIX_PATH
       execute_process(
         COMMAND
-          ${Python3_EXECUTABLE} -c
+          ${venv_command_preamble} ${Python3_EXECUTABLE} -c
           "import os; import ${package}; print(os.path.abspath(os.path.dirname(${package}.__file__)))"
         OUTPUT_VARIABLE venv_site_packages_path
       )
