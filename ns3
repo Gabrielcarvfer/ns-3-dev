@@ -4,9 +4,11 @@ import argparse
 import atexit
 import functools
 import glob
+import json
 import os
 import re
 import shutil
+import site
 import subprocess
 import sys
 import textwrap
@@ -313,6 +315,9 @@ def parse_args(argv):
     )
     parser_configure.add_argument(
         "--prefix", help="Target output directory to install", action="store", default=None
+    )
+    parser_configure.add_argument(
+        "--preset", help="Target CMakePresets.json to load", action="store", default=None
     )
     parser_configure.add_argument(
         "--trace-performance",
@@ -976,6 +981,9 @@ def configure_cmake(
     if args.prefix is not None:
         cmake_args.append("-DCMAKE_INSTALL_PREFIX=%s" % args.prefix)
 
+    if args.preset is not None:
+        cmake_args.append("--preset=%s" % args.preset)
+
     # Process enabled/disabled modules
     if args.enable_modules is not None:
         cmake_args.append("-DNS3_ENABLED_MODULES=%s" % args.enable_modules)
@@ -1442,19 +1450,58 @@ def check_module_installed(module_name: str):
         exit(-1)
 
 
+def replace_penv_vars(text):
+    def replacer(match):
+        var_name = match.group(1)
+        return os.getenv(var_name, "")  # Empty string default if unset
+
+    return re.sub(r"\$penv\{([^}]+)\}", replacer, text).strip(path_sep)
+
+
+def load_preset_environment():
+    lock_dict = {}
+    exec(open(lock_file).read(), globals(), lock_dict)
+    cmake_preset = lock_dict["CMAKE_PRESET"]
+
+    # If a preset is present, we try to load it
+    if cmake_preset:
+        with open(f"{ns3_path}/CMakePresets.json", "r") as f:
+            cmake_presets = json.load(f)
+            cmake_presets = cmake_presets["configurePresets"]
+            cmake_presets = list(filter(lambda x: x["name"] == cmake_preset, cmake_presets))
+            if not cmake_presets:
+                print_and_buffer(
+                    f"Expected CMakePreset '{cmake_preset}' but it was not found in CMakePreset.json"
+                )
+                exit(1)
+            else:
+                # Now we have CMakePresent environment variables
+                cmake_presets = cmake_presets[0]["environment"].items()
+                # But they may have expansion macros that we need to manually handle
+                # Then, if they have $penv{} around, we remove and replace by os.getenv(name, "")
+                cmake_presets = [(key, replace_penv_vars(value)) for key, value in cmake_presets]
+                return cmake_presets
+    return []
+
+
 def run_step(args, target_to_run, target_args):
     libdir = "%s/lib" % out_dir
     if not os.path.exists(libdir):
         libdir += "64"
-    custom_env = {
-        "PATH": libdir,
-        "PYTHONPATH": "%s/bindings/python" % out_dir,
-    }
+
+    custom_env = [
+        ("PATH", libdir),
+        ("PYTHONPATH", f"{out_dir}/bindings/python"),
+        ("PYTHONPATH", path_sep.join(site.getsitepackages())),
+    ]
     if sys.platform != "win32":
-        custom_env["LD_LIBRARY_PATH"] = libdir
+        custom_env.append(("LD_LIBRARY_PATH", libdir))
+
+    # If a preset was configured, load associated environment variables
+    custom_env.extend(load_preset_environment())
 
     proc_env = os.environ.copy()
-    for key, value in custom_env.items():
+    for key, value in custom_env:
         if key in proc_env:
             proc_env[key] += path_sep + value
         else:
@@ -1559,7 +1606,7 @@ def run_step(args, target_to_run, target_args):
 
     if run_verbose or args.dry_run:
         exported_variables = "export "
-        for variable, value in custom_env.items():
+        for variable, value in custom_env:
             if variable == "PATH":
                 value = path_variable + path_sep + libdir
             exported_variables += "%s=%s " % (variable, value)

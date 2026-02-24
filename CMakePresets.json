@@ -1,0 +1,39 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "MacHomebrewSionna",
+      "environment": {
+          "DYLD_FALLBACK_LIBRARY_PATH": "/opt/homebrew/lib:$penv{DYLD_FALLBACK_LIBRARY_PATH}",
+          "DRJIT_LIBLLVM_PATH": "/opt/homebrew/opt/llvm@17/lib/libLLVM.dylib"
+      },
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/opt/homebrew",
+        "NS3_PYTHON_BINDINGS": "ON",
+        "NS3_CMAKE_PRESET": "MacHomebrewSionna"
+      }
+    },
+    {
+      "name": "MacCondaSionna",
+      "environment": {
+        "DRJIT_LIBLLVM_PATH": "$penv{CONDA_PREFIX}/lib/libLLVM-17.dylib"
+      },
+      "cacheVariables": {
+        "NS3_PYTHON_BINDINGS": "ON",
+        "NS3_CMAKE_PRESET": "MacCondaSionna"
+      }
+    },
+    {
+      "name": "MacPortsSionna",
+      "environment": {
+        "DYLD_FALLBACK_LIBRARY_PATH": "/opt/local/lib:$penv{DYLD_FALLBACK_LIBRARY_PATH}",
+        "DRJIT_LIBLLVM_PATH": "/opt/local/libexec/llvm-17/lib/libLLVM.dylib"
+      },
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/opt/local",
+        "NS3_PYTHON_BINDINGS": "ON",
+        "NS3_CMAKE_PRESET": "MacPortsSionna"
+      }
+    }
+  ]
+}
