@@ -8,7 +8,8 @@
           "DRJIT_LIBLLVM_PATH": "/opt/homebrew/opt/llvm@17/lib/libLLVM.dylib"
       },
       "cacheVariables": {
-        "NS3_PYTHON_BINDINGS": "ON"
+        "NS3_PYTHON_BINDINGS": "ON",
+        "NS3_CMAKE_PRESET": "MacHomebrewSionna"
       }
     },
     {
