@@ -1135,8 +1135,8 @@ macro(process_options)
     # WSLv1 has a long double issue that will result in a few tests failing
     # https://github.com/microsoft/WSL/issues/830
     include(CheckTypeSize)
-    check_type_size("double" SIZEOF_DOUBLE)
-    check_type_size("long double" SIZEOF_LONG_DOUBLE)
+    check_type_size("double" SIZEOF_DOUBLE LANGUAGE CXX)
+    check_type_size("long double" SIZEOF_LONG_DOUBLE LANGUAGE CXX)
 
     if(${SIZEOF_LONG_DOUBLE} EQUAL ${SIZEOF_DOUBLE})
       message(
