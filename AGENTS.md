@@ -27,7 +27,7 @@ ns-3 is a discrete-event network simulator for Internet systems, written in C++ 
 **Running:**
 
 ```bash
-./ns3 run simple-global-routing                  # Run example program
+./ns3 run "simple-global-routing"                  # Run example program
 ./ns3 run "program [args]"                       # Run with arguments
 ```
 
@@ -35,7 +35,8 @@ ns-3 is a discrete-event network simulator for Internet systems, written in C++ 
 
 ```bash
 ./test.py                                        # Run all tests
-./test.py -s module-name                         # Run specific module tests
+./test.py -s module-name                         # Run specific module tests, where `module-name`
+                                                 # is the name of the module to be tested.
 ./test.py -v                                     # Verbose output
 ```
 
@@ -90,10 +91,7 @@ src/module-name/
 
 The full coding style guide is documented in `doc/contributing/source/coding-style.rst`.
 
-- **Clang-format**: Microsoft-based style, 100-char limit
-- **Pointer alignment**: Left (`int* ptr`)
-- **Include order**: ns3/, system, local headers
-- **Standard**: C++20
+- **Clang-format**: Formatting rules and current C++ standard alignment are in .clang-format
 - **No Unicode symbols**: Do not use Unicode mathematical symbols (e.g., ≤, ≥, ×, ÷, ∑, π) or arrows (e.g., →, ←, ⇒, ↑) in comments or Doxygen documentation; use ASCII equivalents instead (e.g., `<=`, `>=`, `*`, `/`, `->`, `=>`)
 
 ### Sphinx/reStructuredText Documentation
@@ -151,8 +149,10 @@ class MyClass
 
 - Present tense, imperative mood ("Add feature" not "Added feature")
 - Reference modules: "core, network: Add new feature"
+  - if list of edited modules spans more than two, suppress listing
 - 72 character limit for first line
-- Use "(fixes #issue)" for bug fixes
+- Use "(fixes #issue)" for bug fixes, after the list of modules but before
+  the summary of the commit, where `#issue` is the number of the issue.
 
 ## Common Development Tasks
 
@@ -218,6 +218,14 @@ help(ns.ClassName)  # Get class documentation
 
 ## Documentation
 
-- **Manual**: [https://www.nsnam.org/docs/manual/html/](https://www.nsnam.org/docs/manual/html/)
-- **API Reference**: [https://www.nsnam.org/docs/doxygen/](https://www.nsnam.org/docs/doxygen/)
-- **Model Library**: [https://www.nsnam.org/docs/models/html/](https://www.nsnam.org/docs/models/html/)
+Rendered (current release):
+
+- **Manual**: <https://www.nsnam.org/docs/manual/html/>
+- **API Reference**: <https://www.nsnam.org/docs/doxygen/>
+- **Model Library**: <https://www.nsnam.org/docs/models/html/>
+
+Source (in-tree, for editing):
+
+- **Manual**: `doc/manual/source/`
+- **Model docs**: `doc/models/source/`
+- **Contributing guide**: `doc/contributing/source/`
