@@ -107,93 +107,72 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
 {
     NS_LOG_FUNCTION(this);
 
-    NS_ASSERT_MSG(sAnt != nullptr && uAnt != nullptr, "Improper call to the method");
-    const PhasedArrayModel::ComplexVector& sW = sAnt->GetBeamformingVectorRef();
-    const PhasedArrayModel::ComplexVector& uW = uAnt->GetBeamformingVectorRef();
-    const size_t sAntNumElems = sW.GetSize();
-    const size_t uAntNumElems = uW.GetSize();
-    NS_ASSERT(uAntNumElems == channelMatrix->m_channel.GetNumRows());
-    NS_ASSERT(sAntNumElems == channelMatrix->m_channel.GetNumCols());
-    NS_LOG_DEBUG("CalcLongTerm with " << uW.GetSize() << " u antenna elements and " << sW.GetSize()
-                                      << " s antenna elements, and with "
-                                      << " s ports: " << sAnt->GetNumPorts()
-                                      << " u ports: " << uAnt->GetNumPorts());
-    size_t numClusters = channelMatrix->m_channel.GetNumPages();
-    // create and initialize the size of the longTerm 3D matrix
-    Ptr<MatrixBasedChannelModel::Complex3DVector> longTerm =
-        Create<MatrixBasedChannelModel::Complex3DVector>(uAnt->GetNumPorts(),
-                                                         sAnt->GetNumPorts(),
-                                                         numClusters);
-    // Calculate long term uW * Husn * sW, the result is a matrix
-    // with the dimensions #uPorts, #sPorts, #cluster
-    for (auto sPortIdx = 0; sPortIdx < sAnt->GetNumPorts(); sPortIdx++)
+     const auto& sW = sAnt->GetBeamformingVectorRef();
+    const auto& uW = uAnt->GetBeamformingVectorRef();
+    const size_t numClusters  = channelMatrix->m_channel.GetNumPages();
+    const size_t sAntElems    = sW.GetSize();
+    const size_t uAntElems    = uW.GetSize();
+    const size_t nUPorts      = uAnt->GetNumPorts();
+    const size_t nSPorts      = sAnt->GetNumPorts();
+    const auto   sPortElems   = sAnt->GetNumElemsPerPort();
+    const auto   uPortElems   = uAnt->GetNumElemsPerPort();
+    const auto   sElemsPerPort = sAnt->GetHElemsPerPort();
+    const auto   uElemsPerPort = uAnt->GetHElemsPerPort();
+    const auto   sNumCols     = sAnt->GetNumColumns();
+    const auto   uNumCols     = uAnt->GetNumColumns();
+
+    // Precompute port start indices — avoid per-call ArrayIndexFromPortIndex
+    std::vector<size_t> sPortStart(nSPorts), uPortStart(nUPorts);
+    for (size_t p = 0; p < nSPorts; ++p) sPortStart[p] = sAnt->ArrayIndexFromPortIndex(p, 0);
+    for (size_t p = 0; p < nUPorts; ++p) uPortStart[p] = uAnt->ArrayIndexFromPortIndex(p, 0);
+
+    // Precompute flat index arrays per port (avoids branch inside hot loop)
+    auto buildPortIndices = [](size_t start, size_t portElems,
+                               size_t elemsPerPort, size_t numCols) {
+        std::vector<size_t> idx;
+        idx.reserve(portElems);
+        size_t i = start;
+        for (size_t t = 0; t < portElems; ++t, ++i) {
+            idx.push_back(i);
+            if ((t % elemsPerPort) == (elemsPerPort - 1))
+                i += numCols - elemsPerPort;  // skip to next column in port
+        }
+        return idx;
+    };
+
+    std::vector<std::vector<size_t>> sIdx(nSPorts), uIdx(nUPorts);
+    for (size_t p = 0; p < nSPorts; ++p)
+        sIdx[p] = buildPortIndices(sPortStart[p], sPortElems, sElemsPerPort, sNumCols);
+    for (size_t p = 0; p < nUPorts; ++p)
+        uIdx[p] = buildPortIndices(uPortStart[p], uPortElems, uElemsPerPort, uNumCols);
+
+    auto longTerm = Create<MatrixBasedChannelModel::Complex3DVector>(nUPorts, nSPorts, numClusters);
+
+    // Intermediate buffer: H[:,sPort_elems,c] * sW  →  hs[uAntElems]
+    std::vector<std::complex<double>> hs(uAntElems);
+
+    for (size_t cIndex = 0; cIndex < numClusters; ++cIndex)
     {
-        for (auto uPortIdx = 0; uPortIdx < uAnt->GetNumPorts(); uPortIdx++)
+        for (size_t sPortIdx = 0; sPortIdx < nSPorts; ++sPortIdx)
         {
-            for (size_t cIndex = 0; cIndex < numClusters; cIndex++)
+            // Phase 1: compute hs = H[:, sPort, c] * sW  (once per sPort × cluster)
+            std::fill(hs.begin(), hs.end(), std::complex<double>(0.0, 0.0));
+            for (size_t uIndex = 0; uIndex < uAntElems; ++uIndex)
+                for (size_t t = 0; t < sPortElems; ++t)
+                    hs[uIndex] += channelMatrix->m_channel(uIndex, sIdx[sPortIdx][t], cIndex)
+                                  * sW[t];  // sW indexed relative to port start
+
+            // Phase 2: dot conj(uW) with hs for each uPort
+            for (size_t uPortIdx = 0; uPortIdx < nUPorts; ++uPortIdx)
             {
-                longTerm->Elem(uPortIdx, sPortIdx, cIndex) =
-                    CalculateLongTermComponent(channelMatrix,
-                                               sAnt,
-                                               uAnt,
-                                               sPortIdx,
-                                               uPortIdx,
-                                               cIndex);
+                std::complex<double> val(0.0, 0.0);
+                for (size_t r = 0; r < uPortElems; ++r)
+                    val += std::conj(uW[r]) * hs[uIdx[uPortIdx][r]];
+                longTerm->Elem(uPortIdx, sPortIdx, cIndex) = val;
             }
         }
     }
     return longTerm;
-}
-
-std::complex<double>
-ThreeGppSpectrumPropagationLossModel::CalculateLongTermComponent(
-    Ptr<const MatrixBasedChannelModel::ChannelMatrix> params,
-    Ptr<const PhasedArrayModel> sAnt,
-    Ptr<const PhasedArrayModel> uAnt,
-    const uint16_t sPortIdx,
-    const uint16_t uPortIdx,
-    const uint16_t cIndex) const
-{
-    NS_LOG_FUNCTION(this);
-    const PhasedArrayModel::ComplexVector& sW = sAnt->GetBeamformingVectorRef();
-    const PhasedArrayModel::ComplexVector& uW = uAnt->GetBeamformingVectorRef();
-    const auto sPortElems = sAnt->GetNumElemsPerPort();
-    const auto uPortElems = uAnt->GetNumElemsPerPort();
-    const auto startS = sAnt->ArrayIndexFromPortIndex(sPortIdx, 0);
-    const auto startU = uAnt->ArrayIndexFromPortIndex(uPortIdx, 0);
-    std::complex<double> txSum(0, 0);
-    // limiting multiplication operations to the port location
-    auto sIndex = startS;
-    // The sub-array partition model is adopted for TXRU virtualization,
-    // as described in Section 5.2.2 of 3GPP TR 36.897,
-    // and so equal beam weights are used for all the ports.
-    // Support of the full-connection model for TXRU virtualization would need extensions.
-    const auto uElemsPerPort = uAnt->GetHElemsPerPort();
-    const auto sElemsPerPort = sAnt->GetHElemsPerPort();
-    for (size_t tIndex = 0; tIndex < sPortElems; tIndex++, sIndex++)
-    {
-        std::complex<double> rxSum(0, 0);
-        auto uIndex = startU;
-        for (size_t rIndex = 0; rIndex < uPortElems; rIndex++, uIndex++)
-        {
-            rxSum += std::conj(uW[uIndex - startU]) * params->m_channel(uIndex, sIndex, cIndex);
-            const auto testV = rIndex % uElemsPerPort;
-            if (const auto ptInc = uElemsPerPort - 1; testV == ptInc)
-            {
-                const auto incVal = uAnt->GetNumColumns() - uElemsPerPort;
-                uIndex += incVal; // Increment by a factor to reach next column in a port
-            }
-        }
-
-        txSum += sW[sIndex - startS] * rxSum;
-        const auto testV = tIndex % sElemsPerPort;
-        if (const auto ptInc = sElemsPerPort - 1; testV == ptInc)
-        {
-            const size_t incVal = sAnt->GetNumColumns() - sElemsPerPort;
-            sIndex += incVal; // Increment by a factor to reach next column in a port
-        }
-    }
-    return txSum;
 }
 
 Ptr<SpectrumSignalParameters>
