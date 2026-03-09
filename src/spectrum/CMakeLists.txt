@@ -102,3 +102,6 @@ build_lib(
     test/two-ray-splm-test-suite.cc
     test/wraparound-model-test.cc
 )
+
+add_executable(test-3gpp ./utils/test-3gpp.cc)
+target_link_libraries(test-3gpp PRIVATE spectrum)

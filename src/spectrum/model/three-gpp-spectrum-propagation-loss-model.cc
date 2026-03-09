@@ -99,6 +99,34 @@ ThreeGppSpectrumPropagationLossModel::GetChannelModelAttribute(const std::string
     m_channelModel->GetAttribute(name, value);
 }
 
+// Physical indices for every sub-element of a port via the real API.
+static std::vector<size_t>
+BuildPhysicalIndices(Ptr<const PhasedArrayModel> ant, size_t portIdx)
+{
+    const size_t n = ant->GetNumElemsPerPort();
+    std::vector<size_t> idx(n);
+    for (size_t e = 0; e < n; ++e)
+    {
+        idx[e] = ant->ArrayIndexFromPortIndex(portIdx, e);
+    }
+    return idx;
+}
+
+// Intra-port BF offsets (index - start) — identical for every port
+// because sub-array partition uses the same weight pattern per port.
+static std::vector<size_t>
+BuildLocalOffsets(Ptr<const PhasedArrayModel> ant)
+{
+    const size_t n = ant->GetNumElemsPerPort();
+    const size_t base = ant->ArrayIndexFromPortIndex(0, 0);
+    std::vector<size_t> off(n);
+    for (size_t e = 0; e < n; ++e)
+    {
+        off[e] = ant->ArrayIndexFromPortIndex(0, e) - base;
+    }
+    return off;
+}
+
 Ptr<const MatrixBasedChannelModel::Complex3DVector>
 ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
     Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix,
@@ -107,71 +135,63 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
 {
     NS_LOG_FUNCTION(this);
 
-     const auto& sW = sAnt->GetBeamformingVectorRef();
-    const auto& uW = uAnt->GetBeamformingVectorRef();
-    const size_t numClusters  = channelMatrix->m_channel.GetNumPages();
-    const size_t sAntElems    = sW.GetSize();
-    const size_t uAntElems    = uW.GetSize();
-    const size_t nUPorts      = uAnt->GetNumPorts();
-    const size_t nSPorts      = sAnt->GetNumPorts();
-    const auto   sPortElems   = sAnt->GetNumElemsPerPort();
-    const auto   uPortElems   = uAnt->GetNumElemsPerPort();
-    const auto   sElemsPerPort = sAnt->GetHElemsPerPort();
-    const auto   uElemsPerPort = uAnt->GetHElemsPerPort();
-    const auto   sNumCols     = sAnt->GetNumColumns();
-    const auto   uNumCols     = uAnt->GetNumColumns();
-
-    // Precompute port start indices — avoid per-call ArrayIndexFromPortIndex
-    std::vector<size_t> sPortStart(nSPorts), uPortStart(nUPorts);
-    for (size_t p = 0; p < nSPorts; ++p) sPortStart[p] = sAnt->ArrayIndexFromPortIndex(p, 0);
-    for (size_t p = 0; p < nUPorts; ++p) uPortStart[p] = uAnt->ArrayIndexFromPortIndex(p, 0);
-
-    // Precompute flat index arrays per port (avoids branch inside hot loop)
-    auto buildPortIndices = [](size_t start, size_t portElems,
-                               size_t elemsPerPort, size_t numCols) {
-        std::vector<size_t> idx;
-        idx.reserve(portElems);
-        size_t i = start;
-        for (size_t t = 0; t < portElems; ++t, ++i) {
-            idx.push_back(i);
-            if ((t % elemsPerPort) == (elemsPerPort - 1))
-                i += numCols - elemsPerPort;  // skip to next column in port
-        }
-        return idx;
-    };
-
-    std::vector<std::vector<size_t>> sIdx(nSPorts), uIdx(nUPorts);
-    for (size_t p = 0; p < nSPorts; ++p)
-        sIdx[p] = buildPortIndices(sPortStart[p], sPortElems, sElemsPerPort, sNumCols);
-    for (size_t p = 0; p < nUPorts; ++p)
-        uIdx[p] = buildPortIndices(uPortStart[p], uPortElems, uElemsPerPort, uNumCols);
+    const size_t nUPorts = uAnt->GetNumPorts();
+    const size_t nSPorts = sAnt->GetNumPorts();
+    const size_t numClusters = channelMatrix->m_channel.GetNumPages();
+    const size_t sPortElems = sAnt->GetNumElemsPerPort();
+    const size_t uPortElems = uAnt->GetNumElemsPerPort();
+    const auto& sW = sAnt->GetBeamformingVector();
+    const auto& uW = uAnt->GetBeamformingVector();
 
     auto longTerm = Create<MatrixBasedChannelModel::Complex3DVector>(nUPorts, nSPorts, numClusters);
 
-    // Intermediate buffer: H[:,sPort_elems,c] * sW  →  hs[uAntElems]
-    std::vector<std::complex<double>> hs(uAntElems);
-
-    for (size_t cIndex = 0; cIndex < numClusters; ++cIndex)
+    // Precompute physical index arrays per port (uses real API, no manual walk)
+    std::vector<std::vector<size_t>> sPhys(nSPorts), uPhys(nUPorts);
+    for (size_t p = 0; p < nSPorts; ++p)
     {
-        for (size_t sPortIdx = 0; sPortIdx < nSPorts; ++sPortIdx)
-        {
-            // Phase 1: compute hs = H[:, sPort, c] * sW  (once per sPort × cluster)
-            std::fill(hs.begin(), hs.end(), std::complex<double>(0.0, 0.0));
-            for (size_t uIndex = 0; uIndex < uAntElems; ++uIndex)
-                for (size_t t = 0; t < sPortElems; ++t)
-                    hs[uIndex] += channelMatrix->m_channel(uIndex, sIdx[sPortIdx][t], cIndex)
-                                  * sW[t];  // sW indexed relative to port start
+        sPhys[p] = BuildPhysicalIndices(sAnt, p);
+    }
+    for (size_t p = 0; p < nUPorts; ++p)
+    {
+        uPhys[p] = BuildPhysicalIndices(uAnt, p);
+    }
 
-            // Phase 2: dot conj(uW) with hs for each uPort
-            for (size_t uPortIdx = 0; uPortIdx < nUPorts; ++uPortIdx)
+    // Intra-port BF offsets — same for every port (sub-array partition model)
+    const auto sOff = BuildLocalOffsets(sAnt);
+    const auto uOff = BuildLocalOffsets(uAnt);
+
+    // Precompute combined weight matrix: w[t,r] = conj(uW[uOff[r]]) * sW[sOff[t]]
+    std::vector<std::complex<double>> w(sPortElems * uPortElems);
+    for (size_t t = 0; t < sPortElems; ++t)
+    {
+        for (size_t r = 0; r < uPortElems; ++r)
+        {
+            w[t * uPortElems + r] = std::conj(uW[uOff[r]]) * sW[sOff[t]];
+        }
+    }
+
+    // cIndex outer keeps uIndex (fastest axis) in the inner loop → cache friendly
+    for (size_t c = 0; c < numClusters; ++c)
+    {
+        for (size_t s = 0; s < nSPorts; ++s)
+        {
+            for (size_t u = 0; u < nUPorts; ++u)
             {
-                std::complex<double> val(0.0, 0.0);
-                for (size_t r = 0; r < uPortElems; ++r)
-                    val += std::conj(uW[r]) * hs[uIdx[uPortIdx][r]];
-                longTerm->Elem(uPortIdx, sPortIdx, cIndex) = val;
+                std::complex<double> acc(0.0, 0.0);
+                const auto& si = sPhys[s];
+                const auto& ui = uPhys[u];
+                for (size_t t = 0; t < sPortElems; ++t)
+                {
+                    for (size_t r = 0; r < uPortElems; ++r)
+                    {
+                        acc += w[t * uPortElems + r] * channelMatrix->m_channel(ui[r], si[t], c);
+                    }
+                }
+                longTerm->Elem(u, s, c) = acc;
             }
         }
     }
+
     return longTerm;
 }
 
