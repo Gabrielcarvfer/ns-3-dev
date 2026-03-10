@@ -320,6 +320,13 @@ MultiModelSpectrumChannel::StartTx(Ptr<SpectrumSignalParameters> txParams)
                 rxParams->psd = Copy<SpectrumValue>(convertedPsds.at(rxSpectrumModelUid));
                 Time delay{0};
 
+                if (rxParams->precodingMatrix &&
+                    (rxParams->precodingMatrix->GetNumPages() != rxParams->psd->GetValuesN()))
+                {
+                    NS_LOG_WARN("Precoding matrix conversion not supported yet.");
+                    rxParams->precodingMatrix = nullptr;
+                }
+
                 auto receiverMobility = (*rxPhyIterator)->GetMobility();
 
                 if (txMobility && receiverMobility)

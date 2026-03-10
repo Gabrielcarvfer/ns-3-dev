@@ -295,6 +295,12 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     NS_ASSERT_MSG(rxParams->psd->GetValuesN() == rxParams->spectrumChannelMatrix->GetNumPages(),
                   "RX PSD and the spectrum channel matrix should have the same number of RBs ");
 
+    NS_ASSERT_MSG(!params->precodingMatrix || (params->precodingMatrix &&
+                                               params->precodingMatrix->GetNumPages() ==
+                                                   rxParams->spectrumChannelMatrix->GetNumPages()),
+                  "Unexpected mismatch in the number of RBs and channel matrix and precoding "
+                  "matrix. MultiModelSpectrumChannel conversion is not yet supported.");
+
     // Calculate RX PSD from the spectrum channel matrix H and
     // the precoding matrix P as: PSD = (H*P)^h * (H*P)
     Ptr<const ComplexMatrixArray> p;
