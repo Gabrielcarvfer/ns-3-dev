@@ -133,7 +133,10 @@ def parse_args(argv):
         default=[None, None],
         metavar="compile_or_die",
     )
-    parser_help = sub_parser.add_parser("help", help="Print a summary of available commands")
+    parser_help = sub_parser.add_parser(
+        "help", aliases=["hlp"], help="Print a summary of available commands"
+    )
+    parser_help.set_defaults(subparser="help")
 
     # parser.add_argument('--docset',
     #               help=(
@@ -144,12 +147,14 @@ def parse_args(argv):
 
     parser_build = sub_parser.add_parser(
         "build",
+        aliases=["bld"],
         help=(
             "Accepts a list of targets to build,"
             " or builds the entire project if no target is given"
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
+    parser_build.set_defaults(subparser="build")
     parser_build.add_argument(
         "target",
         help=(
@@ -162,8 +167,11 @@ def parse_args(argv):
     )
 
     parser_configure = sub_parser.add_parser(
-        "configure", help='Try "./ns3 configure --help" for more configuration options'
+        "configure",
+        aliases=["cfg"],
+        help='Try "./ns3 configure --help" for more configuration options',
     )
+    parser_configure.set_defaults(subparser="configure")
     parser_configure.add_argument(
         "-d",
         "--build-profile",
@@ -327,21 +335,28 @@ def parse_args(argv):
         dest="trace_cmake_perf",
     )
 
-    parser_clean = sub_parser.add_parser("clean", help="Removes files created by ns3")
+    parser_clean = sub_parser.add_parser(
+        "clean", aliases=["cln"], help="Removes files created by ns3"
+    )
+    parser_clean.set_defaults(subparser="clean")
 
     parser_distclean = sub_parser.add_parser(
-        "distclean", help="Removes files created by ns3, tests and documentation"
+        "distclean", aliases=["dst"], help="Removes files created by ns3, tests and documentation"
     )
+    parser_distclean.set_defaults(subparser="distclean")
 
-    parser_install = sub_parser.add_parser("install", help="Install ns-3")
+    parser_install = sub_parser.add_parser("install", aliases=["ins"], help="Install ns-3")
+    parser_install.set_defaults(subparser="install")
 
-    parser_uninstall = sub_parser.add_parser("uninstall", help="Uninstall ns-3")
+    parser_uninstall = sub_parser.add_parser("uninstall", aliases=["uni"], help="Uninstall ns-3")
+    parser_uninstall.set_defaults(subparser="uninstall")
 
     parser_run = sub_parser.add_parser(
         "run",
         help='Try "./ns3 run --help" for more runtime options',
         formatter_class=argparse.RawTextHelpFormatter,
     )
+    parser_run.set_defaults(subparser="run")
     parser_run.add_argument(
         "target",
         help=(
@@ -428,12 +443,14 @@ def parse_args(argv):
     )
 
     parser_shell = sub_parser.add_parser(
-        "shell", help="Export necessary environment variables and open a shell"
+        "shell", aliases=["shl"], help="Export necessary environment variables and open a shell"
     )
+    parser_shell.set_defaults(subparser="shell")
 
     parser_docs = sub_parser.add_parser(
-        "docs", help='Try "./ns3 docs --help" for more documentation options'
+        "docs", aliases=["doc"], help='Try "./ns3 docs --help" for more documentation options'
     )
+    parser_docs.set_defaults(subparser="docs")
     parser_docs.add_argument(
         "target",
         help="Build project documentation",
@@ -454,8 +471,9 @@ def parse_args(argv):
     )
 
     parser_show = sub_parser.add_parser(
-        "show", help='Try "./ns3 show --help" for more show options'
+        "show", aliases=["shw"], help='Try "./ns3 show --help" for more show options'
     )
+    parser_show.set_defaults(subparser="show")
     parser_show_sub = parser_show.add_subparsers(dest="show")
 
     # Add subcommands for the "docs" command
@@ -467,15 +485,24 @@ def parse_args(argv):
         if choice == "typeid":
             parser_typeid = parser_show_sub.add_parser(
                 "typeid",
+                aliases=["tid"],
                 help="Show the introspected documentation for a TypeId",
             )
+            parser_typeid.set_defaults(show="typeid")
             parser_typeid.add_argument(
                 "tid",
                 help='Show the introspected documentation for TypeId "tid"',
                 type=str,
             )
         else:
-            parser_show_sub.add_parser(choice)
+            _show_aliases = {
+                "profile": ["prf"],
+                "version": ["ver"],
+                "config": ["cfg"],
+                "targets": ["tgt"],
+            }
+            _p = parser_show_sub.add_parser(choice, aliases=_show_aliases.get(choice, []))
+            _p.set_defaults(show=choice)
 
     parser_show.set_defaults(show="all")
 
@@ -548,7 +575,9 @@ def parse_args(argv):
         sub_parser_actions = list(
             filter(lambda x: isinstance(x, argparse._SubParsersAction), parser._actions)
         )
-        sub_parsers = list(sub_parser_actions[0].choices.keys())
+        sub_parsers = [
+            name for name, p in sub_parser_actions[0].choices.items() if p.prog.split()[-1] == name
+        ]
         if args.subparser in sub_parsers:
             sub_parsers.remove(args.subparser)
 
