@@ -1374,49 +1374,49 @@ class SixLowPanMesh : public Header
 std::ostream& operator<<(std::ostream& os, const SixLowPanMesh& header);
 
 /**
- * \ingroup sixlowpan
- * \brief 6LoWPAN Capability Indication Option - see \RFC{7400}.
+ * @ingroup sixlowpan
+ * @brief 6LoWPAN Capability Indication Option - see \RFC{7400}.
  */
 class Icmpv6OptionSixLowPanCapabilityIndication : public Icmpv6OptionHeader
 {
   public:
-    Icmpv6OptionSixLowPanCapabilityIndication(void);
+    Icmpv6OptionSixLowPanCapabilityIndication();
 
     /**
-     * \brief Get the type ID.
-     * \return The object TypeId.
+     * @brief Get the type ID.
+     * @return The object TypeId.
      */
-    static TypeId GetTypeId(void);
+    static TypeId GetTypeId();
 
     /**
-     * \brief Return the instance type identifier.
-     * \return Instance type ID.
+     * @brief Return the instance type identifier.
+     * @return Instance type ID.
      */
-    TypeId GetInstanceTypeId(void) const override;
+    TypeId GetInstanceTypeId() const override;
 
     void Print(std::ostream& os) const override;
 
     /**
-     * \brief Get the serialized size of the packet.
-     * \return Size.
+     * @brief Get the serialized size of the packet.
+     * @return Size.
      */
-    uint32_t GetSerializedSize(void) const override;
+    uint32_t GetSerializedSize() const override;
 
     /**
-     * \brief Serialize the packet.
-     * \param [in] start Buffer iterator.
+     * @brief Serialize the packet.
+     * @param [in] start Buffer iterator.
      */
     void Serialize(Buffer::Iterator start) const override;
 
     /**
-     * \brief Deserialize the packet.
-     * \param [in] start Buffer iterator.
-     * \return Size of the packet.
+     * @brief Deserialize the packet.
+     * @param [in] start Buffer iterator.
+     * @return Size of the packet.
      */
     uint32_t Deserialize(Buffer::Iterator start) override;
 
     /**
-     * \brief The Capability field bit.
+     * @brief The Capability field bit.
      */
     enum SixLowPanCapability_e
     {
@@ -1429,15 +1429,15 @@ class Icmpv6OptionSixLowPanCapabilityIndication : public Icmpv6OptionHeader
     };
 
     /**
-     * \brief Set an option.
-     * \param [in] option The option to be set.
+     * @brief Set an option.
+     * @param [in] option The option to be set.
      */
     void SetOption(SixLowPanCapability_e option);
 
     /**
-     * \brief Checks an option.
-     * \param [in] option The option to be checked.
-     * \return True if the option is set, false otherwise.
+     * @brief Checks an option.
+     * @param [in] option The option to be checked.
+     * @return True if the option is set, false otherwise.
      */
     bool CheckOption(SixLowPanCapability_e option) const;
 
@@ -1446,11 +1446,11 @@ class Icmpv6OptionSixLowPanCapabilityIndication : public Icmpv6OptionHeader
 };
 
 /**
- * \brief Stream insertion operator.
+ * @brief Stream insertion operator.
  *
- * \param [in] os The reference to the output stream.
- * \param [in] header The Mesh Extension Header.
- * \returns The reference to the output stream.
+ * @param [in] os The reference to the output stream.
+ * @param [in] header The Mesh Extension Header.
+ * @returns The reference to the output stream.
  */
 std::ostream& operator<<(std::ostream& os, const Icmpv6OptionSixLowPanCapabilityIndication& header);
 

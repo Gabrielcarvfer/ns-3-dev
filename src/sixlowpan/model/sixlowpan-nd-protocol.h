@@ -1,27 +1,21 @@
 /*
  * Copyright (c) 2020 Università di Firenze, Italy
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
+ * SPDX-License-Identifier: GPL-2.0-only
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  * Author: Alessio Bonadio <alessio.bonadio@gmail.com>
  *         Tommaso Pecorella <tommaso.pecorella@unifi.it>
  *         Adnan Rashid <adnanrashidpk@gmail.com>
+ *         Boh Jie Qi <jieqiboh5836@gmail.com>
  */
 
 #ifndef SIXLOWPAN_ND_PROTOCOL_H
 #define SIXLOWPAN_ND_PROTOCOL_H
 
+#include "sixlowpan-header.h"
+#include "sixlowpan-nd-binding-table.h"
 #include "sixlowpan-nd-header.h"
 
 #include "ns3/icmpv6-l4-protocol.h"
@@ -29,15 +23,20 @@
 #include "ns3/ipv6-address.h"
 #include "ns3/lollipop-counter.h"
 
+#include <set>
 #include <utility>
 
 namespace ns3
 {
 
-class SixLowPanNdiscCache;
 class SixLowPanNdPrefix;
 class SixLowPanNdContext;
 class SixLowPanNetDevice;
+class SixLowPanNdNsEaroPacketTest;
+class SixLowPanNdNaEaroPacketTest;
+class SixLowPanNdRaPacketTest;
+class SixLowPanNdRsPacketTest;
+class SixLowPanNdRovrTest;
 
 /**
  * @ingroup sixlowpan
@@ -45,11 +44,18 @@ class SixLowPanNetDevice;
  */
 class SixLowPanNdProtocol : public Icmpv6L4Protocol
 {
+    friend class SixLowPanNdNsEaroPacketTest;
+    friend class SixLowPanNdNaEaroPacketTest;
+    friend class SixLowPanNdRaPacketTest;
+    friend class SixLowPanNdRsPacketTest;
+    friend class SixLowPanNdNsNaTest;
+    friend class SixLowPanNdRovrTest;
+
   public:
     /**
      * 6LoWPAN-ND EARO registration status codes
      */
-    enum RegStatus_e
+    enum RegStatus
     {
         SUCCESS = 0x0,       //!< Success
         DUPLICATE_ADDRESS,   //!< Duplicate Address
@@ -69,34 +75,33 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
     };
 
     /**
-     * @brief 6LBR constants : min context change delay.
+     * @brief 6LBR constant: minimum delay (in seconds) before a context change may be
+     * advertised after a previous change. RFC 6775, Table 2.
      */
-    static const uint16_t MIN_CONTEXT_CHANGE_DELAY;
+    static constexpr uint16_t MIN_CONTEXT_CHANGE_DELAY{300};
 
     /**
-     * @brief 6LR constants : max RA transmission.
+     * @brief 6LR constant: maximum number of initial RA transmissions. RFC 6775, Table 1.
+     * Currently unused; reserved for future 6LR role implementation.
      */
-    static const uint8_t MAX_RTR_ADVERTISEMENTS;
+    static constexpr uint8_t MAX_RTR_ADVERTISEMENTS{3};
 
     /**
-     * @brief 6LR constants : min delay between RA.
+     * @brief 6LR constant: minimum delay (in seconds) between consecutive RAs. RFC 6775, Table 1.
+     * Currently unused; reserved for future 6LR role implementation.
      */
-    static const uint8_t MIN_DELAY_BETWEEN_RAS;
+    static constexpr uint8_t MIN_DELAY_BETWEEN_RAS{10};
 
     /**
-     * @brief 6LR constants : max delay between RA.
+     * @brief 6LR constant: maximum delay (in seconds) before responding to an RS. RFC 6775,
+     * Table 1. Currently unused; reserved for future 6LR role implementation.
      */
-    static const uint8_t MAX_RA_DELAY_TIME;
+    static constexpr uint8_t MAX_RA_DELAY_TIME{2};
 
     /**
-     * @brief 6LR constants : tentative neighbor cache entry lifetime.
+     * @brief Router constant: hop limit used for multihop DAR/DAC messages. RFC 6775, Table 1.
      */
-    static const uint8_t TENTATIVE_NCE_LIFETIME;
-
-    /**
-     * @brief router constants : multihop hoplimit.
-     */
-    static const uint8_t MULTIHOP_HOPLIMIT;
+    static constexpr uint8_t MULTIHOP_HOPLIMIT{64};
 
     /**
      * @brief Constructor.
@@ -114,7 +119,6 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
      */
     static TypeId GetTypeId();
 
-    TypeId GetInstanceTypeId() const override;
     void DoInitialize() override;
     void NotifyNewAggregate() override;
 
@@ -132,7 +136,12 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
                                         const Ipv6Header& header,
                                         Ptr<Ipv6Interface> interface) override;
 
-    Ptr<NdiscCache> CreateCache(Ptr<NetDevice> device, Ptr<Ipv6Interface> interface) override;
+    /**
+     * @brief Create and register a binding table for the given device and interface.
+     * @param device the net device
+     * @param interface the IPv6 interface
+     */
+    void CreateBindingTable(Ptr<NetDevice> device, Ptr<Ipv6Interface> interface);
 
     bool Lookup(Ptr<Packet> p,
                 const Ipv6Header& ipHeader,
@@ -144,13 +153,19 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
     void FunctionDadTimeout(Ipv6Interface* interface, Ipv6Address addr) override;
 
     /**
+     * Sets the ROVR for the node.
+     *
+     * @param rovr ROVR to set for this node
+     */
+    void SetRovr(const std::vector<uint8_t> rovr);
+
+    /**
      * @brief Send a NS for 6LoWPAN ND (+ EARO, SLLAO).
      * @param addrToRegister source IPv6 address
      * @param dst destination IPv6 address
      * @param dstMac destination MAC address
      * @param time registration lifetime (EARO)
      * @param rovr ROVR (EARO)
-     * @param tid TID (EARO)
      * @param sixDevice SixLowPan NetDevice
      */
     void SendSixLowPanNsWithEaro(Ipv6Address addrToRegister,
@@ -158,7 +173,6 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
                                  Address dstMac,
                                  uint16_t time,
                                  const std::vector<uint8_t>& rovr,
-                                 uint8_t tid,
                                  Ptr<NetDevice> sixDevice);
 
     /**
@@ -168,7 +182,6 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
      * @param target target IPv6 address
      * @param time registration lifetime (EARO)
      * @param rovr ROVR (EARO)
-     * @param tid TID (EARO)
      * @param sixDevice SixLowPan NetDevice
      * @param status status (EARO)
      */
@@ -177,42 +190,22 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
                                  Ipv6Address target,
                                  uint16_t time,
                                  const std::vector<uint8_t>& rovr,
-                                 uint8_t tid,
                                  Ptr<NetDevice> sixDevice,
                                  uint8_t status);
+    /**
+     * @brief Send a Multicast RS (+ 6CIO) (RFC6775 5.3)
+     * @param src source IPv6 address
+     * @param hardwareAddress the hardware address of the node
+     */
+    void SendSixLowPanMulticastRS(Ipv6Address src, Address hardwareAddress);
 
     /**
-     * @brief Send a RA for 6LoWPAN ND (+ PIO, 6CO, ABRO, SLLAO).
+     * @brief Send a RA for 6LoWPAN ND (+ PIO, 6CO, 6CIO, ABRO, SLLAO).
      * @param src source IPv6 address
      * @param dst destination IPv6 address
      * @param interface the interface from which the packet will be sent
      */
     void SendSixLowPanRA(Ipv6Address src, Ipv6Address dst, Ptr<Ipv6Interface> interface);
-
-    /*
-     * @brief Send a DAR for 6LoWPAN ND.
-     * @param src source IPv6 address
-     * @param dst destination IPv6 address
-     * @param time registration lifetime
-     * @param eui EUI-64
-     * @param registered registered IPv6 address
-     */
-    //  void SendSixLowPanDAR (Ipv6Address src, Ipv6Address dst, uint16_t time, Mac64Address eui,
-    //                         Ipv6Address registered);
-
-    /**
-     * @brief Function called to send RS + SLLAO.
-     * @param src source IPv6 address
-     * @param dst destination IPv6 address
-     * @param linkAddr link-layer address (SLLAO)
-     * @param retransmission RS retransmission number
-     * @param retransmissionInterval RS retransmission interval
-     */
-    void RetransmitRS(Ipv6Address src,
-                      Ipv6Address dst,
-                      Address linkAddr,
-                      uint8_t retransmission,
-                      Time retransmissionInterval);
 
     /**
      * @brief Set an interface to be used as a 6LBR
@@ -249,10 +242,11 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
     bool IsBorderRouterOnInterface(Ptr<SixLowPanNetDevice> device) const;
 
     /**
-     * @brief Checks if an address registration is in progress
-     * @return true if an address registration is in progress
+     * @brief Find the binding table corresponding to the IPv6 interface.
+     * @param interface the IPv6 interface
+     * @return the SixLowPanNdBindingTable associated with the interface
      */
-    bool IsAddressRegistrationInProgress() const;
+    Ptr<SixLowPanNdBindingTable> FindBindingTable(Ptr<Ipv6Interface> interface);
 
   protected:
     /**
@@ -323,7 +317,7 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
          * Builds an Icmpv6RA from the stored data.
          * @return the Icmpv6RA.
          */
-        Icmpv6RA BuildRouterAdvertisementHeader();
+        Icmpv6RA BuildRouterAdvertisementHeader() const;
 
         /**
          * Builds a container of Icmpv6OptionPrefixInformation from the stored data.
@@ -476,13 +470,13 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
         std::map<uint8_t, Ptr<SixLowPanNdContext>> m_contexts;
 
         /**
-         * @brief Managed flag. If true host use the stateful protocol for address
+         * @brief Managed flag. If true, the host uses the stateful protocol for address
          * autoconfiguration.
          */
         bool m_managedFlag;
 
         /**
-         * @brief Other configuration flag. If true host use stateful protocol for other
+         * @brief Other configuration flag. If true, the host uses the stateful protocol for other
          * (non-address) information.
          */
         bool m_otherConfigFlag;
@@ -505,7 +499,7 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
         /**
          * @brief Current hop limit (TTL).
          */
-        uint32_t m_curHopLimit;
+        uint8_t m_curHopLimit;
 
         /**
          * @brief Router life time in seconds.
@@ -526,12 +520,6 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
          * @brief Border Router address for ABRO.
          */
         Ipv6Address m_abroBorderRouter;
-
-        /**
-         * Neighbors that are announcing this RA.
-         * Pair of Ipv6Address of the neighbor, Time of the last RA received
-         */
-        std::map<Ipv6Address, Time> m_neighbors;
     };
 
     /**
@@ -545,7 +533,6 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
     {
         SixLowPanNodeOnly,    //!< a 6LN that can not become a 6LR
         SixLowPanNode,        //!< a 6LN that can (and want to) become a 6LR
-        SixLowPanRouter,      //!< a 6LR
         SixLowPanBorderRouter //!< a 6LBR
     };
 
@@ -556,7 +543,7 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
     uint16_t m_regTime;
 
     /**
-     * @brief The advance to perform maintaining of RA's information and registration.
+     * @brief How many seconds before registration expiry to begin re-registration.
      */
     uint16_t m_advance;
 
@@ -577,7 +564,7 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
     Ptr<RandomVariableStream> m_addressRegistrationJitter;
 
     /**
-     * @brief Receive NS for 6LoWPAN ND method.
+     * @brief NS handler for 6LoWPAN ND.
      * @param packet the packet.
      * @param src source address.
      * @param dst destination address.
@@ -589,7 +576,7 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
                            Ptr<Ipv6Interface> interface);
 
     /**
-     * @brief Receive NA for 6LoWPAN ND method.
+     * @brief NA handler for 6LoWPAN ND.
      * @param packet the packet
      * @param src source address
      * @param dst destination address
@@ -601,7 +588,7 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
                            Ptr<Ipv6Interface> interface);
 
     /**
-     * @brief Receive RS for 6LoWPAN ND method.
+     * @brief RS handler for 6LoWPAN ND.
      * @param packet the packet
      * @param src source address
      * @param dst destination address
@@ -613,7 +600,7 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
                            Ptr<Ipv6Interface> interface);
 
     /**
-     * @brief Receive RA for 6LoWPAN ND method.
+     * @brief RA handler for 6LoWPAN ND.
      * @param packet the packet
      * @param src source address
      * @param dst destination address
@@ -624,133 +611,218 @@ class SixLowPanNdProtocol : public Icmpv6L4Protocol
                            const Ipv6Address& dst,
                            Ptr<Ipv6Interface> interface);
 
-    /*
-     * @brief Receive DAC for 6LoWPAN ND method.
-     * @param packet the packet
-     * @param src source address
-     * @param dst destination address
-     * @param interface the interface from which the packet is coming
-     */
-    // void HandleSixLowPanDAC (Ptr<Packet> packet, Ipv6Address const &src, Ipv6Address const &dst,
-    //                         Ptr<Ipv6Interface> interface);
-
-    /**
-     * Creates a ROVR for the NetDevice
-     *
-     * @param device device to create the ROVR for
-     */
-    void BuildRovrForDevice(Ptr<NetDevice> device);
-
-    /**
-     * Check an RA for consistency with the ones in the RA cache
-     * @param ra the RA to check
-     * @return true if the RA is not consistent (must be discarded)
-     */
-    bool ScreeningRas(Ptr<SixLowPanRaEntry> ra);
-
-    /**
-     * Address re-registration procedure
-     */
-    void AddressReRegistration();
-
     /**
      * Address registration procedure
      */
     void AddressRegistration();
 
     /**
-     * Address registration Success or Failure
+     * Address registration success or failure.
      *
      * @param registrar node that performs the registration. Registered Node or a proxy.
-     * @param tid Transaction ID
      */
-    void AddressRegistrationSuccess(Ipv6Address registrar, LollipopCounter8 tid);
+    void AddressRegistrationSuccess(Ipv6Address registrar);
 
     /**
      * Address registration timeout handler
      */
     void AddressRegistrationTimeout();
 
-    uint8_t m_addressRegistrationCounter; //!< Number of retries of an address registration.
+    uint8_t m_addressRegistrationCounter = 0; //!< Number of retries of an address registration.
 
-    std::map<Ptr<NetDevice>, std::vector<uint8_t>> m_rovrContainer; //!< Container of ROVRs
+    std::vector<uint8_t> m_rovr; //!< Node ROVR
 
     EventId m_addressRegistrationTimeoutEvent; //!< Address Registration timeout event.
-    EventId m_addressRegistrationEvent;        //!< Address Registration event.
-    EventId m_addressReRegistrationEvent;      //!< Address ReRegistration event.
 
-    /**
-     * Container of TIDs for each pair <Registered LinkLocal Address, Registrar address>
-     * For LLaddr, the registrar is the node we're registering to. For Gaddr, it is "::".
-     */
-    std::map<std::pair<Ipv6Address, Ipv6Address>, LollipopCounter8> m_tidContainer;
+    EventId m_addressRegistrationEvent; //!< Address Registration event.
 
-    std::map<Ipv6Address, Time> m_neighborBlacklist; //!< Blacklist of the neighbors that didn't
-                                                     //!< allow registration or didn't reply.
-
-    std::map<Ipv6Address, Ptr<SixLowPanRaEntry>>
-        m_raCache; //!< Router Advertisement cached entries (if the node is a 6L*).
+    std::set<Ipv6Address>
+        m_raCache; //!< Set of 6LBR addresses from which a RA has already been processed.
 
     std::map<Ptr<SixLowPanNetDevice>, Ptr<SixLowPanRaEntry>>
         m_raEntries; //!< Router Advertisement entries (if the node is a 6LBR).
 
-    /**
-     * Structure holding data about a pending RA being processed
-     */
-    typedef struct
-    {
-        Ptr<SixLowPanRaEntry> pendingRa; //!< RA being processed
-        Ipv6Address source;              //!< Origin of the RA (might be a 6LR)
-        Icmpv6OptionLinkLayerAddress
-            llaHdr; //!< Link-Layer address option from the RA (can be 6LR or 6LBR).
-        Ptr<Ipv6Interface> incomingIf;                  //!< Interface that did receive the RA
-        std::list<Ipv6Address> addressesToBeregistered; //!< Addresses pending registration.
-        std::map<Ipv6Address, Icmpv6OptionPrefixInformation>
-            prefixForAddress; //!< Prefixes used to build global addresses.
-    } SixLowPanPendingRa;
+    TracedCallback<Ipv6Address, bool, uint8_t>
+        m_addressRegistrationResultTrace; //!< Traces address registration result (address,
+                                          //!< success/failure, status code)
 
-    std::list<SixLowPanPendingRa>
-        m_pendingRas; //!< RA waiting for processing (addresses registration).
+    typedef Callback<void, Ipv6Address, bool, uint8_t>
+        AddressRegistrationCallback; //!< Trace sink signature for address registration result
+
+    TracedCallback<Ipv6Address> m_multicastRsTrace; //!< Trace fired whenever a multicast RS is sent
+
+    typedef Callback<void, Ipv6Address>
+        MulticastRsCallback; //!< Trace sink signature for multicast RS sends
+
+    TracedCallback<Ptr<Packet>> m_naRxTrace; //!< Trace fired whenever an NA packet is received
+
+    typedef Callback<void, Ptr<Packet>> NaRxCallback; //!< Trace sink signature for NA reception
 
     /**
-     * Structure holding data about registered addresses
+     * Struct holding data about a pending RA being processed.
      */
-    typedef struct
+    struct SixLowPanPendingRa
     {
-        Time registrationTimeout;   //!< Registration expiration time
-        Ipv6Address registeredAddr; //!< Registered address
-        Ipv6Address abroAddress;    //!< Address of the ABRO (always global)
-        Ipv6Address registrar; //!< Registering node (lladdr of 6LR or 6LBR for a lladdr, gaddr of
-                               //!< 6LBR for gaddr)
-        Address registrarMacAddr;     //!< Registering node MAC address
-        Ptr<Ipv6Interface> interface; //!< Interface used for the registration
-    } SixLowPanRegisteredAddress;
+        Ipv6Address source; //!< Origin of the RA / Registering Node (will be a 6LBR)
+        Icmpv6OptionLinkLayerAddress llaHdr; //!< Contains MAC address of the RA sender (6LBR)
+        Ptr<Ipv6Interface> interface;        //!< Interface that received the RA
+        std::list<std::pair<Ipv6Address, Icmpv6OptionPrefixInformation>>
+            addressesToBeRegistered; //!< Addresses pending registration with their PIOs.
+    };
+
+    std::list<SixLowPanPendingRa> m_pendingRas; //!< RA awaiting processing (address registration).
+
+    /**
+     * Struct holding data about registered addresses.
+     */
+    struct SixLowPanRegisteredAddress
+    {
+        Ipv6Address registrar;               //!< Registering node (link-local addr / gaddr of 6LBR)
+        Time registrationTimeout;            //!< Registration expiration time
+        Ipv6Address registeredAddr;          //!< Registered address
+        Icmpv6OptionLinkLayerAddress llaHdr; //!< Contains MAC address of the RA sender (6LBR)
+        Ptr<Ipv6Interface> interface;        //!< Interface used for the registration
+        Icmpv6OptionPrefixInformation
+            pioHdr; //!< Prefix Information Option for the address being registered
+    };
 
     std::list<SixLowPanRegisteredAddress>
         m_registeredAddresses; //!< Addresses that have been registered.
 
     /**
-     * Structure holding data of the address being registered
+     * Struct holding data for the address currently being registered.
      */
-    typedef struct
+    struct AddressPendingRegistration
     {
         bool isValid; //!< The data are valid (for timeouts and retransmissions)
         Ipv6Address addressPendingRegistration; //!< Address being Registered
-        Ipv6Address abroAddress;                //!< Address of the ABRO (always global)
         Ipv6Address registrar;                  //!< Registering node address (always link-local)
-        Address registrarMacAddr;               //!< Registering node MAC address
-        bool newRegistration;     //!< new registration (true) or re-registration (false)
-        Ptr<NetDevice> sixDevice; //!< The SixLowPanNetDevice to use for the registration
-    } AddressPendingRegistration;
+        bool newRegistration; //!< new registration (true) or re-registration (false)
+        Icmpv6OptionLinkLayerAddress
+            llaHdr; //!< Link-Layer address option from the RA (can be 6LR or 6LBR).
+        Ptr<Ipv6Interface> interface; //!< Interface on which the RA was received
+        Icmpv6OptionPrefixInformation
+            pioHdr; //!< Prefix Information Option for the address being registered
+    };
 
-    AddressPendingRegistration m_addrPendingReg; //!< Address being Registered
+    AddressPendingRegistration m_addrPendingReg; //!< Address currently being Registered
 
-    // RS retry backoff
-    //  Time m_rtrSolicitationInterval;         //!< RS Retransmission interval
     Time m_maxRtrSolicitationInterval; //!< Maximum RS Retransmission interval
-    //  Time m_currentRtrSolicitationInterval;  //!< Current RS Retransmission interval
-    //  Ptr<UniformRandomVariable> m_rsRetransmissionDelay; //!< Random variable for RS
-    //  retransmissions.
+
+    using BindingTableList =
+        std::list<Ptr<SixLowPanNdBindingTable>>; //!< container of BindingTables
+
+    BindingTableList m_bindingTableList; //!< Binding Table for 6LoWPAN ND
+
+    /**
+     * @brief Construct NS (EARO) packet.
+     * @param src source address
+     * @param dst destination address
+     * @param nsHdr
+     * @param slla
+     * @param tlla
+     * @param earo
+     * @return NS (EARO) Packet
+     */
+    static Ptr<Packet> MakeNsEaroPacket(Ipv6Address src,
+                                        Ipv6Address dst,
+                                        Icmpv6NS& nsHdr,
+                                        Icmpv6OptionLinkLayerAddress& slla,
+                                        Icmpv6OptionLinkLayerAddress& tlla,
+                                        Icmpv6OptionSixLowPanExtendedAddressRegistration& earo);
+
+    /**
+     * @brief Construct NA (EARO) packet.
+     * @param src source address
+     * @param dst destination address
+     * @param naHdr
+     * @param earo
+     * @return NA (EARO) Packet
+     */
+    static Ptr<Packet> MakeNaEaroPacket(Ipv6Address src,
+                                        Ipv6Address dst,
+                                        Icmpv6NA& naHdr,
+                                        Icmpv6OptionSixLowPanExtendedAddressRegistration& earo);
+
+    /**
+     * @brief Constructs a RA packet (raEntry contains info for raHdr, pios, abro and contexts)
+     * @param src source address
+     * @param dst destination address
+     * @param slla Source Link-Layer Address Option
+     * @param cio Capability Indication Option
+     * @param raEntry RA entry containing router advertisement information
+     * @return RA Packet
+     */
+    static Ptr<Packet> MakeRaPacket(Ipv6Address src,
+                                    Ipv6Address dst,
+                                    Icmpv6OptionLinkLayerAddress& slla,
+                                    Icmpv6OptionSixLowPanCapabilityIndication& cio,
+                                    Ptr<SixLowPanRaEntry> raEntry);
+
+    /**
+     * @brief Parses NS packet and populates params, returning true if packet is a valid NS/NS(EARO)
+     * packet
+     * @param p Packet to be parsed
+     * @param nsHdr populated with packet nsHdr
+     * @param slla populated with packet SLLAO if present
+     * @param tlla populated with packet TLLAO if present
+     * @param earo populated with packet EARO if present
+     * @param hasEaro true if NS packet contains an EARO option
+     * @return True if packet is valid, false otherwise
+     */
+    static bool ParseAndValidateNsEaroPacket(Ptr<Packet> p,
+                                             Icmpv6NS& nsHdr,
+                                             Icmpv6OptionLinkLayerAddress& slla,
+                                             Icmpv6OptionLinkLayerAddress& tlla,
+                                             Icmpv6OptionSixLowPanExtendedAddressRegistration& earo,
+                                             bool& hasEaro);
+
+    /**
+     * @brief Parses NA packet and populates params, returning true if packet is valid
+     * @param p Packet to be parsed
+     * @param naHdr populated with packet NA header
+     * @param tlla populated with packet Target Link-Layer Address Option if present
+     * @param earo populated with packet EARO if present
+     * @param hasEaro true if NA packet contains an EARO option
+     * @return True if packet is valid, false otherwise
+     */
+    static bool ParseAndValidateNaEaroPacket(Ptr<Packet> p,
+                                             Icmpv6NA& naHdr,
+                                             Icmpv6OptionLinkLayerAddress& tlla,
+                                             Icmpv6OptionSixLowPanExtendedAddressRegistration& earo,
+                                             bool& hasEaro);
+
+    /**
+     * @brief Parses RS packet and populates params, returning true if packet is valid
+     * @param p Packet to be parsed
+     * @param rsHdr populated with packet RS header
+     * @param slla populated with packet Source Link-Layer Address Option if present
+     * @param cio populated with packet Capability Indication Option if present
+     * @return True if packet is valid, false otherwise
+     */
+    static bool ParseAndValidateRsPacket(Ptr<Packet> p,
+                                         Icmpv6RS& rsHdr,
+                                         Icmpv6OptionLinkLayerAddress& slla,
+                                         Icmpv6OptionSixLowPanCapabilityIndication& cio);
+
+    /**
+     * @brief Parses RA packet and populates params, returning true if packet is valid
+     * @param p Packet to be parsed
+     * @param raHdr populated with packet RA header
+     * @param pios populated with Prefix Information Options from the packet
+     * @param abro populated with Authoritative Border Router Option from the packet
+     * @param slla populated with Source Link-Layer Address Option if present
+     * @param cio populated with Capability Indication Option if present
+     * @param contexts populated with 6LoWPAN Context Options from the packet
+     * @return True if packet is valid, false otherwise
+     */
+    static bool ParseAndValidateRaPacket(Ptr<Packet> p,
+                                         Icmpv6RA& raHdr,
+                                         std::list<Icmpv6OptionPrefixInformation>& pios,
+                                         Icmpv6OptionSixLowPanAuthoritativeBorderRouter& abro,
+                                         Icmpv6OptionLinkLayerAddress& slla,
+                                         Icmpv6OptionSixLowPanCapabilityIndication& cio,
+                                         std::list<Icmpv6OptionSixLowPanContext>& contexts);
 };
 
 } /* namespace ns3 */

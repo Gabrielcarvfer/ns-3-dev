@@ -1,18 +1,9 @@
 /*
  * Copyright (c) 2015 Università di Firenze, Italy
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
+ * SPDX-License-Identifier: GPL-2.0-only
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  * Author: Alessio Bonadio <alessio.bonadio@gmail.com>
  *         Tommaso Pecorella <tommaso.pecorella@unifi.it>
@@ -258,7 +249,7 @@ Icmpv6OptionSixLowPanExtendedAddressRegistration::Icmpv6OptionSixLowPanExtendedA
     m_status = 0;
     m_opaque = 0;
     m_i = 0;
-    m_flagR = 0;
+    m_flagR = false;
     m_tid = 0;
     m_regTime = 0;
 }
@@ -274,7 +265,7 @@ Icmpv6OptionSixLowPanExtendedAddressRegistration::Icmpv6OptionSixLowPanExtendedA
     m_status = 0;
     m_opaque = 0;
     m_i = 0;
-    m_flagR = 0;
+    m_flagR = false;
     m_tid = tid;
     m_regTime = time;
     SetRovr(rovr);
@@ -292,7 +283,7 @@ Icmpv6OptionSixLowPanExtendedAddressRegistration::Icmpv6OptionSixLowPanExtendedA
     m_status = status;
     m_opaque = 0;
     m_i = 0;
-    m_flagR = 0;
+    m_flagR = false;
     m_tid = tid;
     m_regTime = time;
     SetRovr(rovr);
