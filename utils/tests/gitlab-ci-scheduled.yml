@@ -11,6 +11,7 @@
     # add the core-debug repo to pacman.conf
     - printf "\n%s\n%s\n" "[core-debug]" "Include = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
     - pacman-key --init
+    - pacman -Sy archlinux-keyring --noconfirm
     - pacman -Syu --noconfirm
       base-devel cmake ninja ccache valgrind
       python python-pip python-distutils-extra binutils lcov

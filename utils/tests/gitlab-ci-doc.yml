@@ -5,6 +5,7 @@
   stage: documentation
   before_script:
     - pacman-key --init
+    - pacman -Sy archlinux-keyring --noconfirm
     - pacman -Syu --noconfirm
       python python-sphinx make libxml2-legacy
       graphviz imagemagick libx264
