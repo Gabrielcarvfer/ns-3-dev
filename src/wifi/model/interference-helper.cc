@@ -441,7 +441,7 @@ InterferenceHelper::CalculateNoiseInterferenceW(Ptr<Event> event,
     auto niIt = m_niChanges.find(band);
     NS_ABORT_IF(niIt == m_niChanges.end());
     const auto now = Simulator::Now();
-    auto it = niIt->second.find(event->GetStartTime());
+    auto it = niIt->second.lower_bound(event->GetStartTime());
     const auto muMimoPower = (event->GetPpdu()->GetType() == WIFI_PPDU_TYPE_UL_MU)
                                  ? CalculateMuMimoPowerW(event, band)
                                  : Watt_u{0.0};
@@ -461,7 +461,7 @@ InterferenceHelper::CalculateNoiseInterferenceW(Ptr<Event> event,
             noiseInterference = Watt_u{0.0};
         }
     }
-    it = niIt->second.find(event->GetStartTime());
+    it = niIt->second.lower_bound(event->GetStartTime());
     NS_ABORT_IF(it == niIt->second.end());
     for (; it != niIt->second.end() && it->second.GetEvent() != event; ++it)
     {
