@@ -26,6 +26,7 @@ per-commit-clang-optimized-libc++:
     MODE: optimized
     COMPILER: clang++
     CXXFLAGS: -stdlib=libc++
+    EXTRA_OPTIONS: --disable-gtk
 
 per-commit-gcc-debug:
   extends: .base-per-commit-compile
@@ -62,7 +63,7 @@ per-commit-clang-disabled-asserts-logs:
   variables:
     MODE: debug
     COMPILER: clang++
-    EXTRA_OPTIONS: --disable-asserts --disable-logs
+    EXTRA_OPTIONS: --disable-asserts --disable-logs --disable-gtk
 
 # Test stage
 per-commit-gcc-default-test:
@@ -95,3 +96,4 @@ per-commit-clang-optimized-libc++-test:
     MODE: optimized
     COMPILER: clang++
     CXXFLAGS: -stdlib=libc++
+    EXTRA_OPTIONS: --disable-gtk
