@@ -723,16 +723,16 @@ The module offers a helper model (``LeoOrbitNodeHelper``) to ease the instantiat
     NodeContainer satellites;
     if (!orbitFile.empty())
     {
-        satellites = orbit.Install(orbitFile);
+        satellites = orbit.CreateNodesAndInstallMobility(orbitFile);
     }
     else
     {
-        satellites = orbit.Install({LeoOrbit(1200, 30, 1, 2)});
+        satellites = orbit.CreateNodesAndInstallMobility({LeoOrbit(1200, 30, 1, 2)});
     }
 
 
 In this snippet, the helper is used to create the satellite nodes.
-Calling ``LeoOrbitNodeHelper.Install()`` returns a ``NodeContainer`` containing the nodes created.
+Calling ``LeoOrbitNodeHelper.CreateNodesAndInstallMobility()`` returns a ``NodeContainer`` containing the nodes created.
 At this point, the nodes are already placed in their initial positions.
 The ``LeoOrbit`` class is used to hold values used to parameterize the instantiation of nodes
 and orbits - its values are, in order, altitude in kilometers, inclination

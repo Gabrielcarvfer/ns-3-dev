@@ -44,10 +44,9 @@ class LeoOrbitNodeHelper
     virtual ~LeoOrbitNodeHelper();
 
     /**
-     * @brief Install orbits from orbitFile with orbital parameters of constellation.
+     * @brief Create satellite nodes and install orbital mobility from a CSV file.
      *
-     * Install orbits from orbitFile containing one or more lines, each with 4 columns separated by
-     * commas (,). The columns contain the following:
+     * The CSV file contains one or more lines, each with 4 comma-separated columns:
      *   - altitude (km, from earth surface)
      *   - inclination (degrees relative to equator)
      *   - number of orbital planes
@@ -60,23 +59,25 @@ class LeoOrbitNodeHelper
      * of inclination in respect to the equator, and with an altitude of 1150 km.
      *
      * @param orbitFile path to orbit definitions file
-     * @returns a node container containing nodes using the specified attributes
+     * @returns a node container containing the created nodes
      */
-    NodeContainer Install(const std::string& orbitFile);
+    NodeContainer CreateNodesAndInstallMobility(const std::string& orbitFile);
 
     /**
-     * @brief Install orbits from vector of orbital parameters
+     * @brief Create satellite nodes and install orbital mobility from a vector
+     *        of orbital parameters.
      * @param orbits orbit definitions
-     * @returns a node container containing nodes using the specified attributes
+     * @returns a node container containing the created nodes
      */
-    NodeContainer Install(const std::vector<LeoOrbit>& orbits);
+    NodeContainer CreateNodesAndInstallMobility(const std::vector<LeoOrbit>& orbits);
 
     /**
-     * @brief Install orbit from orbital parameters
+     * @brief Create satellite nodes and install orbital mobility from a single
+     *        orbit definition.
      * @param orbit orbit definition
-     * @returns a node container containing nodes using the specified attributes
+     * @returns a node container containing the created nodes
      */
-    NodeContainer Install(const LeoOrbit& orbit);
+    NodeContainer CreateNodesAndInstallMobility(const LeoOrbit& orbit);
 
     /**
      * Set an attribute for each node

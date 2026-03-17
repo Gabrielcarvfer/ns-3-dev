@@ -183,11 +183,11 @@ main(int argc, char* argv[])
     NodeContainer satellites;
     if (!orbitFile.empty())
     {
-        satellites = orbit.Install(orbitFile);
+        satellites = orbit.CreateNodesAndInstallMobility(orbitFile);
     }
     else
     {
-        satellites = orbit.Install(LeoOrbit(600, 30, 1, 1));
+        satellites = orbit.CreateNodesAndInstallMobility(LeoOrbit(600, 30, 1, 1));
     }
 
     Config::ConnectWithoutContextFailSafe("/NodeList/*/$ns3::MobilityModel/CourseChange",

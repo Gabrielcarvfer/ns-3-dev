@@ -44,7 +44,7 @@ LeoOrbitNodeHelper::SetAttribute(string name, const AttributeValue& value)
 }
 
 NodeContainer
-LeoOrbitNodeHelper::Install(const LeoOrbit& orbit)
+LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
 {
     NS_LOG_FUNCTION(this << orbit);
 
@@ -106,7 +106,7 @@ LeoOrbitNodeHelper::Install(const LeoOrbit& orbit)
 }
 
 NodeContainer
-LeoOrbitNodeHelper::Install(const std::string& orbitFile)
+LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const std::string& orbitFile)
 {
     NS_LOG_FUNCTION(this << orbitFile);
 
@@ -133,18 +133,18 @@ LeoOrbitNodeHelper::Install(const std::string& orbitFile)
 
     NS_ABORT_MSG_IF(orbits.empty(), "Orbit files is empty or badly formatted.");
 
-    return Install(orbits);
+    return CreateNodesAndInstallMobility(orbits);
 }
 
 NodeContainer
-LeoOrbitNodeHelper::Install(const vector<LeoOrbit>& orbits)
+LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const vector<LeoOrbit>& orbits)
 {
     NS_LOG_FUNCTION(this << orbits);
 
     NodeContainer nodes;
     for (auto& orbit : orbits)
     {
-        nodes.Add(Install(orbit));
+        nodes.Add(CreateNodesAndInstallMobility(orbit));
         NS_LOG_DEBUG("Added orbit plane");
     }
 
