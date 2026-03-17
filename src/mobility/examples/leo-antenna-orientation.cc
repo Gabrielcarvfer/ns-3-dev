@@ -155,11 +155,15 @@ main(int argc, char* argv[])
 
     CommandLine cmd(__FILE__);
     std::string orbitFile;
-    std::string traceFile;
+    std::string traceFile = "leo-antenna-orientation-trace.csv";
+    bool writeTrace = true;
     Time duration = Seconds(60);                       // seconds
     Time orbitTimeStepResolution = MilliSeconds(1000); // milliseconds
     cmd.AddValue("orbitFile", "CSV file with orbit parameters", orbitFile);
-    cmd.AddValue("traceFile", "CSV file to store mobility trace in", traceFile);
+    cmd.AddValue("traceFile", "Trace output file path", traceFile);
+    cmd.AddValue("writeTrace",
+                 "Write trace output to file (default true); if false, write to stdout",
+                 writeTrace);
     cmd.AddValue("resolution",
                  "Mobility model time resolution step in milliseconds",
                  orbitTimeStepResolution);
@@ -214,12 +218,15 @@ main(int argc, char* argv[])
     }
 
     std::streambuf* coutbuf = std::cout.rdbuf();
-    // redirect cout if traceFile is specified
+    // redirect cout to trace file if writeTrace is enabled
     std::ofstream out;
-    out.open(traceFile);
-    if (out.is_open())
+    if (writeTrace)
     {
-        std::cout.rdbuf(out.rdbuf());
+        out.open(traceFile);
+        if (out.is_open())
+        {
+            std::cout.rdbuf(out.rdbuf());
+        }
     }
 
     std::cout << "Time,Satellite,x,y,z,x_2,y_2,z_2" << std::endl;
@@ -228,6 +235,9 @@ main(int argc, char* argv[])
     Simulator::Run();
     Simulator::Destroy();
 
-    out.close();
-    std::cout.rdbuf(coutbuf);
+    if (out.is_open())
+    {
+        out.close();
+        std::cout.rdbuf(coutbuf);
+    }
 }

@@ -786,16 +786,17 @@ leo-antenna-orientation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 This example builds upon the ``leo-circular-orbit-tracing-example``, with the addition of
-a function that enforces the antenna aggregated to the satellite node to be always pointing
-towards a place. To support different types of strategies, perhaps this function could
-be altered to make the beam steer, but currently it may be used to simulate attitude
-control, forcing the satellite antennas to be always pointing downwards (nadir-pointing).
+a function that periodically steers each satellite's antenna toward a fixed ground station
+(hardcoded to CTTC, near Barcelona).  The steering is purely geometric: every satellite
+computes the direction to the ground station and sets its antenna azimuth and elevation
+accordingly, regardless of whether the satellite has line-of-sight to the ground station.
+The function could be adapted for other pointing strategies (e.g., nadir-pointing or
+beam steering).
 
-In this example, the callback function ``CourseChange`` was altered to insert additional
-information to the position trace output. Two coordinates are provided, one corresponding
-to the node position, and an additional coordinate representing the point where the
-antenna must point to. These two coordinates can be used to with ``model/plot-orbital-traces.py``,
-to generate an animated plot displaying the antenna orientation vector and satellite motion.
+In this example, the ``CourseChange`` callback outputs two ECEF coordinates per event:
+the satellite position and a second point along the antenna pointing direction toward
+the ground station.  These can be visualized with ``model/plot-orbital-traces.py``
+to generate an animated plot showing each satellite's antenna pointing vector.
 
 To execute it, with duration in seconds and resolution in milliseconds:
 
@@ -825,8 +826,8 @@ updated, as we can see the nodes orbiting around Earth in the plot. To generate
 this plot, the user must pass two arguments via command line, specifying file
 paths to the input file, where traces will be taken for plotting, and output file,
 the output video file itself. Additionally, if the user passes the flag ``-a`` then
-the script will also try to plot a vector representing the antenna orientation for
-the satellite nodes, but the input file must contain data produced by
+the script will also plot a vector from each satellite toward the ground station,
+showing the antenna pointing direction.  This requires input data produced by
 the ``leo-antenna-orientation`` example.
 
 To execute it, run the following:
@@ -835,20 +836,24 @@ To execute it, run the following:
 
     $ plot-orbital-traces.py -i <path-to-traceFile> -o <path-to-output-file>.mp4 -a
 
-The ``-a`` option also illustrates the antenna orientation, but it requires a uniform-planar array to be configured.
+The ``-a`` option plots the antenna pointing vector for each satellite, but requires
+trace data from the ``leo-antenna-orientation`` example.
 For example, using the starlink orbit traces:
 
 .. sourcecode:: bash
 
     ~/ns-3-dev/$ ./src/mobility/model/plot-orbital-traces.py -i starlink-orbit-trace -o starlink-animation.mp4
 
-To also plot antenna panel normal vector, try:
+To also plot the antenna pointing vector toward the ground station, try:
 
 .. sourcecode:: bash
 
-    ~/ns-3-dev/$ ./ns3 build leo-antenna-orientation
-    ~/ns-3-dev/$ ./ns3 run "leo-antenna-orientation --duration=100" --no-build > satellite-antenna-trace
-    ~/ns-3-dev/$ ./src/mobility/model/plot-orbital-traces.py -i satellite-antenna-trace -o satellite-antenna-trace.mp4 -a
+    ~/ns-3-dev/$ ./ns3 run "leo-antenna-orientation --duration=100"
+    ~/ns-3-dev/$ ./src/mobility/model/plot-orbital-traces.py -i leo-antenna-orientation-trace.csv -o satellite-antenna-trace.mp4 -a
+
+By default, the trace is written to ``leo-antenna-orientation-trace.csv``.
+Use ``--traceFile=<path>`` to change the output file path, or
+``--writeTrace=false`` to write to stdout instead.
 
 References
 ----------
