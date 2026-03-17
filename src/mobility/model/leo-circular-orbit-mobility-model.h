@@ -136,7 +136,10 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
 
     /**
      * @brief Sets the node position via argument.
-     * @param position the position to set.
+     *
+     * @param position position.x is the longitude of the ascending node
+     *        in degrees; position.y is an offset on the orbital plane
+     *        in degrees.  Both are converted to radians internally.
      */
     void DoSetPosition(const Vector& position) override;
 

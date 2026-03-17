@@ -40,12 +40,14 @@ class LeoCircularOrbitAllocator : public PositionAllocator
     ~LeoCircularOrbitAllocator() override;
 
     /**
-     * @brief Gets the next position on the latitude longitude grid
+     * @brief Gets the next position on the longitude grid
      *
      * If all positions have been returned once, the first position is returned
      * again and so on.
      *
-     * @return the next latitude, longitude pair
+     * @return Vector where x is the longitude of the ascending node in
+     *         degrees, y is the orbital offset in degrees, and z is the
+     *         satellite index within the plane.
      */
     Vector GetNext() const override;
 

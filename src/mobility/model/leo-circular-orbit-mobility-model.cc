@@ -159,12 +159,10 @@ LeoCircularOrbitMobilityModel::DoGetPosition() const
 void
 LeoCircularOrbitMobilityModel::DoSetPosition(const Vector& position)
 {
-    // Use first element of position vector as longitude, second for offset
-    // this works nicely with MobilityHelper and GetPosition will still get the
-    // correct position, but be aware that it will not be the same as supplied to
-    // SetPosition
-    m_longitude = position.x;
-    m_offset = position.y;
+    // position.x is the longitude of the ascending node in degrees;
+    // position.y is an offset on the orbital plane in degrees.
+    m_longitude = (position.x / 180.0) * M_PI;
+    m_offset = (position.y / 180.0) * M_PI;
 }
 
 double
