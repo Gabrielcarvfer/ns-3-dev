@@ -32,10 +32,11 @@ class LeoOrbitNodeHelper
 {
   public:
     /**
-     * Construct a LEO Orbit Node Helper which is used to make life easier when working
-     * with mobility models.
-     * @param timeStep the time resolution for the mobility, which determines the granularity of
-     * positions generated in a given orbit (the faster the orbital speed, the smallest
+     * @brief Construct a LEO Orbit Node Helper.
+     *
+     * @param timeStep time resolution for the progress vector.  Smaller
+     *        values produce finer-grained orbital positions but use more
+     *        memory.  Higher orbital speeds require smaller time steps.
      */
     LeoOrbitNodeHelper(const Time& timeStep);
 
@@ -86,13 +87,19 @@ class LeoOrbitNodeHelper
     void SetAttribute(std::string name, const AttributeValue& value);
 
     /**
-     * Generates a Progress Vector and makes ptr point to the newly created vector.
-     * A progress vector holds all positions that a node may be along its orbit. It is an
-     * offset value regarding the node itself and its orbit.
+     * @brief Generate a progress vector for the given orbit.
      *
-     * @param orbit a LeoOrbit object that holds orbit information
-     * @returns a shared pointer to the vector containing positions of satellites for the specified
-     * LEO orbit
+     * A progress vector is a precomputed table of angular offsets (in
+     * degrees) representing equally spaced positions around a circular
+     * orbit.  Each entry is the true anomaly relative to the ascending
+     * node, sampled at intervals of the helper's time step.  The number
+     * of entries equals one full orbital period divided by the time step.
+     *
+     * The vector is shared among all satellites at the same altitude
+     * (and thus the same orbital speed) to save memory.
+     *
+     * @param orbit orbital parameters (altitude, inclination, etc.)
+     * @return shared pointer to a vector of angular offsets in degrees
      */
     std::shared_ptr<std::vector<double>> GenerateProgressVector(const LeoOrbit& orbit) const;
 

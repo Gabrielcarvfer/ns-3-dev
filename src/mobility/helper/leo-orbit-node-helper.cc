@@ -187,8 +187,8 @@ LeoOrbitNodeHelper::GenerateProgressVector(const LeoOrbit& orbit) const
     // Total number of steps in the orbit
     std::size_t steps = std::round(1.0 / stepFraction);
 
-    // Angular advance per step, anomaly per step
-    double stepAngle = sign * 2 * M_PI * stepFraction;
+    // Angular advance per step in degrees
+    double stepAngle = sign * 360.0 * stepFraction;
 
     // Creates the container and associates it to the pointer passed via argument
     auto progVecPtr = std::make_shared<std::vector<double>>(steps);

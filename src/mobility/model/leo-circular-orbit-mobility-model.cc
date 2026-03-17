@@ -115,7 +115,8 @@ LeoCircularOrbitMobilityModel::CalcPosition(Time t) const
                            cos(m_inclination) * sin(lon),
                            sin(m_inclination)));
 
-    return RotatePlane(m_progressVector->at(m_nodeIndexAtProgressVector), x, t);
+    double progressAngleRad = (m_progressVector->at(m_nodeIndexAtProgressVector) / 180.0) * M_PI;
+    return RotatePlane(progressAngleRad, x, t);
 }
 
 Vector

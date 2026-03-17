@@ -73,27 +73,42 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     void SetInclination(double incl);
 
     /**
-     * @brief Sets the index of the node at the Progress Vector
-     * @param index the node's index at the Progress Vector
+     * @brief Sets the starting index of this node in the progress vector.
+     *
+     * Different satellites in the same orbital plane are assigned different
+     * indices so that they are spaced along the orbit.  The index advances
+     * by one at each resolution time step and wraps around when a full
+     * orbital period has elapsed.
+     *
+     * @param index zero-based index into the progress vector
      */
     void SetNodeIndexAtProgressVector(uint64_t index);
 
     /**
-     * @brief Links this node to a certain Progress Vector - probably shared among other nodes
-     * @param ptr a pointer to the Progress Vector container
+     * @brief Associates this node with a shared progress vector.
+     *
+     * A progress vector is a precomputed table of angular offsets (in
+     * degrees) representing equally spaced positions around a circular
+     * orbit.  Each entry is the true anomaly relative to the ascending
+     * node.  The vector is shared among all satellites in orbital planes
+     * of the same altitude and inclination (to save memory).
+     *
+     * @param ptr shared pointer to a vector of angular offsets in degrees
+     *
+     * @see LeoOrbitNodeHelper::GenerateProgressVector
      */
     void SetProgressVectorPointer(const std::shared_ptr<std::vector<double>>& ptr);
 
     /**
      * @brief Orders the calculation of the node position, notifies course change, advances
      * the node index at the Progress Vector, and schedules the next update event.
-     * @return position that will be returned upon the next call to DoGetPosition
+     * @return ECEF position in meters
      */
     Vector UpdateNodePositionAndScheduleEvent();
 
     /**
      * @brief Returns the Geocentric Position of the Node in ECEF (cartesian)
-     * @return a vector representing the node position
+     * @return ECEF position in meters
      */
     Vector DoGetGeocentricPosition() const override;
 
@@ -125,12 +140,12 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     /// The index of the node in the Progress Vector
     uint16_t m_nodeIndexAtProgressVector{0};
 
-    /// A pointer to a progress vector that is shared among all nodes that have the same altitude
+    /// Shared progress vector of angular offsets (degrees) around the orbit
     std::shared_ptr<std::vector<double>> m_progressVector;
 
     /**
      * @brief Returns the node current position.
-     * @return the current position.
+     * @return ECEF position in meters
      */
     Vector DoGetPosition() const override;
 
@@ -145,7 +160,7 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
 
     /**
      * @brief Returns the current velocity of the node.
-     * @return the current velocity.
+     * @return velocity vector in m/s (ECEF)
      */
     Vector DoGetVelocity() const override;
 
@@ -157,18 +172,30 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     Vector3D PlaneNorm(Time t) const;
 
     /**
-     * @brief Advances a satellite by 'a' degrees inside the orbital plane
-     * @param a angle by which to rotate
-     * @param x vector to rotate
-     * @param t time passed since simulation start (used to calculate rotation offset)
-     * @return rotated vector.
+     * @brief Rotates a position vector by angle 'a' around the orbital plane
+     * normal, using the Rodrigues rotation formula
+     * (see https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula ).
+     *
+     * @param a angle by which to rotate, in radians
+     * @param x position vector to rotate, in meters (ECEF)
+     * @param t time passed since simulation start (used to compute the
+     *        current orbital plane normal)
+     * @return rotated position vector in meters (ECEF)
      */
     Vector3D RotatePlane(double a, const Vector3D& x, Time t) const;
 
     /**
      * @brief Calculate the position at time t
-     * @param t time
-     * @return position at time t
+     *
+     * The returned Vector contains Cartesian ECEF coordinates in meters.
+     * Note that this differs from DoSetPosition(), where the Vector
+     * encodes angular orbital parameters (longitude and offset in
+     * degrees); that discrepancy is a consequence of the MobilityModel
+     * base class interface, which uses a single Vector type for both
+     * input and output.
+     *
+     * @param t simulation time
+     * @return ECEF position in meters
      */
     Vector CalcPosition(Time t) const;
 
