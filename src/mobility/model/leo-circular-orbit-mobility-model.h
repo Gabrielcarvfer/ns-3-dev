@@ -170,11 +170,16 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     Vector CalcPosition(Time t) const;
 
     /**
-     * @brief Calculate the latitude depending on simulation time
+     * @brief Calculate the ECEF longitude of the ascending node at simulation time t
+     *
+     * The orbital plane drifts westward in the ECEF frame because the Earth
+     * rotates eastward, so this returns m_longitude minus the Earth-rotation
+     * angle accumulated over time t.
+     *
      * @param t time
-     * @return latitude
+     * @return longitude of the ascending node in radians (ECEF)
      */
-    double CalcLatitude(Time t) const;
+    double CalcLongitude(Time t) const;
 };
 } // namespace ns3
 

@@ -188,7 +188,7 @@ orbit_alt_km = 500.0
 time_step_sec = 600.0
 
 inclination_deg = 30.0
-raan_deg = 0.0  # we call it "latitude" in ns-3, to infer it starts from prime meridian and rotate like time zones
+raan_deg = 0.0  # longitude of the ascending node, starts from prime meridian
 plane_rotation_deg = 60.0  # extra rotation about chosen axis (dial/spin)
 
 # 1) Progress angles over ~one orbit

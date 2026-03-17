@@ -84,9 +84,9 @@ LeoCircularOrbitMobilityModel::DoGetVelocity() const
 Vector3D
 LeoCircularOrbitMobilityModel::PlaneNorm(Time t) const
 {
-    double lat = CalcLatitude(t);
-    return Vector3D(sin(-m_inclination) * cos(lat),
-                    sin(-m_inclination) * sin(lat),
+    double lon = CalcLongitude(t);
+    return Vector3D(sin(-m_inclination) * cos(lon),
+                    sin(-m_inclination) * sin(lon),
                     cos(m_inclination));
 }
 
@@ -100,19 +100,19 @@ LeoCircularOrbitMobilityModel::RotatePlane(double a, const Vector3D& x, Time t) 
 }
 
 double
-LeoCircularOrbitMobilityModel::CalcLatitude(Time t) const
+LeoCircularOrbitMobilityModel::CalcLongitude(Time t) const
 {
-    return m_longitude + ((t.GetDouble() / Hours(24).GetDouble()) * 2 * M_PI);
+    return m_longitude - ((t.GetDouble() / Hours(24).GetDouble()) * 2 * M_PI);
 }
 
 Vector
 LeoCircularOrbitMobilityModel::CalcPosition(Time t) const
 {
-    double lat = CalcLatitude(t);
-    // account for orbit latitude and earth rotation offset
+    double lon = CalcLongitude(t);
+    // account for orbit longitude and earth rotation offset
     Vector3D x = (m_orbitHeight * M_PER_KM *
-                  Vector3D(cos(m_inclination) * cos(lat),
-                           cos(m_inclination) * sin(lat),
+                  Vector3D(cos(m_inclination) * cos(lon),
+                           cos(m_inclination) * sin(lon),
                            sin(m_inclination)));
 
     return RotatePlane(m_progressVector->at(m_nodeIndexAtProgressVector), x, t);
@@ -159,7 +159,7 @@ LeoCircularOrbitMobilityModel::DoGetPosition() const
 void
 LeoCircularOrbitMobilityModel::DoSetPosition(const Vector& position)
 {
-    // Use first element of position vector as latitude, second for longitude
+    // Use first element of position vector as longitude, second for offset
     // this works nicely with MobilityHelper and GetPosition will still get the
     // correct position, but be aware that it will not be the same as supplied to
     // SetPosition
