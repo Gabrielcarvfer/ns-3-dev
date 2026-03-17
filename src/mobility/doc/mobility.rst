@@ -735,7 +735,7 @@ In this snippet, the helper is used to create the satellite nodes.
 Calling ``LeoOrbitNodeHelper.Install()`` returns a ``NodeContainer`` containing the nodes created.
 At this point, the nodes are already placed in their initial positions.
 The ``LeoOrbit`` class is used to hold values used to parameterize the instantiation of nodes
-and orbits - its values are, in order, altitude in meters, inclination
+and orbits - its values are, in order, altitude in kilometers, inclination
 angle in degrees, number of planes and number of satellite nodes per plane.
 
 A CSV file can be used as a source of information for the program to know how many orbits to instantiate.
