@@ -57,6 +57,7 @@ build_lib(
   LIBRARIES_TO_LINK ${libantenna}
                     ${libnetwork}
   TEST_SOURCES
+    test/leo-mobility-test-suite.cc
     test/box-line-intersection-test.cc
     test/geo-to-cartesian-test.cc
     test/geocentric-topocentric-conversion-test.cc
