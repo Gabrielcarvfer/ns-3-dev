@@ -42,7 +42,7 @@ LeoCircularOrbitMobilityModel::GetTypeId()
                                              &LeoCircularOrbitMobilityModel::GetInclination),
                           MakeDoubleChecker<double>())
             .AddAttribute("Resolution",
-                          "Time resolution step between precomputed orbital positions",
+                          "Time interval between CourseChange notifications (zero disables)",
                           TimeValue(Seconds(1)),
                           MakeTimeAccessor(&LeoCircularOrbitMobilityModel::m_resolutionTimeStep),
                           MakeTimeChecker());
@@ -52,8 +52,7 @@ LeoCircularOrbitMobilityModel::GetTypeId()
 LeoCircularOrbitMobilityModel::LeoCircularOrbitMobilityModel()
     : GeocentricConstantPositionMobilityModel(),
       m_longitude(0.0),
-      m_offset(0.0),
-      m_position()
+      m_offset(0.0)
 {
     NS_LOG_FUNCTION_NOARGS();
 }
@@ -105,6 +104,19 @@ LeoCircularOrbitMobilityModel::CalcLongitude(Time t) const
     return m_longitude - ((t.GetDouble() / Hours(24).GetDouble()) * 2 * M_PI);
 }
 
+double
+LeoCircularOrbitMobilityModel::GetAngularVelocity() const
+{
+    // omega = sqrt(GM / r^3); units: sqrt(km^3/s^2 / km^3) = rad/s
+    double omega = std::sqrt(LEO_EARTH_GGC / (m_orbitHeight * m_orbitHeight * m_orbitHeight));
+    // Retrograde orbit: inclination > 90 degrees
+    if (m_inclination > M_PI / 2.0)
+    {
+        omega = -omega;
+    }
+    return omega;
+}
+
 Vector
 LeoCircularOrbitMobilityModel::CalcPosition(Time t) const
 {
@@ -115,46 +127,29 @@ LeoCircularOrbitMobilityModel::CalcPosition(Time t) const
                            cos(m_inclination) * sin(lon),
                            sin(m_inclination)));
 
-    double progressAngleRad = (m_progressVector->at(m_nodeIndexAtProgressVector) / 180.0) * M_PI;
+    double progressAngleRad = m_offset + GetAngularVelocity() * t.GetSeconds();
     return RotatePlane(progressAngleRad, x, t);
 }
 
-Vector
-LeoCircularOrbitMobilityModel::UpdateNodePositionAndScheduleEvent()
+void
+LeoCircularOrbitMobilityModel::NotifyCourseChangeAndReschedule()
 {
-    m_position = CalcPosition(Simulator::Now());
-
     NotifyCourseChange();
-
-    // Advances the node position in the Progress Vector or resets its index when an orbital period
-    // has been completed.
-    m_nodeIndexAtProgressVector = (m_nodeIndexAtProgressVector + 1) % m_progressVector->size();
-
-    if (m_resolutionTimeStep > Seconds(0))
-    {
-        Simulator::Schedule(m_resolutionTimeStep,
-                            &LeoCircularOrbitMobilityModel::UpdateNodePositionAndScheduleEvent,
-                            this);
-    }
-
-    return m_position;
+    Simulator::Schedule(m_resolutionTimeStep,
+                        &LeoCircularOrbitMobilityModel::NotifyCourseChangeAndReschedule,
+                        this);
 }
 
 Vector
 LeoCircularOrbitMobilityModel::DoGetGeocentricPosition() const
 {
-    return m_position;
+    return CalcPosition(Simulator::Now());
 }
 
 Vector
 LeoCircularOrbitMobilityModel::DoGetPosition() const
 {
-    if (m_resolutionTimeStep == Time(0))
-    {
-        // Notice: NotifyCourseChange () will not be called.
-        return CalcPosition(Simulator::Now());
-    }
-    return m_position;
+    return CalcPosition(Simulator::Now());
 }
 
 void
@@ -164,6 +159,14 @@ LeoCircularOrbitMobilityModel::DoSetPosition(const Vector& position)
     // position.y is an offset on the orbital plane in degrees.
     m_longitude = (position.x / 180.0) * M_PI;
     m_offset = (position.y / 180.0) * M_PI;
+
+    // Schedule periodic CourseChange notifications if resolution > 0
+    if (m_resolutionTimeStep > Seconds(0))
+    {
+        Simulator::Schedule(m_resolutionTimeStep,
+                            &LeoCircularOrbitMobilityModel::NotifyCourseChangeAndReschedule,
+                            this);
+    }
 }
 
 double
@@ -191,16 +194,4 @@ LeoCircularOrbitMobilityModel::SetInclination(double incl)
     m_inclination = (incl / 180.0) * M_PI;
 }
 
-void
-LeoCircularOrbitMobilityModel::SetNodeIndexAtProgressVector(uint64_t index)
-{
-    m_nodeIndexAtProgressVector = index;
-}
-
-void
-LeoCircularOrbitMobilityModel::SetProgressVectorPointer(
-    const std::shared_ptr<std::vector<double>>& ptr)
-{
-    m_progressVector = ptr;
-}
 }; // namespace ns3

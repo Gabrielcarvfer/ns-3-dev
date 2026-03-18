@@ -8,7 +8,6 @@
 #ifndef LEO_ORBIT_NODE_HELPER_H
 #define LEO_ORBIT_NODE_HELPER_H
 
-#include "ns3/leo-circular-orbit-mobility-model.h"
 #include "ns3/leo-orbit.h"
 #include "ns3/node-container.h"
 #include "ns3/object-factory.h"
@@ -34,11 +33,12 @@ class LeoOrbitNodeHelper
     /**
      * @brief Construct a LEO Orbit Node Helper.
      *
-     * @param timeStep time resolution for the progress vector.  Smaller
-     *        values produce finer-grained orbital positions but use more
-     *        memory.  Higher orbital speeds require smaller time steps.
+     * @param resolution time interval between CourseChange notifications
+     *        on the installed mobility models.  Smaller values produce
+     *        more frequent notifications.  Zero disables periodic
+     *        notifications.
      */
-    LeoOrbitNodeHelper(const Time& timeStep);
+    LeoOrbitNodeHelper(const Time& resolution);
 
     /// destructor
     virtual ~LeoOrbitNodeHelper();
@@ -87,29 +87,11 @@ class LeoOrbitNodeHelper
      */
     void SetAttribute(std::string name, const AttributeValue& value);
 
-    /**
-     * @brief Generate a progress vector for the given orbit.
-     *
-     * A progress vector is a precomputed table of angular offsets (in
-     * degrees) representing equally spaced positions around a circular
-     * orbit.  Each entry is the true anomaly relative to the ascending
-     * node, sampled at intervals of the helper's time step.  The number
-     * of entries equals one full orbital period divided by the time step.
-     *
-     * The vector is shared among all satellites at the same altitude
-     * (and thus the same orbital speed) to save memory.
-     *
-     * @param orbit orbital parameters (altitude, inclination, etc.)
-     * @return shared pointer to a vector of angular offsets in degrees
-     */
-    std::shared_ptr<std::vector<double>> GenerateProgressVector(const LeoOrbit& orbit) const;
-
   private:
     ObjectFactory m_nodeFactory; ///< Node factory
 
-    /// The period at which the mobility model is updated. Higher orbital speeds require smaller
-    /// steps.
-    Time m_timeStep;
+    /// Time interval between CourseChange notifications
+    Time m_resolution;
 };
 
 }; // namespace ns3

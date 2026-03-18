@@ -73,40 +73,6 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     void SetInclination(double incl);
 
     /**
-     * @brief Sets the starting index of this node in the progress vector.
-     *
-     * Different satellites in the same orbital plane are assigned different
-     * indices so that they are spaced along the orbit.  The index advances
-     * by one at each resolution time step and wraps around when a full
-     * orbital period has elapsed.
-     *
-     * @param index zero-based index into the progress vector
-     */
-    void SetNodeIndexAtProgressVector(uint64_t index);
-
-    /**
-     * @brief Associates this node with a shared progress vector.
-     *
-     * A progress vector is a precomputed table of angular offsets (in
-     * degrees) representing equally spaced positions around a circular
-     * orbit.  Each entry is the true anomaly relative to the ascending
-     * node.  The vector is shared among all satellites in orbital planes
-     * of the same altitude and inclination (to save memory).
-     *
-     * @param ptr shared pointer to a vector of angular offsets in degrees
-     *
-     * @see LeoOrbitNodeHelper::GenerateProgressVector
-     */
-    void SetProgressVectorPointer(const std::shared_ptr<std::vector<double>>& ptr);
-
-    /**
-     * @brief Orders the calculation of the node position, notifies course change, advances
-     * the node index at the Progress Vector, and schedules the next update event.
-     * @return ECEF position in meters
-     */
-    Vector UpdateNodePositionAndScheduleEvent();
-
-    /**
      * @brief Returns the Geocentric Position of the Node in ECEF (cartesian)
      * @return ECEF position in meters
      */
@@ -131,17 +97,24 @@ class LeoCircularOrbitMobilityModel : public GeocentricConstantPositionMobilityM
     /// Offset on the orbital plane in rad
     double m_offset;
 
-    /// Current position
-    Vector3D m_position;
-
-    /// Time resolution step between precomputed orbital positions
+    /// Time interval between CourseChange notifications; zero disables
+    /// periodic notifications
     Time m_resolutionTimeStep;
 
-    /// The index of the node in the Progress Vector
-    uint16_t m_nodeIndexAtProgressVector{0};
+    /**
+     * @brief Get the orbital angular velocity.
+     *
+     * Computed from Keplerian mechanics: omega = sqrt(GM / r^3).
+     * Negated for retrograde orbits (inclination > 90 degrees).
+     *
+     * @return angular velocity in rad/s
+     */
+    double GetAngularVelocity() const;
 
-    /// Shared progress vector of angular offsets (degrees) around the orbit
-    std::shared_ptr<std::vector<double>> m_progressVector;
+    /**
+     * @brief Fire NotifyCourseChange and reschedule at m_resolutionTimeStep.
+     */
+    void NotifyCourseChangeAndReschedule();
 
     /**
      * @brief Returns the node current position.

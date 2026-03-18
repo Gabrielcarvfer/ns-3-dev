@@ -7,19 +7,14 @@
 
 #include "leo-orbit-node-helper.h"
 
-#include "math.h"
 #include "mobility-helper.h"
 
-#include "ns3/config.h"
 #include "ns3/csv-reader.h"
 #include "ns3/double.h"
-#include "ns3/geographic-positions.h"
 #include "ns3/integer.h"
 #include "ns3/log.h"
-#include "ns3/waypoint.h"
 
 #include <fstream>
-#include <vector>
 
 using namespace std;
 
@@ -27,10 +22,10 @@ namespace ns3
 {
 NS_LOG_COMPONENT_DEFINE("LeoOrbitNodeHelper");
 
-LeoOrbitNodeHelper::LeoOrbitNodeHelper(const Time& timeStep)
+LeoOrbitNodeHelper::LeoOrbitNodeHelper(const Time& resolution)
 {
     m_nodeFactory.SetTypeId("ns3::Node");
-    m_timeStep = timeStep;
+    m_resolution = resolution;
 }
 
 LeoOrbitNodeHelper::~LeoOrbitNodeHelper()
@@ -48,6 +43,15 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
 {
     NS_LOG_FUNCTION(this << orbit);
 
+    NodeContainer satelliteContainer;
+    for (uint16_t i = 0; i < orbit.planes; i++)
+    {
+        for (int32_t j = 0; j < orbit.sats; j++)
+        {
+            satelliteContainer.Add(m_nodeFactory.Create<Node>());
+        }
+    }
+
     MobilityHelper mobility;
     mobility.SetPositionAllocator("ns3::LeoCircularOrbitPositionAllocator",
                                   "NumOrbits",
@@ -58,50 +62,11 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
                               "Altitude",
                               DoubleValue(orbit.alt),
                               "Inclination",
-                              DoubleValue(orbit.inc));
+                              DoubleValue(orbit.inc),
+                              "Resolution",
+                              TimeValue(m_resolution));
+    mobility.Install(satelliteContainer);
 
-    auto progressVector = GenerateProgressVector(orbit);
-
-    // This section:
-    // - Creates a node, installs mobility, associate node to a progress vector, and adds node to
-    // a NodeContainer.
-    // - It also calculates the initial offset for nodes that share the same orbit, assigning each
-    // node a different starting index, which will be increased at every call to Update().
-    // - It tries to distribute nodes evenly within the Progress Vector, by diluting the remainder
-    // space between the first nodes.
-
-    auto [truncatedRegularStepSize, remainder] = std::div(progressVector->size(), orbit.sats);
-    uint64_t progressVectorIndex{0};
-
-    NodeContainer satelliteContainer;
-    for (uint16_t i = 0; i < orbit.planes; i++)
-    {
-        progressVectorIndex = 0;
-        auto rem = remainder;
-        for (int32_t j = 0; j < orbit.sats; j++)
-        {
-            auto node = m_nodeFactory.Create<Node>();
-            mobility.Install(node);
-            auto currentNodeMobModel = node->GetObject<LeoCircularOrbitMobilityModel>();
-
-            // set time step resolution to match progress vector
-            currentNodeMobModel->SetAttribute("Resolution", TimeValue(m_timeStep));
-
-            // associates the progress vector to the node
-            currentNodeMobModel->SetProgressVectorPointer(progressVector);
-            currentNodeMobModel->SetNodeIndexAtProgressVector(progressVectorIndex);
-            if (rem > 0)
-            {
-                // there's a remainder
-                // adds one space to dilute the remainder
-                progressVectorIndex++;
-            }
-            currentNodeMobModel->UpdateNodePositionAndScheduleEvent();
-            satelliteContainer.Add(node);
-            progressVectorIndex += truncatedRegularStepSize;
-            rem--;
-        }
-    }
     return satelliteContainer;
 }
 
@@ -151,57 +116,6 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const vector<LeoOrbit>& orbits
     NS_LOG_DEBUG("Added " << nodes.GetN() << " nodes");
 
     return nodes;
-}
-
-constexpr double KM_TO_M = 1000; ///< Meters in a kilometer
-
-/// geocentric gravitational constant in KM^3/s^2 https://ntrs.nasa.gov/citations/19760058274
-constexpr double LEO_EARTH_GGC = 398600.7;
-
-std::shared_ptr<std::vector<double>>
-LeoOrbitNodeHelper::GenerateProgressVector(const LeoOrbit& orbit) const
-{
-    // sqrt((km^3/s^2) / km) => sqrt(km^2/s^2) => km/s * 1000m/km = m/s
-    constexpr auto earthRadiusKm = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / KM_TO_M);
-    const auto orbitHeight = earthRadiusKm + orbit.alt;             // km
-    double nodeSpeed = sqrt(LEO_EARTH_GGC / orbitHeight);           // km/s
-    double orbitPerimeter = (earthRadiusKm + orbit.alt) * 2 * M_PI; // 2*pi*r km
-
-    // Calculates the step size for the progress vector - the step size represents how much the
-    // node progresses along its orbit during a single time resolution interval. Since the model
-    // only fetches the node position at each interval, we only need to store its offset at each
-    // interval.
-    double stepSize = nodeSpeed * m_timeStep.GetSeconds(); // km
-
-    // Ensure correct gradient (not against earth rotation)
-    int sign = 1;
-    // Convert to radians then apply inverted signal if needed
-    if (((orbit.inc / 180.0) * M_PI) > M_PI / 2)
-    {
-        sign = -1;
-    }
-
-    // Fraction of orbit per step
-    double stepFraction = stepSize / orbitPerimeter;
-
-    // Total number of steps in the orbit
-    std::size_t steps = std::round(1.0 / stepFraction);
-
-    // Angular advance per step in degrees
-    double stepAngle = sign * 360.0 * stepFraction;
-
-    // Creates the container and associates it to the pointer passed via argument
-    auto progVecPtr = std::make_shared<std::vector<double>>(steps);
-
-    // It progresses step by step until it makes one cycle along the orbit, and at each step, we
-    // calculate the angle/offset - creating a vector with all possible offsets given a time res.
-    for (std::size_t i = 0; i < steps; i++)
-    {
-        // 2pi * sign * amountProgressed / earth circular perimeter
-        progVecPtr->at(i) = i * stepAngle;
-    }
-
-    return progVecPtr;
 }
 
 }; // namespace ns3

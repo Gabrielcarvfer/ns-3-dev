@@ -639,24 +639,18 @@ Characteristics & Assumptions
 * **Static Earth**: While the model takes into consideration Earth’s rotation, it does not consider Earth’s orbit around the sun; i.e., the Earth is static.
 * In the plots, Earth is modelled as a perfect sphere.
 
-The model works in 3 steps:
+The model computes satellite positions in three steps:
 
-- First step: Precompute a single ``ProgressVector`` per orbit, containing all possible positions a
-  satellite can assume in a particular orbit height.
-- Second step: Apply orbital plane inclination referent to equator and rotation referent to the RAAN.
-- Third step: Apply orbital plane rotation.
+- First step: Compute the satellite's angular position along its orbit from the initial
+  orbital offset and the angular velocity (derived from altitude via Keplerian mechanics)
+  multiplied by the elapsed simulation time.
+- Second step: Apply orbital plane inclination relative to the equator and rotation
+  relative to the RAAN.
+- Third step: Apply the Rodrigues rotation formula to rotate the satellite around the
+  orbital plane normal by the computed angular position.
 
-The ``ProgressVector`` is shared among all orbital planes of the same orbit, to save up on memory
-and trigonometric computations. An important parameter of this arrangement is that we need to define
-a resolution, which along with orbital speed (automatically selected based on orbital height/altitude of satellites),
-will define the spacing between satellites.
-
-Examples of such progress vector and different resolutions are shown in the figures below.
-
-Figure :ref:`leo-orbit-res-600s` shows a coarser resolution, where ``ProgressVector`` contains
-the angles to the positions a satellite would assume every 600 seconds. Figure :ref:`leo-orbit-res-60s`
-shows a finer resolution, with a new position for every 60 seconds. And Figure :ref:`leo-orbit-res-1s`
-shows an even finer resolution, with a new position for every second.
+The figures below illustrate how satellites are distributed along their orbits at
+different angular spacings.
 
 .. _leo-orbit-res-600s:
 
@@ -713,33 +707,17 @@ Figure :ref:`leo-orbit-res-600s-inc-30deg-raan-0deg-planeRot-60deg`.
 Usage
 ~~~~~
 
-The module offers a helper model (``LeoOrbitNodeHelper``) to ease the instantiation of the satellite nodes:
+There are three approaches to setting up a LEO satellite constellation.  Users will
+typically want to use the first two approaches, which leverage the ``LeoOrbitNodeHelper``
+to create satellite nodes and install orbital mobility in a single step.  The third
+approach uses the standard ns-3 ``MobilityHelper`` and ``PositionAllocator`` pattern
+directly, which may be useful when more fine-grained control is needed.
 
-.. sourcecode:: cpp
+**Approach 1: CSV file with constellation parameters**
 
-    LeoOrbitNodeHelper orbit(resolutionTimeStep);
-
-    // creates the satellite nodes and put them into a container
-    NodeContainer satellites;
-    if (!orbitFile.empty())
-    {
-        satellites = orbit.CreateNodesAndInstallMobility(orbitFile);
-    }
-    else
-    {
-        satellites = orbit.CreateNodesAndInstallMobility({LeoOrbit(1200, 30, 1, 2)});
-    }
-
-
-In this snippet, the helper is used to create the satellite nodes.
-Calling ``LeoOrbitNodeHelper.CreateNodesAndInstallMobility()`` returns a ``NodeContainer`` containing the nodes created.
-At this point, the nodes are already placed in their initial positions.
-The ``LeoOrbit`` class is used to hold values used to parameterize the instantiation of nodes
-and orbits - its values are, in order, altitude in kilometers, inclination
-angle in degrees, number of planes and number of satellite nodes per plane.
-
-A CSV file can be used as a source of information for the program to know how many orbits to instantiate.
-Typically, a file path must be passed via command line. This is how such a file would look like:
+A CSV file can define one or more orbital shells, each with different altitude,
+inclination, number of planes, and number of satellites per plane.  For example,
+a file representing part of the Starlink constellation:
 
 .. sourcecode:: text
 
@@ -749,13 +727,81 @@ Typically, a file path must be passed via command line. This is how such a file 
     1130.0,74.0,8,50
     (...)
 
+The helper reads the file, creates the appropriate number of nodes for all shells,
+and installs orbital mobility on each:
+
+.. sourcecode:: cpp
+
+    LeoOrbitNodeHelper orbit(resolution);
+    NodeContainer satellites = orbit.CreateNodesAndInstallMobility(orbitFile);
+
+The ``resolution`` parameter is a ``Time`` value that controls how frequently
+the mobility model fires ``CourseChange`` trace notifications.  It does not
+affect the accuracy of the orbital position model itself; satellite positions
+are always computed exactly on demand when ``GetPosition()`` is called.
+The resolution is handled separately from the orbital parameters (altitude,
+inclination, planes, satellites) because it is not a property of the orbit
+but rather a simulation-level control over how often trace callbacks are
+invoked.
+
+**Approach 2: LeoOrbit objects**
+
+The ``LeoOrbit`` class bundles the four orbital parameters: altitude in kilometers,
+inclination angle in degrees, number of planes, and number of satellites per plane.
+One or more ``LeoOrbit`` objects can be passed directly to the helper:
+
+.. sourcecode:: cpp
+
+    LeoOrbitNodeHelper orbit(resolution);
+
+    // Single shell
+    NodeContainer satellites = orbit.CreateNodesAndInstallMobility(LeoOrbit(1200, 30, 1, 2));
+
+    // Multiple shells
+    NodeContainer satellites = orbit.CreateNodesAndInstallMobility(
+        {LeoOrbit(1200, 30, 32, 16), LeoOrbit(1180, 45, 12, 10)});
+
+In both approaches 1 and 2, ``CreateNodesAndInstallMobility()`` returns a
+``NodeContainer`` with all satellite nodes already placed at their initial
+orbital positions.
+
+**Approach 3: Standard MobilityHelper pattern**
+
+For a single orbital shell, the standard ns-3 ``MobilityHelper`` and
+``PositionAllocator`` pattern can be used directly:
+
+.. sourcecode:: cpp
+
+    uint16_t numOrbits = 1;
+    int32_t numSatellites = 16;
+    NodeContainer satellites(numOrbits * numSatellites);
+
+    MobilityHelper mobility;
+    mobility.SetPositionAllocator("ns3::LeoCircularOrbitPositionAllocator",
+                                  "NumOrbits", IntegerValue(numOrbits),
+                                  "NumSatellites", IntegerValue(numSatellites));
+    mobility.SetMobilityModel("ns3::LeoCircularOrbitMobilityModel",
+                              "Altitude", DoubleValue(1200),
+                              "Inclination", DoubleValue(30));
+    mobility.Install(satellites);
+
+When using this approach, note the following caveats:
+
+- The number of nodes in the ``NodeContainer`` must equal
+  ``NumOrbits * NumSatellites``.  If these are inconsistent, the position
+  allocator will wrap around or leave nodes at default positions.
+- The ``Altitude`` and ``Inclination`` attributes on the mobility model
+  apply uniformly to all nodes in a single ``Install()`` call.  For
+  multi-shell constellations (e.g., Starlink with shells at different
+  altitudes), a separate ``MobilityHelper`` and ``Install()`` call is
+  required for each shell.
+
 Resolution
 ~~~~~~~~~~
 
-An important parameter that needs to be set appropriately during the construction of ``LeoOrbitNodeHelper``
-is the ``TimeStep``. The term itself may be a bit vague, but it is related to the period between positions
-of a satellite in a given orbit. A smaller period results in more steps, or higher resolution orbit,
-with smaller position jumps. Higher resolution is needed by higher orbital speeds.
+As described above, the ``Resolution`` attribute controls how often
+``CourseChange`` trace notifications are fired.  A value of zero disables
+periodic notifications entirely.
 
 leo-circular-orbit-tracing-example
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
