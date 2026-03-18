@@ -24,17 +24,20 @@ NS_LOG_COMPONENT_DEFINE("LeoOrbitNodeHelper");
 
 LeoOrbitNodeHelper::LeoOrbitNodeHelper(const Time& resolution)
 {
+    NS_LOG_FUNCTION(this << resolution.As(Time::S));
     m_nodeFactory.SetTypeId("ns3::Node");
     m_resolution = resolution;
 }
 
 LeoOrbitNodeHelper::~LeoOrbitNodeHelper()
 {
+    NS_LOG_FUNCTION(this);
 }
 
 void
 LeoOrbitNodeHelper::SetAttribute(string name, const AttributeValue& value)
 {
+    NS_LOG_FUNCTION(this);
     m_nodeFactory.Set(name, value);
 }
 
@@ -42,6 +45,11 @@ NodeContainer
 LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
 {
     NS_LOG_FUNCTION(this << orbit);
+
+    NS_LOG_INFO("Installing shell: altitude = "
+                << orbit.alt << " km, inclination = " << orbit.inc << " deg, " << orbit.planes
+                << " planes, " << orbit.sats << " sats/plane, phasing = " << orbit.phasing
+                << ", RAAN span = " << orbit.raanSpanDeg << " deg");
 
     NS_ABORT_MSG_IF(orbit.planes == 0, "Number of orbital planes must be > 0");
     NS_ABORT_MSG_IF(orbit.sats == 0, "Number of satellites per plane must be > 0");

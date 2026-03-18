@@ -54,7 +54,7 @@ LeoCircularOrbitMobilityModel::LeoCircularOrbitMobilityModel()
       m_longitude(0.0),
       m_offset(0.0)
 {
-    NS_LOG_FUNCTION_NOARGS();
+    NS_LOG_FUNCTION(this);
 }
 
 /// meters in a kilometer
@@ -134,6 +134,8 @@ LeoCircularOrbitMobilityModel::CalcPosition(Time t) const
 void
 LeoCircularOrbitMobilityModel::NotifyCourseChangeAndReschedule()
 {
+    NS_LOG_FUNCTION(this);
+    NS_LOG_DEBUG("CourseChange pos = " << CalcPosition(Simulator::Now()));
     NotifyCourseChange();
     Simulator::Schedule(m_resolutionTimeStep,
                         &LeoCircularOrbitMobilityModel::NotifyCourseChangeAndReschedule,
@@ -155,10 +157,15 @@ LeoCircularOrbitMobilityModel::DoGetPosition() const
 void
 LeoCircularOrbitMobilityModel::DoSetPosition(const Vector& position)
 {
+    NS_LOG_FUNCTION(this << position);
     // position.x is the longitude of the ascending node in degrees;
     // position.y is an offset on the orbital plane in degrees.
     m_longitude = (position.x / 180.0) * M_PI;
     m_offset = (position.y / 180.0) * M_PI;
+    NS_LOG_INFO("Set orbital position: longitude = "
+                << position.x << " deg, offset = " << position.y
+                << " deg, altitude = " << GetAltitude() << " km, inclination = " << GetInclination()
+                << " deg, angular velocity = " << GetAngularVelocity() << " rad/s");
 
     // Schedule periodic CourseChange notifications if resolution > 0
     if (m_resolutionTimeStep > Seconds(0))
@@ -178,6 +185,7 @@ LeoCircularOrbitMobilityModel::GetAltitude() const
 void
 LeoCircularOrbitMobilityModel::SetAltitude(double h)
 {
+    NS_LOG_FUNCTION(this << h);
     m_orbitHeight = (GeographicPositions::EARTH_SEMIMAJOR_AXIS / M_PER_KM) + h;
 }
 
@@ -190,6 +198,7 @@ LeoCircularOrbitMobilityModel::GetInclination() const
 void
 LeoCircularOrbitMobilityModel::SetInclination(double incl)
 {
+    NS_LOG_FUNCTION(this << incl);
     NS_ASSERT_MSG(incl != 0.0, "Plane must not be orthogonal to axis");
     m_inclination = (incl / 180.0) * M_PI;
 }
