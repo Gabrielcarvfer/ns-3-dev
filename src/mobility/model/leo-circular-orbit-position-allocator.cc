@@ -60,11 +60,11 @@ LeoCircularOrbitAllocator::GetNext() const
                          360.0 * (m_lastSatellite / (double)m_numSatellites),
                          m_lastSatellite);
 
-    if (m_lastSatellite + 1 == m_numSatellites)
+    m_lastSatellite = (m_lastSatellite + 1) % m_numSatellites;
+    if (!m_lastSatellite)
     {
         m_lastOrbit = (m_lastOrbit + 1) % m_numOrbits;
     }
-    m_lastSatellite = (m_lastSatellite + 1) % m_numSatellites;
 
     return next;
 }
