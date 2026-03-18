@@ -877,6 +877,9 @@ To execute it, with duration in seconds and resolution in milliseconds:
     --orbitFile=/path/to/orbit-parameters.csv \
     --traceFile=/path/to/orbit-trace.csv
 
+Sample constellation CSV files are provided in ``src/mobility/examples/``:
+``starlink.csv`` (Walker Delta) and ``one-web.csv`` (Walker Star).
+
 To use the Starlink constellation, use ``--orbitFile=./src/mobility/examples/starlink.csv``:
 
 .. sourcecode:: bash
