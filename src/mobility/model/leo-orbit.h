@@ -79,14 +79,16 @@ class LeoOrbit
      * @brief Constructor
      * @param a altitude (km, from earth surface)
      * @param i inclination (degrees)
-     * @param p number planes
-     * @param s number of satellites in plane
+     * @param p number of planes
+     * @param s number of satellites per plane
+     * @param f Walker Delta phasing factor (default 0)
      */
-    LeoOrbit(double a, double i, double p, double s)
+    LeoOrbit(double a, double i, double p, double s, uint16_t f = 0)
         : alt(a),
           inc(i),
           planes(p),
-          sats(s)
+          sats(s),
+          phasing(f)
     {
     }
 
@@ -98,6 +100,8 @@ class LeoOrbit
     uint16_t planes;
     /// Number of satellites in those planes
     uint16_t sats;
+    /// Walker Delta phasing factor F (0 means no inter-plane stagger)
+    uint16_t phasing{0};
 };
 
 }; // namespace ns3

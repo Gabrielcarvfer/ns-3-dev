@@ -13,6 +13,7 @@
 #include "ns3/double.h"
 #include "ns3/integer.h"
 #include "ns3/log.h"
+#include "ns3/uinteger.h"
 
 #include <fstream>
 
@@ -57,7 +58,9 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
                                   "NumOrbits",
                                   IntegerValue(orbit.planes),
                                   "NumSatellites",
-                                  IntegerValue(orbit.sats));
+                                  IntegerValue(orbit.sats),
+                                  "PhasingFactor",
+                                  UintegerValue(orbit.phasing));
     mobility.SetMobilityModel("ns3::LeoCircularOrbitMobilityModel",
                               "Altitude",
                               DoubleValue(orbit.alt),
@@ -91,6 +94,8 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const std::string& orbitFile)
         ok &= csv.GetValue(3, orbit.sats);
         if (ok)
         {
+            // Optional 5th column: Walker Delta phasing factor
+            csv.GetValue(4, orbit.phasing);
             orbits.push_back(orbit);
         }
     }

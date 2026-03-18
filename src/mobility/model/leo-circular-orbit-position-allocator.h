@@ -59,6 +59,8 @@ class LeoCircularOrbitAllocator : public PositionAllocator
     uint64_t m_numOrbits;
     /// Number of satellites per orbit
     uint64_t m_numSatellites;
+    /// Walker Delta phasing factor F (0 means no inter-plane stagger)
+    uint16_t m_phasingFactor;
 
     /// The last orbit that has been assigned
     mutable uint64_t m_lastOrbit;

@@ -746,8 +746,9 @@ invoked.
 
 **Approach 2: LeoOrbit objects**
 
-The ``LeoOrbit`` class bundles the four orbital parameters: altitude in kilometers,
-inclination angle in degrees, number of planes, and number of satellites per plane.
+The ``LeoOrbit`` class bundles the orbital parameters: altitude in kilometers,
+inclination angle in degrees, number of planes, number of satellites per plane,
+and an optional Walker Delta phasing factor.
 One or more ``LeoOrbit`` objects can be passed directly to the helper:
 
 .. sourcecode:: cpp
@@ -760,6 +761,15 @@ One or more ``LeoOrbit`` objects can be passed directly to the helper:
     // Multiple shells
     NodeContainer satellites = orbit.CreateNodesAndInstallMobility(
         {LeoOrbit(1200, 30, 32, 16), LeoOrbit(1180, 45, 12, 10)});
+
+    // Walker Delta 1600/32/1 constellation with phasing factor F = 1
+    NodeContainer satellites = orbit.CreateNodesAndInstallMobility(LeoOrbit(1200, 53, 32, 50, 1));
+
+For Walker Delta constellations (T/P/F), the optional fifth parameter sets the
+phasing factor F.  This staggers satellites in adjacent planes by
+``F * 360 / T`` degrees, where ``T = P * S`` (total satellites).  Without
+phasing (F = 0, the default), all planes have their first satellite at the
+same orbital offset.
 
 In both approaches 1 and 2, ``CreateNodesAndInstallMobility()`` returns a
 ``NodeContainer`` with all satellite nodes already placed at their initial
