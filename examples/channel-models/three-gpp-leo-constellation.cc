@@ -5,6 +5,22 @@
 // Author: Tim Schubert <ns-3-leo@timschubert.net>
 // Additions & Modifications: Thiago Miyazaki <miyathiago@gmail.com> <t.miyazaki@unesp.br>
 
+/**
+ * @file
+ * This example demonstrates LEO satellite-to-ground propagation loss
+ * estimation using 3GPP NTN channel models.  It sets up a LEO constellation
+ * (from a CSV file or a default single-satellite orbit), places a ground
+ * station beneath the first satellite, and periodically steers each
+ * satellite's antenna toward the ground station.
+ *
+ * At each CourseChange event, the example outputs a colon-separated trace
+ * line containing the satellite position, antenna pointing vector endpoint,
+ * path loss (dB), slant distance (m), and elevation angle (degrees).
+ *
+ * The NTN propagation scenario (DenseUrban, Urban, Suburban, Rural) and
+ * carrier frequency are configurable via command-line options.
+ */
+
 #include "math.h"
 
 #include "ns3/channel-condition-model.h"
@@ -19,13 +35,23 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("LeoLinkExample");
+NS_LOG_COMPONENT_DEFINE("ThreeGppLeoConstellationExample");
 
+/// Ground station geodetic position (latitude, longitude, altitude)
 Vector groundNodePosGEO;
+/// Ground station ECEF position (x, y, z) in meters
 Vector groundNodePosECEF;
+/// Ground station node
 Ptr<Node> groundNode;
+/// 3GPP NTN propagation loss model
 Ptr<ThreeGppPropagationLossModel> propagationLossModel;
 
+/**
+ * Periodically steer a satellite node's antenna toward the ground station.
+ *
+ * @param node the satellite node
+ * @param period the interval at which to update the antenna angles
+ */
 void
 UpdateAntennaOrientation(Ptr<Node> node, Time period)
 {
@@ -55,6 +81,20 @@ UpdateAntennaOrientation(Ptr<Node> node, Time period)
     Simulator::Schedule(period, &UpdateAntennaOrientation, node, period);
 }
 
+/**
+ * Compute a point along a satellite's antenna pointing direction.
+ *
+ * Given a satellite position in ECEF and its antenna azimuth and
+ * inclination angles, this function returns a second ECEF point at the
+ * end of the antenna orientation vector (whose length equals the
+ * satellite-to-ground-station distance).  The two points can be used
+ * to visualize the antenna pointing direction.
+ *
+ * @param nodePosECEF the satellite node ECEF position
+ * @param azimuth the antenna azimuth angle in radians
+ * @param inclination the antenna inclination angle in radians
+ * @return ECEF coordinate of the endpoint of the orientation vector
+ */
 Vector
 GeneratePoint(const Vector& nodePosECEF, const double azimuth, const double inclination)
 {
@@ -94,6 +134,13 @@ GeneratePoint(const Vector& nodePosECEF, const double azimuth, const double incl
     return newPointWithMagnitudeECEF;
 }
 
+/**
+ * CourseChange callback that outputs a trace line with satellite position,
+ * antenna pointing vector endpoint, path loss, slant distance, and
+ * elevation angle.
+ *
+ * @param mob the mobility model that changed course
+ */
 void
 CourseChange(Ptr<const MobilityModel> mob)
 {
@@ -172,10 +219,6 @@ main(int argc, char* argv[])
                  scenario);
     cmd.AddValue("frequency", "Carrier frequency in Hz", frequencyHz);
     cmd.Parse(argc, argv);
-
-    // sets the time precision for the mobility model, i.e. how often its position will be updated
-    Config::SetDefault("ns3::LeoCircularOrbitMobilityModel::Precision",
-                       TimeValue(MilliSeconds(precision)));
 
     LeoOrbitNodeHelper orbit(Time(MilliSeconds(precision)));
 

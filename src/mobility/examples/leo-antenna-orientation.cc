@@ -84,12 +84,17 @@ UpdateAntennaOrientation(Ptr<Node> node, Time period)
 }
 
 /**
- * Generate next position for a satellite node, given the node position in ECEF coordinate,
- * an azimuth and inclination
- * @param nodePosECEF the satellite node current position
- * @param azimuth the horizontal inclination from current position
- * @param zenith the vertical inclination from current position
- * @returns new coordinate for satellite node
+ * Compute a point along a satellite's antenna pointing direction.
+ *
+ * Given a satellite position in ECEF and its antenna azimuth and zenith
+ * angles, this function returns a second ECEF point at the end of the
+ * antenna orientation vector (whose length equals the satellite-to-ground-
+ * station distance).
+ *
+ * @param nodePosECEF the satellite node ECEF position
+ * @param azimuth the antenna azimuth angle in radians
+ * @param zenith the antenna zenith angle in radians
+ * @return ECEF coordinate of the endpoint of the orientation vector
  */
 Vector
 GeneratePoint(const Vector& nodePosECEF, const double azimuth, const double zenith)
@@ -131,9 +136,11 @@ GeneratePoint(const Vector& nodePosECEF, const double azimuth, const double zeni
 }
 
 /**
- * Generate next position for a satellite node in a given orbit defined by its mobility model,
- * and move the satellite to said position
- * @param mob the mobility model for the satellite node
+ * CourseChange callback that outputs a trace line with the satellite position
+ * and a second point along the antenna pointing direction toward the ground
+ * station.
+ *
+ * @param mob the mobility model that changed course
  */
 void
 CourseChange(Ptr<const MobilityModel> mob)
@@ -181,7 +188,8 @@ main(int argc, char* argv[])
     else
     {
         satellites = orbit.CreateNodesAndInstallMobility(LeoOrbit(1180, 30, 1, 16));
-        // satellites = orbit.CreateNodesAndInstallMobility({LeoOrbit(1200, 20, 32, 16), LeoOrbit(1180, 30, 12, 10)});
+        // satellites = orbit.CreateNodesAndInstallMobility({LeoOrbit(1200, 20, 32, 16),
+        // LeoOrbit(1180, 30, 12, 10)});
     }
 
     Config::ConnectWithoutContextFailSafe("/NodeList/*/$ns3::MobilityModel/CourseChange",

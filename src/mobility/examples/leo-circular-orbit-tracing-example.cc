@@ -30,8 +30,7 @@
  * - orbitFile: path to a CSV containing orbit parameters for satellites
  * - traceFile: path to a CSV file to store mobility trace; if omitted or
  *              empty, traces are written to the console
- * - resolution: mobility model time step resolution in milliseconds (defines the distance between
- * satellite steps in its orbital path)
+ * - resolution: time interval between CourseChange notifications in milliseconds
  * - duration: total simulation time in seconds
  */
 
@@ -76,7 +75,8 @@ main(int argc, char* argv[])
     }
     else
     {
-        satellites = orbit.CreateNodesAndInstallMobility({LeoOrbit(1200, 20, 32, 16), LeoOrbit(1180, 30, 12, 10)});
+        satellites = orbit.CreateNodesAndInstallMobility(
+            {LeoOrbit(1200, 20, 32, 16), LeoOrbit(1180, 30, 12, 10)});
     }
 
     Config::ConnectWithoutContext("/NodeList/*/$ns3::MobilityModel/CourseChange",
