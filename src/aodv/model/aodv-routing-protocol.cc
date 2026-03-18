@@ -2269,11 +2269,58 @@ void
 RoutingProtocol::DoInitialize()
 {
     NS_LOG_FUNCTION(this);
-
     NS_ABORT_MSG_IF(m_ttlStart > m_netDiameter,
                     "AODV: configuration error, TtlStart ("
                         << m_ttlStart << ") must be less than or equal to NetDiameter ("
                         << m_netDiameter << ").");
+    NS_ABORT_MSG_IF(m_netTraversalTime < m_nodeTraversalTime,
+                    "AODV: configuration error, NetTraversalTime ("
+                        << m_netTraversalTime.As(Time::S) << ") must be >= NodeTraversalTime ("
+                        << m_nodeTraversalTime.As(Time::S) << ").");
+
+    Time expectedNetTraversal = 2 * m_nodeTraversalTime * m_netDiameter;
+    if (m_netTraversalTime < expectedNetTraversal)
+    {
+        NS_LOG_WARN("AODV: NetTraversalTime ("
+                    << m_netTraversalTime.As(Time::S)
+                    << ") does not match RFC 3561: 2 * NodeTraversalTime * NetDiameter = "
+                    << expectedNetTraversal.As(Time::S));
+    }
+
+    Time expectedPathDiscovery = 2 * m_netTraversalTime;
+    if (m_pathDiscoveryTime < expectedPathDiscovery)
+    {
+        NS_LOG_WARN("AODV: PathDiscoveryTime ("
+                    << m_pathDiscoveryTime.As(Time::S)
+                    << ") does not match RFC 3561: 2 * NetTraversalTime = "
+                    << expectedPathDiscovery.As(Time::S));
+    }
+
+    Time expectedMyRouteTimeout = 2 * m_pathDiscoveryTime;
+    NS_ABORT_MSG_IF(m_myRouteTimeout < expectedMyRouteTimeout,
+                    "AODV: MyRouteTimeout ("
+                        << m_myRouteTimeout.As(Time::S)
+                        << ") violates RFC 3561 MUST: must be >= 2 * PathDiscoveryTime = "
+                        << expectedMyRouteTimeout.As(Time::S));
+
+    Time expectedBlackList = m_rreqRetries * m_netTraversalTime;
+    if (m_blackListTimeout < expectedBlackList)
+    {
+        NS_LOG_WARN("AODV: BlackListTimeout ("
+                    << m_blackListTimeout.As(Time::S)
+                    << ") is below RFC 3561 minimum: RreqRetries * NetTraversalTime = "
+                    << expectedBlackList.As(Time::S)
+                    << ". Note: a larger value may be correct when expanding ring search is used.");
+    }
+
+    Time expectedNextHopWait = m_nodeTraversalTime + MilliSeconds(10);
+    if (m_nextHopWait < expectedNextHopWait)
+    {
+        NS_LOG_WARN("AODV: NextHopWait ("
+                    << m_nextHopWait.As(Time::S)
+                    << ") does not match RFC 3561: NodeTraversalTime + 10ms = "
+                    << expectedNextHopWait.As(Time::S));
+    }
 
     if (m_enableHello)
     {
