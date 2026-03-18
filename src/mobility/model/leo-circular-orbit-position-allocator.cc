@@ -9,6 +9,7 @@
 
 #include "math.h"
 
+#include "ns3/double.h"
 #include "ns3/uinteger.h"
 
 namespace ns3
@@ -50,7 +51,13 @@ LeoCircularOrbitAllocator::GetTypeId()
                           "T = NumOrbits * NumSatellites",
                           UintegerValue(0),
                           MakeUintegerAccessor(&LeoCircularOrbitAllocator::m_phasingFactor),
-                          MakeUintegerChecker<uint16_t>());
+                          MakeUintegerChecker<uint16_t>())
+            .AddAttribute("RaanSpanDeg",
+                          "Total RAAN span in degrees over which orbital planes "
+                          "are distributed (360 for Walker Delta, 180 for Walker Star)",
+                          DoubleValue(360.0),
+                          MakeDoubleAccessor(&LeoCircularOrbitAllocator::m_raanSpanDeg),
+                          MakeDoubleChecker<double>(0.0, 360.0));
     return tid;
 }
 
@@ -64,7 +71,7 @@ Vector
 LeoCircularOrbitAllocator::GetNext() const
 {
     double phasingOffset = m_phasingFactor * m_lastOrbit * 360.0 / (m_numOrbits * m_numSatellites);
-    Vector next = Vector(360.0 * (m_lastOrbit / (double)m_numOrbits),
+    Vector next = Vector(m_raanSpanDeg * (m_lastOrbit / (double)m_numOrbits),
                          360.0 * (m_lastSatellite / (double)m_numSatellites) + phasingOffset,
                          m_lastSatellite);
 

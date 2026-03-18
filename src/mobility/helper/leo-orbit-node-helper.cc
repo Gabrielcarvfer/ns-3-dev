@@ -59,7 +59,9 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
                                   "NumSatellites",
                                   UintegerValue(orbit.sats),
                                   "PhasingFactor",
-                                  UintegerValue(orbit.phasing));
+                                  UintegerValue(orbit.phasing),
+                                  "RaanSpanDeg",
+                                  DoubleValue(orbit.raanSpanDeg));
     mobility.SetMobilityModel("ns3::LeoCircularOrbitMobilityModel",
                               "Altitude",
                               DoubleValue(orbit.alt),
@@ -95,6 +97,8 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const std::string& orbitFile)
         {
             // Optional 5th column: Walker Delta phasing factor
             csv.GetValue(4, orbit.phasing);
+            // Optional 6th column: RAAN span in degrees (360 = Delta, 180 = Star)
+            csv.GetValue(5, orbit.raanSpanDeg);
             orbits.push_back(orbit);
         }
     }

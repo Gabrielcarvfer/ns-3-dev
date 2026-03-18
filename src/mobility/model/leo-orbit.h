@@ -102,6 +102,8 @@ class LeoOrbit
     uint16_t sats;
     /// Walker Delta phasing factor F (0 means no inter-plane stagger)
     uint16_t phasing{0};
+    /// RAAN span in degrees (360 for Walker Delta, 180 for Walker Star)
+    double raanSpanDeg{360.0};
 };
 
 }; // namespace ns3

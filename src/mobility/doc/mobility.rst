@@ -771,6 +771,20 @@ phasing factor F.  This staggers satellites in adjacent planes by
 phasing (F = 0, the default), all planes have their first satellite at the
 same orbital offset.
 
+For Walker Star constellations (e.g., Iridium), orbital planes are distributed
+over 180 degrees instead of 360 degrees.  Set the ``raanSpanDeg`` member on
+the ``LeoOrbit`` object:
+
+.. sourcecode:: cpp
+
+    // Walker Star: Iridium-like 66/6/1 constellation
+    LeoOrbit orbit(780, 86.4, 6, 11, 1);
+    orbit.raanSpanDeg = 180.0;
+    NodeContainer satellites = helper.CreateNodesAndInstallMobility(orbit);
+
+The ``RaanSpanDeg`` attribute on ``LeoCircularOrbitPositionAllocator`` can also
+be set directly when using approach 3.
+
 In both approaches 1 and 2, ``CreateNodesAndInstallMobility()`` returns a
 ``NodeContainer`` with all satellite nodes already placed at their initial
 orbital positions.

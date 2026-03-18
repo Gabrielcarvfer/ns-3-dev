@@ -61,6 +61,8 @@ class LeoCircularOrbitAllocator : public PositionAllocator
     uint64_t m_numSatellites;
     /// Walker Delta phasing factor F (0 means no inter-plane stagger)
     uint16_t m_phasingFactor;
+    /// RAAN span in degrees (360 for Walker Delta, 180 for Walker Star)
+    double m_raanSpanDeg;
 
     /// The last orbit that has been assigned
     mutable uint64_t m_lastOrbit;
