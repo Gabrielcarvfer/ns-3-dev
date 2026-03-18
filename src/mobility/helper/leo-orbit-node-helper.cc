@@ -43,6 +43,14 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
 {
     NS_LOG_FUNCTION(this << orbit);
 
+    NS_ABORT_MSG_IF(orbit.planes == 0, "Number of orbital planes must be > 0");
+    NS_ABORT_MSG_IF(orbit.sats == 0, "Number of satellites per plane must be > 0");
+    NS_ABORT_MSG_IF(orbit.alt <= 0, "Orbital altitude must be > 0 km");
+    NS_ABORT_MSG_IF(orbit.inc == 0, "Orbital inclination must not be 0 degrees");
+    NS_ABORT_MSG_IF(orbit.raanSpanDeg <= 0 || orbit.raanSpanDeg > 360,
+                    "RAAN span must be in (0, 360] degrees");
+    NS_ABORT_MSG_IF(orbit.phasing >= orbit.planes, "Phasing factor must be in [0, planes - 1]");
+
     NodeContainer satelliteContainer;
     for (uint16_t i = 0; i < orbit.planes; i++)
     {
@@ -87,24 +95,38 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const std::string& orbitFile)
     CsvReader csv(orbitFile);
     while (csv.FetchNextRow())
     {
+        // Require at least 4 columns; allow up to 6
+        if (csv.ColumnCount() < 4)
+        {
+            NS_LOG_WARN("Skipping row " << csv.RowNumber() << " of " << orbitFile
+                                        << ": expected at least 4 columns, got "
+                                        << csv.ColumnCount());
+            continue;
+        }
+
         LeoOrbit orbit{};
 
         bool ok = csv.GetValue(0, orbit.alt);
         ok &= csv.GetValue(1, orbit.inc);
         ok &= csv.GetValue(2, orbit.planes);
         ok &= csv.GetValue(3, orbit.sats);
-        if (ok)
+        if (!ok)
         {
-            // Optional 5th column: Walker Delta phasing factor
-            csv.GetValue(4, orbit.phasing);
-            // Optional 6th column: RAAN span in degrees (360 = Delta, 180 = Star)
-            csv.GetValue(5, orbit.raanSpanDeg);
-            orbits.push_back(orbit);
+            NS_LOG_WARN("Skipping row " << csv.RowNumber() << " of " << orbitFile
+                                        << ": non-numeric value in required column");
+            continue;
         }
+
+        // Optional 5th column: Walker Delta phasing factor
+        csv.GetValue(4, orbit.phasing);
+        // Optional 6th column: RAAN span in degrees (360 = Delta, 180 = Star)
+        csv.GetValue(5, orbit.raanSpanDeg);
+        orbits.push_back(orbit);
     }
     orbitsf.close();
 
-    NS_ABORT_MSG_IF(orbits.empty(), "Orbit files is empty or badly formatted.");
+    NS_ABORT_MSG_IF(orbits.empty(),
+                    "No valid orbit rows found in " << orbitFile << "; check file format");
 
     return CreateNodesAndInstallMobility(orbits);
 }
