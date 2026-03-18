@@ -9,7 +9,6 @@
 
 #include "math.h"
 
-#include "ns3/integer.h"
 #include "ns3/uinteger.h"
 
 namespace ns3
@@ -37,14 +36,14 @@ LeoCircularOrbitAllocator::GetTypeId()
             .AddConstructor<LeoCircularOrbitAllocator>()
             .AddAttribute("NumOrbits",
                           "The number of orbits",
-                          IntegerValue(1),
-                          MakeIntegerAccessor(&LeoCircularOrbitAllocator::m_numOrbits),
-                          MakeIntegerChecker<uint16_t>())
+                          UintegerValue(1),
+                          MakeUintegerAccessor(&LeoCircularOrbitAllocator::m_numOrbits),
+                          MakeUintegerChecker<uint16_t>())
             .AddAttribute("NumSatellites",
                           "The number of satellites per orbit",
-                          IntegerValue(1),
-                          MakeIntegerAccessor(&LeoCircularOrbitAllocator::m_numSatellites),
-                          MakeIntegerChecker<uint16_t>())
+                          UintegerValue(1),
+                          MakeUintegerAccessor(&LeoCircularOrbitAllocator::m_numSatellites),
+                          MakeUintegerChecker<uint16_t>())
             .AddAttribute("PhasingFactor",
                           "Walker Delta phasing factor F; staggers satellites in "
                           "adjacent planes by F * 360 / T degrees, where "

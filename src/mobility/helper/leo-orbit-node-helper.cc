@@ -11,7 +11,6 @@
 
 #include "ns3/csv-reader.h"
 #include "ns3/double.h"
-#include "ns3/integer.h"
 #include "ns3/log.h"
 #include "ns3/uinteger.h"
 
@@ -56,9 +55,9 @@ LeoOrbitNodeHelper::CreateNodesAndInstallMobility(const LeoOrbit& orbit)
     MobilityHelper mobility;
     mobility.SetPositionAllocator("ns3::LeoCircularOrbitPositionAllocator",
                                   "NumOrbits",
-                                  IntegerValue(orbit.planes),
+                                  UintegerValue(orbit.planes),
                                   "NumSatellites",
-                                  IntegerValue(orbit.sats),
+                                  UintegerValue(orbit.sats),
                                   "PhasingFactor",
                                   UintegerValue(orbit.phasing));
     mobility.SetMobilityModel("ns3::LeoCircularOrbitMobilityModel",
