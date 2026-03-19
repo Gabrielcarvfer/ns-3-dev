@@ -20,6 +20,7 @@
 #include "ns3/simulator.h"
 #include "ns3/uinteger.h"
 
+#include <algorithm>
 #include <iomanip>
 
 namespace ns3

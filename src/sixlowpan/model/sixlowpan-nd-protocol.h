@@ -23,8 +23,11 @@
 #include "ns3/ipv6-address.h"
 #include "ns3/lollipop-counter.h"
 
+#include <list>
+#include <map>
 #include <set>
 #include <utility>
+#include <vector>
 
 namespace ns3
 {

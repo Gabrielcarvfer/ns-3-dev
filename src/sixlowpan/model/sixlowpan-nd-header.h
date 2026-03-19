@@ -18,6 +18,8 @@
 #include "ns3/ipv6-address.h"
 #include "ns3/mac64-address.h"
 
+#include <vector>
+
 namespace ns3
 {
 

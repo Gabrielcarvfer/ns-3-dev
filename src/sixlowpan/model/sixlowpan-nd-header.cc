@@ -16,6 +16,9 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 
+#include <ios>
+#include <utility>
+
 namespace ns3
 {
 
