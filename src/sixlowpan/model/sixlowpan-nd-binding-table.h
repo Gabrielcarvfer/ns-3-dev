@@ -229,9 +229,7 @@ class SixLowPanNdBindingTable : public Object
     /**
      * @brief 6LoWPAN Neighbor Discovery Table container
      */
-    typedef std::unordered_map<Ipv6Address,
-                               SixLowPanNdBindingTable::SixLowPanNdBindingTableEntry*,
-                               Ipv6AddressHash>
+    typedef std::unordered_map<Ipv6Address, SixLowPanNdBindingTable::SixLowPanNdBindingTableEntry*>
         SixLowPanTable;
 
     SixLowPanTable m_sixLowPanNdBindingTable; ///< The actual binding table
