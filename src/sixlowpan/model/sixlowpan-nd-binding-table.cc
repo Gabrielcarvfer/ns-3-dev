@@ -74,6 +74,10 @@ SixLowPanNdBindingTable::DoDispose()
     }
     m_sixLowPanNdBindingTable.clear();
 
+    m_device = nullptr;
+    m_interface = nullptr;
+    m_icmpv6 = nullptr;
+
     Object::DoDispose();
 }
 

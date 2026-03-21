@@ -396,6 +396,12 @@ SixLowPanNdProtocol::DoDispose()
 
     m_handleRsTimeoutEvent.Cancel();
     m_addressRegistrationTimeoutEvent.Cancel();
+    m_raEntries.clear();
+    m_bindingTableList.clear();
+    m_pendingRas.clear();
+    m_registeredAddresses.clear();
+    m_addrPendingReg.interface = nullptr;
+    m_addressRegistrationJitter = nullptr;
     Icmpv6L4Protocol::DoDispose();
 }
 
