@@ -8,6 +8,8 @@
 
 #include "matrix-array.h"
 
+#include <cstring>
+
 #ifdef HAVE_EIGEN3
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -207,22 +209,47 @@ MatrixArray<T>::Determinant() const
     return res;
 }
 
+namespace
+{
+
+// |z|^2 helper: for std::complex<double> this is `std::norm` (a real-only
+// re*re + im*im, no sqrt), which is what we want for FrobeniusNorm's
+// per-element contribution. For real T, |z|^2 = z*z. Keeping it
+// templated avoids the std::abs->sqrt->square round-trip the original
+// loop did for the complex case.
+template <class U>
+inline double
+magSqr(const U& v)
+{
+    return static_cast<double>(v) * static_cast<double>(v);
+}
+
+template <>
+inline double
+magSqr<std::complex<double>>(const std::complex<double>& v)
+{
+    return std::norm(v); // re*re + im*im, no sqrt
+}
+
+} // namespace
+
 template <class T>
 MatrixArray<T>
 MatrixArray<T>::FrobeniusNorm() const
 {
     MatrixArray<T> res{1, 1, m_numPages};
+    const size_t elemsPerPage = m_numRows * m_numCols;
     for (size_t page = 0; page < m_numPages; ++page)
     {
-        // Calculate the sum of squared absolute values of each matrix page
-        res[page] = 0;
-        auto pagePtr = this->GetPagePtr(page);
-        for (size_t i = 0; i < m_numRows * m_numCols; i++)
+        // sum_i |a_i|^2 -- using norm(z) = re*re + im*im for complex
+        // skips the original abs(z) (sqrt) followed by a square.
+        const auto* pagePtr = this->GetPagePtr(page);
+        double acc = 0.0;
+        for (size_t i = 0; i < elemsPerPage; ++i)
         {
-            auto absVal = std::abs(pagePtr[i]);
-            res[page] += absVal * absVal;
+            acc += magSqr(pagePtr[i]);
         }
-        res[page] = sqrt(res[page]);
+        res[page] = static_cast<T>(std::sqrt(acc));
     }
     return res;
 }
@@ -291,13 +318,34 @@ template <bool EnableBool, typename>
 MatrixArray<T>
 MatrixArray<T>::HermitianTranspose() const
 {
-    MatrixArray<std::complex<double>> retMatrix = this->Transpose();
-
-    for (size_t index = 0; index < this->GetSize(); ++index)
+    // Single-pass: transpose + conjugate in one walk per page.
+    // The previous implementation first transposed (an Eigen call that
+    // wrote every cell), then walked the whole array a second time to
+    // conjugate -- 2x the memory traffic of what's necessary. With
+    // Eigen we use `.adjoint()` directly (Hermitian conjugate); without
+    // Eigen we do a manual (col, row) write that conjugates on the fly.
+    MatrixArray<T> res{m_numCols, m_numRows, m_numPages};
+    for (size_t page = 0; page < m_numPages; ++page)
     {
-        retMatrix.m_values[index] = std::conj(retMatrix.m_values[index]);
+#ifdef HAVE_EIGEN3
+        ConstEigenMatrix<T> srcMap(GetPagePtr(page), m_numRows, m_numCols);
+        EigenMatrix<T> dstMap(res.GetPagePtr(page), res.m_numRows, res.m_numCols);
+        dstMap = srcMap.adjoint();
+#else
+        const T* src = GetPagePtr(page);
+        T* dst = res.GetPagePtr(page);
+        // src is column-major [row + numRows*col]; dst is
+        // column-major [col + numCols*row] (i.e. transposed).
+        for (size_t row = 0; row < m_numRows; ++row)
+        {
+            for (size_t col = 0; col < m_numCols; ++col)
+            {
+                dst[col + m_numCols * row] = std::conj(src[row + m_numRows * col]);
+            }
+        }
+#endif
     }
-    return retMatrix;
+    return res;
 }
 
 template <class T>
@@ -306,12 +354,15 @@ MatrixArray<T>::MakeNCopies(size_t nCopies) const
 {
     NS_ASSERT_MSG(m_numPages == 1, "The MatrixArray should have only one page to be copied.");
     auto copiedMatrix = MatrixArray<T>{m_numRows, m_numCols, nCopies};
-    for (size_t copy = 0; copy < nCopies; copy++)
+    // T (int / double / std::complex<double>) is trivially copyable, so
+    // a per-page memcpy beats the original element-by-element loop --
+    // especially in Debug builds where std::complex<double>'s assign
+    // operator wasn't getting inlined.
+    const size_t pageBytes = m_numRows * m_numCols * sizeof(T);
+    const T* srcPtr = GetPagePtr(0);
+    for (size_t copy = 0; copy < nCopies; ++copy)
     {
-        for (size_t i = 0; i < m_numRows * m_numCols; i++)
-        {
-            copiedMatrix.GetPagePtr(copy)[i] = m_values[i];
-        }
+        std::memcpy(copiedMatrix.GetPagePtr(copy), srcPtr, pageBytes);
     }
     return copiedMatrix;
 }
@@ -322,11 +373,9 @@ MatrixArray<T>::ExtractPage(size_t page) const
 {
     NS_ASSERT_MSG(page < m_numPages, "The page to extract from the MatrixArray is out of bounds.");
     auto extractedPage = MatrixArray<T>{m_numRows, m_numCols, 1};
-
-    for (size_t i = 0; i < m_numRows * m_numCols; ++i)
-    {
-        extractedPage.m_values[i] = GetPagePtr(page)[i];
-    }
+    std::memcpy(extractedPage.GetPagePtr(0),
+                GetPagePtr(page),
+                m_numRows * m_numCols * sizeof(T));
     return extractedPage;
 }
 
@@ -336,7 +385,8 @@ MatrixArray<T>::JoinPages(const std::vector<MatrixArray<T>>& pages)
 {
     auto jointMatrix =
         MatrixArray<T>{pages.front().GetNumRows(), pages.front().GetNumCols(), pages.size()};
-    for (size_t page = 0; page < jointMatrix.GetNumPages(); page++)
+    const size_t pageBytes = jointMatrix.GetNumRows() * jointMatrix.GetNumCols() * sizeof(T);
+    for (size_t page = 0; page < jointMatrix.GetNumPages(); ++page)
     {
         NS_ASSERT_MSG(pages[page].GetNumRows() == jointMatrix.GetNumRows(),
                       "All page matrices should have the same number of rows");
@@ -344,13 +394,7 @@ MatrixArray<T>::JoinPages(const std::vector<MatrixArray<T>>& pages)
                       "All page matrices should have the same number of columns");
         NS_ASSERT_MSG(pages[page].GetNumPages() == 1,
                       "All page matrices should have a single page");
-
-        size_t i = 0;
-        for (auto a : pages[page].GetValues())
-        {
-            jointMatrix.GetPagePtr(page)[i] = a;
-            i++;
-        }
+        std::memcpy(jointMatrix.GetPagePtr(page), pages[page].GetPagePtr(0), pageBytes);
     }
     return jointMatrix;
 }

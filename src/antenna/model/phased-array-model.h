@@ -245,6 +245,15 @@ class PhasedArrayModel : public Object
     uint32_t GetId() const;
 
     /**
+     * Returns a cached 64-bit FNV-1a hash of the current beamforming
+     * vector, recomputed lazily after SetBeamformingVector. Used by
+     * beam-aware spectrum caches that key entries per beam pair and would
+     * otherwise re-hash the full vector on every (tx, rx) evaluation.
+     * @return hash of the current beamforming vector
+     */
+    uint64_t GetBeamformingVectorHash() const;
+
+    /**
      * Returns whether the channel needs to be updated due to antenna setting changes.
      * @param antennaB the second antenna of the pair for the channel we want to check
      * @return whether a channel update is needed due to antenna settings changes
@@ -261,6 +270,8 @@ class PhasedArrayModel : public Object
     ComplexVector m_beamformingVector;  //!< the beamforming vector in use
     Ptr<AntennaModel> m_antennaElement; //!< the model of the antenna element in use
     bool m_isBfVectorValid;             //!< ensures the validity of the beamforming vector
+    mutable uint64_t m_bfHash{0};       //!< cached hash of m_beamformingVector
+    mutable bool m_bfHashValid{false};  //!< whether m_bfHash matches the current vector
     static uint32_t
         m_idCounter;  //!< the ID counter that is used to determine the unique antenna array ID
     uint32_t m_id{0}; //!< the ID of this antenna array instance

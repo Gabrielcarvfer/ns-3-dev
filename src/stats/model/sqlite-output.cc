@@ -295,9 +295,17 @@ SQLiteOutput::SpinExec(sqlite3* db, const std::string& cmd)
     }
 
     rc = SpinStep(stmt);
+    // Statements such as "PRAGMA journal_mode = ..." return a result row.
+    // Drain rows until DONE; the early-return on SQLITE_ROW used to leak
+    // the statement, leaving the connection permanently locked.
+    while (rc == SQLITE_ROW)
+    {
+        rc = SpinStep(stmt);
+    }
     ret = CheckError(db, rc, cmd, false);
     if (ret)
     {
+        SpinFinalize(stmt);
         return rc;
     }
 

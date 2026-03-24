@@ -130,6 +130,13 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
             m_longTerm; //!< vector containing the long term component for each cluster
         Ptr<const MatrixBasedChannelModel::ChannelMatrix>
             m_channel; //!< pointer to the channel matrix used to compute the long term
+        //! Snapshot of m_channel->m_generatedTime at cache time. When the
+        //! mezanine reuses the ChannelMatrix Ptr in place across periodic
+        //! refreshes (to avoid ~4 GB/tick allocation churn), the Ptr
+        //! identity stays constant but m_generatedTime advances. Storing
+        //! a snapshot here lets the update check see the change without
+        //! needing fresh Ptr identity.
+        Time m_capturedGeneratedTime;
         PhasedArrayModel::ComplexVector
             m_sW; //!< the beamforming vector for the node s used to compute the long term
         PhasedArrayModel::ComplexVector
@@ -156,7 +163,11 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
         PhasedArrayModel::ComplexVector doppler,
         const uint8_t numTxPorts,
         const uint8_t numRxPorts,
-        const bool isReverse);
+        const bool isReverse,
+        Ptr<MatrixBasedChannelModel> channelModel = nullptr,
+        uint64_t sWBeamHash = 0,
+        uint64_t uWBeamHash = 0,
+        bool scalarPsdOk = false);
 
     /**
      * Get the operating frequency
@@ -216,9 +227,12 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
         const uint16_t cIndex) const;
 
     /**
-     * @brief Computes the beamforming gain and applies it to the TX PSD
+     * @brief Computes the beamforming gain and applies it to the TX PSD.
+     *        The long-term component is evaluated lazily: skipped entirely on GPU
+     *        cache hits (~75% of calls), saving ~0.66 us per hit.
      * @param params SpectrumSignalParameters holding TX PSD
-     * @param longTerm the long term component
+     * @param aPhasedArrayModel phased-array model of node a
+     * @param bPhasedArrayModel phased-array model of node b
      * @param channelMatrix the channel matrix structure
      * @param channelParams the channel params structure
      * @param sSpeed the speed of the first node
@@ -230,7 +244,8 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
      */
     Ptr<SpectrumSignalParameters> CalcBeamformingGain(
         Ptr<const SpectrumSignalParameters> params,
-        Ptr<const MatrixBasedChannelModel::Complex3DVector> longTerm,
+        Ptr<const PhasedArrayModel> aPhasedArrayModel,
+        Ptr<const PhasedArrayModel> bPhasedArrayModel,
         Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix,
         Ptr<const MatrixBasedChannelModel::ChannelParams> channelParams,
         const Vector& sSpeed,
@@ -243,8 +258,33 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
 
     //! map containing the long-term components
     mutable std::unordered_map<uint64_t, Ptr<const LongTerm>> m_longTermMap;
+
+    /// Per-antenna-pair eval-context fast cache (see
+    /// DoCalcRxPowerSpectralDensity): avoids re-deriving the
+    /// (channelMatrix, channelParams, isReverse) triple — node-id
+    /// aggregation walks, key computations and several hash-map
+    /// operations — on every per-link evaluation when the link has not
+    /// refreshed since the previous one.
+    struct FastEvalCtx
+    {
+        Ptr<const MatrixBasedChannelModel::ChannelMatrix> mat; ///< cached matrix
+        Ptr<const MatrixBasedChannelModel::ChannelParams> par; ///< cached params
+        Time gen;       ///< matrix generatedTime at cache-fill time
+        bool isReverse; ///< cached orientation
+    };
+    /// Eval-context cache, keyed by (aAntennaId << 32 | bAntennaId).
+    mutable std::unordered_map<uint64_t, FastEvalCtx> m_evalCtxCache;
+    /// UpdatePeriod of the channel model: the age bound that expires
+    /// entries whose underlying objects the base-class per-link path
+    /// REPLACES on regeneration. -2 = not yet read; -1 = attribute absent
+    /// (fast path disabled).
+    mutable Time m_evalCtxMaxAge{Seconds(-2.0)};
+
     //! the model to generate the channel matrix
     Ptr<MatrixBasedChannelModel> m_channelModel;
+    //! mutate input params in place in CalcBeamformingGain instead of deep-copying
+    //! (only safe when the spectrum channel passes exclusively-owned copies)
+    bool m_inPlaceParams{false};
 };
 } // namespace ns3
 

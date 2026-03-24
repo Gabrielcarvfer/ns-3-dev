@@ -23,6 +23,7 @@ namespace ns3
 {
 
 class MobilityModel;
+class SpectrumValue;
 
 /**
  * @ingroup spectrum
@@ -199,6 +200,121 @@ class MatrixBasedChannelModel : public Object
      */
     virtual Ptr<const ChannelParams> GetParams(Ptr<const MobilityModel> aMob,
                                                Ptr<const MobilityModel> bMob) const = 0;
+
+    /**
+     * Optional opt-in hook for back-ends that want to refresh many links'
+     * channel parameters in a single batch (e.g. a GPU pipeline) rather
+     * than regenerating them lazily inside `GetChannel`. The
+     * `ThreeGppSpectrumPropagationLossModel` calls this once at the top
+     * of `DoCalcRxPowerSpectralDensity` so a derived class that knows
+     * how to batch can refresh everything in one shot before the
+     * per-link `GetChannel` calls start running. Default implementation
+     * is a no-op so existing back-ends keep working unchanged.
+     */
+    virtual void EnsureBatchFresh()
+    {
+        // Default: no batching. Implemented by ThreeGppChannelModel when
+        // its `UseGpu` attribute is true.
+    }
+
+    /**
+     * Optional opt-in hook for back-ends that want to provide a
+     * pre-computed PRX-style long-term beamforming vector instead of
+     * forcing PRX::GetLongTerm to run CalcLongTerm on the CPU. The
+     * `ThreeGppSpectrumPropagationLossModel::GetLongTerm` checks this
+     * before computing; on a non-null return that matches the current
+     * (channelMatrix.m_generatedTime, sW, uW), PRX populates its
+     * m_longTermMap with the cached value and skips the CPU compute.
+     *
+     * Back-ends that don't implement this return nullptr (the default)
+     * and PRX falls through to its existing path. The Wgpu-mezanine
+     * subclass overrides this to surface the result of its on-GPU
+     * gen_long_term_kernel.
+     *
+     * Returns nullptr when the back-end has nothing cached for this
+     * (sAnt, uAnt) pair, or when its snapshot's beam weights no longer
+     * match the caller's. The (sW, uW) arguments are passed by
+     * `Ptr<>` so callers don't pay a vector copy when the channel
+     * model can't accept the hook anyway.
+     */
+    virtual Ptr<const Complex3DVector> GetCachedLongTerm(
+        [[maybe_unused]] Ptr<const ChannelMatrix> channelMatrix,
+        [[maybe_unused]] Ptr<const PhasedArrayModel> sAnt,
+        [[maybe_unused]] Ptr<const PhasedArrayModel> uAnt,
+        [[maybe_unused]] const PhasedArrayModel::ComplexVector& sW,
+        [[maybe_unused]] const PhasedArrayModel::ComplexVector& uW) const
+    {
+        return nullptr;
+    }
+
+    /**
+     * Optional opt-in hook for back-ends that want to compute the
+     * per-RB spectrum channel matrix (PRX::GenSpectrumChannelMatrix
+     * output) on the GPU instead of forcing PRX to run the per-cluster
+     * outer-product on the CPU. The mezanine WebGPU subclass overrides
+     * this to dispatch gen_spec_chan_kernel against the longTerm
+     * matrix that's already resident on GPU from gen_long_term_kernel.
+     *
+     * Inputs:
+     *   - channelMatrix / channelParams: provide cluster count + delays
+     *   - longTerm: the (rxPorts, txPorts, nCluster) reduced matrix
+     *     PRX just got from GetLongTerm
+     *   - sAnt / uAnt: the (sAntenna, uAntenna) PRX::GetLongTerm
+     *     selected (i.e. already swapped for isReverse)
+     *   - delayT: [nCluster * numRb] vec2<f64> = doppler * delaySincos,
+     *     packed by the caller because it's the smallest thing varying
+     *     per eval
+     *   - sqrtVit: [numRb] f64 = sqrt(inPsd[rb])
+     *   - numRb / numRxPorts / numTxPorts / isReverse
+     *
+     * Returns nullptr when the back-end has nothing to offer (no
+     * cached longTerm for this link, no GPU pipeline, etc.) and PRX
+     * falls through to the CPU GenSpectrumChannelMatrix.
+     */
+    virtual Ptr<Complex3DVector> TryGenSpectrumChannelMatrix(
+        [[maybe_unused]] Ptr<const ChannelMatrix> channelMatrix,
+        [[maybe_unused]] Ptr<const ChannelParams> channelParams,
+        [[maybe_unused]] Ptr<const Complex3DVector> longTerm,
+        [[maybe_unused]] Ptr<const SpectrumValue> inPsd,
+        [[maybe_unused]] const std::vector<std::complex<double>>& delayT,
+        [[maybe_unused]] const std::vector<double>& sqrtVit,
+        [[maybe_unused]] uint32_t numRb,
+        [[maybe_unused]] uint8_t numRxPorts,
+        [[maybe_unused]] uint8_t numTxPorts,
+        [[maybe_unused]] bool isReverse,
+        [[maybe_unused]] uint64_t sWBeamHash = 0,
+        [[maybe_unused]] uint64_t uWBeamHash = 0,
+        [[maybe_unused]] bool scalarPsdOk = false) const
+    {
+        return nullptr;
+    }
+
+    /**
+     * FNV-1a hash of a beamforming vector, used by beam-aware spectrum
+     * caches: a cached spectrum channel embeds the TX/RX beam pair it was
+     * computed with, and evals must only consume entries whose beams match
+     * (the beams change per scheduled UE, many times within a channel
+     * update period).
+     * @param v the beamforming vector
+     * @return 64-bit hash of the complex weights
+     */
+    static uint64_t HashBeamVector(const PhasedArrayModel::ComplexVector& v)
+    {
+        uint64_t h = 1469598103934665603ull;
+        const size_t n = v.GetSize();
+        for (size_t i = 0; i < n; ++i)
+        {
+            const auto c = v[i];
+            const double parts[2] = {c.real(), c.imag()};
+            const auto* bytes = reinterpret_cast<const unsigned char*>(parts);
+            for (size_t b = 0; b < sizeof(parts); ++b)
+            {
+                h ^= bytes[b];
+                h *= 1099511628211ull;
+            }
+        }
+        return h;
+    }
 
     /**
      * Generate a unique value for the pair of unsigned integer of 32 bits,

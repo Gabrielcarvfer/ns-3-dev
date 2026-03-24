@@ -10,6 +10,12 @@
  */
 #include "three-gpp-channel-model.h"
 
+#include "sls-phase-timer.h"
+
+#ifdef NS3_ENABLE_3GPP_GPU
+#include "sls-chan-wgpu.h"
+#endif
+
 #include "ns3/boolean.h"
 #include "ns3/double.h"
 #include "ns3/geocentric-constant-position-mobility-model.h"
@@ -1114,6 +1120,9 @@ static const std::unordered_map<int, double> cNlosTableTheta = {
 };
 
 ThreeGppChannelModel::ThreeGppChannelModel()
+    : m_useGpu(false),
+      m_lastBatchTime(Time::Min()),
+      m_gpu(nullptr)
 {
     NS_LOG_FUNCTION(this);
     m_uniformRv = CreateObject<UniformRandomVariable>();
@@ -1125,6 +1134,9 @@ ThreeGppChannelModel::ThreeGppChannelModel()
     m_normalRv->SetAttribute("Variance", DoubleValue(1.0));
 }
 
+// Destructor defined out-of-line so std::unique_ptr<SlsChanWgpu>'s
+// destructor sees the complete type. Required because m_gpu is forward-
+// declared in the header.
 ThreeGppChannelModel::~ThreeGppChannelModel()
 {
     NS_LOG_FUNCTION(this);
@@ -1140,6 +1152,7 @@ ThreeGppChannelModel::DoDispose()
     }
     m_channelMatrixMap.clear();
     m_channelParamsMap.clear();
+    m_linkEndpoints.clear();
     m_channelConditionModel = nullptr;
 }
 
@@ -1209,7 +1222,16 @@ ThreeGppChannelModel::GetTypeId()
                           "delayed (reflected) paths",
                           DoubleValue(0.0),
                           MakeDoubleAccessor(&ThreeGppChannelModel::m_vScatt),
-                          MakeDoubleChecker<double>(0.0));
+                          MakeDoubleChecker<double>(0.0))
+            .AddAttribute("UseGpu",
+                          "If true, ThreeGppChannelModel uses the WebGPU SlsChanWgpu back-end "
+                          "to regenerate every dirty link's ThreeGppChannelParams in one batch "
+                          "(see EnsureBatchFresh). Falls back to the per-link CPU path on any "
+                          "GPU initialisation failure or when NS3_ENABLE_3GPP_GPU is off at "
+                          "compile time. Default false until parity tests gate this on.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&ThreeGppChannelModel::m_useGpu),
+                          MakeBooleanChecker());
     return tid;
 }
 
@@ -2512,11 +2534,17 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
                                  Ptr<const PhasedArrayModel> aAntenna,
                                  Ptr<const PhasedArrayModel> bAntenna)
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::GetChannel");
     NS_LOG_FUNCTION(this);
 
     // Compute the channel params key. The key is reciprocal, i.e., key (a, b) = key (b, a)
     const uint64_t channelParamsKey =
         GetKey(aMob->GetObject<Node>()->GetId(), bMob->GetObject<Node>()->GetId());
+    // Stash the endpoints so a later `EnsureBatchFresh` can find them
+    // without having to round-trip back through this call site. We
+    // overwrite unconditionally — the antenna pointer can legitimately
+    // change between calls (e.g. nr's initial association swap).
+    m_linkEndpoints[channelParamsKey] = {aMob, bMob, aAntenna, bAntenna};
     // retrieve the channel condition
     const Ptr<const ChannelCondition> condition =
         m_channelConditionModel->GetChannelCondition(aMob, bMob);
@@ -2590,6 +2618,457 @@ ThreeGppChannelModel::GetParams(Ptr<const MobilityModel> aMob, Ptr<const Mobilit
     }
     NS_LOG_WARN("Channel params map not found. Returning a nullptr.");
     return nullptr;
+}
+
+std::vector<uint64_t>
+ThreeGppChannelModel::CollectDirtyLinks() const
+{
+    NS_LOG_FUNCTION(this);
+
+    std::vector<uint64_t> dirty;
+    dirty.reserve(m_linkEndpoints.size());
+
+    for (const auto& [key, ep] : m_linkEndpoints)
+    {
+        // We can't refresh a link we've never observed in `GetChannel`,
+        // because we wouldn't know which mobility/antenna pair belongs
+        // to it. Such links are auto-skipped because they're not in
+        // `m_linkEndpoints` to begin with.
+        NS_ASSERT(ep.aMob && ep.bMob && ep.aAntenna && ep.bAntenna);
+
+        const Ptr<const ChannelCondition> condition =
+            m_channelConditionModel->GetChannelCondition(ep.aMob, ep.bMob);
+
+        // Case 1: link doesn't exist yet, or the LOS/O2I condition changed,
+        // or the endpoint displacement exceeded the consistency step.
+        if (NewChannelParamsNeeded(key, condition, ep.aMob, ep.bMob))
+        {
+            dirty.push_back(key);
+            continue;
+        }
+
+        // Case 2: link exists, but the spatial-consistency update window
+        // has elapsed — Procedure A update.
+        const auto it = m_channelParamsMap.find(key);
+        if (it != m_channelParamsMap.end() && ChannelUpdateNeeded(it->second, ep.aMob, ep.bMob))
+        {
+            dirty.push_back(key);
+        }
+    }
+
+    return dirty;
+}
+
+void
+ThreeGppChannelModel::EnsureBatchFresh()
+{
+    NS_LOG_FUNCTION(this);
+
+#ifndef NS3_ENABLE_3GPP_GPU
+    // GPU back-end disabled at compile time — every link falls through
+    // to the per-call CPU regeneration in GetChannel.
+    return;
+#else
+    if (!m_useGpu)
+    {
+        // GPU back-end available but the user hasn't opted in.
+        return;
+    }
+
+    // De-dup against repeated calls within the same Simulator::Now() tick.
+    // Multiple TX→RX evaluations inside the same time step share the batch.
+    const Time now = Simulator::Now();
+    if (m_lastBatchTime == now)
+    {
+        return;
+    }
+
+    // Staleness gate: links only become dirty on update-period boundaries
+    // (param regeneration, procedure-A windows, condition-cache refreshes
+    // all run on >= m_updatePeriod cadences), so the O(nLinks)
+    // CollectDirtyLinks walk — one condition-model lookup per tracked
+    // link — does not need to run on every new tick. With a zero update
+    // period (static channels) fall back to a 100 ms walk cadence so
+    // condition flips still reach the batch path eventually; anything
+    // missed in between is regenerated correctly (just per-link, without
+    // batching) by GetChannel's own staleness check.
+    const Time walkPeriod = m_updatePeriod.IsZero() ? MilliSeconds(100) : m_updatePeriod;
+    if (m_lastDirtyWalkTime >= Time(0) && now < m_lastDirtyWalkTime + walkPeriod)
+    {
+        m_lastBatchTime = now;
+        return;
+    }
+    m_lastDirtyWalkTime = now;
+
+    // Phase 1.b — find every link in the cache (or about to be in it)
+    // whose params are stale and would be regenerated by the next
+    // `GetChannel` call. If none, there's nothing to batch and we can
+    // return cleanly.
+    const std::vector<uint64_t> dirty = CollectDirtyLinks();
+    NS_LOG_DEBUG("EnsureBatchFresh: " << dirty.size() << " dirty link(s) out of "
+                                      << m_linkEndpoints.size() << " tracked");
+    if (!dirty.empty())
+    {
+        // Phase 1.c — run the GPU pipeline for these links and stash the
+        // resulting LSPs so the next per-link `GetChannel` call can
+        // consume them via `GenerateOrFetchLSPs` instead of drawing
+        // fresh on the CPU.
+        RunGpuLspBatch(dirty);
+    }
+
+    m_lastBatchTime = now;
+#endif
+}
+
+ThreeGppChannelModel::LargeScaleParameters
+ThreeGppChannelModel::GenerateOrFetchLSPs(uint64_t channelParamsKey,
+                                          ChannelCondition::LosConditionValue losCondition,
+                                          Ptr<const ParamsTable> table3gpp) const
+{
+    NS_LOG_FUNCTION(this);
+    const auto it = m_gpuLspCache.find(channelParamsKey);
+    if (it != m_gpuLspCache.end())
+    {
+        LargeScaleParameters lsps = it->second;
+        m_gpuLspCache.erase(it);
+        NS_LOG_DEBUG("LSP cache HIT for key " << channelParamsKey
+                                              << " — using GPU-computed LSPs");
+        return lsps;
+    }
+    return GenerateLSPs(losCondition, table3gpp);
+}
+
+#ifdef NS3_ENABLE_3GPP_GPU
+void
+ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
+{
+    NS_LOG_FUNCTION(this << dirty.size());
+    NS_ASSERT(!dirty.empty());
+
+    // Lazy-create the GPU pipeline on first use. The constructor talks to
+    // the WGPU runtime (adapter + device), which is non-trivial work we
+    // only want to pay once. If the device isn't available (no GPU, no
+    // permission, missing shader file, ...) the constructor throws --
+    // catch and silently fall back to the CPU path for the rest of the
+    // simulation rather than abort.
+    if (!m_gpu)
+    {
+        NS_LOG_INFO("Creating SlsChanWgpu instance for GPU batch back-end");
+        try
+        {
+            m_gpu = std::make_unique<::SlsChanWgpu>();
+        }
+        catch (const std::exception& e)
+        {
+            NS_LOG_WARN("SlsChanWgpu construction failed (" << e.what()
+                                                            << "); falling back to CPU path");
+            m_useGpu = false;
+            return;
+        }
+    }
+
+    // Step 1 — partition the dirty links' endpoints into cells (lower id)
+    // and UTs (higher id). The same node may appear in multiple links;
+    // dedup by node id so we run the GPU pipeline over the unique union.
+    std::map<uint32_t, Ptr<const MobilityModel>> cellMobById;
+    std::map<uint32_t, Ptr<const MobilityModel>> utMobById;
+    for (uint64_t key : dirty)
+    {
+        const auto epIt = m_linkEndpoints.find(key);
+        NS_ASSERT(epIt != m_linkEndpoints.end());
+        const auto& ep = epIt->second;
+        const uint32_t aId = ep.aMob->GetObject<Node>()->GetId();
+        const uint32_t bId = ep.bMob->GetObject<Node>()->GetId();
+        if (aId < bId)
+        {
+            cellMobById[aId] = ep.aMob;
+            utMobById[bId] = ep.bMob;
+        }
+        else
+        {
+            cellMobById[bId] = ep.bMob;
+            utMobById[aId] = ep.aMob;
+        }
+    }
+
+    if (cellMobById.empty() || utMobById.empty())
+    {
+        NS_LOG_WARN("RunGpuLspBatch: empty cell or UT set after partition; skipping");
+        return;
+    }
+
+    // Step 2 — build flat CellParam / UtParam vectors and an idx map for
+    // the slice lookup afterwards.
+    std::vector<CellParam> cells;
+    std::vector<UtParam> uts;
+    std::unordered_map<uint32_t, uint32_t> cellIdToIdx;
+    std::unordered_map<uint32_t, uint32_t> utIdToIdx;
+    cells.reserve(cellMobById.size());
+    uts.reserve(utMobById.size());
+
+    double minX = std::numeric_limits<double>::infinity();
+    double maxX = -std::numeric_limits<double>::infinity();
+    double minY = std::numeric_limits<double>::infinity();
+    double maxY = -std::numeric_limits<double>::infinity();
+
+    uint32_t cellIdx = 0;
+    for (const auto& [nodeId, mob] : cellMobById)
+    {
+        const Vector p = mob->GetPosition();
+        CellParam c{};
+        c.cid = cellIdx;
+        c.siteId = cellIdx;
+        c.loc[0] = static_cast<float>(p.x);
+        c.loc[1] = static_cast<float>(p.y);
+        c.loc[2] = static_cast<float>(p.z);
+        c.antPanelIdx = 0;
+        // Reasonable default boresight pattern; antenna pattern integration
+        // is a separate Phase. theta_tilt = 102 deg (12 deg downtilt from
+        // 90 deg horizon), phi/zeta = 0.
+        c.antPanelOrientation[0] = static_cast<float>(102.0 * M_PI / 180.0);
+        c.antPanelOrientation[1] = 0.0f;
+        c.antPanelOrientation[2] = 0.0f;
+        c.monostaticInd = 0;
+        c.secondAntPanelIdx = 0;
+        c.secondAntPanelOrientation[0] = 0.0f;
+        c.secondAntPanelOrientation[1] = 0.0f;
+        c.secondAntPanelOrientation[2] = 0.0f;
+        cellIdToIdx[nodeId] = cellIdx;
+        cells.push_back(c);
+
+        minX = std::min(minX, p.x);
+        maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+        cellIdx++;
+    }
+
+    // Look at each UT's O2I state across all the dirty links that touch
+    // it. If ANY of those links reports the UT as indoor, mark the UT
+    // indoor for the GPU — the GPU's per-UT outdoor_ind is global to
+    // the link batch, not per-link, so we have to collapse the choice.
+    std::unordered_map<uint32_t, bool> utIsIndoor;
+    for (uint64_t key : dirty)
+    {
+        const auto& ep = m_linkEndpoints.find(key)->second;
+        const uint32_t aId = ep.aMob->GetObject<Node>()->GetId();
+        const uint32_t bId = ep.bMob->GetObject<Node>()->GetId();
+        const uint32_t utId = std::max(aId, bId);
+        auto cond = m_channelConditionModel->GetChannelCondition(ep.aMob, ep.bMob);
+        const bool indoor = cond->GetO2iCondition() == ChannelCondition::O2I;
+        // Latch indoor=true wins.
+        utIsIndoor[utId] = utIsIndoor[utId] || indoor;
+    }
+
+    uint32_t utIdx = 0;
+    for (const auto& [nodeId, mob] : utMobById)
+    {
+        const Vector p = mob->GetPosition();
+        const bool indoor = utIsIndoor.count(nodeId) ? utIsIndoor[nodeId] : false;
+        UtParam u{};
+        u.loc.x = static_cast<float>(p.x);
+        u.loc.y = static_cast<float>(p.y);
+        u.loc.z = static_cast<float>(p.z);
+        u.loc._p = 0;
+        u.d_2d_in = indoor ? 10.0f : 0.0f; // 10 m indoor penetration default
+        u.outdoor_ind = indoor ? 0u : 1u;
+        u.o2i_penetration_loss = 0.0f; // ns-3 propagation loss model handles penetration
+        u._p = 0;
+        utIdToIdx[nodeId] = utIdx;
+        uts.push_back(u);
+
+        minX = std::min(minX, p.x);
+        maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+        utIdx++;
+    }
+
+    const uint32_t nSite = static_cast<uint32_t>(cells.size());
+    const uint32_t nUT = static_cast<uint32_t>(uts.size());
+    NS_LOG_INFO("RunGpuLspBatch: " << nSite << " cells, " << nUT << " UTs, "
+                                   << dirty.size() << " dirty links");
+
+    // Pad area bounds by 3x the largest correlation distance so the CRN
+    // grid covers every link even at the deployment edges (the kernels
+    // bilinear-sample the grid at (x,y) so out-of-bounds reads break).
+    const float pad = 200.0f;
+    const float fMaxX = static_cast<float>(maxX) + pad;
+    const float fMinX = static_cast<float>(minX) - pad;
+    const float fMaxY = static_cast<float>(maxY) + pad;
+    const float fMinY = static_cast<float>(minY) - pad;
+
+    // Step 2.5 — figure out the system-level config. Two pieces matter:
+    //
+    //   - scenario: map ns-3's `m_scenario` string to the GPU's u32 enum.
+    //   - forceLosOutdoor: ns-3's ChannelConditionModel has already
+    //     decided each link's LOS state. The GPU has its own
+    //     LOS-probability formulas in `cal_los_prob` and will happily
+    //     disagree if we don't override. If every dirty link agrees on
+    //     LOS (or every link agrees on NLOS), we can tell the GPU to
+    //     force that verdict; otherwise we leave the formula in place
+    //     and accept some statistical mismatch on K-factor.
+    //
+    // SCENARIO_UMA=0 / SCENARIO_UMI=1 / SCENARIO_RMA=2 in sls-chan.wgsl.
+    uint32_t gpuScenario = 0;
+    if (m_scenario == "UMi-StreetCanyon" || m_scenario == "UMi")
+        gpuScenario = 1;
+    else if (m_scenario == "RMa")
+        gpuScenario = 2;
+
+    int losAgreedCount = 0;
+    int nlosAgreedCount = 0;
+    for (uint64_t key : dirty)
+    {
+        const auto& ep = m_linkEndpoints.find(key)->second;
+        auto cond = m_channelConditionModel->GetChannelCondition(ep.aMob, ep.bMob);
+        if (cond->GetLosCondition() == ChannelCondition::LOS)
+            ++losAgreedCount;
+        else if (cond->GetLosCondition() == ChannelCondition::NLOS)
+            ++nlosAgreedCount;
+    }
+    float forceLosOutdoor = -1.0f;
+    if (losAgreedCount == static_cast<int>(dirty.size()))
+        forceLosOutdoor = 1.0f;
+    else if (nlosAgreedCount == static_cast<int>(dirty.size()))
+        forceLosOutdoor = 0.0f;
+    m_gpu->setSystemLevelConfig(gpuScenario,
+                                /*enablePropagationDelay=*/1,
+                                /*o2iBldg=*/0,
+                                /*o2iCar=*/0,
+                                /*forceLosIndoor=*/forceLosOutdoor,
+                                forceLosOutdoor);
+    m_gpu->setCenterFrequencyHz(static_cast<float>(m_frequency));
+
+    // Step 3 — upload topology + dispatch the large-scale pipeline.
+    // Pass nSectorPerSite=1 so SlsChanWgpu's nSite_ tracking lines up
+    // with our "one cell per site" convention.
+    m_gpu->uploadCellParams(cells, /*nSectorPerSite=*/1);
+    m_gpu->uploadUtParams(uts);
+
+    // UMa Table 7.5-6 correlation distances. Other scenarios will get
+    // their own tables in a later phase; for now everything runs as UMa.
+    const float corrLos[8] = {37.0f, 50.0f, 37.0f, 25.0f, 25.0f, 15.0f, 15.0f, 40.0f};
+    const float corrNlos[7] = {50.0f, 40.0f, 50.0f, 50.0f, 50.0f, 50.0f, 40.0f};
+    const float corrO2i[7] = {15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f};
+
+    m_gpu->generateCRN(fMaxX, fMinX, fMaxY, fMinY, corrLos, corrNlos, corrO2i);
+
+    m_gpu->calLinkParam(nSite,
+                        nUT,
+                        /*nSectorPerSite=*/1,
+                        fMaxX,
+                        fMinX,
+                        fMaxY,
+                        fMinY,
+                        /*updatePL=*/true,
+                        /*updateAllLSPs=*/true,
+                        /*updateLos=*/true,
+                        /*updateOptionalPL=*/false,
+                        m_gpu->nX(),
+                        m_gpu->nY());
+
+    // Step 4 — read back and slice.
+    const std::vector<LinkParams> lps = m_gpu->readLinkParams(nSite, nUT);
+    NS_ASSERT_MSG(lps.size() == static_cast<size_t>(nSite) * nUT,
+                  "readLinkParams returned " << lps.size() << " entries, expected "
+                                             << static_cast<size_t>(nSite) * nUT);
+
+    uint32_t cacheStored = 0;
+    uint32_t paramsUpdated = 0;
+    for (uint64_t key : dirty)
+    {
+        const auto& ep = m_linkEndpoints[key];
+        const uint32_t aId = ep.aMob->GetObject<Node>()->GetId();
+        const uint32_t bId = ep.bMob->GetObject<Node>()->GetId();
+        const uint32_t cellId = std::min(aId, bId);
+        const uint32_t utId = std::max(aId, bId);
+        const uint32_t ci = cellIdToIdx.at(cellId);
+        const uint32_t ui = utIdToIdx.at(utId);
+        const LinkParams& lp = lps[ci * nUT + ui];
+
+        // Unit conversions between the GPU LinkParams output and the
+        // ns-3 LargeScaleParameters struct:
+        //   - DS: GPU writes pow(10, mu+9) in nanoseconds (the +9 lifts
+        //     log10(seconds) into nanoseconds so cluster delays end up
+        //     directly in ns). ns-3 expects seconds.  Convert ns -> s.
+        //   - K: GPU writes pow(10, mu/10) -- linear ratio.  ns-3
+        //     expects K in dB.  Convert linear -> dB.
+        //   - ASD/ASA/ZSD/ZSA: GPU writes pow(10, mu) -- linear degrees,
+        //     same as ns-3's LSP convention.  Copy verbatim.
+        LargeScaleParameters lsps;
+        lsps.DS = static_cast<double>(lp.DS) * 1e-9;
+        lsps.ASD = lp.ASD;
+        lsps.ASA = lp.ASA;
+        lsps.ZSD = lp.ZSD;
+        lsps.ZSA = lp.ZSA;
+        lsps.kFactor =
+            (lp.K > 0.0f) ? 10.0 * std::log10(static_cast<double>(lp.K)) : 0.0;
+
+        // Two cases for how the LSPs feed into the next `GetChannel`
+        // call for this key:
+        //
+        //  (a) Link is brand new (no entry in m_channelParamsMap yet)
+        //      -- next call will go through GenerateChannelParameters,
+        //      which calls GenerateOrFetchLSPs. Stash in the cache.
+        //
+        //  (b) Link already exists and just needs a consistency update
+        //      -- next call will go through UpdateChannelParameters,
+        //      which does NOT re-draw LSPs; it keeps the m_DS /
+        //      m_K_factor values stored on the existing params. So we
+        //      have to mutate them in place here, otherwise the GPU
+        //      LSPs are silently discarded. ASD/ASA/ZSD/ZSA aren't
+        //      stored on the params struct (they're only used at draw
+        //      time), so we only need to write DS and K.
+        auto pit = m_channelParamsMap.find(key);
+        if (pit == m_channelParamsMap.end())
+        {
+            m_gpuLspCache[key] = lsps;
+            ++cacheStored;
+        }
+        else
+        {
+            pit->second->m_DS = lsps.DS;
+            pit->second->m_K_factor = lsps.kFactor;
+            ++paramsUpdated;
+        }
+    }
+    NS_LOG_INFO("RunGpuLspBatch wrote " << cacheStored << " cache entr(y/ies) and updated "
+                                        << paramsUpdated << " existing param block(s)");
+}
+#endif // NS3_ENABLE_3GPP_GPU
+
+void
+ThreeGppChannelModel::DumpGpuChannelsToHdf5(const std::string& filename,
+                                            double isd,
+                                            double bsHeight,
+                                            double bandwidthHz)
+{
+    NS_LOG_FUNCTION(this << filename);
+#ifdef NS3_ENABLE_3GPP_GPU
+#ifdef SLS_CHAN_HDF5
+    if (!m_useGpu || !m_gpu)
+    {
+        NS_LOG_WARN("DumpGpuChannelsToHdf5: no GPU batch has run yet "
+                    "(UseGpu="
+                    << (m_useGpu ? "true" : "false")
+                    << "); nothing to dump. Make sure at least one EnsureBatchFresh() with "
+                       "dirty links has fired before calling this.");
+        return;
+    }
+    ::SlsChanWgpu::SceneMeta meta;
+    meta.isd = static_cast<float>(isd);
+    meta.bsHeight = static_cast<float>(bsHeight);
+    meta.bandwidthHz = static_cast<float>(bandwidthHz);
+    m_gpu->saveSlsChanToHdf5(filename, meta);
+#else
+    NS_LOG_WARN("DumpGpuChannelsToHdf5: spectrum library built without HDF5 support; "
+                "rebuild with HDF5_FOUND=ON. Filename=" << filename);
+#endif
+#else
+    NS_LOG_WARN("DumpGpuChannelsToHdf5: spectrum library built without NS3_ENABLE_3GPP_GPU; "
+                "filename=" << filename);
+#endif
 }
 
 ThreeGppChannelModel::LargeScaleParameters
@@ -3689,6 +4168,7 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                                                 Ptr<const MobilityModel> aMob,
                                                 Ptr<const MobilityModel> bMob) const
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::GenerateChannelParameters");
     NS_LOG_FUNCTION(this);
     // Enforce canonical ordering (by node id) for deterministic parameter generation.
     Ptr<const MobilityModel> aMobOrdered = aMob;
@@ -3722,7 +4202,12 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                        &channelParams->m_lastRelativePosition2D);
 
     // Step 4: Generate large-scale parameters. All LSPS are uncorrelated.
-    const LargeScaleParameters lsps = GenerateLSPs(channelParams->m_losCondition, table3gpp);
+    // When the GPU batch back-end is active and has a fresh LSP entry
+    // for this link, consume that one shot; otherwise draw on the CPU.
+    const uint64_t lspKey = GetKey(aMobOrdered->GetObject<Node>()->GetId(),
+                                   bMobOrdered->GetObject<Node>()->GetId());
+    const LargeScaleParameters lsps =
+        GenerateOrFetchLSPs(lspKey, channelParams->m_losCondition, table3gpp);
 
     channelParams->m_DS = lsps.DS;
     channelParams->m_K_factor = lsps.kFactor;
@@ -3845,6 +4330,7 @@ ThreeGppChannelModel::UpdateChannelParameters(Ptr<ThreeGppChannelParams> channel
                                               Ptr<const MobilityModel> aMob,
                                               Ptr<const MobilityModel> bMob) const
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::UpdateChannelParameters");
     NS_LOG_FUNCTION(this);
     NS_ASSERT_MSG(channelParams != nullptr, "Channel parameters cannot be null");
     NS_ASSERT_MSG(channelCondition != nullptr, "Channel condition cannot be null");
@@ -3970,6 +4456,7 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
                                     Ptr<const PhasedArrayModel> sAntenna,
                                     Ptr<const PhasedArrayModel> uAntenna) const
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::GetNewChannel");
     NS_LOG_FUNCTION(this);
 
     NS_ASSERT_MSG(m_frequency > 0.0, "Set the operating frequency first!");
@@ -3994,29 +4481,17 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
         std::make_pair(sAntenna->GetId(),
                        uAntenna->GetId()); // save antenna pair, with the exact order of s and u
 
-    Double2DVector rayAodRadian;
-    Double2DVector rayAoaRadian;
-    Double2DVector rayZodRadian;
-    Double2DVector rayZoaRadian;
-
-    // if channel params is generated in the same direction in which we
-    // generate the channel matrix, angles and zenith od departure and arrival are ok,
-    // just set them to corresponding variable that will be used for the generation
-    // of channel matrix, otherwise we need to flip angles and zeniths of departure and arrival
-    if (isSameDirection)
-    {
-        rayAodRadian = channelParams->m_rayAodRadian;
-        rayAoaRadian = channelParams->m_rayAoaRadian;
-        rayZodRadian = channelParams->m_rayZodRadian;
-        rayZoaRadian = channelParams->m_rayZoaRadian;
-    }
-    else
-    {
-        rayAodRadian = channelParams->m_rayAoaRadian;
-        rayAoaRadian = channelParams->m_rayAodRadian;
-        rayZodRadian = channelParams->m_rayZoaRadian;
-        rayZoaRadian = channelParams->m_rayZodRadian;
-    }
+    // ── Optimization: avoid the full deep-copy of four Double2DVectors
+    // (≈4 × 12 × 20 × 8 B = 7.6 KB per GetNewChannel call). Just bind
+    // const references; the kernel below only reads these.
+    const Double2DVector& rayAodRadian =
+        isSameDirection ? channelParams->m_rayAodRadian : channelParams->m_rayAoaRadian;
+    const Double2DVector& rayAoaRadian =
+        isSameDirection ? channelParams->m_rayAoaRadian : channelParams->m_rayAodRadian;
+    const Double2DVector& rayZodRadian =
+        isSameDirection ? channelParams->m_rayZodRadian : channelParams->m_rayZoaRadian;
+    const Double2DVector& rayZoaRadian =
+        isSameDirection ? channelParams->m_rayZoaRadian : channelParams->m_rayZodRadian;
 
     // Step 11: Generate channel coefficients for each cluster n and each receiver
     //  and transmitter element pair u,s.
@@ -4053,204 +4528,258 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
     Angles sAngle(uMob->GetPosition(), sMob->GetPosition());
     Angles uAngle(sMob->GetPosition(), uMob->GetPosition());
 
-    Double2DVector sinCosA; // cached multiplications of sin and cos of the ZoA and AoA angles
-    Double2DVector sinSinA; // cached multiplications of sines of the ZoA and AoA angles
-    Double2DVector cosZoA;  // cached cos of the ZoA angle
-    Double2DVector sinCosD; // cached multiplications of sin and cos of the ZoD and AoD angles
-    Double2DVector sinSinD; // cached multiplications of the cosines of the ZoA and AoA angles
-    Double2DVector cosZoD;  // cached cos of the ZoD angle
+    // ── Optimization: flatten the per-(cluster,ray) caches into one
+    // contiguous std::vector<double> rather than a 2D `Double2DVector`
+    // (which is std::vector<std::vector<double>> and pays double-indirection
+    // + per-row malloc on every GetNewChannel call). Layout is row-major
+    // [cluster][ray]; index = cluster*nRays + ray. Saves ~6 mallocs and a
+    // pointer chase per inner-loop access.
+    const uint8_t nClusters = channelParams->m_reducedClusterNumber;
+    const uint8_t nRays = table3gpp->m_raysPerCluster;
+    const size_t nm = static_cast<size_t>(nClusters) * nRays;
+    std::vector<double> sinCosA(nm), sinSinA(nm), cosZoA(nm);
+    std::vector<double> sinCosD(nm), sinSinD(nm), cosZoD(nm);
 
-    // contains part of the ray expression, cached as independent from the u- and s-indexes,
-    // but calculate it for different polarization angles of s and u
-    std::map<std::pair<uint8_t, uint8_t>, Complex2DVector> raysPreComp;
-    for (size_t polSa = 0; polSa < sAntenna->GetNumPols(); ++polSa)
+    // ── Optimization: replace `std::map<pair<u8,u8>, Complex2DVector>
+    // raysPreComp` with a flat 2x2 array of Complex2DVector. Two reasons:
+    //   (1) `std::map` allocates a tree node + the Complex2DVector value
+    //       for each (polS, polU) on every GetNewChannel call (per-link
+    //       per-tick), then frees them seconds later. The fixed array
+    //       lives on the stack.
+    //   (2) The innermost (s,u,n,m) loops below previously did a
+    //       `raysPreComp[std::make_pair(polS, polU)](n, m)` lookup ->
+    //       O(log#keys) compare per cell on a 2x2 table. With a flat
+    //       array the lookup is one indexed load.
+    const uint8_t numPolS = static_cast<uint8_t>(sAntenna->GetNumPols());
+    const uint8_t numPolU = static_cast<uint8_t>(uAntenna->GetNumPols());
+    NS_ASSERT_MSG(numPolS <= 2 && numPolU <= 2,
+                  "raysPreComp lookup table assumes at most 2 polarizations");
+    Complex2DVector raysPreComp[2][2];
+    for (uint8_t pS = 0; pS < numPolS; ++pS)
     {
-        for (size_t polUa = 0; polUa < uAntenna->GetNumPols(); ++polUa)
+        for (uint8_t pU = 0; pU < numPolU; ++pU)
         {
-            raysPreComp[std::make_pair(polSa, polUa)] =
-                Complex2DVector(channelParams->m_reducedClusterNumber, table3gpp->m_raysPerCluster);
+            raysPreComp[pS][pU] = Complex2DVector(nClusters, nRays);
         }
     }
 
-    // resize to appropriate dimensions
-    sinCosA.resize(channelParams->m_reducedClusterNumber);
-    sinSinA.resize(channelParams->m_reducedClusterNumber);
-    cosZoA.resize(channelParams->m_reducedClusterNumber);
-    sinCosD.resize(channelParams->m_reducedClusterNumber);
-    sinSinD.resize(channelParams->m_reducedClusterNumber);
-    cosZoD.resize(channelParams->m_reducedClusterNumber);
-    for (uint8_t nIndex = 0; nIndex < channelParams->m_reducedClusterNumber; nIndex++)
+    // Pre-compute the (n,m) terms that are independent of (u,s,polarization).
+    // Polarisation-dependent precomp lives in raysPreComp[pS][pU](n,m).
+    for (uint8_t nIndex = 0; nIndex < nClusters; nIndex++)
     {
-        sinCosA[nIndex].resize(table3gpp->m_raysPerCluster);
-        sinSinA[nIndex].resize(table3gpp->m_raysPerCluster);
-        cosZoA[nIndex].resize(table3gpp->m_raysPerCluster);
-        sinCosD[nIndex].resize(table3gpp->m_raysPerCluster);
-        sinSinD[nIndex].resize(table3gpp->m_raysPerCluster);
-        cosZoD[nIndex].resize(table3gpp->m_raysPerCluster);
-    }
-    // pre-compute the terms which are independent from uIndex and sIndex
-    for (uint8_t nIndex = 0; nIndex < channelParams->m_reducedClusterNumber; nIndex++)
-    {
-        for (uint8_t mIndex = 0; mIndex < table3gpp->m_raysPerCluster; mIndex++)
+        for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
         {
-            DoubleVector initialPhase = channelParams->m_clusterPhase[nIndex][mIndex];
+            const size_t idx = static_cast<size_t>(nIndex) * nRays + mIndex;
+            // Use *references* to the inner phase / xpr vectors to avoid
+            // the per-iteration copy-construct of a DoubleVector (was
+            // hitting the heap allocator for every ray).
+            const DoubleVector& initialPhase = channelParams->m_clusterPhase[nIndex][mIndex];
             NS_ASSERT(4 <= initialPhase.size());
-            double k = channelParams->m_crossPolarizationPowerRatios[nIndex][mIndex];
+            const double k = channelParams->m_crossPolarizationPowerRatios[nIndex][mIndex];
+            const double sqrtInvK = std::sqrt(1.0 / k);
 
-            // cache the component of the "rays" terms which depend on the random angle of arrivals
-            // and departures and initial phases only
-            for (uint8_t polUa = 0; polUa < uAntenna->GetNumPols(); ++polUa)
+            // std::polar(1, x) folds the cos+sin call to a single sincos
+            // on modern libstdc++/libc++.
+            const std::complex<double> ph0 = std::polar(1.0, initialPhase[0]);
+            const std::complex<double> ph1 = std::polar(1.0, initialPhase[1]) * sqrtInvK;
+            const std::complex<double> ph2 = std::polar(1.0, initialPhase[2]) * sqrtInvK;
+            const std::complex<double> ph3 = std::polar(1.0, initialPhase[3]);
+
+            const double rxAoa = channelParams->m_rayAoaRadian[nIndex][mIndex];
+            const double rxZoa = channelParams->m_rayZoaRadian[nIndex][mIndex];
+            const double txAod = channelParams->m_rayAodRadian[nIndex][mIndex];
+            const double txZod = channelParams->m_rayZodRadian[nIndex][mIndex];
+
+            for (uint8_t polUa = 0; polUa < numPolU; ++polUa)
             {
-                auto [rxFieldPatternPhi, rxFieldPatternTheta] = uAntenna->GetElementFieldPattern(
-                    Angles(channelParams->m_rayAoaRadian[nIndex][mIndex],
-                           channelParams->m_rayZoaRadian[nIndex][mIndex]),
-                    polUa);
-                for (uint8_t polSa = 0; polSa < sAntenna->GetNumPols(); ++polSa)
+                auto [rxPhi, rxTheta] = uAntenna->GetElementFieldPattern(
+                    Angles(rxAoa, rxZoa), polUa);
+                for (uint8_t polSa = 0; polSa < numPolS; ++polSa)
                 {
-                    auto [txFieldPatternPhi, txFieldPatternTheta] =
-                        sAntenna->GetElementFieldPattern(
-                            Angles(channelParams->m_rayAodRadian[nIndex][mIndex],
-                                   channelParams->m_rayZodRadian[nIndex][mIndex]),
-                            polSa);
-                    raysPreComp[std::make_pair(polSa, polUa)](nIndex, mIndex) =
-                        std::complex(cos(initialPhase[0]), sin(initialPhase[0])) *
-                            rxFieldPatternTheta * txFieldPatternTheta +
-                        std::complex(cos(initialPhase[1]), sin(initialPhase[1])) *
-                            std::sqrt(1.0 / k) * rxFieldPatternTheta * txFieldPatternPhi +
-                        std::complex(cos(initialPhase[2]), sin(initialPhase[2])) *
-                            std::sqrt(1.0 / k) * rxFieldPatternPhi * txFieldPatternTheta +
-                        std::complex(cos(initialPhase[3]), sin(initialPhase[3])) *
-                            rxFieldPatternPhi * txFieldPatternPhi;
+                    auto [txPhi, txTheta] =
+                        sAntenna->GetElementFieldPattern(Angles(txAod, txZod), polSa);
+                    raysPreComp[polSa][polUa](nIndex, mIndex) =
+                        ph0 * rxTheta * txTheta
+                      + ph1 * rxTheta * txPhi
+                      + ph2 * rxPhi * txTheta
+                      + ph3 * rxPhi * txPhi;
                 }
             }
 
-            // cache the component of the "rxPhaseDiff" terms which depend on the random angle of
-            // arrivals only
-            double sinRayZoa = sin(rayZoaRadian[nIndex][mIndex]);
-            double sinRayAoa = sin(rayAoaRadian[nIndex][mIndex]);
-            double cosRayAoa = cos(rayAoaRadian[nIndex][mIndex]);
-            sinCosA[nIndex][mIndex] = sinRayZoa * cosRayAoa;
-            sinSinA[nIndex][mIndex] = sinRayZoa * sinRayAoa;
-            cosZoA[nIndex][mIndex] = cos(rayZoaRadian[nIndex][mIndex]);
+            // (n,m) caches for the rxPhase / txPhase phase-difference math.
+            // Pre-baked in the same loop so we avoid a second pass over
+            // (n,m). Using *references* to the ray-angle Double2DVectors
+            // also avoids the per-iteration `operator[]` indirection
+            // (we resolve [nIndex] once and reuse the inner vector).
+            const double sinZoa = std::sin(rayZoaRadian[nIndex][mIndex]);
+            const double sinAoa = std::sin(rayAoaRadian[nIndex][mIndex]);
+            const double cosAoa = std::cos(rayAoaRadian[nIndex][mIndex]);
+            sinCosA[idx] = sinZoa * cosAoa;
+            sinSinA[idx] = sinZoa * sinAoa;
+            cosZoA[idx] = std::cos(rayZoaRadian[nIndex][mIndex]);
 
-            // cache the component of the "txPhaseDiff" terms which depend on the random angle of
-            // departure only
-            double sinRayZod = sin(rayZodRadian[nIndex][mIndex]);
-            double sinRayAod = sin(rayAodRadian[nIndex][mIndex]);
-            double cosRayAod = cos(rayAodRadian[nIndex][mIndex]);
-            sinCosD[nIndex][mIndex] = sinRayZod * cosRayAod;
-            sinSinD[nIndex][mIndex] = sinRayZod * sinRayAod;
-            cosZoD[nIndex][mIndex] = cos(rayZodRadian[nIndex][mIndex]);
+            const double sinZod = std::sin(rayZodRadian[nIndex][mIndex]);
+            const double sinAod = std::sin(rayAodRadian[nIndex][mIndex]);
+            const double cosAod = std::cos(rayAodRadian[nIndex][mIndex]);
+            sinCosD[idx] = sinZod * cosAod;
+            sinSinD[idx] = sinZod * sinAod;
+            cosZoD[idx] = std::cos(rayZodRadian[nIndex][mIndex]);
         }
     }
 
-    // The following for loops computes the channel coefficients
-    // Keeps track of how many sub-clusters have been added up to now
-    uint8_t numSubClustersAdded = 0;
-    for (uint8_t nIndex = 0; nIndex < channelParams->m_reducedClusterNumber; nIndex++)
+    // ── Optimization: cache antenna element locations and polarisations.
+    // The inner (s,u) loops call sAntenna->GetElementLocation(s) and
+    // ->GetElemPol(s) on every iteration; both are O(1) but go through
+    // a vtable + bounds-check. Pre-loading into stack vectors lets the
+    // compiler keep them in registers across the cluster/ray loops.
+    std::vector<Vector> uLocs(uSize), sLocs(sSize);
+    std::vector<uint8_t> uPols(uSize), sPols(sSize);
+    for (size_t i = 0; i < uSize; ++i)
     {
+        uLocs[i] = uAntenna->GetElementLocation(i);
+        uPols[i] = uAntenna->GetElemPol(i);
+    }
+    for (size_t i = 0; i < sSize; ++i)
+    {
+        sLocs[i] = sAntenna->GetElementLocation(i);
+        sPols[i] = sAntenna->GetElemPol(i);
+    }
+
+    // ── Optimization: hoist `rxPhaseDiff` (and its sincos) AND the
+    // `preComp(n,m) * rxPhase[m]` product out of the sIndex loop.
+    //   * rxPhaseDiff depends only on (n, u, m); the sIndex loop used
+    //     to redo this work sSize times per (u, m).
+    //   * preComp(n,m) depends on (n, m, polS, polU); polU is fixed per
+    //     uIndex but polS varies per sIndex. We fold rxPhase into both
+    //     polS variants up-front so the sIndex inner loop becomes
+    //     `rays += precompRxPhase[polS][m] * exp(j*txArg)` —
+    //     one fewer complex multiply per (sIndex, mIndex) iteration.
+    // For a 4×4 BS / 1×1 UE that's a 16x reduction in trig calls
+    // and ~6 KB less complex-multiply work per call on the hot path.
+    // [polS][mIndex] buffer reused per (cluster, uIndex). Sized at the
+    // outer scope so we don't malloc inside the loop.
+    std::array<std::vector<std::complex<double>>, 2> precompRxPhase{
+        std::vector<std::complex<double>>(nRays),
+        std::vector<std::complex<double>>(nRays)};
+
+    // Cluster-power normalisation factor: clusterPower changes per
+    // cluster but is constant across (u,s,m). Hoist sqrt out of the
+    // inner loop.
+    std::vector<double> clusterScale(nClusters);
+    const double invNRays = 1.0 / static_cast<double>(nRays);
+    for (uint8_t n = 0; n < nClusters; ++n)
+    {
+        clusterScale[n] = std::sqrt(channelParams->m_clusterPower[n] * invNRays);
+    }
+
+    // The following for loops computes the channel coefficients.
+    // Keeps track of how many sub-clusters have been added up to now.
+    uint8_t numSubClustersAdded = 0;
+    for (uint8_t nIndex = 0; nIndex < nClusters; nIndex++)
+    {
+        const bool isStrongest =
+            nIndex == channelParams->m_cluster1st || nIndex == channelParams->m_cluster2nd;
+        const size_t nmBase = static_cast<size_t>(nIndex) * nRays;
+        const double clusScale = clusterScale[nIndex];
+
         for (size_t uIndex = 0; uIndex < uSize; uIndex++)
         {
-            Vector uLoc = uAntenna->GetElementLocation(uIndex);
+            const Vector& uLoc = uLocs[uIndex];
+            const uint8_t polU = uPols[uIndex];
+
+            // Pre-compute rxPhase[m] for this (n, u) AND the
+            // precompRxPhase[polS][m] product for the two possible
+            // polS values. The sIndex inner loop reads these by
+            // indexed lookup, saving one complex multiply per (s, m).
+            for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
+            {
+                const size_t idx = nmBase + mIndex;
+                const double rxArg =
+                    2.0 * M_PI *
+                    (sinCosA[idx] * uLoc.x + sinSinA[idx] * uLoc.y + cosZoA[idx] * uLoc.z);
+                const std::complex<double> rxRot = std::polar(1.0, rxArg);
+                for (uint8_t pS = 0; pS < numPolS; ++pS)
+                {
+                    precompRxPhase[pS][mIndex] =
+                        raysPreComp[pS][polU](nIndex, mIndex) * rxRot;
+                }
+            }
 
             for (size_t sIndex = 0; sIndex < sSize; sIndex++)
             {
-                Vector sLoc = sAntenna->GetElementLocation(sIndex);
-                // Compute the N-2 weakest cluster, assuming 0 slant angle and a
-                // polarization slant angle configured in the array (7.5-22)
-                if (nIndex != channelParams->m_cluster1st && nIndex != channelParams->m_cluster2nd)
-                {
-                    std::complex<double> rays(0, 0);
-                    for (uint8_t mIndex = 0; mIndex < table3gpp->m_raysPerCluster; mIndex++)
-                    {
-                        // lambda_0 is accounted in the antenna spacing uLoc and sLoc.
-                        double rxPhaseDiff =
-                            2 * M_PI *
-                            (sinCosA[nIndex][mIndex] * uLoc.x + sinSinA[nIndex][mIndex] * uLoc.y +
-                             cosZoA[nIndex][mIndex] * uLoc.z);
+                const Vector& sLoc = sLocs[sIndex];
+                const uint8_t polS = sPols[sIndex];
+                const std::vector<std::complex<double>>& preCompRx = precompRxPhase[polS];
+                // Treat the precomp array as a [re, im] double pair so
+                // the hot inner loop avoids std::complex<double>
+                // operator* / operator+= overhead under -O0. Release
+                // builds end up with the same code path.
+                const auto* preCompRxD =
+                    reinterpret_cast<const double*>(preCompRx.data());
 
-                        double txPhaseDiff =
-                            2 * M_PI *
-                            (sinCosD[nIndex][mIndex] * sLoc.x + sinSinD[nIndex][mIndex] * sLoc.y +
-                             cosZoD[nIndex][mIndex] * sLoc.z);
-                        // NOTE Doppler is computed in the CalcBeamformingGain function and is
-                        // simplified to only account for the center angle of each cluster.
-                        rays += raysPreComp[std::make_pair(sAntenna->GetElemPol(sIndex),
-                                                           uAntenna->GetElemPol(uIndex))](nIndex,
-                                                                                          mIndex) *
-                                std::complex(cos(rxPhaseDiff), sin(rxPhaseDiff)) *
-                                std::complex(cos(txPhaseDiff), sin(txPhaseDiff));
+                if (!isStrongest)
+                {
+                    // (7.5-22) — N-2 weakest clusters
+                    double raysRe = 0.0, raysIm = 0.0;
+                    for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
+                    {
+                        const size_t idx = nmBase + mIndex;
+                        const double txArg =
+                            2.0 * M_PI *
+                            (sinCosD[idx] * sLoc.x + sinSinD[idx] * sLoc.y +
+                             cosZoD[idx] * sLoc.z);
+                        // NOTE Doppler is computed in CalcBeamformingGain.
+                        const double tCos = std::cos(txArg);
+                        const double tSin = std::sin(txArg);
+                        const double pRe = preCompRxD[mIndex * 2];
+                        const double pIm = preCompRxD[mIndex * 2 + 1];
+                        // (pRe + j pIm) * (tCos + j tSin)
+                        raysRe += pRe * tCos - pIm * tSin;
+                        raysIm += pRe * tSin + pIm * tCos;
                     }
-                    rays *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    hUsn(uIndex, sIndex, nIndex) = rays;
+                    hUsn(uIndex, sIndex, nIndex) =
+                        std::complex<double>(raysRe * clusScale, raysIm * clusScale);
                 }
-                else //(7.5-28)
+                else
                 {
-                    std::complex<double> raysSub1(0, 0);
-                    std::complex<double> raysSub2(0, 0);
-                    std::complex<double> raysSub3(0, 0);
-
-                    for (uint8_t mIndex = 0; mIndex < table3gpp->m_raysPerCluster; mIndex++)
+                    // (7.5-28) — strongest clusters split into 3 subclusters
+                    double r1Re = 0, r1Im = 0;
+                    double r2Re = 0, r2Im = 0;
+                    double r3Re = 0, r3Im = 0;
+                    for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
                     {
-                        // ZML:Just remind me that the angle offsets for the 3 subclusters were not
-                        // generated correctly.
-                        double rxPhaseDiff =
-                            2 * M_PI *
-                            (sinCosA[nIndex][mIndex] * uLoc.x + sinSinA[nIndex][mIndex] * uLoc.y +
-                             cosZoA[nIndex][mIndex] * uLoc.z);
-
-                        double txPhaseDiff =
-                            2 * M_PI *
-                            (sinCosD[nIndex][mIndex] * sLoc.x + sinSinD[nIndex][mIndex] * sLoc.y +
-                             cosZoD[nIndex][mIndex] * sLoc.z);
-
-                        std::complex<double> raySub =
-                            raysPreComp[std::make_pair(sAntenna->GetElemPol(sIndex),
-                                                       uAntenna->GetElemPol(uIndex))](nIndex,
-                                                                                      mIndex) *
-                            std::complex(cos(rxPhaseDiff), sin(rxPhaseDiff)) *
-                            std::complex(cos(txPhaseDiff), sin(txPhaseDiff));
+                        const size_t idx = nmBase + mIndex;
+                        const double txArg =
+                            2.0 * M_PI *
+                            (sinCosD[idx] * sLoc.x + sinSinD[idx] * sLoc.y +
+                             cosZoD[idx] * sLoc.z);
+                        const double tCos = std::cos(txArg);
+                        const double tSin = std::sin(txArg);
+                        const double pRe = preCompRxD[mIndex * 2];
+                        const double pIm = preCompRxD[mIndex * 2 + 1];
+                        const double rRe = pRe * tCos - pIm * tSin;
+                        const double rIm = pRe * tSin + pIm * tCos;
 
                         switch (mIndex)
                         {
-                        case 9:
-                        case 10:
-                        case 11:
-                        case 12:
-                        case 17:
-                        case 18:
-                            raysSub2 += raySub;
-                            break;
-                        case 13:
-                        case 14:
-                        case 15:
-                        case 16:
-                            raysSub3 += raySub;
-                            break;
-                        default: // case 1,2,3,4,5,6,7,8,19,20
-                            raysSub1 += raySub;
-                            break;
+                        case 9: case 10: case 11: case 12: case 17: case 18:
+                            r2Re += rRe; r2Im += rIm; break;
+                        case 13: case 14: case 15: case 16:
+                            r3Re += rRe; r3Im += rIm; break;
+                        default: // 1..8, 19, 20
+                            r1Re += rRe; r1Im += rIm; break;
                         }
                     }
-                    raysSub1 *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    raysSub2 *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    raysSub3 *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    hUsn(uIndex, sIndex, nIndex) = raysSub1;
-                    hUsn(uIndex,
-                         sIndex,
-                         channelParams->m_reducedClusterNumber + numSubClustersAdded) = raysSub2;
-                    hUsn(uIndex,
-                         sIndex,
-                         channelParams->m_reducedClusterNumber + numSubClustersAdded + 1) =
-                        raysSub3;
+                    hUsn(uIndex, sIndex, nIndex) =
+                        std::complex<double>(r1Re * clusScale, r1Im * clusScale);
+                    hUsn(uIndex, sIndex, nClusters + numSubClustersAdded) =
+                        std::complex<double>(r2Re * clusScale, r2Im * clusScale);
+                    hUsn(uIndex, sIndex, nClusters + numSubClustersAdded + 1) =
+                        std::complex<double>(r3Re * clusScale, r3Im * clusScale);
                 }
             }
         }
-        if (nIndex == channelParams->m_cluster1st || nIndex == channelParams->m_cluster2nd)
+        if (isStrongest)
         {
             numSubClustersAdded += 2;
         }
@@ -4258,58 +4787,85 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
 
     if (channelParams->m_losCondition == ChannelCondition::LOS) //(7.5-29) && (7.5-30)
     {
-        double lambda = 3.0e8 / m_frequency; // the wavelength of the carrier frequency
-        std::complex phaseDiffDueToDistance(cos(-2 * M_PI * distance3D / lambda),
-                                            sin(-2 * M_PI * distance3D / lambda));
+        // ── Optimization: every per-link constant gets computed
+        // exactly once outside the (u,s) loops.
+        //   * kLinear, atten1 = sqrt(1/(K+1)), attenK = sqrt(K/(K+1)):
+        //     were pow/sqrt'd on every (u,s) iteration in the original.
+        //   * pow(10, attenuation_dB/10): same, plus a divide per cell.
+        //   * Per-element field patterns: the LOS ray direction
+        //     (uAngle, sAngle) is identical for all elements of one
+        //     panel, so we precompute one (Phi, Theta) pair per
+        //     polarisation instead of one per (u-elem, s-elem).
+        //   * Distance-driven `phaseDiffDueToDistance` and the
+        //     per-element rx/tx phase diffs use std::polar.
+        const double lambda = 3.0e8 / m_frequency;
+        const std::complex<double> phaseDiffDueToDistance =
+            std::polar(1.0, -2.0 * M_PI * distance3D / lambda);
 
-        const double sinUAngleIncl = sin(uAngle.GetInclination());
-        const double cosUAngleIncl = cos(uAngle.GetInclination());
-        const double sinUAngleAz = sin(uAngle.GetAzimuth());
-        const double cosUAngleAz = cos(uAngle.GetAzimuth());
-        const double sinSAngleIncl = sin(sAngle.GetInclination());
-        const double cosSAngleIncl = cos(sAngle.GetInclination());
-        const double sinSAngleAz = sin(sAngle.GetAzimuth());
-        const double cosSAngleAz = cos(sAngle.GetAzimuth());
+        const double sinUAngleIncl = std::sin(uAngle.GetInclination());
+        const double cosUAngleIncl = std::cos(uAngle.GetInclination());
+        const double sinUAngleAz = std::sin(uAngle.GetAzimuth());
+        const double cosUAngleAz = std::cos(uAngle.GetAzimuth());
+        const double sinSAngleIncl = std::sin(sAngle.GetInclination());
+        const double cosSAngleIncl = std::cos(sAngle.GetInclination());
+        const double sinSAngleAz = std::sin(sAngle.GetAzimuth());
+        const double cosSAngleAz = std::cos(sAngle.GetAzimuth());
 
+        const double kLinear = std::pow(10.0, channelParams->m_K_factor / 10.0);
+        const double atten1 = std::sqrt(1.0 / (kLinear + 1.0));
+        const double attenK = std::sqrt(kLinear / (1.0 + kLinear));
+        const double invAttenuationLin =
+            1.0 / std::pow(10.0, channelParams->m_attenuation_dB[0] / 10.0);
+        const std::complex<double> attenKOverPow = attenK * invAttenuationLin;
+
+        // Field patterns depend only on the angle and the panel
+        // polarisation, NOT on the element index. Cache one (Phi,
+        // Theta) per polarisation per side.
+        std::complex<double> rxFieldPhi[2]{}, rxFieldTheta[2]{};
+        std::complex<double> txFieldPhi[2]{}, txFieldTheta[2]{};
+        for (uint8_t p = 0; p < numPolU; ++p)
+        {
+            std::tie(rxFieldPhi[p], rxFieldTheta[p]) = uAntenna->GetElementFieldPattern(
+                Angles(uAngle.GetAzimuth(), uAngle.GetInclination()), p);
+        }
+        for (uint8_t p = 0; p < numPolS; ++p)
+        {
+            std::tie(txFieldPhi[p], txFieldTheta[p]) = sAntenna->GetElementFieldPattern(
+                Angles(sAngle.GetAzimuth(), sAngle.GetInclination()), p);
+        }
+
+        const size_t totalPages = hUsn.GetNumPages();
         for (size_t uIndex = 0; uIndex < uSize; uIndex++)
         {
-            Vector uLoc = uAntenna->GetElementLocation(uIndex);
-            double rxPhaseDiff = 2 * M_PI *
-                                 (sinUAngleIncl * cosUAngleAz * uLoc.x +
-                                  sinUAngleIncl * sinUAngleAz * uLoc.y + cosUAngleIncl * uLoc.z);
+            const Vector& uLoc = uLocs[uIndex];
+            const uint8_t polU = uPols[uIndex];
+            const double rxPhaseDiff =
+                2.0 * M_PI *
+                (sinUAngleIncl * cosUAngleAz * uLoc.x +
+                 sinUAngleIncl * sinUAngleAz * uLoc.y + cosUAngleIncl * uLoc.z);
+            const std::complex<double> rxRot = std::polar(1.0, rxPhaseDiff);
 
             for (size_t sIndex = 0; sIndex < sSize; sIndex++)
             {
-                Vector sLoc = sAntenna->GetElementLocation(sIndex);
-                std::complex<double> ray(0, 0);
-                double txPhaseDiff =
-                    2 * M_PI *
-                    (sinSAngleIncl * cosSAngleAz * sLoc.x + sinSAngleIncl * sinSAngleAz * sLoc.y +
-                     cosSAngleIncl * sLoc.z);
+                const Vector& sLoc = sLocs[sIndex];
+                const uint8_t polS = sPols[sIndex];
+                const double txPhaseDiff =
+                    2.0 * M_PI *
+                    (sinSAngleIncl * cosSAngleAz * sLoc.x +
+                     sinSAngleIncl * sinSAngleAz * sLoc.y + cosSAngleIncl * sLoc.z);
 
-                auto [rxFieldPatternPhi, rxFieldPatternTheta] = uAntenna->GetElementFieldPattern(
-                    Angles(uAngle.GetAzimuth(), uAngle.GetInclination()),
-                    uAntenna->GetElemPol(uIndex));
-                auto [txFieldPatternPhi, txFieldPatternTheta] = sAntenna->GetElementFieldPattern(
-                    Angles(sAngle.GetAzimuth(), sAngle.GetInclination()),
-                    sAntenna->GetElemPol(sIndex));
+                const std::complex<double> ray =
+                    (rxFieldTheta[polU] * txFieldTheta[polS] -
+                     rxFieldPhi[polU] * txFieldPhi[polS]) *
+                    phaseDiffDueToDistance * rxRot * std::polar(1.0, txPhaseDiff);
 
-                ray = (rxFieldPatternTheta * txFieldPatternTheta -
-                       rxFieldPatternPhi * txFieldPatternPhi) *
-                      phaseDiffDueToDistance * std::complex(cos(rxPhaseDiff), sin(rxPhaseDiff)) *
-                      std::complex(cos(txPhaseDiff), sin(txPhaseDiff));
-
-                double kLinear = pow(10, channelParams->m_K_factor / 10.0);
-                // the LOS path should be attenuated if blockage is enabled.
-                hUsn(uIndex, sIndex, 0) =
-                    sqrt(1.0 / (kLinear + 1)) * hUsn(uIndex, sIndex, 0) +
-                    sqrt(kLinear / (1 + kLinear)) * ray /
-                        pow(10,
-                            channelParams->m_attenuation_dB[0] / 10.0); //(7.5-30) for tau = tau1
-                for (size_t nIndex = 1; nIndex < hUsn.GetNumPages(); nIndex++)
+                // (7.5-30) for tau = tau1: cluster 0 = NLOS-cluster-0 scaled
+                // by 1/sqrt(K+1) plus the LOS ray scaled by sqrt(K/(K+1))/atten.
+                hUsn(uIndex, sIndex, 0) = atten1 * hUsn(uIndex, sIndex, 0) + attenKOverPow * ray;
+                // (7.5-30) for tau = tau2..tauN: scale remaining clusters by atten1.
+                for (size_t nIndex = 1; nIndex < totalPages; nIndex++)
                 {
-                    hUsn(uIndex, sIndex, nIndex) *=
-                        sqrt(1.0 / (kLinear + 1)); //(7.5-30) for tau = tau2...tauN
+                    hUsn(uIndex, sIndex, nIndex) *= atten1;
                 }
             }
         }

@@ -10,6 +10,7 @@
 
 #include "simple-ref-count.h"
 
+#include <cstddef>
 #include <stdint.h>
 
 /**
@@ -34,6 +35,44 @@ namespace ns3
 class EventImpl : public SimpleRefCount<EventImpl>
 {
   public:
+    /**
+     * Pooled allocation for event objects.
+     *
+     * Every Simulator::Schedule call heap-allocates one EventImpl subclass
+     * object (created by MakeEvent with the bound callback arguments) and
+     * frees it after Invoke(). Large simulations schedule millions of events
+     * per wall-second, so the malloc/free pair per event is a measurable
+     * share of the event-processing cost. These class-level operators recycle
+     * freed event blocks through small size-bucketed free lists: a freed
+     * block is pushed onto the bucket for its size class and reused by the
+     * next allocation that fits the same class, falling back to the global
+     * operator new/delete for sizes above the largest bucket.
+     *
+     * The pool is intentionally simple: ns-3 simulations are single-threaded
+     * per Simulator, the blocks never shrink (peak in-flight events bound the
+     * pool size), and the size classes cover the MakeEvent template family
+     * (callback pointer + a handful of bound arguments).
+     *
+     * @param size the size of the event subclass object in bytes
+     * @return pointer to a recycled or freshly allocated block
+     */
+    static void* operator new(std::size_t size);
+    /**
+     * Return an event block to the size-bucketed pool (or to the global
+     * operator delete when it was allocated above the largest bucket).
+     * @param ptr the block to free
+     * @param size the size of the event subclass object in bytes
+     */
+    static void operator delete(void* ptr, std::size_t size);
+    /**
+     * Unsized fallback (used e.g. when a subclass constructor throws).
+     * Bypasses the pool: without the size the bucket is unknown, and
+     * releasing a pool-eligible block straight to the global delete is
+     * always valid because bucket blocks originate from ::operator new.
+     * @param ptr the block to free
+     */
+    static void operator delete(void* ptr);
+
     /** Default constructor. */
     EventImpl();
     /** Destructor. */

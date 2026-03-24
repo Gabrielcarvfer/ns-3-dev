@@ -304,7 +304,17 @@ ThreeGppPropagationLossModel::GetTypeId()
                           "metal coated glass panels.",
                           DoubleValue(9),
                           MakeDoubleAccessor(&ThreeGppPropagationLossModel::m_meanVehicleO2iLoss),
-                          MakeDoubleChecker<double>());
+                          MakeDoubleChecker<double>())
+            .AddAttribute("LossCacheUpdatePeriod",
+                          "Serve the total loss (pathloss + shadowing + O2I) from a "
+                          "per-link cache for this long before recomputing. Zero "
+                          "(default) disables caching. Intended for dense scenarios "
+                          "where DoCalcRxPower runs millions of times per simulated "
+                          "second while node positions move negligibly within the "
+                          "period; align it with the fading-channel update period.",
+                          TimeValue(Seconds(0)),
+                          MakeTimeAccessor(&ThreeGppPropagationLossModel::m_lossCachePeriod),
+                          MakeTimeChecker());
     return tid;
 }
 
@@ -399,6 +409,26 @@ ThreeGppPropagationLossModel::DoCalcRxPower(double txPowerDbm,
     // check if the model is initialized
     NS_ASSERT_MSG(m_frequency != 0.0, "First set the centre frequency");
 
+    // Serve the total loss from cache while fresh. At dense-NR densities
+    // this function runs once per (tx, rx) pair per transmitted signal --
+    // millions of times per simulated second -- while positions move
+    // negligibly within a refresh period. Keyed by the mobility-model
+    // pointer pair, avoiding the GetObject<Node> aggregate walk entirely.
+    const bool useCache = m_lossCachePeriod.IsStrictlyPositive();
+    std::pair<uintptr_t, uintptr_t> cacheKey{0, 0};
+    if (useCache)
+    {
+        const auto pa = reinterpret_cast<uintptr_t>(PeekPointer(a));
+        const auto pb = reinterpret_cast<uintptr_t>(PeekPointer(b));
+        cacheKey = {std::min(pa, pb), std::max(pa, pb)};
+        const auto it = m_lossCache.find(cacheKey);
+        if (it != m_lossCache.end() &&
+            Simulator::Now() - it->second.computedAt < m_lossCachePeriod)
+        {
+            return txPowerDbm - it->second.lossDb;
+        }
+    }
+
     // retrieve the channel condition
     NS_ASSERT_MSG(m_channelConditionModel, "First set the channel condition model");
     Ptr<ChannelCondition> cond = m_channelConditionModel->GetChannelCondition(a, b);
@@ -436,6 +466,13 @@ ThreeGppPropagationLossModel::DoCalcRxPower(double txPowerDbm,
     }
 
     rxPow -= GetO2iVehicularLoss(a, b, cond->GetO2iCondition());
+
+    if (useCache)
+    {
+        auto& entry = m_lossCache[cacheKey];
+        entry.lossDb = txPowerDbm - rxPow;
+        entry.computedAt = Simulator::Now();
+    }
 
     return rxPow;
 }
