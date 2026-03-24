@@ -102,3 +102,25 @@ build_lib(
     test/two-ray-splm-test-suite.cc
     test/wraparound-model-test.cc
 )
+
+# Fetch prebuilt wgpu-native binaries (fastest)
+include(FetchContent)
+set(WEBGPU_LINK_TYPE SHARED)
+FetchContent_Declare(webgpu
+        GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
+        GIT_TAG        main   # pin to a release tag in production
+)
+FetchContent_MakeAvailable(webgpu)
+
+get_target_property(WEBGPU_INCLUDES  webgpu INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(WEBGPU_LOCATION  webgpu IMPORTED_LOCATION)
+get_target_property(WEBGPU_DEFS      webgpu INTERFACE_COMPILE_DEFINITIONS)
+add_executable(sls_chan_test examples/sls-chan-example.cc model/sls-chan-wgpu.cc)
+target_link_libraries(sls_chan_test PRIVATE ${WEBGPU_LOCATION})
+target_include_directories(sls_chan_test PRIVATE model/ ${WEBGPU_INCLUDES})
+target_compile_definitions(sls_chan_test PRIVATE ${INTERFACE_COMPILE_DEFINITIONS})
+
+add_executable(sls_chan_validation model/sls-chan-validation.cc model/sls-chan-wgpu.cc)
+target_link_libraries(sls_chan_validation PRIVATE ${WEBGPU_LOCATION})
+target_include_directories(sls_chan_validation PRIVATE model/ ${WEBGPU_INCLUDES})
+target_compile_definitions(sls_chan_validation PRIVATE ${INTERFACE_COMPILE_DEFINITIONS})
