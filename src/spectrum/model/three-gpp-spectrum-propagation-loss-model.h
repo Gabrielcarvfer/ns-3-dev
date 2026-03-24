@@ -15,7 +15,7 @@
 
 #include "ns3/random-variable-stream.h"
 
-#include <complex.h>
+#include <complex>
 #include <unordered_map>
 
 class ThreeGppCalcLongTermMultiPortTest;
