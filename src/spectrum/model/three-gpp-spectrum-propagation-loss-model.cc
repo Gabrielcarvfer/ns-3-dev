@@ -55,7 +55,7 @@ ThreeGppSpectrumPropagationLossModel::GetTypeId()
             .AddAttribute(
                 "ChannelModel",
                 "The channel model. It needs to implement the MatrixBasedChannelModel interface",
-                StringValue("ns3::ThreeGppChannelModel"),
+                StringValue("ns3::ThreeGppChannelModelWgpuMezanine"),
                 MakePointerAccessor(&ThreeGppSpectrumPropagationLossModel::SetChannelModel,
                                     &ThreeGppSpectrumPropagationLossModel::GetChannelModel),
                 MakePointerChecker<MatrixBasedChannelModel>());

@@ -102,3 +102,37 @@ build_lib(
     test/two-ray-splm-test-suite.cc
     test/wraparound-model-test.cc
 )
+
+# ── HDF5 support ──
+find_package(HDF5 COMPONENTS C CXX HL)
+if(${HDF5_FOUND})
+    message(STATUS "HDF5 found")
+else()
+    message(WARNING "HDF5 not found — sls_chan_validation will build without HDF5 output")
+endif()
+
+# Fetch prebuilt wgpu-native binaries (fastest)
+include(FetchContent)
+set(WEBGPU_LINK_TYPE SHARED)
+FetchContent_Declare(webgpu
+        GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
+        GIT_TAG        main   # pin to a release tag in production
+)
+FetchContent_MakeAvailable(webgpu)
+
+get_target_property(WEBGPU_INCLUDES  webgpu INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(WEBGPU_LOCATION  webgpu IMPORTED_LOCATION)
+get_target_property(WEBGPU_DEFS      webgpu INTERFACE_COMPILE_DEFINITIONS)
+add_executable(sls_chan_test examples/sls-chan-example.cc model/sls-chan-wgpu.cc)
+target_link_libraries(sls_chan_test PRIVATE ${WEBGPU_LOCATION})
+target_include_directories(sls_chan_test PRIVATE model/ ${WEBGPU_INCLUDES})
+target_compile_definitions(sls_chan_test PRIVATE ${INTERFACE_COMPILE_DEFINITIONS})
+#target_copy_webgpu_binaries(sls_chan_test)
+
+if(${HDF5_FOUND})
+    add_executable(sls_chan_validation model/sls-chan-validation.cc model/sls-chan-wgpu.cc)
+    target_link_libraries(sls_chan_validation PRIVATE ${WEBGPU_LOCATION} HDF5::HDF5)
+    target_include_directories(sls_chan_validation PRIVATE model/ ${WEBGPU_INCLUDES})
+    target_compile_definitions(sls_chan_validation PRIVATE ${INTERFACE_COMPILE_DEFINITIONS} SLS_CHAN_HDF5)
+    target_copy_webgpu_binaries(sls_chan_validation)
+endif()

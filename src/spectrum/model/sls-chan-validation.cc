@@ -1,0 +1,578 @@
+// sls-chan-validation.cc
+// Sweeps UTs across distances, writes per-link CSV for 3GPP TR 38.901 UMa validation.
+//
+// python /c/tools/sources/aerial-cuda-accelerated-ran/testBenches/chanModels/util/analysis_channel_stats.py ./build/channel_output.h5 --reference-json /c/tools/sources/aerial-cuda-accelerated-ran/testBenches/chanModels/util/3gpp_calibration_phase1.json --calibration-phase 1 --output-dir ./
+//
+
+#include "sls-chan-wgpu.h"
+#include "wgpu.h"
+
+#include <cassert>
+#include <chrono>
+#include <cmath>
+#include <fstream>
+#include <iostream>
+#include <random>
+#include <vector>
+
+#ifdef SLS_CHAN_HDF5
+#include <H5Cpp.h>
+#endif
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
+
+
+static float
+uma_d_bp(float h_bs, float h_ut, float fc_ghz)
+{
+    const float h_e = 1.0f;
+    return 4.0f * (h_bs - h_e) * (h_ut - h_e) * fc_ghz * 1e9f / 3e8f;
+}
+
+static float
+uma_los_pl_ref(float d2d, float d3d, float h_bs, float h_ut, float fc_ghz)
+{
+    const float d_bp = uma_d_bp(h_bs, h_ut, fc_ghz);
+    const float pl1 = 28.0f + 22.0f * std::log10(d3d) + 20.0f * std::log10(fc_ghz);
+    const float pl2 = 28.0f + 40.0f * std::log10(d3d) + 20.0f * std::log10(fc_ghz) -
+                      9.0f * std::log10(d_bp * d_bp + (h_bs - h_ut) * (h_bs - h_ut));
+    return (d2d <= d_bp) ? pl1 : pl2;
+}
+
+static float
+uma_nlos_pl_ref(float d2d, float d3d, float h_bs, float h_ut, float fc_ghz)
+{
+    // Phase 1 reference: 3GPP TR 38.901 UMa NLOS pathloss
+    // Matches sls-chan-validate.py uma_nlos_pl() and statistic_channel_config_phase1.yaml
+    const float los  = uma_los_pl_ref(d2d, d3d, h_bs, h_ut, fc_ghz);
+    const float nlos = 32.4f + 20.0f * std::log10(fc_ghz) + 30.0f * std::log10(d3d);
+    return std::max(los, nlos);
+}
+
+static void
+buildHexCells(uint32_t nSite,
+              uint32_t nSector,
+              float isd,
+              float h_bs,
+              std::vector<CellParam>& cells)
+{
+    cells.resize(nSite * nSector);
+    for (uint32_t s = 0; s < nSite; ++s)
+    {
+        float sx = 0.0f, sy = 0.0f;
+        if (s > 0)
+        {
+            const float angle = float(s - 1) * float(M_PI) / 3.0f;
+            sx = isd * std::cos(angle);
+            sy = isd * std::sin(angle);
+        }
+        for (uint32_t k = 0; k < nSector; ++k)
+        {
+            cells[s * nSector + k].loc = {sx, sy, h_bs, 0.0f};
+        }
+    }
+}
+
+int
+main()
+{
+    SlsChanWgpu sls;
+
+    const uint32_t nSite = 19;
+    const uint32_t nSector = 3;
+    const uint32_t nCell = nSite * nSector;
+    const float fc_ghz = 6.0f;  // Phase 1 reference: 6 GHz
+    const float h_bs = 25.0f;
+    const float h_ut = 1.5f;
+    const float isd = 1732.0f;
+
+    const uint32_t nUT = 570;
+    const float maxDist = 2000.0f;
+
+    std::vector<CellParam> cells;
+    buildHexCells(nSite, nSector, isd, h_bs, cells);
+    sls.uploadCellParams(cells);
+
+    std::vector<UtParam> uts(nUT);
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<float> uDist(-1.0f, 1.0f);
+    for (uint32_t u = 0; u < nUT; u++)
+    {
+        float x, y;
+        double closestCellDistance = std::numeric_limits<double>::max();
+        do
+        {
+            // Create UE position
+            x = uDist(rng) * maxDist;
+            y = uDist(rng) * maxDist;
+
+            // Check UE is further away from the closest UE at least 10m
+            for (auto& cell : cells)
+            {
+                double d = sqrt(pow(cell.loc.x - x, 2) + pow(cell.loc.y - y, 2));
+                if (d < closestCellDistance)
+                {
+                    closestCellDistance = d;
+                }
+            }
+        } while (closestCellDistance < 10);
+
+        uts[u].loc = {x, y, h_ut, 0.0f};
+        uts[u].d_2d_in = 0.0f;
+        uts[u].outdoor_ind = 1u;
+        uts[u].o2i_penetration_loss = 0.0f;
+    }
+    sls.uploadUtParams(uts);
+
+    // ── CRN correlation distances (TR 38.901 Table 7.5-6 UMa) ──────────────
+    // [SF, K, DS, ASD, ASA, ZSD, ZSA]
+    float corrLos[7]  = {37.f, 12.f, 30.f, 18.f, 15.f, 15.f, 15.f};
+    float corrNlos[6] = {50.f, 40.f, 50.f, 50.f, 50.f, 50.f};        // no K for NLOS
+    float corrO2i[6]  = {10.f, 10.f, 11.f, 17.f, 25.f, 25.f};
+
+    const float area = maxDist + 100.0f;
+
+    // Check large system parameters
+    sls.generateCRN(area, -area, area, -area, corrLos, corrNlos, corrO2i);
+    std::cerr << "generateCRN ok" << std::endl;
+
+    sls.calLinkParam(nSite,
+                     nUT,
+                     nSector,
+                     area,
+                     -area,
+                     area,
+                     -area,
+                     true,
+                     true,
+                     true,
+                     sls.nX(),
+                     sls.nY());
+    std::cerr << "calLinkParam ok" << std::endl;
+
+    auto links = sls.readLinkParams(nSite, nUT);
+    std::cerr << "readLinkParams ok" << std::endl;
+
+    /*
+    std::ofstream csv("link_params.csv");
+    csv << "cell_id,ut_id,is_los,is_outdoor,d2d_m,d3d_m,pl_sim_db,pl_ref_db,sf_db,k_db,ds_ns,asd_"
+           "deg,asa_deg,zsd_deg,zsa_deg\n";
+
+    for (uint32_t site = 0; site < nSite; ++site)
+    {
+        for (uint32_t u = 0; u < nUT; ++u)
+        {
+            const LinkParams& lk = links[site * nUT + u];
+            const float d3d = std::max(lk.d3d, 1e-3f);
+            const float pl_ref = lk.losInd ? uma_los_pl_ref(lk.d2d, d3d, h_bs, h_ut, fc_ghz)
+                                           : uma_nlos_pl_ref(lk.d2d, d3d, h_bs, h_ut, fc_ghz);
+
+            csv << site << "," << u << "," << lk.losInd << "," << uts[u].outdoor_ind << ","
+                << lk.d2d << "," << d3d << "," << lk.pathloss << "," << pl_ref << "," << lk.SF
+                << "," << lk.K << "," << lk.DS << "," << lk.ASD << "," << lk.ASA << "," << lk.ZSD
+                << "," << lk.ZSA << "\n";
+        }
+    }
+    */
+
+    std::cout << "Wrote link_params.csv (" << uint64_t(nCell) * nUT << " links)\n";
+
+    // Check small scale parameters
+    sls.uploadSmallScaleConfig(
+        /*scSpacingHz=*/15000.0f,
+        /*fftSize=*/4096,
+        /*nPrb=*/106,
+        /*nPrbg=*/53,
+        /*nSnapshotPerSlot=*/14,
+        /*enablePropagationDelay=*/0,
+        /*disableSmallScaleFading=*/0,
+        /*disablePlShadowing=*/0,
+        /*optionalCfrDim=*/0,       // 0 = use nPrbg as CFR dimension
+        /*lambda0=*/3e8f / (fc_ghz * 1e9f) // c/fc wavelength at Phase 1 freq (6 GHz → ~0.05 m)
+    );
+    std::cerr << "uploadSmallScaleConfig ok" << std::endl;
+
+    // ── Antenna panel configs (matches default_antenna_config.yaml) ──────────
+    // panel 0 = BS: nAnt=4, antSize=[1,1,1,2,2], antSpacing=[0,0,0.5,0.5], polarAngles=[45,-45]
+    // panel 1 = UE: nAnt=1, antSize=[1,1,2,2,1], antSpacing=[0,0,0.5,0.5], polarAngles=[0,0]
+    std::vector<AntPanelConfigGPU> antCfgs(2);
+
+    // BS panel (index 0)
+    antCfgs[0].nAnt = 4;
+    antCfgs[0].antModel = 1; // directional
+    antCfgs[0].antSize[0] = 1;
+    antCfgs[0].antSize[1] = 1;
+    antCfgs[0].antSize[2] = 1;
+    antCfgs[0].antSize[3] = 2;
+    antCfgs[0].antSize[4] = 2;
+    antCfgs[0].antSpacing[0] = 0.0f;
+    antCfgs[0].antSpacing[1] = 0.0f;
+    antCfgs[0].antSpacing[2] = 0.5f;
+    antCfgs[0].antSpacing[3] = 0.5f;
+    antCfgs[0].antPolarAngles[0] = 45.0f;
+    antCfgs[0].antPolarAngles[1] = -45.0f;
+    antCfgs[0].thetaOffset = 0; // first 181 entries in flat theta table
+    antCfgs[0].phiOffset = 0;   // first 360 entries in flat phi table
+
+    // UE panel (index 1)
+    antCfgs[1].nAnt = 1;
+    antCfgs[1].antModel = 0; // isotropic
+    antCfgs[1].antSize[0] = 1;
+    antCfgs[1].antSize[1] = 1;
+    antCfgs[1].antSize[2] = 2;
+    antCfgs[1].antSize[3] = 2;
+    antCfgs[1].antSize[4] = 1;
+    antCfgs[1].antSpacing[0] = 0.0f;
+    antCfgs[1].antSpacing[1] = 0.0f;
+    antCfgs[1].antSpacing[2] = 0.5f;
+    antCfgs[1].antSpacing[3] = 0.5f;
+    antCfgs[1].antPolarAngles[0] = 0.0f;
+    antCfgs[1].antPolarAngles[1] = 0.0f;
+    antCfgs[1].thetaOffset = 181; // second block in flat theta table
+    antCfgs[1].phiOffset = 360;   // second block in flat phi table
+
+    // Flat antenna pattern tables: 181 theta entries + 360 phi entries per panel
+    // For isotropic (antModel=0): all zeros in dB → gain=1 after 10^(0/20)
+    // For directional (antModel=1): simplified flat 0 dB table for validation
+    std::vector<float> antThetaFlat(2 * 181, 0.0f); // 0 dB for all angles
+    std::vector<float> antPhiFlat(2 * 360, 0.0f);
+
+    const uint32_t nBsAnt = antCfgs[0].nAnt; // 4
+    const uint32_t nUeAnt = antCfgs[1].nAnt; // 1
+    sls.uploadAntPanelConfigs(antCfgs, antThetaFlat, antPhiFlat);
+    std::cerr << "uploadAntPanelConfigs ok" << std::endl;
+
+    // Small-scale common parameters for WGSL binding 2 (SsCmnParams).
+    // TR 38.901 Table 7.5-6 UMa at fc = 3.5 GHz ─────
+    // Index convention: [0]=LOS, [1]=NLOS, [2]=O2I
+    // (matches kernel lsp_idx: LOS=0, NLOS=1, O2I=2)
+    SsCmnParams ssCmn{};
+
+    // ── Delay spread ─────────────────────────────────────────────────────────
+    // LOS:  μ = -7.03 + 0.66·log10(1+fc),  σ = 0.66
+    // NLOS: μ = -6.955 - 0.0963·log10(fc), σ = 0.66
+    // O2I:  μ = -6.62,                      σ = 0.32
+    ssCmn.mu_lgDS[0]    = -7.03f + 0.66f  * std::log10(1.0f + fc_ghz); // -6.5989
+    ssCmn.mu_lgDS[1]    = -6.955f - 0.0963f * std::log10(fc_ghz);       // -7.0074
+    ssCmn.mu_lgDS[2]    = -6.62f;
+    ssCmn.sigma_lgDS[0] = 0.66f;
+    ssCmn.sigma_lgDS[1] = 0.66f;
+    ssCmn.sigma_lgDS[2] = 0.32f;
+
+    // ── ASD ──────────────────────────────────────────────────────────────────
+    // LOS:  μ = 1.54 - 0.08·log10(1+fc),   σ = 0.28
+    // NLOS: μ = 1.06 + 0.1114·log10(fc),   σ = 0.28
+    // O2I:  μ = 1.25,                       σ = 0.42
+    ssCmn.mu_lgASD[0]    = 1.54f  - 0.08f   * std::log10(1.0f + fc_ghz); // 1.4877
+    ssCmn.mu_lgASD[1]    = 1.06f  + 0.1114f * std::log10(fc_ghz);         // 1.1206
+    ssCmn.mu_lgASD[2]    = 1.25f;
+    ssCmn.sigma_lgASD[0] = 0.28f;
+    ssCmn.sigma_lgASD[1] = 0.28f;
+    ssCmn.sigma_lgASD[2] = 0.42f;
+
+    // ── ASA ──────────────────────────────────────────────────────────────────
+    // LOS:  μ = 1.81 - 0.08·log10(1+fc),   σ = 0.20
+    // NLOS: μ = 1.81,                       σ = 0.20
+    // O2I:  μ = 1.76,                       σ = 0.16
+    ssCmn.mu_lgASA[0]    = 1.81f  - 0.08f * std::log10(1.0f + fc_ghz);   // 1.7577
+    ssCmn.mu_lgASA[1]    = 1.81f;
+    ssCmn.mu_lgASA[2]    = 1.76f;
+    ssCmn.sigma_lgASA[0] = 0.20f;
+    ssCmn.sigma_lgASA[1] = 0.20f;
+    ssCmn.sigma_lgASA[2] = 0.16f;
+
+    // ── ZSA ──────────────────────────────────────────────────────────────────
+    // LOS/NLOS: μ = 0.73 - 0.1·log10(1+fc), σ = 0.34 - 0.04·log10(1+fc)
+    // O2I:      μ = 1.01,                    σ = 0.43
+    ssCmn.mu_lgZSA[0]    = 0.73f  - 0.10f  * std::log10(1.0f + fc_ghz);  // 0.6647
+    ssCmn.mu_lgZSA[1]    = 0.73f  - 0.10f  * std::log10(1.0f + fc_ghz);  // 0.6647
+    ssCmn.mu_lgZSA[2]    = 1.01f;
+    ssCmn.sigma_lgZSA[0] = 0.34f  - 0.04f  * std::log10(1.0f + fc_ghz);  // 0.3139
+    ssCmn.sigma_lgZSA[1] = 0.34f  - 0.04f  * std::log10(1.0f + fc_ghz);  // 0.3139
+    ssCmn.sigma_lgZSA[2] = 0.43f;
+
+    // ── K-factor (LOS only) ──────────────────────────────────────────────────
+    ssCmn.mu_K[0]    = 9.0f;   ssCmn.sigma_K[0] = 3.5f;
+    ssCmn.mu_K[1]    = 0.0f;   ssCmn.sigma_K[1] = 0.0f;
+    ssCmn.mu_K[2]    = 0.0f;   ssCmn.sigma_K[2] = 0.0f;
+
+    // ── Delay scaling r_tau ──────────────────────────────────────────────────
+    ssCmn.r_tao[0] = 2.5f;   // LOS
+    ssCmn.r_tao[1] = 2.3f;   // NLOS
+    ssCmn.r_tao[2] = 2.2f;   // O2I
+
+    // ── XPR ─────────────────────────────────────────────────────────────────
+    ssCmn.mu_XPR[0]    = 8.0f;  ssCmn.sigma_XPR[0] = 4.0f;  // LOS
+    ssCmn.mu_XPR[1]    = 7.0f;  ssCmn.sigma_XPR[1] = 3.0f;  // NLOS
+    ssCmn.mu_XPR[2]    = 9.0f;  ssCmn.sigma_XPR[2] = 5.0f;  // O2I
+
+    // ── Cluster counts ───────────────────────────────────────────────────────
+    ssCmn.nCluster[0]       = 12u;   // LOS
+    ssCmn.nCluster[1]       = 20u;   // NLOS
+    ssCmn.nCluster[2]       = 12u;   // O2I
+    ssCmn.nRayPerCluster[0] = 20u;
+    ssCmn.nRayPerCluster[1] = 20u;
+    ssCmn.nRayPerCluster[2] = 20u;
+
+    // ── Cluster DS scaling (C_DS) ────────────────────────────────────────────
+    // C_DS (in seconds) is not used directly in the angular generation — kept
+    // as a per-scenario scale; angular cluster spreads use C_ASD/C_ASA/C_ZSA.
+    ssCmn.C_DS[0] = 3.91e-9f;
+    ssCmn.C_DS[1] = 3.91e-9f;
+    ssCmn.C_DS[2] = 3.91e-9f;
+
+    // ── Cluster angular spreads (degrees, used in ray angle generation) ──────
+    // ASD cluster value (σ_ASD) = C_ASD per 3GPP Table 7.5-6
+    ssCmn.C_ASD[0] = 5.0f;   ssCmn.C_ASD[1] = 5.0f;   ssCmn.C_ASD[2] = 5.0f;
+    ssCmn.C_ASA[0] = 11.0f;  ssCmn.C_ASA[1] = 11.0f;  ssCmn.C_ASA[2] = 11.0f;
+    ssCmn.C_ZSA[0] = 7.0f;   ssCmn.C_ZSA[1] = 7.0f;   ssCmn.C_ZSA[2] = 7.0f;
+
+    // ── xi (per-cluster power shadow fading, dB std) ─────────────────────────
+    ssCmn.xi[0] = 3.0f;
+    ssCmn.xi[1] = 3.0f;
+    ssCmn.xi[2] = 3.0f;
+
+    // ── C_phi / C_theta — TR 38.901 Table 7.5-2 / 7.5-3 ────────────────────
+    // Scaling factors for cluster angle spread (Eq 7.5-9 / 7.5-14).
+    // Values depend on nCluster: LOS/O2I=12 → 1.2766/1.3086; NLOS=20 → 1.3418/1.2481
+    ssCmn.C_phi_LOS    = 1.2766f;
+    ssCmn.C_phi_NLOS   = 1.3418f;
+    ssCmn.C_phi_O2I    = 1.2766f;
+    ssCmn.C_theta_LOS  = 1.3086f;
+    ssCmn.C_theta_NLOS = 1.2481f;
+    ssCmn.C_theta_O2I  = 1.3086f;
+
+    // ── Misc ─────────────────────────────────────────────────────────────────
+    ssCmn.lgfc     = std::log10(fc_ghz);
+    ssCmn.lambda_0 = 3e8f / 3.5e9f;
+
+    // ── Sub-cluster ray indices (TR 38.901 Table 7.5-5) ─────────────────────
+    // Sub-cluster 0: rays 1-10 (0-indexed: 0-9)
+    // Sub-cluster 1: rays 11-16 (0-indexed: 10-15) — 6 rays
+    // Sub-cluster 2: rays 17-20 (0-indexed: 16-19) — 4 rays
+    for (uint32_t i = 0; i < 10u; ++i) ssCmn.raysInSubCluster0[i] = i;
+    for (uint32_t i = 0; i < 6u;  ++i) ssCmn.raysInSubCluster1[i] = 10u + i;
+    for (uint32_t i = 0; i < 4u;  ++i) ssCmn.raysInSubCluster2[i] = 16u + i;
+    ssCmn.raysInSubClusterSizes[0] = 10u;
+    ssCmn.raysInSubClusterSizes[1] = 6u;
+    ssCmn.raysInSubClusterSizes[2] = 4u;
+    ssCmn.nSubCluster = 3u;
+    ssCmn.nUeAnt      = nUeAnt;
+    ssCmn.nBsAnt      = nBsAnt;
+
+    // ── Ray offset angles (TR 38.901 Table 7.5-3, 20 offsets) ───────────────
+    // α_m values in degrees (used in Eq 7.5-13)
+    const float rayOffsets[20] = {
+         0.0447f, -0.0447f,  0.1413f, -0.1413f,
+         0.2492f, -0.2492f,  0.3715f, -0.3715f,
+         0.5129f, -0.5129f,  0.6797f, -0.6797f,
+         0.8844f, -0.8844f,  1.1481f, -1.1481f,
+         1.5195f, -1.5195f,  2.1551f, -2.1551f
+    };
+    for (uint32_t i = 0; i < 20u; ++i) ssCmn.RayOffsetAngles[i] = rayOffsets[i];
+
+    sls.uploadCmnLinkParamsSmallScale(ssCmn);
+    std::cerr << "uploadCmnLinkParamsSmallScale ok" << std::endl;
+
+    // ── Build active links: all nSite × nUT pairs ────────────────────────────
+    const uint32_t nSnapshots = 14; // n_snapshot_per_slot
+    const uint32_t nPrbg = 53;
+
+    std::vector<ActiveLink> activeLinks;
+    activeLinks.reserve(nSite * nUT);
+    for (uint32_t site = 0; site < nSite; ++site)
+    {
+        for (uint32_t u = 0; u < nUT; ++u)
+        {
+            const uint32_t linkIdx = site * nUT + u;
+            const uint32_t elemsPerLink = nSnapshots * nUeAnt * nBsAnt * 24u; // NMAXTAPS=24
+            ActiveLink al;
+            al.cid = site * nSector; // first sector of this site
+            al.uid = u;
+            al.linkIdx = linkIdx;
+            al.lspReadIdx = linkIdx;
+            al.cirCoeOffset = linkIdx * elemsPerLink;
+            al.cirNormDelayOffset = linkIdx * 24u;
+            al.cirNtapsOffset = linkIdx;
+            al.freqChanPrbgOffset = linkIdx * nSnapshots * nUeAnt * nBsAnt * nPrbg;
+            activeLinks.push_back(al);
+        }
+    }
+    const uint32_t nActiveLinks = static_cast<uint32_t>(activeLinks.size());
+
+    // Build small-scale cell params (antPanelIdx + orientation)
+    std::vector<CellParamSS> cellsSS(nCell);
+    for (uint32_t i = 0; i < nCell; ++i)
+    {
+        cellsSS[i].antPanelIdx = 0;                 // BS panel = index 0
+        cellsSS[i].antPanelOrientation[0] = 102.0f; // theta_tilt (degrees downtilt)
+        cellsSS[i].antPanelOrientation[1] = float(i % nSector) * 120.0f; // phi per sector
+        cellsSS[i].antPanelOrientation[2] = 0.0f;                        // zeta_offset
+        cellsSS[i]._pad0 = 0;
+    }
+    sls.uploadCellParamsSS(cellsSS);
+    std::cerr << "uploadCellParamsSS ok" << std::endl;
+
+    // Build small-scale UT params
+    std::vector<UtParamSS> utsSS(nUT);
+    for (uint32_t u = 0; u < nUT; ++u)
+    {
+        utsSS[u].antPanelIdx = 1; // UE panel = index 1
+        utsSS[u].outdoor_ind = uts[u].outdoor_ind;
+        utsSS[u].antPanelOrientation[0] = 0.0f;
+        utsSS[u].antPanelOrientation[1] = 0.0f;
+        utsSS[u].antPanelOrientation[2] = 0.0f;
+        utsSS[u].velocity[0] = 0.0f; // stationary UTs
+        utsSS[u].velocity[1] = 0.0f;
+        utsSS[u].velocity[2] = 0.0f;
+        utsSS[u]._pad0 = 0;
+    }
+    sls.uploadUtParamsSS(utsSS);
+    std::cerr << "uploadUtParamsSS ok" << std::endl;
+
+    // ── Small-scale pipeline ─────────────────────────────────────────────────
+    sls.calClusterRay(nSite, nUT);
+    std::cerr << "calClusterRay ok" << std::endl;
+
+    sls.generateCIR(activeLinks, nActiveLinks, nSnapshots, /*refTime=*/0.0f);
+    std::cerr << "generateCIR ok" << std::endl;
+
+    auto t0 = std::chrono::high_resolution_clock::now();
+
+    sls.generateCFRBatched(activeLinks, nActiveLinks, nSnapshots);
+    std::cerr << "generateCFRBatched ok" << std::endl;
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+    std::cout << "Total time until generateCFRBatched: " << duration << " us" << std::endl;
+
+    // ── Readback ─────────────────────────────────────────────────────────────
+    auto cirCoe = sls.readCirCoe(nActiveLinks, nSnapshots, nUeAnt, nBsAnt);
+    std::vector<std::complex<float>> freqChanPrbg;
+    sls.readFreqChanPrbgBatched(freqChanPrbg);
+    auto clusterParams = sls.readClusterParams(nSite, nUT);
+    auto cirNtaps = sls.readCirNtaps();
+    auto xpr = sls.readXpr();
+    auto phiNmAoA = sls.readPhiNmAoA();
+    auto phiNmAoD = sls.readPhiNmAoD();
+    auto thetaNmZOA = sls.readThetaNmZOA();
+    auto thetaNmZOD = sls.readThetaNmZOD();
+
+#ifdef SLS_CHAN_HDF5
+    // ── Write all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
+    float centerFreqHz = fc_ghz * 1e9f;
+    float bandwidthHz = 20e6f;
+
+    // CIR normalised delay (same as NVIDIA: 0..NMAXTAPS-1 scaled to [0,1))
+    const uint32_t NMAXTAPS = 24;
+    std::vector<uint32_t> cirNormDelay(NMAXTAPS);
+    for (uint32_t i = 0; i < NMAXTAPS; ++i)
+        cirNormDelay[i] = i;
+
+    saveSlsChanToHdf5("channel_output.h5",
+        links, nSite, nUT,
+        clusterParams, activeLinks,
+        cirCoe, cirNormDelay, cirNtaps,
+        freqChanPrbg, nPrbg,
+        xpr, phiNmAoA, phiNmAoD,
+        thetaNmZOA, thetaNmZOD,
+        15000.0f, 4096u, 106u, 14u,
+        centerFreqHz, bandwidthHz,
+        nUeAnt, nBsAnt,
+        ssCmn,
+        cells, cellsSS, uts,
+        isd, h_bs, 10.0f, 2000.0f, 0.0f,
+        nSector
+    );
+    std::cerr << "HDF5 output saved" << std::endl;
+#endif
+
+    // ── Write small-scale CSV ─────────────────────────────────────────────────
+    // Per link: mean CIR power across snapshots/antennas/taps, mean CFR power
+    /*
+    std::ofstream csvSS("small_scale_params.csv");
+    std::ofstream csvDetail("small_scale_detail.csv");
+    std::ofstream csvRays("ray_params.csv");
+
+    csvSS << "site,ut,is_los,d2d_m,cir_power_db,cfr_power_db\n";
+    csvDetail << "site,ut,is_los,d2d_m,ds_ns,asd_deg,asa_deg,zsa_deg,"
+                 "n_cluster,n_ray_per_cluster,n_taps,strongest0,strongest1,"
+                 "cir_power_db,cfr_power_db\n";
+    csvRays << "site,ut,is_los,d2d_m,cluster_idx,ray_idx,strongest_cluster,"
+               "cluster_delay_ns,cluster_power_lin,cluster_power_db,"
+               "aoa_deg,aod_deg,zoa_deg,zod_deg,xpr_linear,xpr_db\n";
+
+    for (uint32_t site = 0; site < nSite; ++site)
+    {
+        for (uint32_t u = 0; u < nUT; ++u)
+        {
+            const uint32_t linkIdx = site * nUT + u;
+            const LinkParams& lk = links[linkIdx];
+            const ClusterParamsGpu& cp = clusterParams[linkIdx];
+
+            // CIR mean power over all snapshots * nUeAnt * nBsAnt * NMAXTAPS
+            const uint32_t cirBase = linkIdx * nSnapshots * nUeAnt * nBsAnt * 24u;
+            float cirPow = 0.0f;
+            const uint32_t cirCount = nSnapshots * nUeAnt * nBsAnt * 24u;
+            for (uint32_t i = 0; i < cirCount; ++i)
+            {
+                const auto& c = cirCoe[cirBase + i];
+                cirPow += c.real() * c.real() + c.imag() * c.imag();
+            }
+            cirPow /= float(cirCount);
+
+            // CFR mean power over all snapshots * nUeAnt * nBsAnt * nPrbg
+            const uint32_t cfrBase = linkIdx * nSnapshots * nUeAnt * nBsAnt * nPrbg;
+            float cfrPow = 0.0f;
+            const uint32_t cfrCount = nSnapshots * nUeAnt * nBsAnt * nPrbg;
+            for (uint32_t i = 0; i < cfrCount; ++i)
+            {
+                const auto& c = freqChanPrbg[cfrBase + i];
+                cfrPow += c.real() * c.real() + c.imag() * c.imag();
+            }
+            cfrPow /= float(cfrCount);
+
+            const float cirDb = (cirPow > 0.0f) ? 10.0f * std::log10(cirPow) : -999.0f;
+            const float cfrDb = (cfrPow > 0.0f) ? 10.0f * std::log10(cfrPow) : -999.0f;
+
+            csvSS << site << "," << u << "," << lk.losInd << "," << lk.d2d << "," << cirDb << ","
+                  << cfrDb << "\n";
+
+            csvDetail << site << "," << u << "," << lk.losInd << "," << lk.d2d << "," << lk.DS
+                      << "," << lk.ASD << "," << lk.ASA << "," << lk.ZSA << "," << cp.nCluster
+                      << "," << cp.nRayPerCluster << "," << cirNtaps[linkIdx] << ","
+                      << cp.strongest2clustersIdx[0] << "," << cp.strongest2clustersIdx[1] << ","
+                      << cirDb << "," << cfrDb << "\n";
+            uint32_t MAXCR = cp.nCluster * cp.nRayPerCluster;
+            const uint32_t rayBase = linkIdx * MAXCR;
+            for (uint32_t c = 0; c < cp.nCluster; ++c)
+            {
+                const bool strongest =
+                    (c == cp.strongest2clustersIdx[0]) || (c == cp.strongest2clustersIdx[1]);
+                const float clPowLin = cp.powers[c];
+                const float clPowDb = (clPowLin > 0.0f) ? 10.0f * std::log10(clPowLin) : -999.0f;
+
+                for (uint32_t r = 0; r < cp.nRayPerCluster; ++r)
+                {
+                    const uint32_t idx = rayBase + c * cp.nRayPerCluster + r;
+                    const float xprLin = xpr[idx];
+                    const float xprDb = (xprLin > 0.0f) ? 10.0f * std::log10(xprLin) : -999.0f;
+
+                    csvRays << site << "," << u << "," << lk.losInd << "," << lk.d2d << "," << c
+                            << "," << r << "," << (strongest ? 1 : 0) << "," << cp.delays[c] << ","
+                            << clPowLin << "," << clPowDb << "," << phiNmAoA[idx] << ","
+                            << phiNmAoD[idx] << "," << thetaNmZOA[idx] << "," << thetaNmZOD[idx]
+                            << "," << xprLin << "," << xprDb << "\n";
+                }
+            }
+        }
+    }
+    std::cout << "Wrote small_scale_params.csv (" << nActiveLinks << " links)\n";
+    std::cout << "Wrote small_scale_detail.csv (" << nActiveLinks << " links)\n";
+    std::cout << "Wrote ray_params.csv (" << "variable rows" << ")\n";
+    */
+    return 0;
+}

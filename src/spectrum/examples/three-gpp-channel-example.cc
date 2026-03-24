@@ -35,6 +35,8 @@
 #include "ns3/three-gpp-propagation-loss-model.h"
 #include "ns3/three-gpp-spectrum-propagation-loss-model.h"
 #include "ns3/uniform-planar-array.h"
+#include "ns3/three-gpp-channel-model-wgpu-mezanine.h"
+#include "../model/spectrum-propagation-loss-model.h"
 
 #include <fstream>
 
@@ -423,7 +425,8 @@ main(int argc, char* argv[])
         ComputeSnrParams params{txMob, rxMob, txPow, noiseFigure, txAntenna, rxAntenna};
         Simulator::Schedule(MilliSeconds(timeRes * i), &ComputeSnr, params);
     }
-
+    auto chanModel = DynamicCast<ThreeGppChannelModelWgpuMezanine>(m_spectrumLossModel->GetChannelModel());
+    Simulator::Schedule(MilliSeconds(10), [chanModel](){ chanModel->UpdateChannel(); });
     Simulator::Run();
     Simulator::Destroy();
     return 0;
