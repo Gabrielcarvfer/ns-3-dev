@@ -9,6 +9,7 @@
 
 #include "synchronizer.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 
@@ -140,6 +141,8 @@ class WallClockSynchronizer : public Synchronizer
     /**
      * @brief Get the current absolute real time (in ns since the epoch).
      *
+     * Note that the epoch might be OS dependent.
+     *
      * @returns The current real time, in ns.
      */
     uint64_t GetRealtime();
@@ -160,7 +163,7 @@ class WallClockSynchronizer : public Synchronizer
     /** Mutex controlling access to the condition variable. */
     std::mutex m_mutex;
     /** The condition state. */
-    bool m_condition;
+    std::atomic<bool> m_condition{false};
 };
 
 } // namespace ns3

@@ -63,8 +63,8 @@ WallClockSynchronizer::WallClockSynchronizer()
     // If the underlying OS does not support posix clocks, we'll just assume a
     // one millisecond quantum and deal with this as best we can
 
-    m_jiffy = std::chrono::system_clock::period::num * std::nano::den /
-              std::chrono::system_clock::period::den;
+    m_jiffy = std::chrono::steady_clock::period::num * std::nano::den /
+              std::chrono::steady_clock::period::den;
     NS_LOG_INFO("Jiffy is " << m_jiffy << " ns");
 }
 
@@ -215,7 +215,7 @@ WallClockSynchronizer::DoSynchronize(uint64_t nsCurrent, uint64_t nsDelay)
         // interrupted by a Signal.  In this case, we need to return and let the
         // simulator re-evaluate what to do.
         //
-        if (!SleepWait((numberJiffies - 3) * m_jiffy))
+        if (SleepWait((numberJiffies - 3) * m_jiffy))
         {
             NS_LOG_INFO("SleepWait interrupted");
             return false;
@@ -266,7 +266,7 @@ WallClockSynchronizer::DoSignal()
     NS_LOG_FUNCTION(this);
 
     std::unique_lock<std::mutex> lock(m_mutex);
-    m_condition = true;
+    m_condition.store(true);
 
     // Manual unlocking is done before notifying, to avoid waking up
     // the waiting thread only to block again (see notify_one for details).
@@ -279,7 +279,7 @@ void
 WallClockSynchronizer::DoSetCondition(bool cond)
 {
     NS_LOG_FUNCTION(this << cond);
-    m_condition = cond;
+    m_condition.store(cond);
 }
 
 void
@@ -308,7 +308,7 @@ WallClockSynchronizer::SpinWait(uint64_t ns)
         {
             return true;
         }
-        if (m_condition)
+        if (m_condition.load())
         {
             return false;
         }
@@ -325,8 +325,8 @@ WallClockSynchronizer::SleepWait(uint64_t ns)
     std::unique_lock<std::mutex> lock(m_mutex);
     bool finishedWaiting =
         m_conditionVariable.wait_for(lock,
-                                     std::chrono::nanoseconds(ns),      // Timeout
-                                     [this]() { return m_condition; }); // Wait condition
+                                     std::chrono::nanoseconds(ns),             // Timeout
+                                     [this]() { return m_condition.load(); }); // Wait condition
 
     return finishedWaiting;
 }
@@ -366,7 +366,7 @@ uint64_t
 WallClockSynchronizer::GetRealtime()
 {
     NS_LOG_FUNCTION(this);
-    auto now = std::chrono::system_clock::now().time_since_epoch();
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
 }
 
