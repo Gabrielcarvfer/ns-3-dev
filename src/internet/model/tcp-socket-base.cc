@@ -1693,6 +1693,7 @@ TcpSocketBase::EnterCwr(uint32_t currentDelivered)
     m_tcb->m_cWndInfl = m_tcb->m_ssThresh;
     NS_ASSERT(m_tcb->m_congState != TcpSocketState::CA_CWR);
     NS_LOG_DEBUG(TcpSocketState::TcpCongStateName[m_tcb->m_congState] << " -> CA_CWR");
+    m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_CWR);
     m_tcb->m_congState = TcpSocketState::CA_CWR;
     // CWR state will be exited when the ack exceeds the m_recover variable.
     // Do not set m_recoverActive (which applies to a loss-based recovery)
@@ -1945,6 +1946,7 @@ TcpSocketBase::ReceivedAck(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         // Recovery is over after the window exceeds m_recover
         // (although it may be re-entered below if ECE is still set)
         NS_LOG_DEBUG(TcpSocketState::TcpCongStateName[m_tcb->m_congState] << " -> CA_OPEN");
+        m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_OPEN);
         m_tcb->m_congState = TcpSocketState::CA_OPEN;
         if (!m_congestionControl->HasCongControl())
         {
