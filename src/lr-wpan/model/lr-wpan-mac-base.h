@@ -308,10 +308,15 @@ struct MacPibAttributes : public SimpleRefCount<MacPibAttributes>
     bool macAssociationPermit{true};         //!< Indication of whether the coordinator is allowing
                                              //!< association.
     bool macRxOnWhenIdle{true}; //!< Indication of whether the MAC is enabled during idle periods.
-    bool macPromiscuousMode{false}; //!< Indication of whether the mac is in promiscuous mode
-                                    //!<  (Receive all mode).
-    uint8_t pCurrentChannel{11};    //!< The current logical channel in used in the PHY
-    uint8_t pCurrentPage{0};        //!< The current logical page in use in the PHY
+    bool macPromiscuousMode{false};       //!< Indication of whether the mac is in promiscuous mode
+                                          //!<  (Receive all mode).
+    uint8_t pCurrentChannel{11};          //!< The current logical channel in used in the PHY
+    uint8_t pCurrentPage{0};              //!< The current logical page in use in the PHY
+    Mac16Address macCoordShortAddress;    //!< The 16-bit short address assigned to the coordinator
+                                          //!< through which the device is associated. 0xFFFE = Ext
+                                          //!< address mode 0xFFFF = Unknown.
+    Mac64Address macCoordExtendedAddress; //!< The 64-bit address of the coordinator through which
+                                          //!< the device is associated.
     // TODO: complete other MAC pib attributes
 };
 

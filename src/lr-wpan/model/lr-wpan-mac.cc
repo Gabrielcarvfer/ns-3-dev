@@ -966,6 +966,12 @@ LrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id, Ptr<MacPibAttributes> at
         m_phy->PlmeSetAttributeRequest(PhyPibAttributeIdentifier::phyCurrentPage, pibAttr);
         break;
     }
+    case macCoordExtendedAddress:
+        m_macCoordExtendedAddress = attribute->macCoordExtendedAddress;
+        break;
+    case macCoordShortAddress:
+        m_macCoordShortAddress = attribute->macCoordShortAddress;
+        break;
     default:
         // TODO: Add support for setting other attributes
         confirmParams.m_status = MacStatus::UNSUPPORTED_ATTRIBUTE;
