@@ -83,12 +83,30 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("Dhcp6Example");
 
+/**
+ * @brief Brings down an IPv6 interface on a given node.
+ *
+ * Retrieves the Ipv6 object aggregated to the specified node and marks
+ * the given interface as down, disabling it from sending or receiving packets.
+ *
+ * @param node Pointer to the ns-3 Node whose interface will be set down.
+ * @param interface Index of the IPv6 interface to disable.
+ */
 void
 SetInterfaceDown(Ptr<Node> node, uint32_t interface)
 {
     node->GetObject<Ipv6>()->SetDown(interface);
 }
 
+/**
+ * @brief Brings up an IPv6 interface on a given node.
+ *
+ * Retrieves the Ipv6 object aggregated to the specified node and marks
+ * the given interface as up, enabling it to send and receive packets.
+ *
+ * @param node Pointer to the ns-3 Node whose interface will be set up.
+ * @param interface Index of the IPv6 interface to enable.
+ */
 void
 SetInterfaceUp(Ptr<Node> node, uint32_t interface)
 {
