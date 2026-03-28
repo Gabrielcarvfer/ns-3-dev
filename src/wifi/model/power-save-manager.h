@@ -9,6 +9,7 @@
 #ifndef POWER_SAVE_MANAGER_H
 #define POWER_SAVE_MANAGER_H
 
+#include "txop.h"
 #include "wifi-types.h"
 #include "wifi-utils.h"
 
@@ -23,7 +24,6 @@ namespace ns3
 {
 
 class StaWifiMac;
-class Txop;
 class MgtBeaconHeader;
 class WifiMpdu;
 enum WifiMacDropReason : uint8_t;
