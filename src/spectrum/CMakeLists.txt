@@ -119,8 +119,11 @@ add_executable(sls_chan_test examples/sls-chan-example.cc model/sls-chan-wgpu.cc
 target_link_libraries(sls_chan_test PRIVATE ${WEBGPU_LOCATION})
 target_include_directories(sls_chan_test PRIVATE model/ ${WEBGPU_INCLUDES})
 target_compile_definitions(sls_chan_test PRIVATE ${INTERFACE_COMPILE_DEFINITIONS})
+#target_copy_webgpu_binaries(sls_chan_test)
 
 add_executable(sls_chan_validation model/sls-chan-validation.cc model/sls-chan-wgpu.cc)
 target_link_libraries(sls_chan_validation PRIVATE ${WEBGPU_LOCATION})
 target_include_directories(sls_chan_validation PRIVATE model/ ${WEBGPU_INCLUDES})
 target_compile_definitions(sls_chan_validation PRIVATE ${INTERFACE_COMPILE_DEFINITIONS})
+target_copy_webgpu_binaries(sls_chan_validation)
+target_link_options(sls_chan_validation PRIVATE -Wl,--stack,200000000)
