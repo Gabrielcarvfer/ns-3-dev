@@ -38,6 +38,8 @@ set(source_files
     model/two-ray-spectrum-propagation-loss-model.cc
     model/waveform-generator.cc
     model/wraparound-model.cc
+        model/sls-chan-wgpu.cc
+        model/three-gpp-channel-model-wgpu-mezanine.cc
 )
 
 set(header_files
@@ -81,7 +83,17 @@ set(header_files
     model/waveform-generator.h
     model/wraparound-model.h
     utils/spectrum-test.h
+    model/sls-chan-wgpu.h
+        model/three-gpp-channel-model-wgpu-mezanine.h
 )
+# Fetch prebuilt wgpu-native binaries (fastest)
+include(FetchContent)
+set(WEBGPU_LINK_TYPE SHARED)
+FetchContent_Declare(webgpu
+        GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
+        GIT_TAG        main   # pin to a release tag in production
+)
+FetchContent_MakeAvailable(webgpu)
 
 build_lib(
   LIBNAME spectrum
@@ -103,14 +115,7 @@ build_lib(
     test/wraparound-model-test.cc
 )
 
-# Fetch prebuilt wgpu-native binaries (fastest)
-include(FetchContent)
-set(WEBGPU_LINK_TYPE SHARED)
-FetchContent_Declare(webgpu
-        GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
-        GIT_TAG        main   # pin to a release tag in production
-)
-FetchContent_MakeAvailable(webgpu)
+
 
 get_target_property(WEBGPU_INCLUDES  webgpu INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(WEBGPU_LOCATION  webgpu IMPORTED_LOCATION)
@@ -127,3 +132,9 @@ target_include_directories(sls_chan_validation PRIVATE model/ ${WEBGPU_INCLUDES}
 target_compile_definitions(sls_chan_validation PRIVATE ${INTERFACE_COMPILE_DEFINITIONS})
 target_copy_webgpu_binaries(sls_chan_validation)
 target_link_options(sls_chan_validation PRIVATE -Wl,--stack,200000000)
+
+target_link_libraries(spectrum PRIVATE webgpu ${WEBGPU_LOCATION})
+target_include_directories(spectrum PRIVATE ${WEBGPU_INCLUDES})
+target_compile_definitions(spectrum PRIVATE ${INTERFACE_COMPILE_DEFINITIONS})
+target_copy_webgpu_binaries(spectrum)
+target_link_options(spectrum PRIVATE -Wl,--stack,200000000)
