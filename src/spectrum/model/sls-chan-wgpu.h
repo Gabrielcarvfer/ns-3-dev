@@ -254,7 +254,7 @@ sv(const char* s)
 class SlsChanWgpu
 {
   public:
-    explicit SlsChanWgpu(wgpu::Device device);
+    SlsChanWgpu();
     ~SlsChanWgpu() = default;
 
     // Upload topology/config once (or whenever it changes)

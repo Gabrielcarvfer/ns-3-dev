@@ -15,105 +15,7 @@
 #define M_PI 3.14159265358979323846f
 #endif
 
-static wgpu::Device
-createDevice()
-{
-    WGPUInstanceDescriptor idesc{};
-    WGPUInstance instance = wgpuCreateInstance(&idesc);
-    assert(instance);
 
-    WGPUAdapter adapter = nullptr;
-    WGPURequestAdapterOptions aopts{};
-    aopts.backendType = WGPUBackendType_D3D12; // Force D3D12, not Vulkan
-
-    wgpuInstanceRequestAdapter(
-        instance,
-        &aopts,
-        WGPURequestAdapterCallbackInfo{.mode = WGPUCallbackMode_AllowSpontaneous,
-                                       .callback =
-                                           [](WGPURequestAdapterStatus status,
-                                              WGPUAdapter a,
-                                              WGPUStringView,
-                                              void* ud1,
-                                              void*) {
-                                               if (status == WGPURequestAdapterStatus_Success)
-                                               {
-                                                   *static_cast<WGPUAdapter*>(ud1) = a;
-                                               }
-                                               else
-                                               {
-                                                   fprintf(stderr, "requestAdapter failed\n");
-                                               }
-                                           },
-                                       .userdata1 = &adapter});
-    assert(adapter);
-
-    // Query what the adapter actually supports first
-    WGPULimits supported{};
-    wgpuAdapterGetLimits(adapter, &supported);
-
-    WGPUDevice device = nullptr;
-    WGPUDeviceDescriptor ddesc{};
-    ddesc.uncapturedErrorCallbackInfo.callback =
-        [](const WGPUDevice*, WGPUErrorType t, WGPUStringView msg, void*, void*) {
-            fprintf(stderr, "[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
-        };
-    wgpu::Limits::WGPULimits requiredLimits{};
-    requiredLimits.maxBindGroups = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxBufferSize = WGPU_LIMIT_U64_UNDEFINED;
-    requiredLimits.maxColorAttachmentBytesPerSample = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxColorAttachments = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeInvocationsPerWorkgroup = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeWorkgroupSizeX = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeWorkgroupSizeY = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeWorkgroupSizeZ = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeWorkgroupStorageSize = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeWorkgroupStorageSize = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeWorkgroupsPerDimension = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxDynamicStorageBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxDynamicUniformBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxInterStageShaderVariables = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxSampledTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxSamplersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxStorageBufferBindingSize =
-        std::min(supported.maxStorageBufferBindingSize, uint64_t(1) << 31);
-    requiredLimits.maxStorageBuffersPerShaderStage = 30;
-    requiredLimits.maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxTextureDimension3D = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxUniformBufferBindingSize = WGPU_LIMIT_U64_UNDEFINED;
-    requiredLimits.maxUniformBuffersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxVertexAttributes = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxVertexBufferArrayStride = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxVertexBuffers = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    ddesc.requiredLimits = &requiredLimits;
-    wgpuAdapterRequestDevice(
-        adapter,
-        &ddesc,
-        WGPURequestDeviceCallbackInfo{
-            .callback =
-                [](WGPURequestDeviceStatus status, WGPUDevice d, WGPUStringView, void* ud1, void*) {
-                    if (status == WGPURequestDeviceStatus_Success)
-                    {
-                        *static_cast<WGPUDevice*>(ud1) = d;
-                    }
-                    else
-                    {
-                        fprintf(stderr, "requestDevice failed\n");
-                    }
-                },
-            .userdata1 = &device});
-    assert(device);
-    wgpu::Device dev(device);
-    wgpuAdapterRelease(adapter);
-    wgpuInstanceRelease(instance);
-    return dev;
-}
 
 static float
 uma_d_bp(float h_bs, float h_ut, float fc_ghz)
@@ -165,8 +67,7 @@ buildHexCells(uint32_t nSite,
 int
 main()
 {
-    wgpu::Device device = createDevice();
-    SlsChanWgpu sls(device);
+    SlsChanWgpu sls();
 
     const uint32_t nSite = 7;
     const uint32_t nSector = 3;
