@@ -82,6 +82,8 @@ ExampleAsTestCase::DoRun()
         // resulting from invoking NS_FATAL..., which in turn
         // calls std::terminate
         post += " | sed '1,/" + std::string(NS_FATAL_MSG) + "/!d' ";
+        post += " | sed -E 's/file=[^,]*/file=.../' ";
+        post += " | sed -E 's/line=[^,]*/line=.../' ";
     }
 
     std::stringstream ss;
