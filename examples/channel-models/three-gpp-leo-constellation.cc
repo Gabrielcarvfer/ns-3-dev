@@ -312,14 +312,10 @@ main(int argc, char* argv[])
     {
         node = satellites.Get(i);
         node->AggregateObject(CreateObjectWithAttributes<UniformPlanarArray>(
-            "NumColumns",
-            UintegerValue(1),
-            "NumRows",
-            UintegerValue(1),
-            "AntennaElement",
-            PointerValue(
-                CreateObjectWithAttributes<IsotropicAntennaModel>("Gain",
-                                                                  DoubleValue(satAntennaGainDb)))));
+            "NumColumns", UintegerValue(1),
+            "NumRows", UintegerValue(1),
+            "AntennaElement", PointerValue(
+                CreateObjectWithAttributes<IsotropicAntennaModel>("Gain", DoubleValue(satAntennaGainDb)))));
 
         UpdateAntennaOrientation(node, MilliSeconds(500));
     }
