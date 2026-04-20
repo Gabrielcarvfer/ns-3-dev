@@ -8,6 +8,7 @@
 
 /**
  * @file
+ * @ingroup leo
  * This example demonstrates LEO satellite-to-ground propagation loss
  * estimation using 3GPP NTN channel models.  It sets up a LEO constellation
  * (from a CSV file or a default single-satellite orbit), places a ground

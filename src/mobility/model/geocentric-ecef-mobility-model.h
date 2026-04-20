@@ -16,6 +16,7 @@ namespace ns3
 
 /**
  * @ingroup mobility
+ * @ingroup leo
  * @brief Geocentric mobility model that returns ECEF coordinates from GetPosition()
  *
  * This class extends GeocentricConstantPositionMobilityModel to override the default behavior.
