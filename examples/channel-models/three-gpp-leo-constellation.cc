@@ -308,15 +308,23 @@ main(int argc, char* argv[])
     }
     groundNode->AggregateObject(groundNodeMobility);
 
+    ObjectFactory antennaFactory;
+    antennaFactory.SetTypeId("ns3::UniformPlanarArray");
+    antennaFactory.Set("NumColumns", UintegerValue(1));
+    antennaFactory.Set("NumRows", UintegerValue(1));
+
+    ObjectFactory elementFactory;
+    elementFactory.SetTypeId("ns3::IsotropicAntennaModel");
+    elementFactory.Set("Gain", DoubleValue(satAntennaGainDb));
+
     Ptr<Node> node;
     for (uint32_t i = 0; i < satellites.GetN(); i++)
     {
         node = satellites.Get(i);
-        node->AggregateObject(CreateObjectWithAttributes<UniformPlanarArray>(
-            "NumColumns", UintegerValue(1),
-            "NumRows", UintegerValue(1),
-            "AntennaElement", PointerValue(
-                CreateObjectWithAttributes<IsotropicAntennaModel>("Gain", DoubleValue(satAntennaGainDb)))));
+        antennaFactory.Set("AntennaElement",
+                           PointerValue(elementFactory.Create<AntennaModel>()));
+
+        node->AggregateObject(antennaFactory.Create<AntennaModel>());
 
         UpdateAntennaOrientation(node, MilliSeconds(500));
     }
