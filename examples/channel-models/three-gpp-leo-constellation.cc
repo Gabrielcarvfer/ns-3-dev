@@ -222,7 +222,7 @@ main(int argc, char* argv[])
     cmd.AddValue("frequency", "Carrier frequency in Hz", frequencyHz);
     cmd.Parse(argc, argv);
 
-    LeoOrbitNodeHelper orbit(Time(MilliSeconds(precision)));
+    LeoOrbitNodeHelper orbit(precision);
 
     // creates the satellite nodes and put them into a container
     NodeContainer satellites;
@@ -324,7 +324,7 @@ main(int argc, char* argv[])
         antennaFactory.Set("AntennaElement",
                            PointerValue(elementFactory.Create<AntennaModel>()));
 
-        node->AggregateObject(antennaFactory.Create<AntennaModel>());
+        node->AggregateObject(antennaFactory.Create<UniformPlanarArray>());
 
         UpdateAntennaOrientation(node, MilliSeconds(500));
     }
@@ -341,7 +341,7 @@ main(int argc, char* argv[])
     std::cout << "Time:Satellite:x:y:z:x_2:y_2:z_2:PathLoss_dB:SlantDistance_m:ElevationAngle_deg"
               << std::endl;
 
-    Simulator::Stop(Time(Seconds(duration)));
+    Simulator::Stop(duration);
     Simulator::Run();
     Simulator::Destroy();
 
