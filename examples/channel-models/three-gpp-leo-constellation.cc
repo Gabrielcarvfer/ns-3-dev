@@ -210,8 +210,8 @@ main(int argc, char* argv[])
     std::string traceFile;
     std::string scenario = "NTN-Rural"; // Default NTN scenario
     double frequencyHz = 2.0e9;         // Default frequency: 2 GHz
-    uint32_t duration = 60;             // seconds
-    uint32_t precision = 1000;          // milliseconds
+    Time duration = Seconds(60);             // seconds
+    Time precision = MilliSeconds(1000);          // milliseconds
     cmd.AddValue("orbitFile", "CSV file with orbit parameters", orbitFile);
     cmd.AddValue("traceFile", "CSV file to store mobility trace in", traceFile);
     cmd.AddValue("precision", "Mobility model time precision in milliseconds", precision);
