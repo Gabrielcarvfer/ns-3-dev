@@ -344,18 +344,24 @@ build_lib(
   GENERATE_EXPORT_HEADER
 )
 
-set(test-executables
-    fatal-command-line-duplicate-non-option-example
-    fatal-command-line-duplicate-option-example
-)
-foreach(
-  test-exec
-  ${test-executables}
-)
-  build_exec(
-    EXECNAME ${test-exec}
-    SOURCE_FILES ./test/${test-exec}.cc
-    LIBRARIES_TO_LINK ${libcore}
-    EXECUTABLE_DIRECTORY_PATH ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/core/test/
+if(${ENABLE_TESTS})
+  set(test-executables
+      fatal-command-line-duplicate-non-option-example
+      fatal-command-line-duplicate-option-example
   )
-endforeach()
+  foreach(
+    test-exec
+    ${test-executables}
+  )
+    build_exec(
+      EXECNAME ${test-exec}
+      SOURCE_FILES ./test/${test-exec}.cc
+      LIBRARIES_TO_LINK ${libcore}
+      EXECUTABLE_DIRECTORY_PATH ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/core/test/
+    )
+    add_dependencies(
+      test-runner-examples-as-tests
+      ${test-exec}
+    )
+  endforeach()
+endif()
