@@ -8,6 +8,8 @@
 #ifndef NS3_SYMMETRIC_ADJACENCY_MATRIX_H
 #define NS3_SYMMETRIC_ADJACENCY_MATRIX_H
 
+#include "ns3/assert.h"
+
 #include <algorithm>
 #include <vector>
 
@@ -287,16 +289,16 @@ class SymmetricAdjacencyMatrix
     {
         // Since we only store the lower-left half of the adjacency matrix,
         // we need to set the adjacent values in both rows and columns involving this row id
+        NS_ASSERT_MSG(row < m_rows, "Row is outside of range");
 
+        const std::size_t rowBase = m_rowOffsets[row];
         // First set the columns of row m_id
-        for (std::size_t i = 0; i < row; i++)
-        {
-            m_matrix.at(m_rowOffsets.at(row) + i) = value;
-        }
+        std::fill(m_matrix.begin() + rowBase, m_matrix.begin() + rowBase + row, value);
+
         // Then set the column m_id of rows >= m_id
-        for (std::size_t i = row; i < m_rows; i++)
+        for (std::size_t i = row; i < m_rows; ++i)
         {
-            m_matrix.at(m_rowOffsets.at(i) + row) = value;
+            m_matrix[m_rowOffsets[i] + row] = value;
         }
     }
 
