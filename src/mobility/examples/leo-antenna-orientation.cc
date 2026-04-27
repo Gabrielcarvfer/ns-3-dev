@@ -17,6 +17,7 @@
 
 /**
  * @file
+ * @ingroup leo
  * This example demonstrates a geocentric satellite orbit simulation using the LEO
  * orbital mobility model. It configures a ground station and a set of satellite nodes,
  * attaches isotropic antenna panels to the satellites, and dynamically updates antenna

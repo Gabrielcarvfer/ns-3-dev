@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
- *
+ * Author: Jesse Chiu <jessest94106@gmail.com>
  */
 
 #ifndef GEOCENTRIC_ECEF_MOBILITY_MODEL_H
@@ -16,6 +16,7 @@ namespace ns3
 
 /**
  * @ingroup mobility
+ * @ingroup leo
  * @brief Geocentric mobility model that returns ECEF coordinates from GetPosition()
  *
  * This class extends GeocentricConstantPositionMobilityModel to override the default behavior.
@@ -44,12 +45,12 @@ class GeocentricEcefMobilityModel : public GeocentricConstantPositionMobilityMod
     /**
      * Create a geocentric ECEF mobility model
      */
-    GeocentricEcefMobilityModel();
+    GeocentricEcefMobilityModel() = default;
 
     /**
      * Destructor
      */
-    ~GeocentricEcefMobilityModel() override;
+    ~GeocentricEcefMobilityModel() override = default;
 
   private:
     /**

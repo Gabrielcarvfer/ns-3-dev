@@ -889,6 +889,35 @@ To use the Starlink constellation, use ``--orbitFile=./src/mobility/examples/sta
     --orbitFile=./src/mobility/examples/starlink.csv \
     --traceFile=starlink-orbit-trace
 
+three-gpp-leo-constellation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This example builds upon the ``leo-antenna-orientation`` by combining the
+satellite constellation setup with 3GPP NTN propagation loss models.  It
+creates a ground node directly beneath the first satellite, periodically steers
+each satellite antenna toward that ground node, and computes path loss using a
+selected NTN scenario.
+
+At each ``CourseChange`` event, the example outputs a colon-separated trace
+containing the simulation time, satellite node id, satellite ECEF position,
+the endpoint of the antenna pointing vector, path loss in dB, slant distance in
+meters, and elevation angle in degrees.
+
+The NTN scenario can be selected with ``--scenario`` using one of
+``NTN-DenseUrban``, ``NTN-Urban``, ``NTN-Suburban``, or ``NTN-Rural``.
+The carrier frequency can be configured with ``--frequency`` in Hz.
+
+To execute it, with duration in seconds and precision in milliseconds:
+
+.. sourcecode:: bash
+
+    $ ./ns3 run "three-gpp-leo-constellation --duration=60 \
+    --precision=1000 \
+    --scenario=NTN-Rural \
+    --frequency=2e9 \
+    --orbitFile=/path/to/orbit-parameters.csv \
+    --traceFile=/path/to/leo-ntn-trace.csv"
+
 model/plot-orbital-traces.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

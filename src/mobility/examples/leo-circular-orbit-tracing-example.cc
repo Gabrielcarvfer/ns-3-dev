@@ -13,7 +13,7 @@
 
 /**
  * @file
- *
+ * @ingroup leo
  * This example simulates a satellite (Leo) moving along circular orbits
  * and traces its mobility over time.
  *

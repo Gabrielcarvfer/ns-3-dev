@@ -4,9 +4,11 @@
 //
 // Author: Tim Schubert <ns-3-leo@timschubert.net>
 // Additions & Modifications: Thiago Miyazaki <miyathiago@gmail.com> <t.miyazaki@unesp.br>
+// Additions & Modifications: Jesse Chiu <jessest94106@gmail.com>
 
 /**
  * @file
+ * @ingroup leo
  * This example demonstrates LEO satellite-to-ground propagation loss
  * estimation using 3GPP NTN channel models.  It sets up a LEO constellation
  * (from a CSV file or a default single-satellite orbit), places a ground
@@ -206,10 +208,10 @@ main(int argc, char* argv[])
     CommandLine cmd(__FILE__);
     std::string orbitFile;
     std::string traceFile;
-    std::string scenario = "NTN-Rural"; // Default NTN scenario
-    double frequencyHz = 2.0e9;         // Default frequency: 2 GHz
-    uint32_t duration = 60;             // seconds
-    uint32_t precision = 1000;          // milliseconds
+    std::string scenario = "NTN-Rural";  // Default NTN scenario
+    double frequencyHz = 2.0e9;          // Default frequency: 2 GHz
+    Time duration = Seconds(60);         // seconds
+    Time precision = MilliSeconds(1000); // milliseconds
     cmd.AddValue("orbitFile", "CSV file with orbit parameters", orbitFile);
     cmd.AddValue("traceFile", "CSV file to store mobility trace in", traceFile);
     cmd.AddValue("precision", "Mobility model time precision in milliseconds", precision);
@@ -220,7 +222,7 @@ main(int argc, char* argv[])
     cmd.AddValue("frequency", "Carrier frequency in Hz", frequencyHz);
     cmd.Parse(argc, argv);
 
-    LeoOrbitNodeHelper orbit(Time(MilliSeconds(precision)));
+    LeoOrbitNodeHelper orbit(precision);
 
     // creates the satellite nodes and put them into a container
     NodeContainer satellites;
@@ -306,19 +308,22 @@ main(int argc, char* argv[])
     }
     groundNode->AggregateObject(groundNodeMobility);
 
+    ObjectFactory antennaFactory;
+    antennaFactory.SetTypeId("ns3::UniformPlanarArray");
+    antennaFactory.Set("NumColumns", UintegerValue(1));
+    antennaFactory.Set("NumRows", UintegerValue(1));
+
+    ObjectFactory elementFactory;
+    elementFactory.SetTypeId("ns3::IsotropicAntennaModel");
+    elementFactory.Set("Gain", DoubleValue(satAntennaGainDb));
+
     Ptr<Node> node;
     for (uint32_t i = 0; i < satellites.GetN(); i++)
     {
         node = satellites.Get(i);
-        node->AggregateObject(CreateObjectWithAttributes<UniformPlanarArray>(
-            "NumColumns",
-            UintegerValue(1),
-            "NumRows",
-            UintegerValue(1),
-            "AntennaElement",
-            PointerValue(
-                CreateObjectWithAttributes<IsotropicAntennaModel>("Gain",
-                                                                  DoubleValue(satAntennaGainDb)))));
+        antennaFactory.Set("AntennaElement", PointerValue(elementFactory.Create<AntennaModel>()));
+
+        node->AggregateObject(antennaFactory.Create<UniformPlanarArray>());
 
         UpdateAntennaOrientation(node, MilliSeconds(500));
     }
@@ -335,7 +340,7 @@ main(int argc, char* argv[])
     std::cout << "Time:Satellite:x:y:z:x_2:y_2:z_2:PathLoss_dB:SlantDistance_m:ElevationAngle_deg"
               << std::endl;
 
-    Simulator::Stop(Time(Seconds(duration)));
+    Simulator::Stop(duration);
     Simulator::Run();
     Simulator::Destroy();
 
