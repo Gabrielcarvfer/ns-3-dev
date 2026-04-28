@@ -32,6 +32,7 @@ set(source_files
     model/spectrum-transmit-filter.cc
     model/spectrum-value.cc
     model/three-gpp-channel-model.cc
+    model/three-gpp-channel-webgpu-offloader.cc
     model/three-gpp-spectrum-propagation-loss-model.cc
     model/trace-fading-loss-model.cc
     model/tv-spectrum-transmitter.cc
@@ -74,6 +75,7 @@ set(header_files
     model/spectrum-transmit-filter.h
     model/spectrum-value.h
     model/three-gpp-channel-model.h
+    model/three-gpp-channel-webgpu-offloader.h
     model/three-gpp-spectrum-propagation-loss-model.h
     model/trace-fading-loss-model.h
     model/tv-spectrum-transmitter.h

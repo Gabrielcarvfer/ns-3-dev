@@ -15,6 +15,8 @@
 
 #include "ns3/channel-condition-model.h"
 
+#include "three-gpp-channel-webgpu-offloader.h"
+
 #include <unordered_map>
 
 namespace ns3
@@ -1132,6 +1134,10 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     bool m_portraitMode;
     /// the blocker speed
     double m_blockerSpeed;
+    /// WebGPU offloader for channel matrix computation
+    Ptr<ThreeGppChannelWebGpuOffloader> m_gpuOffloader;
+    /// Flag to enable/disable GPU offloading
+    bool m_enableGpuOffloading;
 
     /// index of the PHI value in the m_nonSelfBlocking array
     static constexpr uint8_t PHI_INDEX = 0;
