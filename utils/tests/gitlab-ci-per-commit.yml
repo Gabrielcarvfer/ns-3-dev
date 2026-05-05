@@ -3,11 +3,17 @@
 # Defines the per-commit jobs. They are executed for any branch
 .base-per-commit-compile:
   extends: .base-build
-  except:
-    variables:
-      - $CPPYY == "True"
-      - $RELEASE == "weekly"
-      - $RELEASE == "daily"
+  # Use rules exclusively (GitLab does not allow mixing only/except with rules via inheritance)
+  rules:
+    # Replicate previous except:variables behavior using when: never
+    - if: '$CPPYY == "True"'
+      when: never
+    - if: '$RELEASE == "weekly"'
+      when: never
+    - if: '$RELEASE == "daily"'
+      when: never
+    # Default: run when none of the above exclusions match
+    - when: on_success
   image: archlinux
   before_script:
     - pacman-key --init
