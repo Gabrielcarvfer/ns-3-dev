@@ -38,7 +38,6 @@ clang-tidy-22:
   variables:
     MPI_CI: 1
     CLANG_TIDY_VERSION: 22
-    CLANG_TIDY_OUTPUT: clang-tidy-output.log
     FILES_CHANGED: git-diff-name-only.log
   before_script:
     - apt update
@@ -72,16 +71,11 @@ clang-tidy-22:
         echo "Running clang-tidy on the following changed files:";
         echo $FILES_TO_CHECK;
       fi
-    - run-clang-tidy-$CLANG_TIDY_VERSION -p cmake-cache/ -quiet $FILES_TO_CHECK > $CLANG_TIDY_OUTPUT
-
-    # Check job results
-    - (! egrep -v "file not found \[clang-diagnostic-error\]" $CLANG_TIDY_OUTPUT | egrep -A3 "error:|warning:|note:")
+    - run-clang-tidy-$CLANG_TIDY_VERSION -p cmake-cache/
+      -quiet -hide-progress -use-color=true -warnings-as-errors=*
+      $FILES_TO_CHECK
     - echo "No clang-tidy errors found"
   dependencies: []
-  artifacts:
-    paths:
-      - $CLANG_TIDY_OUTPUT
-    when: on_failure
   timeout: 3h
 
 # Spell checking
