@@ -121,18 +121,23 @@ struct LinkParamUniforms
 {
     float maxX, minX, maxY, minY;
     uint32_t nSite, nUT, nSectorPerSite;
-    uint32_t updatePL, updateAllLSPs, updateLosState;
+    uint32_t updatePL, updateAllLSPs, updateLosState, updateOptionalPL;
     int32_t nX, nY;
 };
+static_assert(sizeof(LinkParamUniforms) == 52, "LinkParamUniforms size mismatch with WGSL");
 
 // Binding 9  — sys_config (large-scale kernel)
 struct SystemLevelConfigGPU
 {
-    uint32_t scenario, o2i_bldg, o2i_car, _p;
+    uint32_t scenario;
+    uint32_t enable_propagation_delay;
+    uint32_t o2i_bldg;
+    uint32_t o2i_car;
     float force_los_indoor;  // -1.0 = use formula
     float force_los_outdoor; // -1.0 = use formula
     float _p2[2];
 };
+static_assert(sizeof(SystemLevelConfigGPU) == 32, "SystemLevelConfigGPU size mismatch");
 
 // Binding 10 — sim_config (large-scale kernel)
 struct SimConfigGPU
@@ -151,8 +156,9 @@ struct CmnLinkParamsGPU
     float mu_lgASD[4], sigma_lgASD[4];
     float mu_lgASA[4], sigma_lgASA[4];
     float mu_lgZSA[4], sigma_lgZSA[4];
+    float mu_lgDT[4], sigma_lgDT[4];
     float lgfc;
-    float _pad[3];
+    float _pad[2];
 };
 
 // ── Small-scale structs ───────────────────────────────────────────────────────
@@ -227,8 +233,8 @@ static_assert(sizeof(SmallScaleSysConfig) == 16,
               "SmallScaleSysConfig size mismatch vs WGSL uni_sys");
 
 // Binding 2 in calClusterRay / generateCIR.
-// Must match WGSL struct SsCmnParams exactly.
-struct alignas(16) SsCmnParams
+// Must match WGSL struct SsCmnParams exactly (520 bytes, no extra padding).
+struct SsCmnParams
 {
     float mu_lgDS[3];
     float sigma_lgDS[3];
@@ -254,6 +260,8 @@ struct alignas(16) SsCmnParams
     float C_theta_LOS, C_theta_NLOS, C_theta_O2I;
     float lgfc;
     float lambda_0;
+    float mu_lgDT[3];    // mean of log10(delta_tau) by scenario (NLOS=0, LOS=1, O2I=2)
+    float sigma_lgDT[3]; // stddev of log10(delta_tau) by scenario
     uint32_t raysInSubCluster0[10];
     uint32_t raysInSubCluster1[10];
     uint32_t raysInSubCluster2[10];
@@ -296,6 +304,9 @@ class SlsChanWgpu
     void uploadCellParams(const std::vector<CellParam>& cells);
     void uploadUtParams(const std::vector<UtParam>& uts);
 
+
+    // Check if running in GPU mode (always true now)
+    bool isCpuOnlyMode() const { return false; }
     // Upload small-scale cell/UT params (different layout from large-scale)
     void uploadCellParamsSS(const std::vector<CellParamSS>& cells);
     void uploadUtParamsSS(const std::vector<UtParamSS>& uts);
@@ -330,9 +341,9 @@ class SlsChanWgpu
                      float minX,
                      float maxY,
                      float minY,
-                     const float corrDistsLos[7],
-                     const float corrDistsNlos[6],
-                     const float corrDistsO2i[6]);
+                     const float corrDistsLos[8],
+                     const float corrDistsNlos[7],
+                     const float corrDistsO2i[7]);
 
     void calLinkParam(uint32_t nSite,
                       uint32_t nUT,
@@ -344,6 +355,7 @@ class SlsChanWgpu
                       bool updatePL,
                       bool updateAllLSPs,
                       bool updateLos,
+                      bool updateOptionalPL,
                       int32_t nX,
                       int32_t nY);
 
@@ -469,6 +481,8 @@ class SlsChanWgpu
     std::vector<std::complex<float>> m_cfrBatchedResult_;
     uint32_t m_cfrBatchedNActiveLinks_ = 0;
     uint32_t m_cfrBatchedNSnapshots_ = 0;
+
+    uint64_t m_maxGpuBuffer_ = 0;
 
     uint32_t ssNUeAnt_ = 0;
     uint32_t ssNBsAnt_ = 0;

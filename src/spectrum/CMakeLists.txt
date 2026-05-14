@@ -114,6 +114,7 @@ endif()
 # Fetch prebuilt wgpu-native binaries (fastest)
 include(FetchContent)
 set(WEBGPU_LINK_TYPE SHARED)
+set(WEBGPU_BACKEND_DEFAULT "WGPU")
 FetchContent_Declare(webgpu
         GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
         GIT_TAG        main   # pin to a release tag in production

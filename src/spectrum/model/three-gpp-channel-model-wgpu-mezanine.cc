@@ -541,9 +541,9 @@ namespace ns3 {
         gpu->uploadCellParams(cells);
         gpu->uploadUtParams(uts);
 
-        const float corrLos[7] = {37.f, 12.f, 30.f, 18.f, 15.f, 15.f, 15.f};
-        const float corrNlos[6] = {50.f, 40.f, 50.f, 50.f, 50.f, 50.f};
-        const float corrO2i[6] = {10.f, 10.f, 11.f, 17.f, 25.f, 25.f};
+        const float corrLos[8] = {37.f, 12.f, 30.f, 18.f, 15.f, 15.f, 15.f, 20.f};
+        const float corrNlos[7] = {50.f, 40.f, 50.f, 50.f, 50.f, 50.f, 25.f};
+        const float corrO2i[7] = {10.f, 10.f, 11.f, 17.f, 25.f, 25.f, 20.f};
 
         gpu->generateCRN(maxXf, minXf, maxYf, minYf, corrLos, corrNlos, corrO2i);
 
@@ -554,9 +554,10 @@ namespace ns3 {
                           minXf,
                           maxYf,
                           minYf,
-                          true,
-                          true,
-                          true,
+                          updatePL,
+                          updateAllLSPs,
+                          updateLos,
+                          updateOptionalPL,
                           gpu->nX(),
                           gpu->nY());
 
@@ -577,39 +578,160 @@ namespace ns3 {
     ss.lambda_0 = static_cast<float>(299792458.0 / m_frequency);
     ss.lgfc = static_cast<float>(std::log10(m_frequency / 1e9));
 
-    // Keep these aligned with your scenario table when you expose it here.
-    ss.mu_lgDS[0] = -7.03f; ss.sigma_lgDS[0] = 0.66f;
-    ss.mu_lgDS[1] = -6.44f; ss.sigma_lgDS[1] = 0.39f;
-    ss.mu_lgDS[2] = -6.62f; ss.sigma_lgDS[2] = 0.32f;
+    const bool isUmI = (m_scenario == ThreeGppChannelModel::SCENARIO_UMi);
+    const bool isRma = (m_scenario == ThreeGppChannelModel::SCENARIO_RMa);
+    const float lgfc_m = std::log10(std::max(m_frequency, 6e9) / 1e9);  // UUmMa style
+    const float lg1fc_m = std::log10(1.0f + m_frequency / 1e9);        // UMi-style
 
-    ss.mu_lgASD[0] = 1.15f; ss.sigma_lgASD[0] = 0.28f;
-    ss.mu_lgASD[1] = 1.41f; ss.sigma_lgASD[1] = 0.28f;
-    ss.mu_lgASD[2] = 1.25f; ss.sigma_lgASD[2] = 0.42f;
+    // Table 7.5-6: DS (spread) mu/sigma [0]=NLOS, [1]=LOS, [2]=O2I
+    if (!isRma) {
+        const float fUuMa = lgfc_m;
+        ss.mu_lgDS[0] = -6.28f - 0.204f * fUuMa;
+        ss.mu_lgDS[1] = -6.955f - 0.0963f * fUuMa;
+        ss.mu_lgDS[2] = -6.62f;
+        ss.sigma_lgDS[0] = 0.39f; ss.sigma_lgDS[1] = 0.66f; ss.sigma_lgDS[2] = 0.32f;
+    }
+    if (isUmI) {
+        ss.mu_lgDS[0] = -6.83f - 0.24f * lg1fc_m;
+        ss.mu_lgDS[1] = -7.14f - 0.24f * lg1fc_m;
+        ss.mu_lgDS[2] = -6.62f;
+        ss.sigma_lgDS[0] = 0.28f + 0.16f * lg1fc_m;
+        ss.sigma_lgDS[1] = 0.38f;
+        ss.sigma_lgDS[2] = 0.32f;
+    }
+    if (isRma) {
+        ss.mu_lgDS[0] = -7.43f; ss.mu_lgDS[1] = -7.49f; ss.mu_lgDS[2] = -7.47f;
+        ss.sigma_lgDS[0] = 0.48f; ss.sigma_lgDS[1] = 0.55f; ss.sigma_lgDS[2] = 0.24f;
+    }
 
-    ss.mu_lgASA[0] = 1.81f; ss.sigma_lgASA[0] = 0.20f;
-    ss.mu_lgASA[1] = 1.87f; ss.sigma_lgASA[1] = 0.20f;
-    ss.mu_lgASA[2] = 1.76f; ss.sigma_lgASA[2] = 0.16f;
+    // Table 7.5-6: ASD mu/sigma
+    if (!isRma) {
+        ss.mu_lgASD[0] = 1.5f - 0.1144f * lgfc_m;
+        ss.mu_lgASD[1] = 1.06f + 0.1114f * lgfc_m;
+        ss.mu_lgASD[2] = 1.25f;
+        ss.sigma_lgASD[0] = 0.28f; ss.sigma_lgASD[1] = 0.28f; ss.sigma_lgASD[2] = 0.42f;
+    }
+    if (isUmI) {
+        ss.mu_lgASD[0] = 1.53f - 0.23f * lg1fc_m;
+        ss.mu_lgASD[1] = 1.21f - 0.05f * lg1fc_m;
+        ss.mu_lgASD[2] = 1.25f;
+        ss.sigma_lgASD[0] = 0.33f + 0.11f * lg1fc_m;
+        ss.sigma_lgASD[1] = 0.41f;
+        ss.sigma_lgASD[2] = 0.42f;
+    }
+    if (isRma) {
+        ss.mu_lgASD[0] = 0.95f; ss.mu_lgASD[1] = 0.9f; ss.mu_lgASD[2] = 0.67f;
+        ss.sigma_lgASD[0] = 0.45f; ss.sigma_lgASD[1] = 0.38f; ss.sigma_lgASD[2] = 0.18f;
+    }
 
-    ss.mu_lgZSA[0] = 0.95f; ss.sigma_lgZSA[0] = 0.16f;
-    ss.mu_lgZSA[1] = 1.26f; ss.sigma_lgZSA[1] = 0.35f;
-    ss.mu_lgZSA[2] = 1.01f; ss.sigma_lgZSA[2] = 0.43f;
+    // Table 7.5-6: ASA mu/sigma
+    if (!isRma) {
+        ss.mu_lgASA[0] = 2.08f - 0.27f * lgfc_m;
+        ss.mu_lgASA[1] = 1.81f;
+        ss.mu_lgASA[2] = 1.76f;
+        ss.sigma_lgASA[0] = 0.11f; ss.sigma_lgASA[1] = 0.20f; ss.sigma_lgASA[2] = 0.16f;
+    }
+    if (isUmI) {
+        ss.mu_lgASA[0] = 1.81f - 0.08f * lg1fc_m;
+        ss.mu_lgASA[1] = 1.73f - 0.08f * lg1fc_m;
+        ss.mu_lgASA[2] = 1.76f;
+        ss.sigma_lgASA[0] = 0.3f + 0.05f * lg1fc_m;
+        ss.sigma_lgASA[1] = 0.28f + 0.014f * lg1fc_m;
+        ss.sigma_lgASA[2] = 0.16f;
+    }
+    if (isRma) {
+        ss.mu_lgASA[0] = 1.52f; ss.mu_lgASA[1] = 1.52f; ss.mu_lgASA[2] = 1.66f;
+        ss.sigma_lgASA[0] = 0.13f; ss.sigma_lgASA[1] = 0.24f; ss.sigma_lgASA[2] = 0.21f;
+    }
 
-    ss.mu_K[0] = 9.0f;  ss.sigma_K[0] = 3.5f;
-    ss.mu_K[1] = 0.0f;  ss.sigma_K[1] = 0.0f;
-    ss.mu_K[2] = 0.0f;  ss.sigma_K[2] = 0.0f;
+    // Table 7.5-6: ZSA mu/sigma
+    if (!isRma) {
+        ss.mu_lgZSA[0] = 1.512f - 0.3236f * lgfc_m;
+        ss.mu_lgZSA[1] = 0.95f;
+        ss.mu_lgZSA[2] = 1.01f;
+        ss.sigma_lgZSA[0] = 0.16f; ss.sigma_lgZSA[1] = 0.16f; ss.sigma_lgZSA[2] = 0.43f;
+    }
+    if (isUmI) {
+        ss.mu_lgZSA[0] = 0.92f - 0.04f * lg1fc_m;
+        ss.mu_lgZSA[1] = 0.73f - 0.1f * lg1fc_m;
+        ss.mu_lgZSA[2] = 1.01f;
+        ss.sigma_lgZSA[0] = 0.41f - 0.07f * lg1fc_m;
+        ss.sigma_lgZSA[1] = 0.34f - 0.04f * lg1fc_m;
+        ss.sigma_lgZSA[2] = 0.43f;
+    }
+    if (isRma) {
+        ss.mu_lgZSA[0] = 0.58f; ss.mu_lgZSA[1] = 0.47f; ss.mu_lgZSA[2] = 0.93f;
+        ss.sigma_lgZSA[0] = 0.37f; ss.sigma_lgZSA[1] = 0.4f; ss.sigma_lgZSA[2] = 0.22f;
+    }
 
-    ss.r_tao[0] = 2.5f; ss.r_tao[1] = 2.3f; ss.r_tao[2] = 2.2f;
-    ss.mu_XPR[0] = 8.0f; ss.mu_XPR[1] = 7.0f; ss.mu_XPR[2] = 9.0f;
-    ss.sigma_XPR[0] = 4.0f; ss.sigma_XPR[1] = 3.0f; ss.sigma_XPR[2] = 3.0f;
-
-    ss.nCluster[0] = 12; ss.nCluster[1] = 20; ss.nCluster[2] = 12;
+    // K-factor (LOS only)
+    if (!isRma) {
+        ss.mu_K[0] = 0.0f; ss.mu_K[1] = 9.0f; ss.mu_K[2] = 0.0f;
+        ss.sigma_K[0] = 0.0f; ss.sigma_K[1] = 3.5f; ss.sigma_K[2] = 0.0f;
+    }
+    if (isRma) {
+        ss.mu_K[0] = 0.0f; ss.mu_K[1] = 7.0f; ss.mu_K[2] = 0.0f;
+        ss.sigma_K[0] = 0.0f; ss.sigma_K[1] = 4.0f; ss.sigma_K[2] = 0.0f;
+    }
+    // nCluster (NLOS / LOS / O2I)
+    ss.nCluster[0] = isUmI ? 19 : (isRma ? 10 : 20);
+    ss.nCluster[1] = isRma ? 11 : 12;
+    ss.nCluster[2] = isRma ? 3 : 12;
     ss.nRayPerCluster[0] = 20; ss.nRayPerCluster[1] = 20; ss.nRayPerCluster[2] = 20;
 
-    ss.C_DS[0] = 5.0f; ss.C_DS[1] = 11.0f; ss.C_DS[2] = 11.0f;
-    ss.C_ASD[0] = 5.0f; ss.C_ASD[1] = 2.0f; ss.C_ASD[2] = 3.0f;
-    ss.C_ASA[0] = 11.0f; ss.C_ASA[1] = 15.0f; ss.C_ASA[2] = 8.0f;
+    // r_tao
+    if (isUmI) { ss.r_tao[0] = 2.1f; ss.r_tao[1] = 3.0f; ss.r_tao[2] = 2.2f; }
+    else if (isRma) { ss.r_tao[0] = 1.7f; ss.r_tao[1] = 3.8f; ss.r_tao[2] = 1.7f; }
+    else { ss.r_tao[0] = 2.3f; ss.r_tao[1] = 2.5f; ss.r_tao[2] = 2.2f; }
+
+    // C_DS (per-cluster distance spread in meters)
+    if (isUmI) {
+        ss.C_DS[0] = 11.0f; ss.C_DS[1] = 5.0f; ss.C_DS[2] = 11.0f;
+    } else if (isRma) {
+        ss.C_DS[0] = 0.0f; ss.C_DS[1] = 0.0f; ss.C_DS[2] = 0.0f;
+    } else {
+        ss.C_DS[0] = std::max(0.25f, 6.5622f - 3.4084f * lgfc_m);
+        ss.C_DS[1] = std::max(0.25f, 6.5622f - 3.4084f * lgfc_m);
+        ss.C_DS[2] = 11.0f;
+    }
+
+    // C_ASD, C_ASA, C_ZSA
+    if (isUmI) {
+        ss.C_ASD[0] = 10.0f; ss.C_ASD[1] = 3.0f; ss.C_ASD[2] = 5.0f;
+        ss.C_ASA[0] = 22.0f; ss.C_ASA[1] = 17.0f; ss.C_ASA[2] = 8.0f;
+    } else if (isRma) {
+        ss.C_ASD[0] = 2.0f; ss.C_ASD[1] = 2.0f; ss.C_ASD[2] = 2.0f;
+        ss.C_ASA[0] = 3.0f; ss.C_ASA[1] = 3.0f; ss.C_ASA[2] = 3.0f;
+    } else {
+        ss.C_ASD[0] = 2.0f; ss.C_ASD[1] = 5.0f; ss.C_ASD[2] = 5.0f;
+        ss.C_ASA[0] = 15.0f; ss.C_ASA[1] = 11.0f; ss.C_ASA[2] = 8.0f;
+    }
     ss.C_ZSA[0] = 7.0f; ss.C_ZSA[1] = 7.0f; ss.C_ZSA[2] = 3.0f;
-    ss.xi[0] = 3.0f; ss.xi[1] = 3.0f; ss.xi[2] = 4.0f;
+    if (isRma) { ss.C_ZSA[0] = 3.0f; ss.C_ZSA[1] = 3.0f; ss.C_ZSA[2] = 3.0f; }
+
+    // xi
+    if (isRma) {
+        ss.xi[0] = 4.0f; ss.xi[1] = 4.0f; ss.xi[2] = 6.0f;
+    } else {
+        ss.xi[0] = 3.0f; ss.xi[1] = 3.0f; ss.xi[2] = 4.0f;
+    }
+
+    // mu_XPR, sigma_XPR (same for UMa/UMi, different for RMa)
+    if (!isRma) {
+        ss.mu_XPR[0] = 7.0f; ss.mu_XPR[1] = 8.0f; ss.mu_XPR[2] = 9.0f;
+        ss.sigma_XPR[0] = 3.0f; ss.sigma_XPR[1] = 4.0f; ss.sigma_XPR[2] = 5.0f;
+    }
+    if (isRma) {
+        ss.mu_XPR[0] = 7.0f; ss.mu_XPR[1] = 12.0f; ss.mu_XPR[2] = 9.0f;
+        ss.sigma_XPR[0] = 3.0f; ss.sigma_XPR[1] = 4.0f; ss.sigma_XPR[2] = 5.0f;
+    }
+
+    // delta_tau means/sigmas (log10) per 3GPP TR 38.901 Table 7.6.9-1
+    // Indexed by scenario: [UMi=0, UMa=1, RMa=2]
+    // Only NLOS values are meaningful (LOS delta_tau = 0 per Eq. 7.6-44)
+    ss.mu_lgDT[0] = -7.5f;  ss.sigma_lgDT[0] = 0.5f;   // UMi
+    ss.mu_lgDT[1] = -7.4f;  ss.sigma_lgDT[1] = 0.2f;   // UMa
+    ss.mu_lgDT[2] = -8.33f; ss.sigma_lgDT[2] = 0.26f;   // RMa
 
     ss.C_phi_LOS = 1.0f;
     ss.C_phi_NLOS = 1.0f;
@@ -618,19 +740,22 @@ namespace ns3 {
     ss.C_theta_NLOS = 1.0f;
     ss.C_theta_O2I = 1.0f;
 
+    // nSubCluster + subcluster ray indices (from CUDA reference)
         ss.nSubCluster = 3;
         ss.nUeAnt = globalUeAnt;
         ss.nBsAnt = globalBsAnt;
-
-        static constexpr uint32_t sub0[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-        static constexpr uint32_t sub1[10] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
-        static constexpr uint32_t sub2[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+        // 3GPP TR 38.901 Table 7.5-5 subcluster ray indices (per-cluster)
+        // Cluster 0: 10 subclusters {0..7, 18, 19}, Cluster 1: 6 subclusters {8..11, 16, 17},
+        // Cluster 2: 4 subclusters {12..15}
+        static constexpr unsigned short sub0[10] = {0, 1, 2, 3, 4, 5, 6, 7, 18, 19};
+        static constexpr unsigned short sub1[6]  = {8, 9, 10, 11, 16, 17};
+        static constexpr unsigned short sub2[4]  = {12, 13, 14, 15};
         std::copy(std::begin(sub0), std::end(sub0), ss.raysInSubCluster0);
         std::copy(std::begin(sub1), std::end(sub1), ss.raysInSubCluster1);
         std::copy(std::begin(sub2), std::end(sub2), ss.raysInSubCluster2);
         ss.raysInSubClusterSizes[0] = 10;
-        ss.raysInSubClusterSizes[1] = 10;
-        ss.raysInSubClusterSizes[2] = 10;
+        ss.raysInSubClusterSizes[1] = 6;
+        ss.raysInSubClusterSizes[2] = 4;
 
         static constexpr float rayOffsets[20] = {
                 0.0447f, -0.0447f, 0.1413f, -0.1413f, 0.2492f, -0.2492f, 0.3715f, -0.3715f,

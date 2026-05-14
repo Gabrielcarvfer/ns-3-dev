@@ -22,6 +22,7 @@ const ASD_IDX: u32 = 3u;
 const ASA_IDX: u32 = 4u;
 const ZSD_IDX: u32 = 5u;
 const ZSA_IDX: u32 = 6u;
+const D_T_IDX: u32 = 7u;   // delta_tau CRN column
 
 const LOS_MATRIX_SIZE:  u32 = 7u;
 const NLOS_MATRIX_SIZE: u32 = 6u;
@@ -36,8 +37,16 @@ const MAX_FILTER_LEN: u32 = 721u;
 struct Vec3f { x: f32, y: f32, z: f32, _p: f32 }
 
 struct CellParam {
-    loc: Vec3f,
-    // Add remaining CellParam fields from sls_chan.cuh here
+    cid: u32,
+    siteId: u32,
+    loc: vec3<f32>,
+    antPanelIdx: u32,
+    antPanelOrientation: vec3<f32>,
+    monostaticInd: u32,
+    _pad1: u32,
+    _pad2: u32,
+    secondAntPanelIdx: u32,
+    secondAntPanelOrientation: vec3<f32>,
 }
 
 struct UtParam {
@@ -51,12 +60,12 @@ struct UtParam {
 
 struct SystemLevelConfig {
     scenario:                     u32,
+    enable_propagation_delay:     u32,
     o2i_building_penetr_loss_ind: u32,
     o2i_car_penetr_loss_ind:      u32,
-    _p:                           u32,
     force_los_prob_indoor:        f32,  // force_los_prob[0]
     force_los_prob_outdoor:       f32,  // force_los_prob[1]
-    _p2:                          vec2<f32>,
+    _p:                           vec2<f32>,
 }
 
 struct SimConfig {
@@ -65,16 +74,23 @@ struct SimConfig {
 }
 
 struct CmnLinkParams {
-    sqrtCorrMatLos:  array<f32, 49>,  // 7×7 lower-triangular
-    sqrtCorrMatNlos: array<f32, 36>,  // 6×6
-    sqrtCorrMatO2i:  array<f32, 36>,  // 6×6
-    mu_K:        array<f32, 4>,  sigma_K:     array<f32, 4>,
-    mu_lgDS:     array<f32, 4>,  sigma_lgDS:  array<f32, 4>,
-    mu_lgASD:    array<f32, 4>,  sigma_lgASD: array<f32, 4>,
-    mu_lgASA:    array<f32, 4>,  sigma_lgASA: array<f32, 4>,
-    mu_lgZSA:    array<f32, 4>,  sigma_lgZSA: array<f32, 4>,
-    lgfc: f32,
-    _pad: array<f32, 3>,
+    sqrtCorrMatLos:  array<f32, 49>,  // 7x7 lower-triangular
+    sqrtCorrMatNlos: array<f32, 36>,  // 6x6
+    sqrtCorrMatO2i:  array<f32, 36>,  // 6x6
+    mu_K:            array<f32, 4>,  // [NLOS, LOS, O2I] + pad
+    sigma_K:         array<f32, 4>,
+    mu_lgDS:         array<f32, 4>,  // [NLOS, LOS, O2I] + pad
+    sigma_lgDS:      array<f32, 4>,
+    mu_lgASD:        array<f32, 4>,  // [NLOS, LOS, O2I] + pad
+    sigma_lgASD:     array<f32, 4>,
+    mu_lgASA:        array<f32, 4>,  // [NLOS, LOS, O2I] + pad
+    sigma_lgASA:     array<f32, 4>,
+    mu_lgZSA:        array<f32, 4>,  // [NLOS, LOS, O2I] + pad
+    sigma_lgZSA:     array<f32, 4>,
+    mu_lgDT:         array<f32, 4>,  // delta_tau means: [NLOS, LOS, O2I] + pad
+    sigma_lgDT:      array<f32, 4>,  // delta_tau sigmas
+    lgfc:            f32,
+    _pad:            array<u32, 2>,  // pad to 16-byte boundary
 }
 
 struct LinkParams {
@@ -85,7 +101,7 @@ struct LinkParams {
     losInd: u32, pathloss: f32,
     SF: f32, K: f32, DS: f32, ASD: f32, ASA: f32, ZSD: f32, ZSA: f32,
     mu_lgZSD: f32, sigma_lgZSD: f32, mu_offset_ZOD: f32,
-    _pad: f32,
+    delta_tau: f32,  // Excess delay per 3GPP TR 38.901 Table 7.6.9-1
 }
 
 // Uniforms for calLinkParamKernel
@@ -95,6 +111,7 @@ struct LinkParamUniforms {
     updatePLAndPenetrationLoss: u32,  // bool as u32
     updateAllLSPs: u32,
     updateLosState: u32,
+    updateOptionalPl: u32,    // optional PL indicator
     nX: i32, nY: i32,   // pre-computed final CRN grid dimensions
 }
 
@@ -109,7 +126,11 @@ struct CRNGenUniforms {
     nY:   u32,   // grid height in pixels
     step: f32,   // metres per pixel
     _pad2: u32,
-}
+    boundX: f32,  // = maxX - minX (for padded grid calc)
+    boundY: f32,  // = maxY - minY (for padded grid calc)
+    rowOffset:    u32,  // Y-axis offset for chunking (in pixels)
+    chunkY:       u32,  // number of rows in this chunk (0 = full grid)
+};
 
 // Uniforms for normalizeCRNGridsKernel
 struct NormUniforms {
@@ -237,25 +258,24 @@ fn cal_pl(cell_loc: Vec3f, ut_loc: Vec3f,
     } else {
         switch scenario {
             case SCENARIO_UMA: {
-                // 3GPP TR 38.901 Table 7.4.1-1: primary UMa NLOS formula
-                let lpl  = uma_los_pl(d2d, d3d, h_bs, h_ut, fc, s);
+                let pl1 = uma_los_pl(d2d, d3d, h_bs, h_ut, fc, s);
                 let nlos = 13.54 + 39.08*log10(d3d) + 20.0*log10(fc)
                          - 0.6*(h_ut - 1.5);
-                return max(lpl, nlos);
+                return max(pl1, nlos);
             }
             case SCENARIO_UMI: {
-                let lpl = umi_los_pl(d2d, d3d, h_bs, h_ut, fc);
-                return max(lpl, 32.4 + 20.0 * log10(fc) + 31.9 * log10(d3d));
+                let pl1 = umi_los_pl(d2d, d3d, h_bs, h_ut, fc);
+                return max(pl1, 32.4 + 20.0 * log10(fc) + 31.9 * log10(d3d));
             }
             case SCENARIO_RMA: {
-                let lpl = rma_los_pl(d2d, d3d, h_bs, h_ut, fc);
+                let pl1 = rma_los_pl(d2d, d3d, h_bs, h_ut, fc);
                 let W = 20.0; let h = 5.0;
                 let nlos = 161.04 - 7.1*log10(W) + 7.5*log10(h)
                          - (24.37 - 3.7*pow(h/h_bs, 2.0)) * log10(h_bs)
                          + (43.42 - 3.1*log10(h_bs)) * (log10(d3d) - 3.0)
                          + 20.0*log10(fc)
                          - (3.2*pow(log10(11.75*h_ut), 2.0) - 4.97);
-                return max(lpl, nlos);
+                return max(pl1, nlos);
             }
             default: { return 0.0; }
         }
@@ -263,24 +283,39 @@ fn cal_pl(cell_loc: Vec3f, ut_loc: Vec3f,
 }
 
 fn cal_sf_std(scenario: u32, is_los: bool, is_indoor: bool,
-              fc: f32, d2d: f32) -> f32 {
+              fc: f32, d2d: f32, h_bs: f32, h_ut: f32, optionalPl: u32) -> f32 {
     if is_los {
         switch scenario {
-            case SCENARIO_UMA, SCENARIO_UMI: {
-                return select(4.0, 7.0, is_indoor); // fc < 6e9
+            case SCENARIO_UMA: {
+                // TR 36.777 Table B-3: UMa-AV LOS
+                if (h_ut > 22.5) { return 4.64 * exp(-0.0066 * h_ut); }
+                return select(7.0, 4.0, fc < 6e9f);
+            }
+            case SCENARIO_UMI: {
+                // TR 36.777 Table B-3: UMi-AV LOS
+                if (h_ut > 22.5) { return max(5.0 * exp(-0.01 * h_ut), 2.0); }
+                return select(7.0, 4.0, fc < 6e9f);
             }
             case SCENARIO_RMA: {
+                // TR 36.777 Table B-3: RMa-AV LOS
                 if is_indoor { return 8.0; }
-                let d_bp = 2.0 * PI * 35.0 * 1.5 * fc / 3.0e8;
+                let d_bp = 2.0 * PI * h_bs * h_ut * fc / 3.0e8;
                 return select(6.0, 4.0, d2d <= d_bp);
             }
             default: { return 4.0; }
         }
     } else {
         switch scenario {
-            case SCENARIO_UMA: { return select(6.0, 7.0, is_indoor); } // fc < 6e9
-            case SCENARIO_UMI: { return select(7.82, 7.0, is_indoor); }
-            case SCENARIO_RMA: { return 8.0; }
+            case SCENARIO_UMA: {
+                // TR 36.777 Table B-3: UMa-AV NLOS
+                if (h_ut > 22.5) { return 6.0; }
+                return select(7.0, select(7.8, 6.0, optionalPl != 0u), fc < 6e9f);
+            }
+            case SCENARIO_UMI: {
+                // TR 36.777 Table B-3: UMi-AV NLOS
+                if (h_ut > 22.5) { return 8.0; }
+                return select(7.0, select(8.2, 7.82, optionalPl != 0u), fc < 6e9f);
+            }
             default:           { return 6.0; }
         }
     }
@@ -298,23 +333,32 @@ fn fill_crn_kernel(
     @builtin(global_invocation_id) gid: vec3<u32>,
 ) {
     let uni      = fill_uni;
-    let corr_px  = select(uni.corrDist / uni.step, 0.0, uni.corrDist == 0.0);
-    let D        = 3.0 * corr_px;
+    // Match CPU reference: D = 3*corrDist (not corrDist/step)
+    let D        = select(3.0 * uni.corrDist, 0.0, uni.corrDist == 0.0);
     let iD       = u32(D);
-    let L        = select(2u * iD + 1u, 1u, corr_px == 0.0);
-    let padded_nx = uni.nX + L - 1u;
-    let padded_ny = uni.nY + L - 1u;
+    // padded grid = round(bound + 1 + 2*D) matching CPU: round(maxX-minX+1+2*D)
+    let boundF   = uni.boundX;  // = maxX - minX as f32
+    let boundFY  = uni.boundY;  // = maxY - minY as f32
+    // Use u32(x + 0.5) for rounding positive floats to nearest integer
+    let padded_n = select(u32(0u), u32(boundF + 1.0 + 2.0 * D + 0.5), iD > 0u);
+    let padded_m = select(u32(0u), u32(boundFY + 1.0 + 2.0 * D + 0.5), iD > 0u);
+    let padded_nx = padded_n;
+    let padded_ny = padded_m;
     let total_pad = padded_nx * padded_ny;
 
+    // Use chunkY to compute total elements for this chunk
+    let chunk_ny = select(padded_ny, uni.chunkY, uni.chunkY > 0u);
+    let chunk_total = padded_nx * chunk_ny;
+
+    let tid = gid.x + uni.rowOffset;
     let total_threads = 128u * 256u;
-    let pad_per_thr   = (total_pad + total_threads - 1u) / total_threads;
-    let tid           = gid.x;
+    let pad_per_thr   = (chunk_total + total_threads - 1u) / total_threads;
     let rng_id        = tid % uni.maxRngStates;
     var rng           = fill_rng[rng_id];
 
     for (var e = 0u; e < pad_per_thr; e++) {
         let idx = tid * pad_per_thr + e;
-        if idx < total_pad { fill_temp[idx] = rand_normal(&rng); }
+        if idx < chunk_total { fill_temp[idx] = rand_normal(&rng); }
     }
     fill_rng[rng_id] = rng;
 }
@@ -329,19 +373,23 @@ fn convolve_crn_kernel(
     @builtin(local_invocation_id)  lid: vec3<u32>,
 ) {
     let uni      = fill_uni;
-    let corr_px  = select(uni.corrDist / uni.step, 0.0, uni.corrDist == 0.0);
+    // Match CPU reference: D = 3*corrDist (not corrDist/step)
+    let corr_px  = select(uni.corrDist, 0.0, uni.corrDist == 0.0);
     let D        = 3.0 * corr_px;
     let iD       = u32(D);
     let L        = select(2u * iD + 1u, 1u, corr_px == 0.0);
-    let final_nx  = uni.nX;
-    let final_ny  = uni.nY;
+    // final grid = round(bound + 1 + 2*D) matching CPU
+    let final_nx = select(u32(0u), u32(uni.boundX + 1.0 + 2.0 * D), iD > 0u);
+    let final_ny = select(u32(0u), u32(uni.boundY + 1.0 + 2.0 * D), iD > 0u);
     let padded_nx = final_nx + L - 1u;
     let padded_ny = final_ny + L - 1u;
-    let total_out = final_nx * final_ny;
+    // Use chunkY to compute total elements for this chunk
+    let chunk_ny = select(padded_ny, uni.chunkY, uni.chunkY > 0u);
+    let total_out = padded_nx * chunk_ny;
 
     let total_threads = 128u * 256u;
     let elems_per_thr = (total_out + total_threads - 1u) / total_threads;
-    let tid           = gid.x;
+    let tid = gid.x + gid.y * 256u + uni.rowOffset;
 
     if lid.x == 0u {
         if corr_px == 0.0 {
@@ -392,6 +440,7 @@ var<workgroup> wg_sum2: array<f32, 256>;
 // normalizeCRNGridsKernel
 // Dispatch: grid = (1, 1, 1),  workgroup = (256, 1, 1)
 // One dispatch per grid; set gridOffset in the uniform.
+// Note: normalize uses a single workgroup that loops internally, so no 2D change needed.
 @compute @workgroup_size(256, 1, 1)
 fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
     let tid   = lid.x;
@@ -411,8 +460,7 @@ fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
     workgroupBarrier();
 
     var s = 128u;
-    loop {
-        if s == 0u { break; }
+    while (s > 0u) {
         if tid < s {
             wg_sum[tid]  += wg_sum[tid + s];
             wg_sum2[tid] += wg_sum2[tid + s];
@@ -425,7 +473,8 @@ fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
         let mean     = wg_sum[0] / f32(total);
         let variance = wg_sum2[0] / f32(total) - mean * mean;
         wg_sum[0] = mean;
-        wg_sum[1] = select(1.0, 1.0 / sqrt(variance), variance > 1e-10);
+        let safeVariance = max(variance, 1e-10);
+        wg_sum[1] = 1.0 / sqrt(safeVariance);
     }
     workgroupBarrier();
 
@@ -449,9 +498,9 @@ fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
 @group(0) @binding(14)  var<storage, read>       crn_los:          array<f32>;
 @group(0) @binding(15)  var<storage, read>       crn_nlos:         array<f32>;
 @group(0) @binding(16) var<storage, read>       crn_o2i:          array<f32>;
-@group(0) @binding(17) var<storage, read>       crn_los_offsets:  array<u32>; // nSite*7
-@group(0) @binding(18) var<storage, read>       crn_nlos_offsets: array<u32>; // nSite*6
-@group(0) @binding(19) var<storage, read>       crn_o2i_offsets:  array<u32>; // nSite*6
+@group(0) @binding(17) var<storage, read>       crn_los_offsets:  array<u32>; // nSite*8
+@group(0) @binding(18) var<storage, read>       crn_nlos_offsets: array<u32>; // nSite*7
+@group(0) @binding(19) var<storage, read>       crn_o2i_offsets:  array<u32>; // nSite*7
 
 // Bilinear interpolation into a flat CRN buffer (LOS variant)
 fn lsp_at_loc_los(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
@@ -570,7 +619,8 @@ fn cal_link_param_kernel(
 
     // ── Path loss ────────────────────────────────────────────────────────
     if uni.updatePLAndPenetrationLoss != 0u || uni.updateAllLSPs != 0u {
-        var pl = cal_pl(cell.loc, ut.loc, sc.scenario,
+        var pl = cal_pl(Vec3f(cell.loc.x, cell.loc.y, cell.loc.z, 0.0),
+                        Vec3f(ut.loc.x, ut.loc.y, ut.loc.z, 0.0), sc.scenario,
                         fc / 1e9, is_los, false, &rng);
         if ut.outdoor_ind == 0u {
             pl += ut.o2i_penetration_loss;
@@ -585,33 +635,40 @@ fn cal_link_param_kernel(
         let ux = ut.loc.x;  let uy = ut.loc.y;
         let true_site = site_idx / uni.nSectorPerSite;
         let s7 = true_site * 7u;
+        let s8 = true_site * 8u;
         let s6 = true_site * 6u;
 
-        var ucv: array<f32, 7>;   // uncorrelated vars  [SF,K,DS,ASD,ASA,ZSD,ZSA]
+        var ucv: array<f32, 8>;  // uncorrelated vars [SF,K,DS,ASD,ASA,ZSD,ZSA,DT]
         if is_indoor {
-            ucv[SF_IDX]  = lsp_at_loc_o2i(s6+0u, ux, uy, nx, ny);
+            // O2I grid: nSite * 7 cols (stride-7 contiguous) — cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA
+            ucv[SF_IDX]  = lsp_at_loc_o2i(s7+0u, ux, uy, nx, ny);
             ucv[K_IDX]   = 0.0;
-            ucv[DS_IDX]  = lsp_at_loc_o2i(s6+1u, ux, uy, nx, ny);
-            ucv[ASD_IDX] = lsp_at_loc_o2i(s6+2u, ux, uy, nx, ny);
-            ucv[ASA_IDX] = lsp_at_loc_o2i(s6+3u, ux, uy, nx, ny);
-            ucv[ZSD_IDX] = lsp_at_loc_o2i(s6+4u, ux, uy, nx, ny);
-            ucv[ZSA_IDX] = lsp_at_loc_o2i(s6+5u, ux, uy, nx, ny);
+            ucv[DS_IDX]  = lsp_at_loc_o2i(s7+1u, ux, uy, nx, ny);
+            ucv[ASD_IDX] = lsp_at_loc_o2i(s7+2u, ux, uy, nx, ny);
+            ucv[ASA_IDX] = lsp_at_loc_o2i(s7+3u, ux, uy, nx, ny);
+            ucv[ZSD_IDX] = lsp_at_loc_o2i(s7+4u, ux, uy, nx, ny);
+            ucv[ZSA_IDX] = lsp_at_loc_o2i(s7+5u, ux, uy, nx, ny);
+            ucv[D_T_IDX] = lsp_at_loc_o2i(s7+6u, ux, uy, nx, ny);   // delta_tau CRN (O2I col 6)
         } else if is_los {
-            ucv[SF_IDX]  = lsp_at_loc_los(s7+0u, ux, uy, nx, ny);
-            ucv[K_IDX]   = lsp_at_loc_los(s7+1u, ux, uy, nx, ny);
-            ucv[DS_IDX]  = lsp_at_loc_los(s7+2u, ux, uy, nx, ny);
-            ucv[ASD_IDX] = lsp_at_loc_los(s7+3u, ux, uy, nx, ny);
-            ucv[ASA_IDX] = lsp_at_loc_los(s7+4u, ux, uy, nx, ny);
-            ucv[ZSD_IDX] = lsp_at_loc_los(s7+5u, ux, uy, nx, ny);
-            ucv[ZSA_IDX] = lsp_at_loc_los(s7+6u, ux, uy, nx, ny);
+            ucv[SF_IDX]  = lsp_at_loc_los(s8+0u, ux, uy, nx, ny);
+            ucv[K_IDX]   = lsp_at_loc_los(s8+1u, ux, uy, nx, ny);
+            ucv[DS_IDX]  = lsp_at_loc_los(s8+2u, ux, uy, nx, ny);
+            ucv[ASD_IDX] = lsp_at_loc_los(s8+3u, ux, uy, nx, ny);
+            ucv[ASA_IDX] = lsp_at_loc_los(s8+4u, ux, uy, nx, ny);
+            ucv[ZSD_IDX] = lsp_at_loc_los(s8+5u, ux, uy, nx, ny);
+            ucv[ZSA_IDX] = lsp_at_loc_los(s8+6u, ux, uy, nx, ny);
+            // delta_tau CRN (LOS col 7) — contiguous stride 8 grid
+            ucv[D_T_IDX] = lsp_at_loc_los(s8+7u, ux, uy, nx, ny);
         } else {
-            ucv[SF_IDX]  = lsp_at_loc_nlos(s6+0u, ux, uy, nx, ny);
+            // NLOS grid: nSite * 7 cols (stride-7 contiguous) — cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA
+            ucv[SF_IDX]  = lsp_at_loc_nlos(s7+0u, ux, uy, nx, ny);
             ucv[K_IDX]   = 0.0;
-            ucv[DS_IDX]  = lsp_at_loc_nlos(s6+1u, ux, uy, nx, ny);
-            ucv[ASD_IDX] = lsp_at_loc_nlos(s6+2u, ux, uy, nx, ny);
-            ucv[ASA_IDX] = lsp_at_loc_nlos(s6+3u, ux, uy, nx, ny);
-            ucv[ZSD_IDX] = lsp_at_loc_nlos(s6+4u, ux, uy, nx, ny);
-            ucv[ZSA_IDX] = lsp_at_loc_nlos(s6+5u, ux, uy, nx, ny);
+            ucv[DS_IDX]  = lsp_at_loc_nlos(s7+1u, ux, uy, nx, ny);
+            ucv[ASD_IDX] = lsp_at_loc_nlos(s7+2u, ux, uy, nx, ny);
+            ucv[ASA_IDX] = lsp_at_loc_nlos(s7+3u, ux, uy, nx, ny);
+            ucv[ZSD_IDX] = lsp_at_loc_nlos(s7+4u, ux, uy, nx, ny);
+            ucv[ZSA_IDX] = lsp_at_loc_nlos(s7+5u, ux, uy, nx, ny);
+            ucv[D_T_IDX] = lsp_at_loc_nlos(s7+6u, ux, uy, nx, ny);   // delta_tau CRN (NLOS col 6)
         }
 
         // Cholesky multiply: corr_px = sqrtCorrMat · uncorr  (lower-triangular)
@@ -641,15 +698,24 @@ fn cal_link_param_kernel(
             cv[K_IDX] = 0.0;
         }
 
+        // Heights needed for SF std and ZSD calculations
+        let h_ut = ut.loc.z;
+        let h_bs = cell.loc.z;
+
         // Shadow fading
         link_params[link_idx].SF = cv[SF_IDX] *
-            cal_sf_std(sc.scenario, is_los, is_indoor, fc, d2d);
+            cal_sf_std(sc.scenario, is_los, is_indoor, fc, d2d, h_bs, h_ut, link_uni.updateOptionalPl);
 
         if uni.updateAllLSPs != 0u {
-            // K-factor
-            link_params[link_idx].K = select(0.0,
-                cv[K_IDX] * cl.sigma_K[lsp_idx] + cl.mu_K[lsp_idx],
-                lsp_idx == 0u);
+    // K-factor (Rician K factor for LOS, 0 for NLOS)
+            // Per CUDA: K = pow(10.0, (mu_K + sigma_K*r)/10.0) for LOS, 0 for NLOS
+            if lsp_idx != 0u {
+                // LOS: mu/sigma indexed by scenario [UMi=0, UMa=1, RMa=2]
+                let K_lin = pow(10.0, (cl.mu_K[lsp_idx] + cv[K_IDX] * cl.sigma_K[lsp_idx]) / 10.0);
+                link_params[link_idx].K = K_lin;
+            } else {
+                link_params[link_idx].K = 0.0;
+            }
 
             // DS (convert s → ns via +9)
             link_params[link_idx].DS = pow(10.0,
@@ -708,6 +774,26 @@ fn cal_link_param_kernel(
             // ZSA
             link_params[link_idx].ZSA = min(
                 pow(10.0, cv[ZSA_IDX]*cl.sigma_lgZSA[lsp_idx] + cl.mu_lgZSA[lsp_idx]), 52.0);
+
+            // Excess delay delta_tau per 3GPP TR 38.901 Table 7.6.9-1
+            // LOS: delta_tau = 0 (Eq. 7.6-44). NLOS: lognormal from table values.
+            // mu/sigma arrays are indexed by scenario: [UMi=0, UMa=1, RMa=2].
+    // delta_tau access: mu_lgDT / sigma_lgDT are in SsCmnParams (scenario-level), not in cluster params
+            if uni.updateAllLSPs != 0u && sys_config[0].enable_propagation_delay != 0u {
+                if !is_los {
+                    // NLOS: lg(Delta Tau) = mu_lgDT[i] + sigma_lgDT[i] * r_DT
+                    // Per CUDA reference: r_DT = curand_normal(&localState) i.e. N(0,1)
+                    let mu = cl.mu_lgDT[lsp_idx];
+                    let sigma = cl.sigma_lgDT[lsp_idx];
+                    let r_DT = rand_normal(&rng);  // i.i.d. standard normal
+                    let lg_delta_tau = mu + sigma * r_DT;
+                    link_params[link_idx].delta_tau = pow(10.0, lg_delta_tau);
+                } else {
+                    // LOS: delta_tau = 0 (no excess delay per 3GPP Eq. 7.6-44)
+                    link_params[link_idx].delta_tau = 0.0;
+                }
+            }
+            // When disabled (sys_config[0].enable_propagation_delay == 0), delta_tau stays 0.
         }
     }
 
@@ -823,6 +909,8 @@ struct SsCmnParams {
     C_theta_O2I    : f32,
     lgfc           : f32,
     lambda_0       : f32,
+    mu_lgDT        : array<f32, 3>,  // delta_tau means: NLOS=0, LOS=1, O2I=2
+    sigma_lgDT     : array<f32, 3>,  // delta_tau sigmas
     // 3GPP Table 7.5-5 subcluster ray indices (flat, padded to 10 each)
     raysInSubCluster0    : array<u32, 10>,
     raysInSubCluster1    : array<u32, 10>,
@@ -1006,9 +1094,6 @@ fn calc_ray_coeff(
     t: f32, vel: vec2f, lambda0: f32
 ) -> vec2f {
     // --- antenna element positions ---
-    let M_rx = cir_buf_cluster[cluster_link_idx].nCluster; // dummy – using antSize remove
-    // Use antSize from cfg
-    let N_rx = bsCfg.antSize[3]; // reuse variable names – actually computing for Rx below
     // Rx position  (utCfg)
     let Mu  = utCfg.antSize[2];
     let Nu  = utCfg.antSize[3];
@@ -1056,9 +1141,6 @@ fn calc_ray_coeff(
 
     // --- polarisation matrix (NLOS) ---
     let sqrt_kappa = sqrt(max(xpr, 1e-10));
-    // randomPhases are in degrees – convert to radians inline
-    let cp = cir_buf_cluster[cluster_link_idx]; // re-read needed for random phases remove
-    // Note: rph_off is the flat index into cp.randomPhases
     let ph0 = cir_buf_randomPhases[rph_off    ] * DEG2RAD;
     let ph1 = cir_buf_randomPhases[rph_off + 1u] * DEG2RAD;
     let ph2 = cir_buf_randomPhases[rph_off + 2u] * DEG2RAD;
@@ -1253,9 +1335,9 @@ fn cal_cluster_ray_kernel(
         }
     } else { s0 = 0u; s1 = 0u; }
 
-    // Apply K-factor (LOS)
+    // Apply K-factor (LOS) — lk.K is already in linear units from cal_link_param
     if lk.losInd != 0u {
-        let K_lin = pow(10.0, lk.K / 10.0);
+        let K_lin = lk.K;
         let sc    = 1.0 / (1.0 + K_lin);
         for (var n = 1u; n < n_cluster; n++) { powers[n] *= sc; }
         powers[0] = K_lin / (1.0 + K_lin) + powers[0] * sc;
@@ -1271,16 +1353,19 @@ fn cal_cluster_ray_kernel(
     let C_ASD = cray_buf_cmn.C_ASD[lsp_idx];
     let C_ZSA = cray_buf_cmn.C_ZSA[lsp_idx];
 
+    // C_ZSD is computed per-link from mu_lgZSD: (3/8) * 10^(mu_lgZSD) — not a cluster array
+    let C_ZSD = (3.0 / 8.0) * pow(10.0, lk.mu_lgZSD);
+
     // Select C_phi, C_theta based on scenario
     let C_phi   = select(select(cray_buf_cmn.C_phi_NLOS,   cray_buf_cmn.C_phi_LOS,   lk.losInd != 0u), cray_buf_cmn.C_phi_O2I,   is_o2i != 0u);
     let C_theta = select(select(cray_buf_cmn.C_theta_NLOS, cray_buf_cmn.C_theta_LOS, lk.losInd != 0u), cray_buf_cmn.C_theta_O2I, is_o2i != 0u);
 
-    // Scale C_phi for LOS K-factor (3GPP 38.901 Eq 7.5-10)
+    // Scale C_phi for LOS K-factor (3GPP 38.901 Eq 7.5-10) — lk.K is linear
     var C_phi_scaled   = C_phi;
     var C_theta_scaled = C_theta;
     if lk.losInd != 0u && is_o2i == 0u {
-        let K_lin = pow(10.0, lk.K / 10.0);
-        let Kfac  = 1.1035 - 0.028 * lk.K - 0.002 * lk.K * lk.K + 0.0001 * lk.K * lk.K * lk.K;
+        let K_dB = 10.0 * log10(max(lk.K, 1e-10));
+        let Kfac  = 1.1035 - 0.028 * K_dB - 0.002 * K_dB * K_dB + 0.0001 * K_dB * K_dB * K_dB;
         C_phi_scaled   = C_phi   * Kfac;
         C_theta_scaled = C_theta * Kfac;
     }
@@ -1319,7 +1404,7 @@ fn cal_cluster_ray_kernel(
         }
 
         // ZoD
-        let arg_zsd    = -log(powers[n] / max(max_abs_power, 1e-30)) / (2.0 * C_ZSA / 1.4);
+        let arg_zsd    = -log(powers[n] / max(max_abs_power, 1e-30)) / (2.0 * C_ZSD / 1.4);
         let sign_n_zsd = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
         let eps_n_zsd  = rng_normal(&rng) * lk.ZSD / 7.0;
         theta_n_ZOD[n] = wrap_zenith(sign_n_zsd * arg_zsd + eps_n_zsd
@@ -1509,10 +1594,10 @@ fn generate_cir_kernel(
                     if sc == 1u { cl_delay += 1.28 * C_DS; }
                     if sc == 2u { cl_delay += 2.56 * C_DS; }
 
-                    // tap index
+                    // tap index (matches CUDA: clusterDelay + d3d/c + delta_tau)
                     var tap_idx = 0u;
                     if cir_uni_sys.enable_propagation_delay == 1u {
-                        tap_idx = u32(round((cl_delay * 1e-9 + lk.d3d / 3.0e8)
+                        tap_idx = u32(round((cl_delay * 1e-9 + lk.d3d / 3.0e8 + lk.delta_tau)
                                            * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
                     } else {
                         tap_idx = u32(round(cl_delay * 1e-9
@@ -1557,7 +1642,7 @@ fn generate_cir_kernel(
                 var cl_delay = cp.delays[c];
                 var tap_idx = 0u;
                 if cir_uni_sys.enable_propagation_delay == 1u {
-                    tap_idx = u32(round((cl_delay * 1e-9 + lk.d3d / 3.0e8)
+                    tap_idx = u32(round((cl_delay * 1e-9 + lk.d3d / 3.0e8 + lk.delta_tau)
                                        * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
                 } else {
                     tap_idx = u32(round(cl_delay * 1e-9

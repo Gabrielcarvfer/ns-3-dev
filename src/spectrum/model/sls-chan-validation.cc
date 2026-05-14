@@ -43,7 +43,7 @@ uma_los_pl_ref(float d2d, float d3d, float h_bs, float h_ut, float fc_ghz)
 }
 
 static float
-uma_nlos_pl_ref(float d2d, float d3d, float h_bs, float h_ut, float fc_ghz)
+uma_nlos_pl_ref[[maybe_unused]] (float d2d, float d3d, float h_bs, float h_ut, float fc_ghz)
 {
     // Phase 1 reference: 3GPP TR 38.901 UMa NLOS pathloss
     // Matches sls-chan-validate.py uma_nlos_pl() and statistic_channel_config_phase1.yaml
@@ -60,18 +60,52 @@ buildHexCells(uint32_t nSite,
               std::vector<CellParam>& cells)
 {
     cells.resize(nSite * nSector);
-    for (uint32_t s = 0; s < nSite; ++s)
-    {
-        float sx = 0.0f, sy = 0.0f;
-        if (s > 0)
-        {
-            const float angle = float(s - 1) * float(M_PI) / 3.0f;
-            sx = isd * std::cos(angle);
-            sy = isd * std::sin(angle);
+
+    // 3GPP TR 38.901 UMa: 19-site 3-ring hexagonal layout
+    // Ring 0: 1 site at center
+    // Ring 1: 6 sites at radius ISD
+    // Ring 2: 12 sites at radius 2*ISD
+    std::vector<std::pair<float, float>> ring0 = {{0.0f, 0.0f}};
+    std::vector<std::pair<float, float>> ring1, ring2;
+    for (int k = 0; k < 6; ++k) {
+        float a = float(k) * float(M_PI) / 3.0f;
+        ring1.emplace_back(isd * std::cos(a), isd * std::sin(a));
+    }
+    for (int k = 0; k < 6; ++k) {
+        float a = float(k) * float(M_PI) / 3.0f;
+        ring2.emplace_back(2.0f * isd * std::cos(a), 2.0f * isd * std::sin(a));
+    }
+    for (int k = 0; k < 6; ++k) {
+        float a = (float(k) + 0.5f) * float(M_PI) / 3.0f;
+        ring2.emplace_back(isd * std::cos(a), isd * std::sin(a));
+    }
+
+    std::vector<std::pair<float, float>> allSites = ring0;
+    allSites.insert(allSites.end(), ring1.begin(), ring1.end());
+    allSites.insert(allSites.end(), ring2.begin(), ring2.end());
+
+    // Validate we have exactly nSite sites
+    if (allSites.size() != nSite) {
+        // Fallback: use ring1 for all sites beyond ring0
+        for (uint32_t s = 0; s < nSite; ++s) {
+            float sx = 0.0f, sy = 0.0f;
+            if (s > 0) {
+                const float angle = float(s - 1) * float(M_PI) / 3.0f;
+                sx = isd * std::cos(angle);
+                sy = isd * std::sin(angle);
+            }
+            for (uint32_t k = 0; k < nSector; ++k) {
+                cells[s * nSector + k].loc = {sx, sy, h_bs, 0.0f};
+            }
         }
+        return;
+    }
+
+    for (uint32_t s = 0; s < allSites.size(); ++s)
+    {
         for (uint32_t k = 0; k < nSector; ++k)
         {
-            cells[s * nSector + k].loc = {sx, sy, h_bs, 0.0f};
+            cells[s * nSector + k].loc = {allSites[s].first, allSites[s].second, h_bs, 0.0f};
         }
     }
 }
@@ -90,11 +124,13 @@ main()
     const float isd = 1732.0f;
 
     const uint32_t nUT = 570;
-    const float maxDist = 2000.0f;
+    const float maxDist = 10.0f;
 
     std::vector<CellParam> cells;
     buildHexCells(nSite, nSector, isd, h_bs, cells);
+    fprintf(stderr, "[DEBUG] About to call uploadCellParams\n");
     sls.uploadCellParams(cells);
+    fprintf(stderr, "[DEBUG] uploadCellParams ok\n");
 
     std::vector<UtParam> uts(nUT);
     std::mt19937 rng(42);
@@ -102,14 +138,15 @@ main()
     for (uint32_t u = 0; u < nUT; u++)
     {
         float x, y;
-        double closestCellDistance = std::numeric_limits<double>::max();
+        double closestCellDistance;
         do
         {
             // Create UE position
             x = uDist(rng) * maxDist;
             y = uDist(rng) * maxDist;
 
-            // Check UE is further away from the closest UE at least 10m
+            // Check UE is further away from all cells at least 10m
+            closestCellDistance = std::numeric_limits<double>::max();
             for (auto& cell : cells)
             {
                 double d = sqrt(pow(cell.loc.x - x, 2) + pow(cell.loc.y - y, 2));
@@ -128,15 +165,26 @@ main()
     sls.uploadUtParams(uts);
 
     // ── CRN correlation distances (TR 38.901 Table 7.5-6 UMa) ──────────────
-    // [SF, K, DS, ASD, ASA, ZSD, ZSA]
-    float corrLos[7]  = {37.f, 12.f, 30.f, 18.f, 15.f, 15.f, 15.f};
-    float corrNlos[6] = {50.f, 40.f, 50.f, 50.f, 50.f, 50.f};        // no K for NLOS
-    float corrO2i[6]  = {10.f, 10.f, 11.f, 17.f, 25.f, 25.f};
+    // LOS: [SF, K, DS, ASD, ASA, ZSD, ZSA, delta_tau]
+    float corrLos[8]  = {37.f, 12.f, 30.f, 18.f, 15.f, 15.f, 15.f, 50.f};
+    // NLOS: [SF, DS, ASD, ASA, ZSD, ZSA, delta_tau] (no K)
+    float corrNlos[7] = {50.f, 40.f, 50.f, 50.f, 50.f, 50.f, 50.f};
+    // O2I: [SF, DS, ASD, ASA, ZSD, ZSA, delta_tau] (no K)
+    float corrO2i[7]  = {10.f, 10.f, 11.f, 17.f, 25.f, 25.f, 50.f};
 
     const float area = maxDist + 100.0f;
 
     // Check large system parameters
+    fprintf(stderr, "[DEBUG] corrLos = {%f, %f, %f, %f, %f, %f, %f, %f}\n",
+            corrLos[0], corrLos[1], corrLos[2], corrLos[3], corrLos[4], corrLos[5], corrLos[6], corrLos[7]);
+    fprintf(stderr, "[DEBUG] corrNlos = {%f, %f, %f, %f, %f, %f, %f}\n",
+            corrNlos[0], corrNlos[1], corrNlos[2], corrNlos[3], corrNlos[4], corrNlos[5], corrNlos[6]);
+    fprintf(stderr, "[DEBUG] corrO2i = {%f, %f, %f, %f, %f, %f, %f}\n",
+            corrO2i[0], corrO2i[1], corrO2i[2], corrO2i[3], corrO2i[4], corrO2i[5], corrO2i[6]);
+    fprintf(stderr, "About to call generateCRN\n");
+    fflush(stderr);
     sls.generateCRN(area, -area, area, -area, corrLos, corrNlos, corrO2i);
+    fflush(stderr);
     std::cerr << "generateCRN ok" << std::endl;
 
     sls.calLinkParam(nSite,
@@ -148,7 +196,8 @@ main()
                      -area,
                      true,
                      true,
-                     true,
+                     false,
+                     false,
                      sls.nX(),
                      sls.nY());
     std::cerr << "calLinkParam ok" << std::endl;
@@ -156,7 +205,6 @@ main()
     auto links = sls.readLinkParams(nSite, nUT);
     std::cerr << "readLinkParams ok" << std::endl;
 
-    /*
     std::ofstream csv("link_params.csv");
     csv << "cell_id,ut_id,is_los,is_outdoor,d2d_m,d3d_m,pl_sim_db,pl_ref_db,sf_db,k_db,ds_ns,asd_"
            "deg,asa_deg,zsd_deg,zsa_deg\n";
@@ -176,7 +224,7 @@ main()
                 << "," << lk.ZSA << "\n";
         }
     }
-    */
+    csv.close();
 
     std::cout << "Wrote link_params.csv (" << uint64_t(nCell) * nUT << " links)\n";
 
@@ -388,9 +436,11 @@ main()
         for (uint32_t u = 0; u < nUT; ++u)
         {
             const uint32_t linkIdx = site * nUT + u;
+            const uint32_t sector = u % nSector;   // distribute UEs across 3 sectors per site
+            const uint32_t cid = site * nSector + sector;
             const uint32_t elemsPerLink = nSnapshots * nUeAnt * nBsAnt * 24u; // NMAXTAPS=24
             ActiveLink al;
-            al.cid = site * nSector; // first sector of this site
+            al.cid = cid;
             al.uid = u;
             al.linkIdx = linkIdx;
             al.lspReadIdx = linkIdx;

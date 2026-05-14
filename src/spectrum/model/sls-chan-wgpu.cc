@@ -6,8 +6,11 @@
 #include "sls-chan-wgpu.h"
 
 #include <cassert>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <random>
+#include <vector>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -24,7 +27,7 @@ readFile(const char* path)
     return {std::istreambuf_iterator<char>(f), {}};
 }
 
-static wgpu::Device
+static std::pair<wgpu::Device, uint64_t>
 createDevice()
 {
     WGPUInstanceDescriptor idesc{};
@@ -33,8 +36,10 @@ createDevice()
 
     WGPUAdapter adapter = nullptr;
     WGPURequestAdapterOptions aopts{};
-    aopts.backendType = WGPUBackendType_D3D12; // Force D3D12, not Vulkan
 
+    // Try D3D12 backend first (best on Windows)
+    aopts.backendType = WGPUBackendType_D3D12;
+    fprintf(stderr, "[DEBUG] Trying D3D12 backend...\n");
     wgpuInstanceRequestAdapter(
             instance,
             &aopts,
@@ -47,26 +52,94 @@ createDevice()
                        void*) {
                         if (status == WGPURequestAdapterStatus_Success)
                         {
+                            fprintf(stderr, "[DEBUG] D3D12 adapter acquired\n");
                             *static_cast<WGPUAdapter*>(ud1) = a;
                         }
                         else
                         {
-                            fprintf(stderr, "requestAdapter failed\n");
+                            fprintf(stderr, "[DEBUG] D3D12 adapter failed (status=%d), trying Vulkan...\n", status);
                         }
                     },
                     .userdata1 = &adapter});
-    assert(adapter);
+    wgpuInstanceProcessEvents(instance);  // process async callback
+    if (!adapter) {
+        // Try Vulkan backend as fallback
+        aopts.backendType = WGPUBackendType_Vulkan;
+        fprintf(stderr, "[DEBUG] Trying Vulkan backend...\n");
+        wgpuInstanceRequestAdapter(
+                instance,
+                &aopts,
+                WGPURequestAdapterCallbackInfo{.mode = WGPUCallbackMode_AllowSpontaneous,
+                        .callback =
+                        [](WGPURequestAdapterStatus status,
+                           WGPUAdapter a,
+                           WGPUStringView,
+                           void* ud1,
+                           void*) {
+                            if (status == WGPURequestAdapterStatus_Success)
+                            {
+                                fprintf(stderr, "[DEBUG] Vulkan adapter acquired\n");
+                                *static_cast<WGPUAdapter*>(ud1) = a;
+                            }
+                            else
+                            {
+                                fprintf(stderr, "[DEBUG] Vulkan adapter failed (status=%d), trying auto...\n", status);
+                            }
+                        },
+                        .userdata1 = &adapter});
+        wgpuInstanceProcessEvents(instance);  // process async callback
+    }
+    if (!adapter) {
+        // Try auto-select
+        aopts.backendType = WGPUBackendType_Undefined;
+        fprintf(stderr, "[DEBUG] Trying auto-select backend...\n");
+        wgpuInstanceRequestAdapter(
+                instance,
+                &aopts,
+                WGPURequestAdapterCallbackInfo{.mode = WGPUCallbackMode_AllowSpontaneous,
+                        .callback =
+                        [](WGPURequestAdapterStatus status,
+                           WGPUAdapter a,
+                           WGPUStringView,
+                           void* ud1,
+                           void*) {
+                            if (status == WGPURequestAdapterStatus_Success)
+                            {
+                                fprintf(stderr, "[DEBUG] Auto-selected adapter acquired\n");
+                                *static_cast<WGPUAdapter*>(ud1) = a;
+                            }
+                            else
+                            {
+                                fprintf(stderr, "[DEBUG] Auto-select adapter failed (status=%d)\n", status);
+                            }
+                        },
+                        .userdata1 = &adapter});
+        wgpuInstanceProcessEvents(instance);  // process async callback
+    }
+    if (!adapter) {
+        fprintf(stderr, "[FATAL] No GPU adapter available!\n");
+        wgpuInstanceRelease(instance);
+        exit(1);
+    }
 
     // Query what the adapter actually supports first
     WGPULimits supported{};
     wgpuAdapterGetLimits(adapter, &supported);
 
     WGPUDevice device = nullptr;
+
+    // Request max-buffer-size feature so we can create buffers > 256MB
+    // Note: WGPUFeatureName_MaxBufferSize may not be in this version of wgpu-native
+    // So we just set the limit to WGPU_LIMIT_U64_UNDEFINED (unlimited)
     WGPUDeviceDescriptor ddesc{};
     ddesc.uncapturedErrorCallbackInfo.callback =
             [](const WGPUDevice*, WGPUErrorType t, WGPUStringView msg, void*, void*) {
                 fprintf(stderr, "[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
             };
+    // Set unlimited buffer size limit
+    WGPULimits limits{};
+    limits.maxBufferSize = WGPU_LIMIT_U64_UNDEFINED;
+    ddesc.requiredLimits = &limits;
     wgpu::Limits::WGPULimits requiredLimits{};
     requiredLimits.maxBindGroups = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxBufferSize = WGPU_LIMIT_U64_UNDEFINED;
@@ -77,15 +150,14 @@ createDevice()
     requiredLimits.maxComputeWorkgroupSizeY = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxComputeWorkgroupSizeZ = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxComputeWorkgroupStorageSize = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxComputeWorkgroupStorageSize = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxComputeWorkgroupsPerDimension = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxDynamicStorageBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxDynamicUniformBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxInterStageShaderVariables = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxSampledTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxSamplersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxStorageBufferBindingSize =
-            std::min(supported.maxStorageBufferBindingSize, uint64_t(1) << 31);
+    // Request the largest maxStorageBufferBindingSize the adapter supports
+    requiredLimits.maxStorageBufferBindingSize = supported.maxStorageBufferBindingSize;
     requiredLimits.maxStorageBuffersPerShaderStage = 30;
     requiredLimits.maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
@@ -97,10 +169,10 @@ createDevice()
     requiredLimits.maxVertexBufferArrayStride = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxVertexBuffers = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
     ddesc.requiredLimits = &requiredLimits;
+    fprintf(stderr, "[DEBUG] Device created with maxStorageBufSize=%llu\n",
+            (unsigned long long)requiredLimits.maxStorageBufferBindingSize);
     wgpuAdapterRequestDevice(
             adapter,
             &ddesc,
@@ -117,20 +189,34 @@ createDevice()
                         }
                     },
                     .userdata1 = &device});
-    assert(device);
+    wgpuInstanceProcessEvents(instance);  // process async callback
+    if (!device) {
+        fprintf(stderr, "[FATAL] Failed to create WGPU device!\n");
+        wgpuAdapterRelease(adapter);
+        wgpuInstanceRelease(instance);
+        exit(1);
+    }
     wgpu::Device dev(device);
     wgpuAdapterRelease(adapter);
     wgpuInstanceRelease(instance);
-    return dev;
+    return std::make_pair(dev, supported.maxStorageBufferBindingSize);
 }
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 SlsChanWgpu::SlsChanWgpu()
 {
-    auto device = createDevice();
-    device_ = std::move(device);
-    queue_ =device.getQueue();
+    auto result = createDevice();
+    device_ = std::move(result.first);
+    m_maxGpuBuffer_ = result.second;
+    fprintf(stderr, "[DEBUG] Constructor: GPU max buffer size = %llu bytes (%.1f GB)\n",
+            (unsigned long long)m_maxGpuBuffer_, (double)m_maxGpuBuffer_ / (1024.0*1024.0*1024.0));
+    queue_ = device_.getQueue();
     std::string wgsl = readFile("C:/tools/sources/ns-3-dev/src/spectrum/model/sls-chan.wgsl");
+    if (wgsl.empty()) {
+        fprintf(stderr, "ERROR: Failed to read WGSL shader\n");
+        throw std::runtime_error("Failed to read WGSL shader");
+    }
+    std::cout << "Loaded WGSL shader: " << wgsl.size() << " bytes\n";
 
     WGPUShaderSourceWGSL wgslSource{};
     wgslSource.chain.next = nullptr;
@@ -139,29 +225,46 @@ SlsChanWgpu::SlsChanWgpu()
 
     WGPUShaderModuleDescriptor smDescC{};
     smDescC.nextInChain = &wgslSource.chain;
+    fprintf(stderr, "[DEBUG] Creating WGSL shader module (%zu bytes)...\n", wgsl.size());
     shader_ = wgpu::ShaderModule(wgpuDeviceCreateShaderModule(device_, &smDescC));
-    assert(shader_ && "WGSL failed to compile — check entry point names and file path");
+    if (!shader_) {
+        fprintf(stderr, "[FATAL] WGSL shader module creation failed\n");
+        throw std::runtime_error("WGSL failed to compile");
+    }
+    fprintf(stderr, "[DEBUG] WGSL shader module created successfully\n");
 
     auto makePipeline = [&](const char* ep) -> wgpu::ComputePipeline {
         wgpu::ComputePipelineDescriptor desc{};
         desc.compute.module = shader_;
         desc.compute.entryPoint = sv(ep);
-        return device_.createComputePipeline(desc);
+        fprintf(stderr, "[DEBUG] Creating pipeline '%s'...\n", ep);
+        fflush(stderr);
+        auto pipe = device_.createComputePipeline(desc);
+        fprintf(stderr, "[DEBUG] Pipeline '%s': %s\n", ep, pipe ? "OK" : "FAILED");
+        fflush(stderr);
+        return pipe;
     };
 
     linkParamPipeline_ = makePipeline("cal_link_param_kernel");
+    fprintf(stderr, "[DEBUG] After cal_link_param_kernel\n");
     assert(linkParamPipeline_ && "missing cal_link_param_kernel in WGSL");
     crnFillPipeline_ = makePipeline("fill_crn_kernel");
+    fprintf(stderr, "[DEBUG] After fill_crn_kernel\n");
     assert(crnFillPipeline_ && "missing fill_crn_kernel in WGSL");
     crnConvPipeline_ = makePipeline("convolve_crn_kernel");
+    fprintf(stderr, "[DEBUG] After convolve_crn_kernel\n");
     assert(crnConvPipeline_ && "missing convolve_crn_kernel in WGSL");
     crnNormPipeline_ = makePipeline("normalize_crn_kernel");
+    fprintf(stderr, "[DEBUG] After normalize_crn_kernel\n");
     assert(crnNormPipeline_ && "missing normalize_crn_kernel in WGSL");
     clusterRayPipeline_ = makePipeline("cal_cluster_ray_kernel");
+    fprintf(stderr, "[DEBUG] After cal_cluster_ray_kernel\n");
     assert(clusterRayPipeline_ && "missing cal_cluster_ray_kernel in WGSL");
     generateCIRPipeline_ = makePipeline("generate_cir_kernel");
+    fprintf(stderr, "[DEBUG] After generate_cir_kernel\n");
     assert(generateCIRPipeline_ && "missing generate_cir_kernel in WGSL");
     generateCFRPipeline_ = makePipeline("generate_cfr_kernel_mode1");
+    fprintf(stderr, "[DEBUG] After generate_cfr_kernel_mode1\n");
     assert(generateCFRPipeline_ && "missing generate_cfr_kernel_mode1 in WGSL");
 }
 
@@ -296,51 +399,70 @@ SlsChanWgpu::generateCRN(float maxX,
                          float minX,
                          float maxY,
                          float minY,
-                         const float corrLos[7],
-                         const float corrNlos[6],
-                         const float corrO2i[6])
+                         const float corrLos[8],
+                         const float corrNlos[7],
+                         const float corrO2i[7])
 {
-    const float kStep = 10.0f;
-    const int32_t nX = std::abs(int32_t((maxX - minX) / kStep)) + 1;
-    const int32_t nY = std::abs(int32_t((maxY - minY) / kStep)) + 1;
+    fprintf(stderr, "[DEBUG] generateCRN: nSite=%u, maxX=%.1f, minX=%.1f, maxY=%.1f, minY=%.1f\n", nSite_, maxX, minX, maxY, minY);
+    fflush(stderr);
+    // Calculate grid dimensions matching WGSL shader: round(bound + 1 + 2*D) where D=3*corrDist
+    float maxCorrDist = 0.0f;
+    for (int i = 0; i < 8; i++) maxCorrDist = std::max(maxCorrDist, corrLos[i]);
+    for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrNlos[i]);
+    for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrO2i[i]);
+    
+    fprintf(stderr, "[DEBUG] generateCRN: maxCorrDist=%.1f\n", maxCorrDist);
+    float D = 3.0f * maxCorrDist;
+    const int32_t nX = static_cast<int32_t>((maxX - minX) + 1.0f + 2.0f * D + 0.5f);
+    const int32_t nY = static_cast<int32_t>((maxY - minY) + 1.0f + 2.0f * D + 0.5f);
+    fprintf(stderr, "[DEBUG] generateCRN: nX=%d, nY=%d, gridSz=%llu\n", nX, nY, (unsigned long long)uint64_t(nX) * nY);
 
     nX_ = nX;
     nY_ = nY;
 
     const uint64_t gridSz = uint64_t(nX) * nY;
-    const uint64_t losBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
-    const uint64_t nlosBufSz = uint64_t(nSite_) * 6 * gridSz * sizeof(float);
-    const uint64_t o2iBufSz = uint64_t(nSite_) * 6 * gridSz * sizeof(float);
+    const uint64_t losBufSz = uint64_t(nSite_) * 8 * gridSz * sizeof(float);
+    const uint64_t nlosBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
+    const uint64_t o2iBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
+    fprintf(stderr, "[DEBUG] generateCRN: losBufSz=%llu, nlosBufSz=%llu, o2iBufSz=%llu\n", (unsigned long long)losBufSz, (unsigned long long)nlosBufSz, (unsigned long long)o2iBufSz);
 
     auto tempBufBytes = [&](float cd) -> uint64_t {
-        const float cp = (cd == 0.0f) ? 0.0f : (cd / kStep);
-        const uint32_t iD = static_cast<uint32_t>(3.0f * cp);
-        const uint32_t L = (cp == 0.0f) ? 1u : (2u * iD + 1u);
-        const uint64_t pnx = static_cast<uint64_t>(nX) + (L - 1u);
-        const uint64_t pny = static_cast<uint64_t>(nY) + (L - 1u);
+        // Match WGSL/CPU: D = 3*corrDist, grid = round(bound + 1 + 2*D)
+        float D = 3.0f * cd;
+        const uint64_t pnx = static_cast<uint64_t>((maxX - minX) + 1.0f + 2.0f * D + 0.5f);
+        const uint64_t pny = static_cast<uint64_t>((maxY - minY) + 1.0f + 2.0f * D + 0.5f);
         return pnx * pny * sizeof(float);
     };
 
     float maxCorr = 0.0f;
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < 8; i++)
     {
         maxCorr = std::max(maxCorr, corrLos[i]);
     }
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 7; i++)
     {
         maxCorr = std::max(maxCorr, corrNlos[i]);
     }
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 7; i++)
     {
         maxCorr = std::max(maxCorr, corrO2i[i]);
     }
+    fprintf(stderr, "[DEBUG] generateCRN: maxCorr=%.1f, tempBufBytes=%llu\n", maxCorr, (unsigned long long)tempBufBytes(maxCorr));
 
     wgpu::Buffer tempBuf =
         makeBuffer(tempBufBytes(maxCorr), WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    fprintf(stderr, "[DEBUG] generateCRN: tempBuf created\n");
 
-    crnLosBuf_ = makeBuffer(losBufSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    crnNlosBuf_ = makeBuffer(nlosBufSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    crnO2iBuf_ = makeBuffer(o2iBufSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    // Check if GPU can handle the CRN output buffers
+    // CRN buffers are nSite * channels * gridSz * sizeof(float) each
+    // With nSite=19, gridSz=20259001: LOS=11.5GB, NLOS/O2I=10GB
+    // Use the adapter's actual maxStorageBufferBindingSize (set in createDevice)
+    fprintf(stderr, "[DEBUG] generateCRN: GPU max buffer size = %llu bytes (%.1f GB)\n",
+            (unsigned long long)m_maxGpuBuffer_, (double)m_maxGpuBuffer_ / (1024.0*1024.0*1024.0));
+
+    // NOTE: This wgpu-native version does NOT support the max-buffer-size feature
+    // (WGPUFeatureName_MaxBufferSize is not in the enum). Large buffers (>256MB) will
+    // always fail validation. We rely entirely on CPU-side buffers + staging for output.
 
     const uint32_t nCrnRng = 128u * 256u;
     std::vector<RngState> crnSeeds(nCrnRng);
@@ -358,11 +480,28 @@ SlsChanWgpu::generateCRN(float maxX,
         makeBuffer(gridSz * sizeof(float),
                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
 
-    auto dispatchGrid = [&](wgpu::Buffer& outputBuf, float corrDist, uint32_t gridIndex) {
-        const uint64_t gridBytes = gridSz * sizeof(float);
-        const uint64_t destOffset = uint64_t(gridIndex) * gridBytes;
-        const uint64_t curTempBytes = tempBufBytes(corrDist);
+    auto dispatchGrid = [&](wgpu::Buffer& outputBuf, float corrDist, uint32_t gridIndex, uint32_t rowOffset = 0, uint32_t chunkY = 0) {
+        // Calculate grid size matching WGSL shader: round(bound + 1 + 2*D) where D=3*corrDist
+        float D = 3.0f * corrDist;
+        const uint64_t pnx = static_cast<uint64_t>((maxX - minX) + 1.0f + 2.0f * D + 0.5f);
+        const uint64_t pny = static_cast<uint64_t>((maxY - minY) + 1.0f + 2.0f * D + 0.5f);
+        const uint64_t curTempBytes = pnx * pny * sizeof(float);
+        // Use chunkY for the output grid size if chunking; otherwise use full gridSz
+        const uint64_t gridBytes = (chunkY > 0) ? static_cast<uint64_t>(chunkY) * nX * sizeof(float) : gridSz * sizeof(float);
+        // destOffset = channel offset (full grid) + Y offset from rowOffset
+        const uint64_t fullGridBytes = static_cast<uint64_t>(nX) * nY * sizeof(float);
+        // When chunking, write to staging buffer at rowOffset position; otherwise write to output buffer
+        const uint64_t destOffset = (chunkY > 0) ? uint64_t(rowOffset) * nX * sizeof(float) : uint64_t(gridIndex) * fullGridBytes + uint64_t(rowOffset) * nX * sizeof(float);
         const uint64_t rngBytes = uint64_t(nCrnRng) * sizeof(RngState);
+
+        // Clamp to tempBuf size to avoid OOB
+        const uint64_t maxTempBytes = tempBufBytes(maxCorr);
+        const uint64_t actualTempBytes = std::min(curTempBytes, maxTempBytes);
+
+        // Bind group sizes must match actual buffer sizes, not curTempBytes
+        // (curTempBytes may be smaller than nX*nY when corrDist < maxCorrDist)
+        const uint64_t tempBufActualSize = maxTempBytes;
+        const uint64_t gridBufActualSize = gridSz * sizeof(float);
 
         struct CRNGenUniforms
         {
@@ -372,7 +511,12 @@ SlsChanWgpu::generateCRN(float maxX,
             uint32_t nX, nY;
             float step;
             uint32_t _pad2;
+            float boundX, boundY;
+            uint32_t rowOffset;
+            uint32_t chunkY;
         };
+        const float boundX_val = maxX - minX;
+        const float boundY_val = maxY - minY;
         CRNGenUniforms genUni{maxX,
                               minX,
                               maxY,
@@ -383,8 +527,12 @@ SlsChanWgpu::generateCRN(float maxX,
                               0u,
                               (uint32_t)nX,
                               (uint32_t)nY,
-                              kStep,
-                              0u};
+                              10.0f,
+                              0u,
+                              boundX_val,
+                              boundY_val,
+                              rowOffset,
+                              chunkY};
         wgpu::Buffer genUniBuf =
             makeBuffer(sizeof(genUni), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &genUni);
 
@@ -398,6 +546,10 @@ SlsChanWgpu::generateCRN(float maxX,
                                              &normUni);
 
         // ── Fill bind group ──
+        fprintf(stderr, "[DEBUG] dispatchGrid: corrDist=%.1f, curTempBytes=%llu, actualTempBytes=%llu, pnx=%llu, pny=%llu\n", corrDist, (unsigned long long)curTempBytes, (unsigned long long)actualTempBytes, (unsigned long long)pnx, (unsigned long long)pny);
+        fprintf(stderr, "[DEBUG] dispatchGrid: genUniBuf=%p, tempBuf=%p, crnRngBuf=%p\n", (void*)genUniBuf, (void*)tempBuf, (void*)crnRngBuf);
+        fprintf(stderr, "[DEBUG] dispatchGrid: genUni values: maxX=%.1f minX=%.1f maxY=%.1f minY=%.1f corrDist=%.1f maxRngStates=%u nX=%u nY=%u step=%.1f boundX=%.1f boundY=%.1f\n",
+                genUni.maxX, genUni.minX, genUni.maxY, genUni.minY, genUni.corrDist, genUni.maxRngStates, genUni.nX, genUni.nY, genUni.step, genUni.boundX, genUni.boundY);
         auto fillLayout = crnFillPipeline_.getBindGroupLayout(0);
         std::vector<wgpu::BindGroupEntry> fillEntries(3, wgpu::Default);
         fillEntries[0].binding = 0;
@@ -405,7 +557,7 @@ SlsChanWgpu::generateCRN(float maxX,
         fillEntries[0].size = sizeof(genUni);
         fillEntries[1].binding = 1;
         fillEntries[1].buffer = tempBuf;
-        fillEntries[1].size = curTempBytes;
+        fillEntries[1].size = tempBufActualSize;
         fillEntries[2].binding = 2;
         fillEntries[2].buffer = crnRngBuf;
         fillEntries[2].size = rngBytes;
@@ -413,7 +565,9 @@ SlsChanWgpu::generateCRN(float maxX,
         fillBgDesc.layout = fillLayout;
         fillBgDesc.entryCount = 3;
         fillBgDesc.entries = fillEntries.data();
+        fprintf(stderr, "[DEBUG] dispatchGrid: creating fill bind group...\n");
         wgpu::BindGroup fillBg = device_.createBindGroup(fillBgDesc);
+        fprintf(stderr, "[DEBUG] dispatchGrid: fill bind group created, fillBg=%p\n", (void*)fillBg);
 
         // ── Conv bind group ──
         auto convLayout = crnConvPipeline_.getBindGroupLayout(0);
@@ -423,10 +577,10 @@ SlsChanWgpu::generateCRN(float maxX,
         convEntries[0].size = sizeof(genUni);
         convEntries[1].binding = 1;
         convEntries[1].buffer = tempBuf;
-        convEntries[1].size = curTempBytes;
+        convEntries[1].size = tempBufActualSize;
         convEntries[2].binding = 3;
         convEntries[2].buffer = gridBuf;
-        convEntries[2].size = gridBytes;
+        convEntries[2].size = gridBufActualSize;
         wgpu::BindGroupDescriptor convBgDesc = wgpu::Default;
         convBgDesc.layout = convLayout;
         convBgDesc.entryCount = 3;
@@ -441,7 +595,7 @@ SlsChanWgpu::generateCRN(float maxX,
         normEntries[0].size = sizeof(normUni);
         normEntries[1].binding = 5;
         normEntries[1].buffer = gridBuf;
-        normEntries[1].size = gridBytes;
+        normEntries[1].size = gridBufActualSize;
         wgpu::BindGroupDescriptor normBgDesc = wgpu::Default;
         normBgDesc.layout = normLayout;
         normBgDesc.entryCount = 2;
@@ -450,11 +604,17 @@ SlsChanWgpu::generateCRN(float maxX,
 
         // Pass 1: fill
         {
+            // Calculate dispatch workgroups using 1D grid to stay under WebGPU 65535 limit
+            // chunk_total = padded_nx * chunk_ny (elements to process in this chunk)
+            const uint64_t chunk_total = (chunkY > 0) ? (pnx * chunkY) : (pnx * pny);
+            const uint32_t workgroups = static_cast<uint32_t>((chunk_total + 255u) / 256u);
+            fprintf(stderr, "[DEBUG] dispatchGrid: dispatching %u workgroups for %llu elements\\n",
+                    workgroups, (unsigned long long)chunk_total);
             wgpu::CommandEncoder enc1 = device_.createCommandEncoder(wgpu::Default);
             auto pass = enc1.beginComputePass(wgpu::Default);
             pass.setPipeline(crnFillPipeline_);
             pass.setBindGroup(0u, fillBg, (size_t)0, nullptr);
-            pass.dispatchWorkgroups(128u, 1u, 1u);
+            pass.dispatchWorkgroups(workgroups, 1u, 1u);
             pass.end();
             queue_.submit(enc1.finish(wgpu::Default));
             waitIdle();
@@ -464,10 +624,15 @@ SlsChanWgpu::generateCRN(float maxX,
         {
             wgpu::CommandEncoder enc2 = device_.createCommandEncoder(wgpu::Default);
             {
+                // Convolve dispatch: use 1D grid to stay under WebGPU 65535 limit
+                const uint64_t chunk_total = (chunkY > 0) ? (pnx * chunkY) : (pnx * pny);
+                const uint32_t convWorkgroups = static_cast<uint32_t>((chunk_total + 255u) / 256u);
+                fprintf(stderr, "[DEBUG] dispatchGrid: convolve dispatching %u workgroups for %llu elements\\n",
+                        convWorkgroups, (unsigned long long)chunk_total);
                 auto pass1 = enc2.beginComputePass(wgpu::Default);
                 pass1.setPipeline(crnConvPipeline_);
                 pass1.setBindGroup(0u, convBg, (size_t)0, nullptr);
-                pass1.dispatchWorkgroups(128u, 1u, 1u);
+                pass1.dispatchWorkgroups(convWorkgroups, 1u, 1u);
                 pass1.end();
             }
             {
@@ -483,26 +648,256 @@ SlsChanWgpu::generateCRN(float maxX,
         }
     };
 
+    // ── Chunk the grid along Y axis to keep output buffers under 256MB ──
+    // gridBuf size = chunkY * nX * sizeof(float); must be <= 256MB
+    // Also limit chunk size to stay under WebGPU 65535 workgroup limit:
+    //   maxChunkY <= (65535 * 256) / pnx where pnx ~ boundX + 2*3*corrDist
+    // For pnx=4423: maxChunkY = 16777216/4423 = 3794
+    // Use 128MB to get maxChunkY=7108, nChunksY=1 (reduces iterations from 8360 to 570)
+    const uint64_t maxGridBufBytes = 128ULL * 1024ULL * 1024ULL;  // 128MB per chunk
+    const uint64_t maxChunkY = maxGridBufBytes / (static_cast<uint64_t>(nX) * sizeof(float));
+    // Clamp to respect WebGPU 65535 workgroup limit per dimension:
+    // workgroups = (pnx * chunkY + 255) / 256 <= 65535
+    // => pnx * chunkY <= 16776961  (pnx <= nX, so nX is safe upper bound)
+    const uint64_t wgLimitChunkY = 16776961u / static_cast<uint64_t>(nX);
+    const uint64_t clampedMaxChunkY = std::min(maxChunkY, std::max(static_cast<uint64_t>(1u), wgLimitChunkY));
+    const uint64_t nChunksY = (static_cast<uint64_t>(nY) + clampedMaxChunkY - 1) / clampedMaxChunkY;
+    fprintf(stderr, "[DEBUG] CRN chunking: nX=%d nY=%d maxChunkY=%llu nChunksY=%llu\n",
+            nX, nY, (unsigned long long)clampedMaxChunkY, (unsigned long long)nChunksY);
+
+    // Also chunk the output buffers: create them on CPU side to avoid GPU memory limit
+    // LOS: nSite * 8 channels, NLOS: nSite * 7 channels, O2I: nSite * 7 channels
+    const size_t losBufSize = static_cast<size_t>(nSite_) * 8ULL * static_cast<uint64_t>(nX) * nY;
+    const size_t nlosBufSize = static_cast<size_t>(nSite_) * 7ULL * static_cast<uint64_t>(nX) * nY;
+    const size_t o2iBufSize = static_cast<size_t>(nSite_) * 7ULL * static_cast<uint64_t>(nX) * nY;
+    std::vector<float> losOutBuf(losBufSize, 0.0f);
+    std::vector<float> nlosOutBuf(nlosBufSize, 0.0f);
+    std::vector<float> o2iOutBuf(o2iBufSize, 0.0f);
+    fprintf(stderr, "[DEBUG] CRN: GPU output buffers created (los=%lluMB, nlos=%lluMB, o2i=%lluMB)\n",
+            (unsigned long long)(losOutBuf.size() * sizeof(float)) / (1024 * 1024),
+            (unsigned long long)(nlosOutBuf.size() * sizeof(float)) / (1024 * 1024),
+            (unsigned long long)(o2iOutBuf.size() * sizeof(float)) / (1024 * 1024));
+
+    // Create staging buffers for chunked output (small enough to fit in GPU memory)
+    const uint64_t stagingGridBytes = static_cast<uint64_t>(clampedMaxChunkY) * nX * sizeof(float);
+    wgpu::Buffer stagingBuf = makeBuffer(stagingGridBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
+    fprintf(stderr, "[DEBUG] CRN: stagingBuf created (%llu bytes)\n", (unsigned long long)stagingGridBytes);
+
+    fprintf(stderr, "[DEBUG] Starting CRN generation loop\n");
     for (uint32_t s = 0; s < nSite_; s++)
     {
-        for (uint32_t lsp = 0; lsp < 7; lsp++)
+        fprintf(stderr, "[DEBUG] LOS site %u\n", s);
+        for (uint32_t ch = 0; ch < 8; ch++)
         {
-            dispatchGrid(crnLosBuf_, corrLos[lsp], s * 7 + lsp);
+            for (uint32_t c = 0; c < nChunksY; c++)
+            {
+                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
+                const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
+                                                                       static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                const uint32_t gridIdx = static_cast<uint32_t>(s) * 8 + ch;
+                fprintf(stderr, "[DEBUG]   dispatchGrid LOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                // Use stagingBuf as output instead of crnLosBuf_
+                dispatchGrid(stagingBuf, corrLos[ch], gridIdx, yOff, yRows);
+                // Copy staging buffer to CPU output buffer
+                const uint64_t cpuOffset = static_cast<uint64_t>(s) * 8 * nX * nY +
+                                           static_cast<uint64_t>(ch) * nX * nY +
+                                           static_cast<uint64_t>(yOff) * nX;
+                const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
+                std::vector<float> stagingData(chunkBytes / sizeof(float));
+                wgpu::Buffer stagingReadBuf = makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+                // Copy staging to stagingReadBuf
+                {
+                    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
+                    enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
+                    queue_.submit(enc.finish(wgpu::Default));
+                    waitIdle();
+                }
+                // Map and read using wgpu-native C API
+                static WGPUMapMode g_mapStatus = WGPUMapMode_None;
+                auto g_callback = [](WGPUMapAsyncStatus status, WGPUStringView message, void* userdata, void* /*another*/) {
+                    (void)message;
+                    *(reinterpret_cast<WGPUMapMode*>(userdata)) = status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
+                };
+                WGPUBufferMapCallbackInfo mapCbInfo = {};
+                mapCbInfo.nextInChain = nullptr;
+                mapCbInfo.callback = g_callback;
+                mapCbInfo.userdata1 = &g_mapStatus;
+                mapCbInfo.userdata2 = nullptr;
+                wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfo);
+                waitIdle();
+                if (g_mapStatus != WGPUMapMode_Read) {
+                    fprintf(stderr, "[ERROR] Failed to map stagingReadBuf\n");
+                    continue;
+                }
+                const void* mapped = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
+                if (!mapped) {
+                    fprintf(stderr, "[ERROR] Failed to get mapped range\n");
+                    continue;
+                }
+                memcpy(stagingData.data(), mapped, chunkBytes);
+                wgpuBufferUnmap(stagingReadBuf);
+                // Copy to CPU buffer
+                for (uint64_t i = 0; i < chunkBytes / sizeof(float); i++)
+                {
+                    losOutBuf[cpuOffset + i] = stagingData[i];
+                }
+                fprintf(stderr, "[DEBUG]   LOS chunk %u copied to CPU buffer\n", c);
+            }
         }
     }
     for (uint32_t s = 0; s < nSite_; s++)
     {
-        for (uint32_t lsp = 0; lsp < 6; lsp++)
+        fprintf(stderr, "[DEBUG] NLOS site %u\n", s);
+        for (uint32_t ch = 0; ch < 7; ch++)
         {
-            dispatchGrid(crnNlosBuf_, corrNlos[lsp], s * 6 + lsp);
+            for (uint32_t c = 0; c < nChunksY; c++)
+            {
+                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
+                const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
+                                                                       static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
+                fprintf(stderr, "[DEBUG]   dispatchGrid NLOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                dispatchGrid(stagingBuf, corrNlos[ch], gridIdx, yOff, yRows);
+                const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
+                                           static_cast<uint64_t>(ch) * nX * nY +
+                                           static_cast<uint64_t>(yOff) * nX;
+                const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
+                std::vector<float> stagingData(chunkBytes / sizeof(float));
+                wgpu::Buffer stagingReadBuf = makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+                {
+                    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
+                    enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
+                    queue_.submit(enc.finish(wgpu::Default));
+                    waitIdle();
+                }
+                // Map and read using wgpu-native C API
+                static WGPUMapMode g_mapStatusNlos = WGPUMapMode_None;
+                auto g_callbackNlos = [](WGPUMapAsyncStatus status, WGPUStringView message, void* userdata, void* /*another*/) {
+                    (void)message;
+                    *(reinterpret_cast<WGPUMapMode*>(userdata)) = status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
+                };
+                WGPUBufferMapCallbackInfo mapCbInfoNlos = {};
+                mapCbInfoNlos.nextInChain = nullptr;
+                mapCbInfoNlos.callback = g_callbackNlos;
+                mapCbInfoNlos.userdata1 = &g_mapStatusNlos;
+                mapCbInfoNlos.userdata2 = nullptr;
+                wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfoNlos);
+                waitIdle();
+                if (g_mapStatusNlos != WGPUMapMode_Read) {
+                    fprintf(stderr, "[ERROR] Failed to map stagingReadBuf (NLOS)\n");
+                    continue;
+                }
+                const void* mappedNlos = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
+                if (!mappedNlos) {
+                    fprintf(stderr, "[ERROR] Failed to get mapped range (NLOS)\n");
+                    continue;
+                }
+                memcpy(stagingData.data(), mappedNlos, chunkBytes);
+                wgpuBufferUnmap(stagingReadBuf);
+                for (uint64_t i = 0; i < chunkBytes / sizeof(float); i++)
+                {
+                    nlosOutBuf[cpuOffset + i] = stagingData[i];
+                }
+                fprintf(stderr, "[DEBUG]   NLOS chunk %u copied to CPU buffer\n", c);
+            }
         }
     }
     for (uint32_t s = 0; s < nSite_; s++)
     {
-        for (uint32_t lsp = 0; lsp < 6; lsp++)
+        fprintf(stderr, "[DEBUG] O2I site %u\n", s);
+        for (uint32_t ch = 0; ch < 7; ch++)
         {
-            dispatchGrid(crnO2iBuf_, corrO2i[lsp], s * 6 + lsp);
+            for (uint32_t c = 0; c < nChunksY; c++)
+            {
+                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
+                const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
+                                                                       static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
+                fprintf(stderr, "[DEBUG]   dispatchGrid O2I s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                dispatchGrid(stagingBuf, corrO2i[ch], gridIdx, yOff, yRows);
+                const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
+                                           static_cast<uint64_t>(ch) * nX * nY +
+                                           static_cast<uint64_t>(yOff) * nX;
+                const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
+                std::vector<float> stagingData(chunkBytes / sizeof(float));
+                wgpu::Buffer stagingReadBuf = makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+                {
+                    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
+                    enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
+                    queue_.submit(enc.finish(wgpu::Default));
+                    waitIdle();
+                }
+                // Map and read using wgpu-native C API
+                static WGPUMapMode g_mapStatusO2i = WGPUMapMode_None;
+                auto g_callbackO2i = [](WGPUMapAsyncStatus status, WGPUStringView message, void* userdata, void* /*another*/) {
+                    (void)message;
+                    *(reinterpret_cast<WGPUMapMode*>(userdata)) = status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
+                };
+                WGPUBufferMapCallbackInfo mapCbInfoO2i = {};
+                mapCbInfoO2i.nextInChain = nullptr;
+                mapCbInfoO2i.callback = g_callbackO2i;
+                mapCbInfoO2i.userdata1 = &g_mapStatusO2i;
+                mapCbInfoO2i.userdata2 = nullptr;
+                wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfoO2i);
+                waitIdle();
+                if (g_mapStatusO2i != WGPUMapMode_Read) {
+                    fprintf(stderr, "[ERROR] Failed to map stagingReadBuf (O2I)\n");
+                    continue;
+                }
+                const void* mappedO2i = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
+                if (!mappedO2i) {
+                    fprintf(stderr, "[ERROR] Failed to get mapped range (O2I)\n");
+                    continue;
+                }
+                memcpy(stagingData.data(), mappedO2i, chunkBytes);
+                wgpuBufferUnmap(stagingReadBuf);
+                for (uint64_t i = 0; i < chunkBytes / sizeof(float); i++)
+                {
+                    o2iOutBuf[cpuOffset + i] = stagingData[i];
+                }
+                fprintf(stderr, "[DEBUG]   O2I chunk %u copied to CPU buffer\n", c);
+            }
         }
+    }
+    fprintf(stderr, "[DEBUG] All CRN generation complete\n");
+    
+    // Create GPU-side CRN buffers and copy CPU data to them
+    if (!crnLosBuf_) {
+        crnLosBuf_ = makeBuffer(losOutBuf.size() * sizeof(float),
+                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+                                losOutBuf.data());
+        // Initialize offset buffer directly using mappedAtCreation
+        std::vector<uint32_t> losOffsets(nSite_ * 8);
+        for (uint32_t i = 0; i < nSite_ * 8; i++) {
+            losOffsets[i] = i * nX_ * nY_;
+        }
+        crnLosOffBuf_ = makeBuffer(nSite_ * 8ULL * sizeof(uint32_t),
+                                   WGPUBufferUsage_Storage,
+                                   losOffsets.data());
+    }
+    if (!crnNlosBuf_) {
+        crnNlosBuf_ = makeBuffer(nlosOutBuf.size() * sizeof(float),
+                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+                                 nlosOutBuf.data());
+        std::vector<uint32_t> nlosOffsets(nSite_ * 7);
+        for (uint32_t i = 0; i < nSite_ * 7; i++) {
+            nlosOffsets[i] = i * nX_ * nY_;
+        }
+        crnNlosOffBuf_ = makeBuffer(nSite_ * 7ULL * sizeof(uint32_t),
+                                    WGPUBufferUsage_Storage,
+                                    nlosOffsets.data());
+    }
+    if (!crnO2iBuf_) {
+        crnO2iBuf_ = makeBuffer(o2iOutBuf.size() * sizeof(float),
+                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+                                o2iOutBuf.data());
+        std::vector<uint32_t> o2iOffsets(nSite_ * 7);
+        for (uint32_t i = 0; i < nSite_ * 7; i++) {
+            o2iOffsets[i] = i * nX_ * nY_;
+        }
+        crnO2iOffBuf_ = makeBuffer(nSite_ * 7ULL * sizeof(uint32_t),
+                                   WGPUBufferUsage_Storage,
+                                   o2iOffsets.data());
     }
 }
 
@@ -515,11 +910,12 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
                           float minX,
                           float maxY,
                           float minY,
-                          bool updatePL,
-                          bool updateAllLSPs,
-                          bool updateLos,
-                          int32_t nX,
-                          int32_t nY)
+                         bool updatePL,
+                         bool updateAllLSPs,
+                         bool updateLos,
+                         bool updateOptionalPL,
+                         int32_t nX,
+                         int32_t nY)
 {
     assert(!isDead());
 
@@ -527,7 +923,7 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     {
         float maxX, minX, maxY, minY;
         uint32_t nSite, nUT, nSectorPerSite;
-        uint32_t updatePL, updateAllLSPs, updateLos;
+        uint32_t updatePL, updateAllLSPs, updateLos, updateOptionalPL;
         int32_t nX, nY;
     };
 
@@ -543,6 +939,7 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
                               (uint32_t)updatePL,
                               (uint32_t)updateAllLSPs,
                               (uint32_t)updateLos,
+                              (uint32_t)updateOptionalPL,
                               nX,
                               nY};
     wgpu::Buffer uniBuf = makeBuffer(sizeof(uniData), WGPUBufferUsage_Uniform, &uniData);
@@ -551,13 +948,6 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     const uint64_t utParamsSz = nUT * sizeof(UtParam);
     const uint64_t linkParamsSz = uint64_t(nSite) * nUT * sizeof(LinkParams);
     const uint64_t rngStatesSz = uint64_t(nSite) * nUT * sizeof(RngState);
-    const uint64_t crnGridSz = uint64_t(nX) * nY;
-    const uint64_t crnLosSz = uint64_t(nSite) * 7 * crnGridSz * sizeof(float);
-    const uint64_t crnNlosSz = uint64_t(nSite) * 6 * crnGridSz * sizeof(float);
-    const uint64_t crnO2iSz = uint64_t(nSite) * 6 * crnGridSz * sizeof(float);
-    const uint64_t crnLosOffSz = uint64_t(nSite) * 7 * sizeof(uint32_t);
-    const uint64_t crnNlosOffSz = uint64_t(nSite) * 6 * sizeof(uint32_t);
-    const uint64_t crnO2iOffSz = uint64_t(nSite) * 6 * sizeof(uint32_t);
 
     if (!linkParamsBuf_)
     {
@@ -576,7 +966,7 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
 
     if (!sysConfigBuf_)
     {
-        SystemLevelConfigGPU slc{0, 0, 0, 0, -1.0f, -1.0f, {0, 0}};
+        SystemLevelConfigGPU slc{0, 1, 0, 0, -1.0f, -1.0f, {0, 0}};
         sysConfigBuf_ = makeBuffer(sizeof(SystemLevelConfigGPU),
                                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                    &slc);
@@ -648,58 +1038,15 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
                                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                    seeds.data());
     }
-    if (!crnLosBuf_)
-    {
-        crnLosBuf_ = makeBuffer(crnLosSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    }
-    if (!crnNlosBuf_)
-    {
-        crnNlosBuf_ = makeBuffer(crnNlosSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    }
-    if (!crnO2iBuf_)
-    {
-        crnO2iBuf_ = makeBuffer(crnO2iSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    }
 
-    std::vector<uint32_t> losOff(nSite * 7), nlosOff(nSite * 6), o2iOff(nSite * 6);
-    for (uint32_t i = 0; i < nSite * 7; i++)
-    {
-        losOff[i] = i * crnGridSz;
-    }
-    for (uint32_t i = 0; i < nSite * 6; i++)
-    {
-        nlosOff[i] = i * crnGridSz;
-    }
-    for (uint32_t i = 0; i < nSite * 6; i++)
-    {
-        o2iOff[i] = i * crnGridSz;
-    }
-
-    if (!crnLosOffBuf_)
-    {
-        crnLosOffBuf_ = makeBuffer(crnLosOffSz,
-                                   WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                                   losOff.data());
-    }
-    if (!crnNlosOffBuf_)
-    {
-        crnNlosOffBuf_ = makeBuffer(crnNlosOffSz,
-                                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                                    nlosOff.data());
-    }
-    if (!crnO2iOffBuf_)
-    {
-        crnO2iOffBuf_ = makeBuffer(crnO2iOffSz,
-                                   WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                                   o2iOff.data());
-    }
     if (!stagingBuf_)
     {
         stagingBuf_ = makeBuffer(linkParamsSz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     }
 
     auto bg0Layout = linkParamPipeline_.getBindGroupLayout(0);
-    std::vector<wgpu::BindGroupEntry> entries(14, wgpu::Default);
+    // Bindings 0-19 required by WGSL shader, but we only use 6-19
+    std::vector<wgpu::BindGroupEntry> entries(20, wgpu::Default);
     auto E = [&](int i, uint32_t binding, wgpu::Buffer buf, uint64_t size = WGPU_WHOLE_SIZE) {
         entries[i].binding = binding;
         entries[i].buffer = buf;
@@ -707,24 +1054,34 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
         entries[i].size = size;
         if (!buf)
         {
-            std::cerr << "null buffer at entry " << i << std::endl;
+            std::cerr << "null buffer at entry " << i << " (binding " << binding << ")" << std::endl;
             abort();
         }
     };
-    E(0, 6, uniBuf, sizeof(uniData));
-    E(1, 7, cellParamsBuf_, cellParamsSz);
-    E(2, 8, utParamsBuf_, utParamsSz);
-    E(3, 9, sysConfigBuf_, sizeof(SystemLevelConfigGPU));
-    E(4, 10, simConfigBuf_, sizeof(SimConfigGPU));
-    E(5, 11, cmnLinkBuf_, sizeof(CmnLinkParamsGPU));
-    E(6, 12, linkParamsBuf_, linkParamsSz);
-    E(7, 13, rngStatesBuf_, rngStatesSz);
-    E(8, 14, crnLosBuf_, crnLosSz);
-    E(9, 15, crnNlosBuf_, crnNlosSz);
-    E(10, 16, crnO2iBuf_, crnO2iSz);
-    E(11, 17, crnLosOffBuf_, crnLosOffSz);
-    E(12, 18, crnNlosOffBuf_, crnNlosOffSz);
-    E(13, 19, crnO2iOffBuf_, crnO2iOffSz);
+    E(6, 6, uniBuf, sizeof(uniData));
+    E(7, 7, cellParamsBuf_, cellParamsSz);
+    E(8, 8, utParamsBuf_, utParamsSz);
+    E(9, 9, sysConfigBuf_, sizeof(SystemLevelConfigGPU));
+    E(10, 10, simConfigBuf_, sizeof(SimConfigGPU));
+    E(11, 11, cmnLinkBuf_, sizeof(CmnLinkParamsGPU));
+    E(12, 12, linkParamsBuf_, linkParamsSz);
+    E(13, 13, rngStatesBuf_, rngStatesSz);
+    E(14, 14, crnLosBuf_, nSite_ * 8ULL * uint64_t(nX_) * nY_ * sizeof(float));
+    E(15, 15, crnNlosBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
+    E(16, 16, crnO2iBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
+    E(17, 17, crnLosOffBuf_, nSite_ * 8ULL * sizeof(uint32_t));
+    E(18, 18, crnNlosOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
+    E(19, 19, crnO2iOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
+
+    // Debug: verify all buffers are valid
+    fprintf(stderr, "[DEBUG] calLinkParam: checking bind group buffers...\n");
+    for (int i = 0; i < 20; i++) {
+        if (entries[i].buffer) {
+            fprintf(stderr, "[DEBUG]   entry[%d] (binding %u): buf=%p size=%llu\n", i, entries[i].binding, (void*)entries[i].buffer, (unsigned long long)entries[i].size);
+        } else {
+            fprintf(stderr, "[DEBUG]   entry[%d] (binding %u): NULL BUFFER!\n", i, entries[i].binding);
+        }
+    }
 
     wgpu::BindGroupDescriptor bgDesc = wgpu::Default;
     bgDesc.layout = bg0Layout;
@@ -863,7 +1220,7 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     };
     E(e0, 0, 0, linkParamsBuf_);      // cray_buf_link
     E(e0, 1, 1, ssUtParamsBuf_);      // cray_buf_ut
-    E(e0, 2, 2, ssCmnLinkBuf_);       // cray_buf_cmn
+    E(e0, 2, 2, ssCmnLinkBuf_, sizeof(SsCmnParams));       // cray_buf_cmn (non-array storage)
     E(e0, 3, 3, clusterParamsBuf_);   // cray_buf_cluster
     E(e0, 4, 4, rngStatesBuf_);       // cray_buf_rng
     E(e0, 5, 5, ssDispatchBuf_);      // cray_disp
