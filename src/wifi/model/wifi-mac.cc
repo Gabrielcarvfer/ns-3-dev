@@ -710,7 +710,7 @@ WifiMac::GetMacQueueScheduler() const
 void
 WifiMac::NotifyChannelSwitching(uint8_t linkId)
 {
-    NS_LOG_FUNCTION(this << +linkId);
+    NS_LOG_FUNCTION(this << linkId);
 
     // we may have changed PHY band, in which case it is necessary to re-configure
     // the PHY dependent parameters. In any case, this makes no harm

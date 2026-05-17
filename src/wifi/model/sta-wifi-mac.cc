@@ -1613,7 +1613,7 @@ StaWifiMac::ReceiveAssocResp(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
                 NS_ABORT_MSG_IF(m_aid != 0 && m_aid != assoc.m_aid,
                                 "AID should be the same for all the links");
                 m_aid = assoc.m_aid;
-                NS_LOG_DEBUG("Setup on link " << staLinkid << " completed");
+                NS_LOG_DEBUG("Setup on link " << +staLinkid << " completed");
                 ApplyOperationalSettings(assocResp, *bssid, *bssid, staLinkid);
                 SetBssid(*bssid, staLinkid);
                 m_setupCompleted(staLinkid, *bssid);
@@ -2346,7 +2346,7 @@ StaWifiMac::CancelEmlsrPhyConnectEvent(uint8_t phyId)
 void
 StaWifiMac::NotifyChannelSwitching(uint8_t linkId)
 {
-    NS_LOG_FUNCTION(this << +linkId);
+    NS_LOG_FUNCTION(this << linkId);
 
     WifiMac::NotifyChannelSwitching(linkId);
 
