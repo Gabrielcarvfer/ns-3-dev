@@ -314,6 +314,7 @@ set(test_sources
     test/length-test-suite.cc
     test/many-uniform-random-variables-one-get-value-call-test-suite.cc
     test/names-test-suite.cc
+    test/nlohmann-json-test-suite.cc
     test/object-test-suite.cc
     test/one-uniform-random-variable-many-get-value-calls-test-suite.cc
     test/pair-value-test-suite.cc

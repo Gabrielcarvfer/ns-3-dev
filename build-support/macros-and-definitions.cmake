@@ -527,11 +527,26 @@ macro(process_options)
   # Set common include folder (./build/include, where we find ns3/core-module.h)
   include_directories(${CMAKE_OUTPUT_DIRECTORY}/include)
 
-  # Prepend the in-tree third-party/ directory to the include search path so
-  # vendored headers (e.g. nlohmann/json.hpp) take precedence over any
-  # system-installed copy. BEFORE ensures the path is emitted as -I ahead of any
-  # other -I or -isystem flags, including the default /usr/include search.
-  include_directories(BEFORE ${PROJECT_SOURCE_DIR}/third-party)
+  # Vendored third-party header-only libraries (e.g. nlohmann/json).
+  #
+  # Rather than placing the generic third-party/ directory on the global include
+  # path -- which would assume that every vendored library is header-only and
+  # follows the same <library>/header layout -- copy the specific vendored
+  # library into the build-tree include directory (build/include, already added
+  # to the include path above). Consumers then use the upstream include path,
+  # e.g. #include <nlohmann/json.hpp>. Re-run CMake after updating the vendored
+  # copy under third-party/nlohmann/ to refresh it.
+  file(COPY ${PROJECT_SOURCE_DIR}/third-party/nlohmann
+       DESTINATION ${CMAKE_OUTPUT_DIRECTORY}/include
+  )
+
+  # Install the vendored header alongside the ns-3 public headers. This keeps an
+  # installed ns-3 self-contained should the library ever be included from an
+  # installed ns-3 header (a public header that includes <nlohmann/json.hpp>
+  # would otherwise fail to compile for downstream users).
+  install(DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/include/nlohmann
+          DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
 
   # Include our package managers
   # cmake-format: off

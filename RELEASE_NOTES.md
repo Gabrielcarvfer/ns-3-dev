@@ -37,6 +37,7 @@ been tested on Linux. As of this release, the latest known version to work with 
 ### New user-visible features
 
 - (network) IANA protocol and link types are now centralized in network module headers.
+- Added support for `nlohmann/json`, a header-only C++ third-party library for JSON parsing and serialization.
 
 ### Bugs fixed
 
