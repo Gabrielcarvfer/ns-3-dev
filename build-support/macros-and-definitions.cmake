@@ -527,6 +527,12 @@ macro(process_options)
   # Set common include folder (./build/include, where we find ns3/core-module.h)
   include_directories(${CMAKE_OUTPUT_DIRECTORY}/include)
 
+  # Prepend the in-tree third-party/ directory to the include search path so
+  # vendored headers (e.g. nlohmann/json.hpp) take precedence over any
+  # system-installed copy. BEFORE ensures the path is emitted as -I ahead of any
+  # other -I or -isystem flags, including the default /usr/include search.
+  include_directories(BEFORE ${PROJECT_SOURCE_DIR}/third-party)
+
   # Include our package managers
   # cmake-format: off
   # Starting with a custom cmake file that provides a Hunter-like interface to vcpkg
