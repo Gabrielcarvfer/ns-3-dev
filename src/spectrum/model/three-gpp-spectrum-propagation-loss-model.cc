@@ -534,6 +534,13 @@ ThreeGppSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(
     NS_ASSERT_MSG(bPhasedArrayModel, "Antenna not found for node " << bId);
     NS_LOG_DEBUG("b node " << bId << " antenna " << bPhasedArrayModel);
 
+    // If the channel model supports it (currently only ThreeGppChannelModel
+    // with `UseGpu=true`), refresh every dirty link in one batch before
+    // the per-link `GetChannel` calls start. Default base-class impl is a
+    // no-op, so existing back-ends (Friis, two-ray, ...) keep working
+    // unchanged.
+    m_channelModel->EnsureBatchFresh();
+
     Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix =
         m_channelModel->GetChannel(a, b, aPhasedArrayModel, bPhasedArrayModel);
     const Ptr<const MatrixBasedChannelModel::ChannelParams> channelParams =

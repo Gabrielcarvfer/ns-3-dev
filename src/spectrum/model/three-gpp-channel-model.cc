@@ -10,6 +10,10 @@
  */
 #include "three-gpp-channel-model.h"
 
+#ifdef NS3_ENABLE_3GPP_GPU
+#include "sls-chan-wgpu.h"
+#endif
+
 #include "ns3/boolean.h"
 #include "ns3/double.h"
 #include "ns3/geocentric-constant-position-mobility-model.h"
@@ -1114,6 +1118,9 @@ static const std::unordered_map<int, double> cNlosTableTheta = {
 };
 
 ThreeGppChannelModel::ThreeGppChannelModel()
+    : m_useGpu(false),
+      m_lastBatchTime(Time::Min()),
+      m_gpu(nullptr)
 {
     NS_LOG_FUNCTION(this);
     m_uniformRv = CreateObject<UniformRandomVariable>();
@@ -1125,6 +1132,9 @@ ThreeGppChannelModel::ThreeGppChannelModel()
     m_normalRv->SetAttribute("Variance", DoubleValue(1.0));
 }
 
+// Destructor defined out-of-line so std::unique_ptr<SlsChanWgpu>'s
+// destructor sees the complete type. Required because m_gpu is forward-
+// declared in the header.
 ThreeGppChannelModel::~ThreeGppChannelModel()
 {
     NS_LOG_FUNCTION(this);
@@ -1140,6 +1150,7 @@ ThreeGppChannelModel::DoDispose()
     }
     m_channelMatrixMap.clear();
     m_channelParamsMap.clear();
+    m_linkEndpoints.clear();
     m_channelConditionModel = nullptr;
 }
 
@@ -1209,7 +1220,16 @@ ThreeGppChannelModel::GetTypeId()
                           "delayed (reflected) paths",
                           DoubleValue(0.0),
                           MakeDoubleAccessor(&ThreeGppChannelModel::m_vScatt),
-                          MakeDoubleChecker<double>(0.0));
+                          MakeDoubleChecker<double>(0.0))
+            .AddAttribute("UseGpu",
+                          "If true, ThreeGppChannelModel uses the WebGPU SlsChanWgpu back-end "
+                          "to regenerate every dirty link's ThreeGppChannelParams in one batch "
+                          "(see EnsureBatchFresh). Falls back to the per-link CPU path on any "
+                          "GPU initialisation failure or when NS3_ENABLE_3GPP_GPU is off at "
+                          "compile time. Default false until parity tests gate this on.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&ThreeGppChannelModel::m_useGpu),
+                          MakeBooleanChecker());
     return tid;
 }
 
@@ -2517,6 +2537,11 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
     // Compute the channel params key. The key is reciprocal, i.e., key (a, b) = key (b, a)
     const uint64_t channelParamsKey =
         GetKey(aMob->GetObject<Node>()->GetId(), bMob->GetObject<Node>()->GetId());
+    // Stash the endpoints so a later `EnsureBatchFresh` can find them
+    // without having to round-trip back through this call site. We
+    // overwrite unconditionally — the antenna pointer can legitimately
+    // change between calls (e.g. nr's initial association swap).
+    m_linkEndpoints[channelParamsKey] = {aMob, bMob, aAntenna, bAntenna};
     // retrieve the channel condition
     const Ptr<const ChannelCondition> condition =
         m_channelConditionModel->GetChannelCondition(aMob, bMob);
@@ -2590,6 +2615,114 @@ ThreeGppChannelModel::GetParams(Ptr<const MobilityModel> aMob, Ptr<const Mobilit
     }
     NS_LOG_WARN("Channel params map not found. Returning a nullptr.");
     return nullptr;
+}
+
+std::vector<uint64_t>
+ThreeGppChannelModel::CollectDirtyLinks() const
+{
+    NS_LOG_FUNCTION(this);
+
+    std::vector<uint64_t> dirty;
+    dirty.reserve(m_linkEndpoints.size());
+
+    for (const auto& [key, ep] : m_linkEndpoints)
+    {
+        // We can't refresh a link we've never observed in `GetChannel`,
+        // because we wouldn't know which mobility/antenna pair belongs
+        // to it. Such links are auto-skipped because they're not in
+        // `m_linkEndpoints` to begin with.
+        NS_ASSERT(ep.aMob && ep.bMob && ep.aAntenna && ep.bAntenna);
+
+        const Ptr<const ChannelCondition> condition =
+            m_channelConditionModel->GetChannelCondition(ep.aMob, ep.bMob);
+
+        // Case 1: link doesn't exist yet, or the LOS/O2I condition changed,
+        // or the endpoint displacement exceeded the consistency step.
+        if (NewChannelParamsNeeded(key, condition, ep.aMob, ep.bMob))
+        {
+            dirty.push_back(key);
+            continue;
+        }
+
+        // Case 2: link exists, but the spatial-consistency update window
+        // has elapsed — Procedure A update.
+        const auto it = m_channelParamsMap.find(key);
+        if (it != m_channelParamsMap.end() && ChannelUpdateNeeded(it->second, ep.aMob, ep.bMob))
+        {
+            dirty.push_back(key);
+        }
+    }
+
+    return dirty;
+}
+
+void
+ThreeGppChannelModel::EnsureBatchFresh()
+{
+    NS_LOG_FUNCTION(this);
+
+#ifndef NS3_ENABLE_3GPP_GPU
+    // GPU back-end disabled at compile time — every link falls through
+    // to the per-call CPU regeneration in GetChannel.
+    return;
+#else
+    if (!m_useGpu)
+    {
+        // GPU back-end available but the user hasn't opted in.
+        return;
+    }
+
+    // De-dup against repeated calls within the same Simulator::Now() tick.
+    // Multiple TX→RX evaluations inside the same time step share the batch.
+    const Time now = Simulator::Now();
+    if (m_lastBatchTime == now)
+    {
+        return;
+    }
+
+    // Phase 1.b — find every link in the cache (or about to be in it)
+    // whose params are stale and would be regenerated by the next
+    // `GetChannel` call. If none, there's nothing to batch and we can
+    // return cleanly.
+    const std::vector<uint64_t> dirty = CollectDirtyLinks();
+    NS_LOG_DEBUG("EnsureBatchFresh: " << dirty.size() << " dirty link(s) out of "
+                                      << m_linkEndpoints.size() << " tracked");
+    if (dirty.empty())
+    {
+        m_lastBatchTime = now;
+        return;
+    }
+
+    // Phase 1.c — populate flat CellParam / UtParam / antenna buffers,
+    // run the SlsChanWgpu pipeline, read back, and write into
+    // m_channelParamsMap. This is the hard part: the GPU pipeline does
+    // not produce the exact ns-3 ThreeGppChannelParams shape; it
+    // produces LinkParams (large-scale), ClusterParams (delays, powers,
+    // angles), and per-ray buffers (XPR, random phases, AoA/AoD/ZoA/ZoD
+    // per ray). Mapping these into ThreeGppChannelParams requires:
+    //   - LinkParams.SF/K/DS/ASD/ASA/ZSD/ZSA  ->  m_DS, m_K_factor and
+    //     LargeScaleParameters consumed by downstream consistency code.
+    //   - ClusterParams.delays  ->  ThreeGppChannelParams.m_delay (after
+    //     adjusting for LOS via AdjustClusterDelaysForLosCondition,
+    //     which the GPU does internally).
+    //   - ClusterParams.powers  ->  m_clusterPower (after RemoveWeakClusters).
+    //   - phinAoA/phinAoD/thetanZOA/thetanZOD  ->  cluster mean angles;
+    //     per-ray buffers populate m_rayAoaRadian / m_rayAodRadian /
+    //     m_rayZoaRadian / m_rayZodRadian (with the same intra-cluster
+    //     offsets the CPU path applies in ComputeRayAngles).
+    //   - cluster phases buffer  ->  m_clusterPhase (4 phases per ray).
+    //   - XPR buffer  ->  m_crossPolarizationPowerRatios.
+    //
+    // Until that mapping + a parity test land, fail loudly rather than
+    // silently producing wrong matrices.
+    NS_FATAL_ERROR("ThreeGppChannelModel::EnsureBatchFresh: GPU dispatch path not yet "
+                   "implemented (Phase 1.c). "
+                   << dirty.size()
+                   << " link(s) would be batched. "
+                      "Set UseGpu=false or wait until Phase 1.c lands.");
+
+    m_lastBatchTime = now;
+#endif
 }
 
 ThreeGppChannelModel::LargeScaleParameters

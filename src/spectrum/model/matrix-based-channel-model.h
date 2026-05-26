@@ -201,6 +201,22 @@ class MatrixBasedChannelModel : public Object
                                                Ptr<const MobilityModel> bMob) const = 0;
 
     /**
+     * Optional opt-in hook for back-ends that want to refresh many links'
+     * channel parameters in a single batch (e.g. a GPU pipeline) rather
+     * than regenerating them lazily inside `GetChannel`. The
+     * `ThreeGppSpectrumPropagationLossModel` calls this once at the top
+     * of `DoCalcRxPowerSpectralDensity` so a derived class that knows
+     * how to batch can refresh everything in one shot before the
+     * per-link `GetChannel` calls start running. Default implementation
+     * is a no-op so existing back-ends keep working unchanged.
+     */
+    virtual void EnsureBatchFresh()
+    {
+        // Default: no batching. Implemented by ThreeGppChannelModel when
+        // its `UseGpu` attribute is true.
+    }
+
+    /**
      * Generate a unique value for the pair of unsigned integer of 32 bits,
      * where the order does not matter, i.e., the same value will be returned for (a,b) and (b,a).
      * @param a the first value
