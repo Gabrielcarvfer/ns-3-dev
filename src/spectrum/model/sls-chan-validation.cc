@@ -95,7 +95,10 @@ buildHexCells(uint32_t nSite,
                 sy = isd * std::sin(angle);
             }
             for (uint32_t k = 0; k < nSector; ++k) {
-                cells[s * nSector + k].loc = {sx, sy, h_bs, 0.0f};
+                CellParam& c = cells[s * nSector + k];
+                c.loc[0] = sx;
+                c.loc[1] = sy;
+                c.loc[2] = h_bs;
             }
         }
         return;
@@ -105,7 +108,23 @@ buildHexCells(uint32_t nSite,
     {
         for (uint32_t k = 0; k < nSector; ++k)
         {
-            cells[s * nSector + k].loc = {allSites[s].first, allSites[s].second, h_bs, 0.0f};
+            const uint32_t cellIdx = s * nSector + k;
+            CellParam& c = cells[cellIdx];
+            c.cid = cellIdx;
+            c.siteId = s;
+            c.loc[0] = allSites[s].first;
+            c.loc[1] = allSites[s].second;
+            c.loc[2] = h_bs;
+            c.antPanelIdx = 0; // BS panel = index 0
+            // Per-sector boresight: 0°, 120°, 240°. zeta_offset = 0.
+            c.antPanelOrientation[0] = float(k) * 120.0f;
+            c.antPanelOrientation[1] = 0.0f;
+            c.antPanelOrientation[2] = 0.0f;
+            c.monostaticInd = 0;
+            c.secondAntPanelIdx = 0;
+            c.secondAntPanelOrientation[0] = 0.0f;
+            c.secondAntPanelOrientation[1] = 0.0f;
+            c.secondAntPanelOrientation[2] = 0.0f;
         }
     }
 }
@@ -133,7 +152,7 @@ main()
 
     std::vector<CellParam> cells;
     buildHexCells(nSite, nSector, isd, h_bs, cells);
-    fprintf(stderr, "[DEBUG] About to call uploadCellParams\n");
+    fprintf(stderr, "[DEBUG] About to call uploadCellParams (cells.size=%zu)\n", cells.size());
     sls.uploadCellParams(cells);
     fprintf(stderr, "[DEBUG] uploadCellParams ok\n");
 
@@ -163,7 +182,7 @@ main()
             closestCellDistance = std::numeric_limits<double>::max();
             for (auto& cell : cells)
             {
-                double d = sqrt(pow(cell.loc.x - x, 2) + pow(cell.loc.y - y, 2));
+                double d = sqrt(pow(cell.loc[0] - x, 2) + pow(cell.loc[1] - y, 2));
                 if (d < closestCellDistance)
                 {
                     closestCellDistance = d;

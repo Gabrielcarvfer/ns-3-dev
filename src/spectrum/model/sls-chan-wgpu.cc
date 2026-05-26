@@ -1011,7 +1011,12 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
                               nY};
     wgpu::Buffer uniBuf = makeBuffer(sizeof(uniData), WGPUBufferUsage_Uniform, &uniData);
 
-    const uint64_t cellParamsSz = uint64_t(nSite) * sizeof(CellParam);
+    // Cell buffer is one entry per (site, sector); WGSL kernel indexes it as
+    // cell_params[site_idx * nSectorPerSite + sector]. Sizing the binding by
+    // nSite alone clips the buffer to the first nSite/nSectorPerSite-th of
+    // the data and the kernel reads zeros for higher site indices.
+    const uint64_t cellParamsSz =
+        uint64_t(nSite) * uint64_t(nSectorPerSite) * sizeof(CellParam);
     const uint64_t utParamsSz = nUT * sizeof(UtParam);
     const uint64_t linkParamsSz = uint64_t(nSite) * nUT * sizeof(LinkParams);
     const uint64_t rngStatesSz = uint64_t(nSite) * nUT * sizeof(RngState);
@@ -2509,9 +2514,9 @@ saveSlsChanToHdf5(
         {
             records[i].cid                      = i;
             records[i].siteId                   = i / nSectorPerSite;
-            records[i].loc[0]                   = cells[i].loc.x;
-            records[i].loc[1]                   = cells[i].loc.y;
-            records[i].loc[2]                   = cells[i].loc.z;
+            records[i].loc[0]                   = cells[i].loc[0];
+            records[i].loc[1]                   = cells[i].loc[1];
+            records[i].loc[2]                   = cells[i].loc[2];
             records[i].antPanelIdx              = cellsSS[i].antPanelIdx;
             records[i].antPanelOrientation[0]   = cellsSS[i].antPanelOrientation[0];
             records[i].antPanelOrientation[1]   = cellsSS[i].antPanelOrientation[1];
@@ -2537,10 +2542,10 @@ saveSlsChanToHdf5(
     for (uint32_t i = 0; i < nCells; ++i)
     {
         uint32_t base = i * cellFloatsPer;
-        cellParamsFlat[base + 0] = cells[i].loc.x;
-        cellParamsFlat[base + 1] = cells[i].loc.y;
-        cellParamsFlat[base + 2] = cells[i].loc.z;
-        cellParamsFlat[base + 3] = cells[i].loc._p;
+        cellParamsFlat[base + 0] = cells[i].loc[0];
+        cellParamsFlat[base + 1] = cells[i].loc[1];
+        cellParamsFlat[base + 2] = cells[i].loc[2];
+        cellParamsFlat[base + 3] = 0.0f;
     }
     writeDatasetFloat(grpTopo, "cell_params", cellParamsFlat.data(), nCells * cellFloatsPer);
 
@@ -2548,10 +2553,10 @@ saveSlsChanToHdf5(
     for (uint32_t i = 0; i < nSite; ++i)
     {
         uint32_t base = i * 7;
-        siteParamsFlat[base + 0] = cells[i * nSectorPerSite].loc.x;
-        siteParamsFlat[base + 1] = cells[i * nSectorPerSite].loc.y;
-        siteParamsFlat[base + 2] = cells[i * nSectorPerSite].loc.z;
-        siteParamsFlat[base + 3] = cells[i * nSectorPerSite].loc._p;
+        siteParamsFlat[base + 0] = cells[i * nSectorPerSite].loc[0];
+        siteParamsFlat[base + 1] = cells[i * nSectorPerSite].loc[1];
+        siteParamsFlat[base + 2] = cells[i * nSectorPerSite].loc[2];
+        siteParamsFlat[base + 3] = 0.0f;
         siteParamsFlat[base + 4] = isd;
         siteParamsFlat[base + 5] = 0.0f;
         siteParamsFlat[base + 6] = 0.0f;

@@ -28,12 +28,35 @@ struct alignas(16) Vec3f
 };
 
 // ── Large-scale CellParam / UtParam ──────────────────────────────────────────
-// Used by calLinkParam (bindings 7 & 8 in cal_link_param_kernel)
+// Used by calLinkParam (bindings 7 & 8 in cal_link_param_kernel).
+// Layout MUST match the WGSL `CellParam` struct exactly. Per the WGSL spec,
+// `vec3<f32>` has alignment 16 *but size 12* — i.e. the next field can start
+// 12 bytes after a vec3 begins, not 16. So we model vec3 with `float[3]` and
+// insert explicit padding before each one to satisfy alignment. Total struct
+// size is 80 bytes.
 struct alignas(16) CellParam
 {
-    Vec3f loc;
-    // add remaining large-scale fields from sls_chan.cuh here
+    uint32_t cid;                              // 0
+    uint32_t siteId;                           // 4
+    uint32_t _pad_a[2];                        // 8  — pad to 16 for `loc`
+    float    loc[3];                           // 16-27 (vec3<f32>, 12 bytes)
+    uint32_t antPanelIdx;                      // 28 — fits in the implicit-pad slot
+    float    antPanelOrientation[3];           // 32-43 (vec3<f32>, 12 bytes)
+    uint32_t monostaticInd;                    // 44
+    uint32_t _pad1;                            // 48
+    uint32_t _pad2;                            // 52
+    uint32_t secondAntPanelIdx;                // 56
+    uint32_t _pad_b;                           // 60 — pad to 64 for next vec3
+    float    secondAntPanelOrientation[3];     // 64-75
+    // alignas(16) pads to 80
 };
+static_assert(sizeof(CellParam) == 80, "CellParam size must match WGSL layout (80 B)");
+static_assert(offsetof(CellParam, loc) == 16, "CellParam.loc must be at offset 16");
+static_assert(offsetof(CellParam, antPanelIdx) == 28, "CellParam.antPanelIdx offset 28");
+static_assert(offsetof(CellParam, antPanelOrientation) == 32, "antPanelOrientation offset 32");
+static_assert(offsetof(CellParam, monostaticInd) == 44, "monostaticInd offset 44");
+static_assert(offsetof(CellParam, secondAntPanelIdx) == 56, "secondAntPanelIdx offset 56");
+static_assert(offsetof(CellParam, secondAntPanelOrientation) == 64, "secondAntPanelOrientation offset 64");
 
 struct alignas(16) UtParam
 {
