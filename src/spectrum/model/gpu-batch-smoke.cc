@@ -49,17 +49,44 @@ struct LinkPair
     const char* label;
 };
 
+int g_failures = 0;
+
 void
 DriveOnce(Ptr<ThreeGppChannelModel> model, const LinkPair& lp)
 {
-    // First call populates the link-endpoint registry and runs the CPU
-    // LSP draw (m_gpuLspCache is empty on the first tick).
     auto mat = model->GetChannel(lp.a, lp.b, lp.aAnt, lp.bAnt);
-    std::printf("  [%s] GetChannel ok (rows=%llu cols=%llu pages=%llu)\n",
+    auto params = model->GetParams(lp.a, lp.b);
+    auto p3 =
+        DynamicCast<const ThreeGppChannelModel::ThreeGppChannelParams>(params);
+    if (!p3)
+    {
+        std::fprintf(stderr, "  [%s] GetParams returned non-ThreeGpp params\n", lp.label);
+        ++g_failures;
+        return;
+    }
+    // Sanity checks: DS must be finite and in (1ns, 10us). K is in dB,
+    // typically in (-10, 30); for NLOS it's 0/unused but should still
+    // be finite.
+    const double ds = p3->m_DS;
+    const double k = p3->m_K_factor;
+    const bool dsOk = std::isfinite(ds) && ds > 1e-9 && ds < 1e-5;
+    const bool kOk = std::isfinite(k) && k > -20.0 && k < 40.0;
+    if (!dsOk || !kOk)
+    {
+        std::fprintf(stderr,
+                     "  [%s] INVALID LSPs: DS=%.3e K=%.3f\n",
+                     lp.label,
+                     ds,
+                     k);
+        ++g_failures;
+    }
+    std::printf("  [%s] H=(%llux%llux%llu) DS=%.3e K=%.3f\n",
                 lp.label,
                 static_cast<unsigned long long>(mat->m_channel.GetNumRows()),
                 static_cast<unsigned long long>(mat->m_channel.GetNumCols()),
-                static_cast<unsigned long long>(mat->m_channel.GetNumPages()));
+                static_cast<unsigned long long>(mat->m_channel.GetNumPages()),
+                ds,
+                k);
 }
 
 void
@@ -190,6 +217,11 @@ main()
         return 2;
     }
 
+    if (g_failures > 0)
+    {
+        std::fprintf(stderr, "gpu_batch_smoke FAILED (%d link(s) had invalid LSPs)\n", g_failures);
+        return 3;
+    }
     std::printf("gpu_batch_smoke OK\n");
     return 0;
 }

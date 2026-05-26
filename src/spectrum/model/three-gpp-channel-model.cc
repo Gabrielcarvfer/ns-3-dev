@@ -2894,13 +2894,23 @@ ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
         const uint32_t ui = utIdToIdx.at(utId);
         const LinkParams& lp = lps[ci * nUT + ui];
 
+        // Unit conversions between the GPU LinkParams output and the
+        // ns-3 LargeScaleParameters struct:
+        //   - DS: GPU writes pow(10, mu+9) in nanoseconds (the +9 lifts
+        //     log10(seconds) into nanoseconds so cluster delays end up
+        //     directly in ns). ns-3 expects seconds.  Convert ns -> s.
+        //   - K: GPU writes pow(10, mu/10) -- linear ratio.  ns-3
+        //     expects K in dB.  Convert linear -> dB.
+        //   - ASD/ASA/ZSD/ZSA: GPU writes pow(10, mu) -- linear degrees,
+        //     same as ns-3's LSP convention.  Copy verbatim.
         LargeScaleParameters lsps;
-        lsps.DS = lp.DS;
+        lsps.DS = static_cast<double>(lp.DS) * 1e-9;
         lsps.ASD = lp.ASD;
         lsps.ASA = lp.ASA;
         lsps.ZSD = lp.ZSD;
         lsps.ZSA = lp.ZSA;
-        lsps.kFactor = lp.K;
+        lsps.kFactor =
+            (lp.K > 0.0f) ? 10.0 * std::log10(static_cast<double>(lp.K)) : 0.0;
 
         // Two cases for how the LSPs feed into the next `GetChannel`
         // call for this key:
