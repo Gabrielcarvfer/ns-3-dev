@@ -29,16 +29,6 @@ if(applications
   endif()
 endif()
 
-set(network_sources)
-if(network
-   IN_LIST
-   ns3-all-enabled-modules
-)
-  set(network_sources
-      traced/traced-value-callback-typedef-test-suite.cc
-  )
-endif()
-
 add_library(
   test
   OBJECT
@@ -46,7 +36,6 @@ add_library(
   # libcore is enabled
   ${csma_sources}
   ${dsr_sources}
-  ${network_sources}
 )
 
 add_dependencies(

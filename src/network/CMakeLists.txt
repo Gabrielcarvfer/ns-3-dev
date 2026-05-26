@@ -176,4 +176,5 @@ build_lib(
     test/pcap-file-test-suite.cc
     test/sequence-number-test-suite.cc
     test/test-data-rate.cc
+    test/traced-value-callback-typedef-test-suite.cc
 )
