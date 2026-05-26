@@ -116,9 +116,11 @@ buildHexCells(uint32_t nSite,
             c.loc[1] = allSites[s].second;
             c.loc[2] = h_bs;
             c.antPanelIdx = 0; // BS panel = index 0
-            // Per-sector boresight: 0°, 120°, 240°. zeta_offset = 0.
-            c.antPanelOrientation[0] = float(k) * 120.0f;
-            c.antPanelOrientation[1] = 0.0f;
+            // antPanelOrientation layout = [theta_tilt, phi_tilt, zeta_offset]
+            // (degrees). 3GPP Phase-1 UMa: 102° zenith tilt (12° below horizon),
+            // per-sector boresight at 0°/120°/240° azimuth, no slant offset.
+            c.antPanelOrientation[0] = 102.0f;
+            c.antPanelOrientation[1] = float(k) * 120.0f;
             c.antPanelOrientation[2] = 0.0f;
             c.monostaticInd = 0;
             c.secondAntPanelIdx = 0;
@@ -152,9 +154,9 @@ main()
 
     std::vector<CellParam> cells;
     buildHexCells(nSite, nSector, isd, h_bs, cells);
-    fprintf(stderr, "[DEBUG] About to call uploadCellParams (cells.size=%zu)\n", cells.size());
+    SLS_LOG("[DEBUG] About to call uploadCellParams (cells.size=%zu)\n", cells.size());
     sls.uploadCellParams(cells);
-    fprintf(stderr, "[DEBUG] uploadCellParams ok\n");
+    SLS_LOG("[DEBUG] uploadCellParams ok\n");
 
     std::vector<UtParam> uts(nUT);
     std::mt19937 rng(42);
@@ -244,8 +246,7 @@ main()
             uts[u].o2i_penetration_loss = 0.0f;
         }
     }
-    fprintf(stderr,
-            "[DEBUG] UE mix: %u indoor (%u high-loss / %u low-loss), %u outdoor "
+    SLS_LOG("[DEBUG] UE mix: %u indoor (%u high-loss / %u low-loss), %u outdoor "
             "(PL_tw_low=%.1f dB, PL_tw_high=%.1f dB at fc=%.1f GHz)\n",
             nIndoor, nHigh, nIndoor - nHigh, nUT - nIndoor,
             PL_tw_low, PL_tw_high, fc_ghz);
@@ -263,11 +264,11 @@ main()
     const float area = maxDist + 50.0f;
 
     // Check large system parameters
-    fprintf(stderr, "[DEBUG] corrLos = {%f, %f, %f, %f, %f, %f, %f, %f}\n",
+    SLS_LOG("[DEBUG] corrLos = {%f, %f, %f, %f, %f, %f, %f, %f}\n",
             corrLos[0], corrLos[1], corrLos[2], corrLos[3], corrLos[4], corrLos[5], corrLos[6], corrLos[7]);
-    fprintf(stderr, "[DEBUG] corrNlos = {%f, %f, %f, %f, %f, %f, %f}\n",
+    SLS_LOG("[DEBUG] corrNlos = {%f, %f, %f, %f, %f, %f, %f}\n",
             corrNlos[0], corrNlos[1], corrNlos[2], corrNlos[3], corrNlos[4], corrNlos[5], corrNlos[6]);
-    fprintf(stderr, "[DEBUG] corrO2i = {%f, %f, %f, %f, %f, %f, %f}\n",
+    SLS_LOG("[DEBUG] corrO2i = {%f, %f, %f, %f, %f, %f, %f}\n",
             corrO2i[0], corrO2i[1], corrO2i[2], corrO2i[3], corrO2i[4], corrO2i[5], corrO2i[6]);
 
     // ── Preflight CRN sizing ─────────────────────────────────────────────────
@@ -293,8 +294,7 @@ main()
         const uint64_t o2iBytes  = uint64_t(nSite) * 7 * nXp * nYp * sizeof(float);
         const uint64_t maxBytes  = std::max({losBytes, nlosBytes, o2iBytes});
         constexpr uint64_t SAFE_CAP = 1ULL << 30; // 1 GB
-        fprintf(stderr,
-                "[PREFLIGHT] area=%.1fm nX=%llu nY=%llu maxCorr=%.1f "
+        SLS_LOG("[PREFLIGHT] area=%.1fm nX=%llu nY=%llu maxCorr=%.1f "
                 "los=%.2f GB nlos=%.2f GB o2i=%.2f GB (cap=%.2f GB)\n",
                 area,
                 (unsigned long long)nXp,
@@ -306,19 +306,18 @@ main()
                 (double)SAFE_CAP  / (1024.0 * 1024.0 * 1024.0));
         if (maxBytes > SAFE_CAP)
         {
-            fprintf(stderr,
-                    "[PREFLIGHT FATAL] CRN buffers exceed 1 GB cap. "
+            SLS_LOG("[PREFLIGHT FATAL] CRN buffers exceed 1 GB cap. "
                     "Shrink isd / maxDist or wait until step is plumbed.\n");
             std::fflush(stderr);
             return 2;
         }
     }
 
-    fprintf(stderr, "About to call generateCRN\n");
+    SLS_LOG("About to call generateCRN\n");
     fflush(stderr);
     sls.generateCRN(area, -area, area, -area, corrLos, corrNlos, corrO2i);
     fflush(stderr);
-    std::cerr << "generateCRN ok" << std::endl;
+    SLS_CERR << "generateCRN ok" << std::endl;
 
     sls.calLinkParam(nSite,
                      nUT,
@@ -333,10 +332,10 @@ main()
                      /*updateOptionalPL=*/false,
                      sls.nX(),
                      sls.nY());
-    std::cerr << "calLinkParam ok" << std::endl;
+    SLS_CERR << "calLinkParam ok" << std::endl;
 
     auto links = sls.readLinkParams(nSite, nUT);
-    std::cerr << "readLinkParams ok" << std::endl;
+    SLS_CERR << "readLinkParams ok" << std::endl;
 
     std::ofstream csv("link_params.csv");
     csv << "cell_id,ut_id,is_los,is_outdoor,d2d_m,d3d_m,pl_sim_db,pl_ref_db,sf_db,k_db,ds_ns,asd_"
@@ -359,7 +358,7 @@ main()
     }
     csv.close();
 
-    std::cout << "Wrote link_params.csv (" << uint64_t(nCell) * nUT << " links)\n";
+    SLS_COUT << "Wrote link_params.csv (" << uint64_t(nCell) * nUT << " links)\n";
 
     // ── Small-scale config (Phase-1 UMa 6 GHz: 20 MHz / 15 kHz SCS) ─────────
     sls.uploadSmallScaleConfig(
@@ -374,7 +373,7 @@ main()
         /*optionalCfrDim=*/0,
         /*lambda0=*/3e8f / (fc_ghz * 1e9f)
     );
-    std::cerr << "uploadSmallScaleConfig ok" << std::endl;
+    SLS_CERR << "uploadSmallScaleConfig ok" << std::endl;
 
     // ── Antenna panel configs (Phase-1: 10-element BS panel, 1-element UE) ──
     // panel 0 = BS: nAnt=10, antSize=[1,1,10,1,1], antSpacing=[0,0,0.5,0.5], polarAngles=[45,-45]
@@ -424,7 +423,7 @@ main()
     const uint32_t nBsAnt = antCfgs[0].nAnt; // 10 (Phase-1)
     const uint32_t nUeAnt = antCfgs[1].nAnt; // 1
     sls.uploadAntPanelConfigs(antCfgs, antThetaFlat, antPhiFlat);
-    std::cerr << "uploadAntPanelConfigs ok" << std::endl;
+    SLS_CERR << "uploadAntPanelConfigs ok" << std::endl;
 
     // Small-scale common parameters for WGSL binding 2 (SsCmnParams).
     // TR 38.901 Table 7.5-6 UMa at fc = 3.5 GHz ─────
@@ -556,7 +555,7 @@ main()
     for (uint32_t i = 0; i < 20u; ++i) ssCmn.RayOffsetAngles[i] = rayOffsets[i];
 
     sls.uploadCmnLinkParamsSmallScale(ssCmn);
-    std::cerr << "uploadCmnLinkParamsSmallScale ok" << std::endl;
+    SLS_CERR << "uploadCmnLinkParamsSmallScale ok" << std::endl;
 
     // ── Build active links: all nSite × nUT pairs ────────────────────────────
     const uint32_t nSnapshots = 1; // n_snapshot_per_slot (Phase-1)
@@ -566,10 +565,21 @@ main()
     activeLinks.reserve(nSite * nUT);
     for (uint32_t site = 0; site < nSite; ++site)
     {
+        // Site location = sector 0's location (all sectors of a site share xy).
+        const float sx = cells[site * nSector].loc[0];
+        const float sy = cells[site * nSector].loc[1];
         for (uint32_t u = 0; u < nUT; ++u)
         {
             const uint32_t linkIdx = site * nUT + u;
-            const uint32_t sector = u % nSector;   // distribute UEs across 3 sectors per site
+            // Pick the sector whose boresight points closest to the UE: sectors
+            // are at 0°/120°/240° azimuth, so wrap [(az - boresight) mod 360]
+            // and pick the minimum. Equivalently, snap az / 120 to the nearest
+            // integer (mod nSector).
+            const float dx = uts[u].loc.x - sx;
+            const float dy = uts[u].loc.y - sy;
+            float azDeg = std::atan2(dy, dx) * 180.0f / float(M_PI);
+            if (azDeg < 0.0f) { azDeg += 360.0f; }
+            uint32_t sector = uint32_t((azDeg + 60.0f) / 120.0f) % nSector;
             const uint32_t cid = site * nSector + sector;
             const uint32_t elemsPerLink = nSnapshots * nUeAnt * nBsAnt * 24u; // NMAXTAPS=24
             ActiveLink al;
@@ -597,7 +607,7 @@ main()
         cellsSS[i]._pad0 = 0;
     }
     sls.uploadCellParamsSS(cellsSS);
-    std::cerr << "uploadCellParamsSS ok" << std::endl;
+    SLS_CERR << "uploadCellParamsSS ok" << std::endl;
 
     // Build small-scale UT params
     std::vector<UtParamSS> utsSS(nUT);
@@ -614,23 +624,23 @@ main()
         utsSS[u]._pad0 = 0;
     }
     sls.uploadUtParamsSS(utsSS);
-    std::cerr << "uploadUtParamsSS ok" << std::endl;
+    SLS_CERR << "uploadUtParamsSS ok" << std::endl;
 
     // ── Small-scale pipeline ─────────────────────────────────────────────────
     sls.calClusterRay(nSite, nUT);
-    std::cerr << "calClusterRay ok" << std::endl;
+    SLS_CERR << "calClusterRay ok" << std::endl;
 
     sls.generateCIR(activeLinks, nActiveLinks, nSnapshots, /*refTime=*/0.0f);
-    std::cerr << "generateCIR ok" << std::endl;
+    SLS_CERR << "generateCIR ok" << std::endl;
 
     auto t0 = std::chrono::high_resolution_clock::now();
 
     sls.generateCFRBatched(activeLinks, nActiveLinks, nSnapshots);
-    std::cerr << "generateCFRBatched ok" << std::endl;
+    SLS_CERR << "generateCFRBatched ok" << std::endl;
 
     auto t1 = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-    std::cout << "Total time until generateCFRBatched: " << duration << " us" << std::endl;
+    SLS_COUT << "Total time until generateCFRBatched: " << duration << " us" << std::endl;
 
     // ── Readback ─────────────────────────────────────────────────────────────
     auto cirCoe = sls.readCirCoe(nActiveLinks, nSnapshots, nUeAnt, nBsAnt);
@@ -670,7 +680,7 @@ main()
         isd, h_bs, 10.0f, 2000.0f, 0.0f,
         nSector
     );
-    std::cerr << "HDF5 output saved" << std::endl;
+    SLS_CERR << "HDF5 output saved" << std::endl;
 #endif
 
     // ── Write small-scale CSV ─────────────────────────────────────────────────
@@ -753,9 +763,9 @@ main()
             }
         }
     }
-    std::cout << "Wrote small_scale_params.csv (" << nActiveLinks << " links)\n";
-    std::cout << "Wrote small_scale_detail.csv (" << nActiveLinks << " links)\n";
-    std::cout << "Wrote ray_params.csv (" << "variable rows" << ")\n";
+    SLS_COUT << "Wrote small_scale_params.csv (" << nActiveLinks << " links)\n";
+    SLS_COUT << "Wrote small_scale_detail.csv (" << nActiveLinks << " links)\n";
+    SLS_COUT << "Wrote ray_params.csv (" << "variable rows" << ")\n";
     */
     return 0;
 }

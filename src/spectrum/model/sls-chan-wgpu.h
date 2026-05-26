@@ -7,6 +7,9 @@
 #include <cassert>
 #include <complex>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -16,6 +19,44 @@
 #endif
 
 #include <webgpu/webgpu.hpp> // C++ wrapper around webgpu.h
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Debug logging — disabled by default, opt in with `SLS_DEBUG=1` in the
+// environment. Use SLS_LOG(fmt, ...) for printf-style messages; SLS_CERR
+// and SLS_COUT for stream-style. None of these produce any output unless
+// SLS_DEBUG is set to a non-empty, non-"0" value at process start.
+// ─────────────────────────────────────────────────────────────────────────────
+inline bool
+slsDebugEnabled()
+{
+    static const bool v = []() {
+        const char* e = std::getenv("SLS_DEBUG");
+        return e != nullptr && e[0] != '\0' && !(e[0] == '0' && e[1] == '\0');
+    }();
+    return v;
+}
+
+#define SLS_LOG(...)                                                                               \
+    do                                                                                             \
+    {                                                                                              \
+        if (slsDebugEnabled())                                                                     \
+        {                                                                                          \
+            std::fprintf(stderr, __VA_ARGS__);                                                     \
+        }                                                                                          \
+    } while (0)
+
+#define SLS_CERR                                                                                   \
+    if (!slsDebugEnabled())                                                                        \
+    {                                                                                              \
+    }                                                                                              \
+    else                                                                                           \
+        std::cerr
+#define SLS_COUT                                                                                   \
+    if (!slsDebugEnabled())                                                                        \
+    {                                                                                              \
+    }                                                                                              \
+    else                                                                                           \
+        std::cout
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plain-old-data structs that map exactly to the WGSL struct layouts.

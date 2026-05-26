@@ -39,7 +39,7 @@ createDevice()
 
     // Try D3D12 backend first (best on Windows)
     aopts.backendType = WGPUBackendType_D3D12;
-    fprintf(stderr, "[DEBUG] Trying D3D12 backend...\n");
+    SLS_LOG("[DEBUG] Trying D3D12 backend...\n");
     wgpuInstanceRequestAdapter(
             instance,
             &aopts,
@@ -52,12 +52,12 @@ createDevice()
                        void*) {
                         if (status == WGPURequestAdapterStatus_Success)
                         {
-                            fprintf(stderr, "[DEBUG] D3D12 adapter acquired\n");
+                            SLS_LOG("[DEBUG] D3D12 adapter acquired\n");
                             *static_cast<WGPUAdapter*>(ud1) = a;
                         }
                         else
                         {
-                            fprintf(stderr, "[DEBUG] D3D12 adapter failed (status=%d), trying Vulkan...\n", status);
+                            SLS_LOG("[DEBUG] D3D12 adapter failed (status=%d), trying Vulkan...\n", status);
                         }
                     },
                     .userdata1 = &adapter});
@@ -65,7 +65,7 @@ createDevice()
     if (!adapter) {
         // Try Vulkan backend as fallback
         aopts.backendType = WGPUBackendType_Vulkan;
-        fprintf(stderr, "[DEBUG] Trying Vulkan backend...\n");
+        SLS_LOG("[DEBUG] Trying Vulkan backend...\n");
         wgpuInstanceRequestAdapter(
                 instance,
                 &aopts,
@@ -78,12 +78,12 @@ createDevice()
                            void*) {
                             if (status == WGPURequestAdapterStatus_Success)
                             {
-                                fprintf(stderr, "[DEBUG] Vulkan adapter acquired\n");
+                                SLS_LOG("[DEBUG] Vulkan adapter acquired\n");
                                 *static_cast<WGPUAdapter*>(ud1) = a;
                             }
                             else
                             {
-                                fprintf(stderr, "[DEBUG] Vulkan adapter failed (status=%d), trying auto...\n", status);
+                                SLS_LOG("[DEBUG] Vulkan adapter failed (status=%d), trying auto...\n", status);
                             }
                         },
                         .userdata1 = &adapter});
@@ -92,7 +92,7 @@ createDevice()
     if (!adapter) {
         // Try auto-select
         aopts.backendType = WGPUBackendType_Undefined;
-        fprintf(stderr, "[DEBUG] Trying auto-select backend...\n");
+        SLS_LOG("[DEBUG] Trying auto-select backend...\n");
         wgpuInstanceRequestAdapter(
                 instance,
                 &aopts,
@@ -105,19 +105,19 @@ createDevice()
                            void*) {
                             if (status == WGPURequestAdapterStatus_Success)
                             {
-                                fprintf(stderr, "[DEBUG] Auto-selected adapter acquired\n");
+                                SLS_LOG("[DEBUG] Auto-selected adapter acquired\n");
                                 *static_cast<WGPUAdapter*>(ud1) = a;
                             }
                             else
                             {
-                                fprintf(stderr, "[DEBUG] Auto-select adapter failed (status=%d)\n", status);
+                                SLS_LOG("[DEBUG] Auto-select adapter failed (status=%d)\n", status);
                             }
                         },
                         .userdata1 = &adapter});
         wgpuInstanceProcessEvents(instance);  // process async callback
     }
     if (!adapter) {
-        fprintf(stderr, "[FATAL] No GPU adapter available!\n");
+        SLS_LOG("[FATAL] No GPU adapter available!\n");
         wgpuInstanceRelease(instance);
         exit(1);
     }
@@ -134,7 +134,7 @@ createDevice()
     WGPUDeviceDescriptor ddesc{};
     ddesc.uncapturedErrorCallbackInfo.callback =
             [](const WGPUDevice*, WGPUErrorType t, WGPUStringView msg, void*, void*) {
-                fprintf(stderr, "[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
+                SLS_LOG("[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
             };
     // Set unlimited buffer size limit
     WGPULimits limits{};
@@ -171,7 +171,7 @@ createDevice()
     requiredLimits.minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
     ddesc.requiredLimits = &requiredLimits;
-    fprintf(stderr, "[DEBUG] Device created with maxStorageBufSize=%llu\n",
+    SLS_LOG("[DEBUG] Device created with maxStorageBufSize=%llu\n",
             (unsigned long long)requiredLimits.maxStorageBufferBindingSize);
     wgpuAdapterRequestDevice(
             adapter,
@@ -185,13 +185,13 @@ createDevice()
                         }
                         else
                         {
-                            fprintf(stderr, "requestDevice failed\n");
+                            SLS_LOG("requestDevice failed\n");
                         }
                     },
                     .userdata1 = &device});
     wgpuInstanceProcessEvents(instance);  // process async callback
     if (!device) {
-        fprintf(stderr, "[FATAL] Failed to create WGPU device!\n");
+        SLS_LOG("[FATAL] Failed to create WGPU device!\n");
         wgpuAdapterRelease(adapter);
         wgpuInstanceRelease(instance);
         exit(1);
@@ -208,15 +208,15 @@ SlsChanWgpu::SlsChanWgpu()
     auto result = createDevice();
     device_ = std::move(result.first);
     m_maxGpuBuffer_ = result.second;
-    fprintf(stderr, "[DEBUG] Constructor: GPU max buffer size = %llu bytes (%.1f GB)\n",
+    SLS_LOG("[DEBUG] Constructor: GPU max buffer size = %llu bytes (%.1f GB)\n",
             (unsigned long long)m_maxGpuBuffer_, (double)m_maxGpuBuffer_ / (1024.0*1024.0*1024.0));
     queue_ = device_.getQueue();
     std::string wgsl = readFile("C:/tools/sources/ns-3-dev/src/spectrum/model/sls-chan.wgsl");
     if (wgsl.empty()) {
-        fprintf(stderr, "ERROR: Failed to read WGSL shader\n");
+        SLS_LOG("ERROR: Failed to read WGSL shader\n");
         throw std::runtime_error("Failed to read WGSL shader");
     }
-    std::cout << "Loaded WGSL shader: " << wgsl.size() << " bytes\n";
+    SLS_COUT << "Loaded WGSL shader: " << wgsl.size() << " bytes\n";
 
     WGPUShaderSourceWGSL wgslSource{};
     wgslSource.chain.next = nullptr;
@@ -225,46 +225,46 @@ SlsChanWgpu::SlsChanWgpu()
 
     WGPUShaderModuleDescriptor smDescC{};
     smDescC.nextInChain = &wgslSource.chain;
-    fprintf(stderr, "[DEBUG] Creating WGSL shader module (%zu bytes)...\n", wgsl.size());
+    SLS_LOG("[DEBUG] Creating WGSL shader module (%zu bytes)...\n", wgsl.size());
     shader_ = wgpu::ShaderModule(wgpuDeviceCreateShaderModule(device_, &smDescC));
     if (!shader_) {
-        fprintf(stderr, "[FATAL] WGSL shader module creation failed\n");
+        SLS_LOG("[FATAL] WGSL shader module creation failed\n");
         throw std::runtime_error("WGSL failed to compile");
     }
-    fprintf(stderr, "[DEBUG] WGSL shader module created successfully\n");
+    SLS_LOG("[DEBUG] WGSL shader module created successfully\n");
 
     auto makePipeline = [&](const char* ep) -> wgpu::ComputePipeline {
         wgpu::ComputePipelineDescriptor desc{};
         desc.compute.module = shader_;
         desc.compute.entryPoint = sv(ep);
-        fprintf(stderr, "[DEBUG] Creating pipeline '%s'...\n", ep);
+        SLS_LOG("[DEBUG] Creating pipeline '%s'...\n", ep);
         fflush(stderr);
         auto pipe = device_.createComputePipeline(desc);
-        fprintf(stderr, "[DEBUG] Pipeline '%s': %s\n", ep, pipe ? "OK" : "FAILED");
+        SLS_LOG("[DEBUG] Pipeline '%s': %s\n", ep, pipe ? "OK" : "FAILED");
         fflush(stderr);
         return pipe;
     };
 
     linkParamPipeline_ = makePipeline("cal_link_param_kernel");
-    fprintf(stderr, "[DEBUG] After cal_link_param_kernel\n");
+    SLS_LOG("[DEBUG] After cal_link_param_kernel\n");
     assert(linkParamPipeline_ && "missing cal_link_param_kernel in WGSL");
     crnFillPipeline_ = makePipeline("fill_crn_kernel");
-    fprintf(stderr, "[DEBUG] After fill_crn_kernel\n");
+    SLS_LOG("[DEBUG] After fill_crn_kernel\n");
     assert(crnFillPipeline_ && "missing fill_crn_kernel in WGSL");
     crnConvPipeline_ = makePipeline("convolve_crn_kernel");
-    fprintf(stderr, "[DEBUG] After convolve_crn_kernel\n");
+    SLS_LOG("[DEBUG] After convolve_crn_kernel\n");
     assert(crnConvPipeline_ && "missing convolve_crn_kernel in WGSL");
     crnNormPipeline_ = makePipeline("normalize_crn_kernel");
-    fprintf(stderr, "[DEBUG] After normalize_crn_kernel\n");
+    SLS_LOG("[DEBUG] After normalize_crn_kernel\n");
     assert(crnNormPipeline_ && "missing normalize_crn_kernel in WGSL");
     clusterRayPipeline_ = makePipeline("cal_cluster_ray_kernel");
-    fprintf(stderr, "[DEBUG] After cal_cluster_ray_kernel\n");
+    SLS_LOG("[DEBUG] After cal_cluster_ray_kernel\n");
     assert(clusterRayPipeline_ && "missing cal_cluster_ray_kernel in WGSL");
     generateCIRPipeline_ = makePipeline("generate_cir_kernel");
-    fprintf(stderr, "[DEBUG] After generate_cir_kernel\n");
+    SLS_LOG("[DEBUG] After generate_cir_kernel\n");
     assert(generateCIRPipeline_ && "missing generate_cir_kernel in WGSL");
     generateCFRPipeline_ = makePipeline("generate_cfr_kernel_mode1");
-    fprintf(stderr, "[DEBUG] After generate_cfr_kernel_mode1\n");
+    SLS_LOG("[DEBUG] After generate_cfr_kernel_mode1\n");
     assert(generateCFRPipeline_ && "missing generate_cfr_kernel_mode1 in WGSL");
 }
 
@@ -403,7 +403,7 @@ SlsChanWgpu::generateCRN(float maxX,
                          const float corrNlos[7],
                          const float corrO2i[7])
 {
-    fprintf(stderr, "[DEBUG] generateCRN: nSite=%u, maxX=%.1f, minX=%.1f, maxY=%.1f, minY=%.1f\n", nSite_, maxX, minX, maxY, minY);
+    SLS_LOG("[DEBUG] generateCRN: nSite=%u, maxX=%.1f, minX=%.1f, maxY=%.1f, minY=%.1f\n", nSite_, maxX, minX, maxY, minY);
     fflush(stderr);
     // Calculate grid dimensions matching WGSL shader: round(bound + 1 + 2*D) where D=3*corrDist
     float maxCorrDist = 0.0f;
@@ -411,7 +411,7 @@ SlsChanWgpu::generateCRN(float maxX,
     for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrNlos[i]);
     for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrO2i[i]);
     
-    fprintf(stderr, "[DEBUG] generateCRN: maxCorrDist=%.1f step=%.1f\n",
+    SLS_LOG("[DEBUG] generateCRN: maxCorrDist=%.1f step=%.1f\n",
             maxCorrDist, crnStep_);
     // All grid sizing is in PIXELS. corrDist (metres) maps to corrDist/step
     // pixels of correlation; D = 3*corr_px is the per-side filter pad; the
@@ -422,7 +422,7 @@ SlsChanWgpu::generateCRN(float maxX,
         (maxX - minX) / step_m + 1.0f + 2.0f * D_px + 0.5f);
     const int32_t nY = static_cast<int32_t>(
         (maxY - minY) / step_m + 1.0f + 2.0f * D_px + 0.5f);
-    fprintf(stderr, "[DEBUG] generateCRN: nX=%d, nY=%d, gridSz=%llu\n", nX, nY, (unsigned long long)uint64_t(nX) * nY);
+    SLS_LOG("[DEBUG] generateCRN: nX=%d, nY=%d, gridSz=%llu\n", nX, nY, (unsigned long long)uint64_t(nX) * nY);
 
     nX_ = nX;
     nY_ = nY;
@@ -431,7 +431,7 @@ SlsChanWgpu::generateCRN(float maxX,
     const uint64_t losBufSz = uint64_t(nSite_) * 8 * gridSz * sizeof(float);
     const uint64_t nlosBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
     const uint64_t o2iBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
-    fprintf(stderr, "[DEBUG] generateCRN: losBufSz=%llu, nlosBufSz=%llu, o2iBufSz=%llu\n", (unsigned long long)losBufSz, (unsigned long long)nlosBufSz, (unsigned long long)o2iBufSz);
+    SLS_LOG("[DEBUG] generateCRN: losBufSz=%llu, nlosBufSz=%llu, o2iBufSz=%llu\n", (unsigned long long)losBufSz, (unsigned long long)nlosBufSz, (unsigned long long)o2iBufSz);
 
     // Hard safety guard. On D3D12 we have observed that requesting a CRN buffer
     // anywhere near the device's maxStorageBufferBindingSize triggers a BSOD
@@ -449,8 +449,7 @@ SlsChanWgpu::generateCRN(float maxX,
     }
     if (maxCrn > effectiveCap)
     {
-        fprintf(stderr,
-                "[FATAL] CRN buffer size %.2f GB exceeds safety cap %.2f GB "
+        SLS_LOG("[FATAL] CRN buffer size %.2f GB exceeds safety cap %.2f GB "
                 "(device limit %.2f GB).\n"
                 "        nSite=%u, gridSz=%llu (nX=%d nY=%d).\n"
                 "        Reduce deployment radius / site count or coarsen the "
@@ -490,17 +489,17 @@ SlsChanWgpu::generateCRN(float maxX,
     {
         maxCorr = std::max(maxCorr, corrO2i[i]);
     }
-    fprintf(stderr, "[DEBUG] generateCRN: maxCorr=%.1f, tempBufBytes=%llu\n", maxCorr, (unsigned long long)tempBufBytes(maxCorr));
+    SLS_LOG("[DEBUG] generateCRN: maxCorr=%.1f, tempBufBytes=%llu\n", maxCorr, (unsigned long long)tempBufBytes(maxCorr));
 
     wgpu::Buffer tempBuf =
         makeBuffer(tempBufBytes(maxCorr), WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    fprintf(stderr, "[DEBUG] generateCRN: tempBuf created\n");
+    SLS_LOG("[DEBUG] generateCRN: tempBuf created\n");
 
     // Check if GPU can handle the CRN output buffers
     // CRN buffers are nSite * channels * gridSz * sizeof(float) each
     // With nSite=19, gridSz=20259001: LOS=11.5GB, NLOS/O2I=10GB
     // Use the adapter's actual maxStorageBufferBindingSize (set in createDevice)
-    fprintf(stderr, "[DEBUG] generateCRN: GPU max buffer size = %llu bytes (%.1f GB)\n",
+    SLS_LOG("[DEBUG] generateCRN: GPU max buffer size = %llu bytes (%.1f GB)\n",
             (unsigned long long)m_maxGpuBuffer_, (double)m_maxGpuBuffer_ / (1024.0*1024.0*1024.0));
 
     // NOTE: This wgpu-native version does NOT support the max-buffer-size feature
@@ -592,9 +591,9 @@ SlsChanWgpu::generateCRN(float maxX,
                                              &normUni);
 
         // ── Fill bind group ──
-        fprintf(stderr, "[DEBUG] dispatchGrid: corrDist=%.1f, curTempBytes=%llu, actualTempBytes=%llu, pnx=%llu, pny=%llu\n", corrDist, (unsigned long long)curTempBytes, (unsigned long long)actualTempBytes, (unsigned long long)pnx, (unsigned long long)pny);
-        fprintf(stderr, "[DEBUG] dispatchGrid: genUniBuf=%p, tempBuf=%p, crnRngBuf=%p\n", (void*)genUniBuf, (void*)tempBuf, (void*)crnRngBuf);
-        fprintf(stderr, "[DEBUG] dispatchGrid: genUni values: maxX=%.1f minX=%.1f maxY=%.1f minY=%.1f corrDist=%.1f maxRngStates=%u nX=%u nY=%u step=%.1f boundX=%.1f boundY=%.1f\n",
+        SLS_LOG("[DEBUG] dispatchGrid: corrDist=%.1f, curTempBytes=%llu, actualTempBytes=%llu, pnx=%llu, pny=%llu\n", corrDist, (unsigned long long)curTempBytes, (unsigned long long)actualTempBytes, (unsigned long long)pnx, (unsigned long long)pny);
+        SLS_LOG("[DEBUG] dispatchGrid: genUniBuf=%p, tempBuf=%p, crnRngBuf=%p\n", (void*)genUniBuf, (void*)tempBuf, (void*)crnRngBuf);
+        SLS_LOG("[DEBUG] dispatchGrid: genUni values: maxX=%.1f minX=%.1f maxY=%.1f minY=%.1f corrDist=%.1f maxRngStates=%u nX=%u nY=%u step=%.1f boundX=%.1f boundY=%.1f\n",
                 genUni.maxX, genUni.minX, genUni.maxY, genUni.minY, genUni.corrDist, genUni.maxRngStates, genUni.nX, genUni.nY, genUni.step, genUni.boundX, genUni.boundY);
         auto fillLayout = crnFillPipeline_.getBindGroupLayout(0);
         std::vector<wgpu::BindGroupEntry> fillEntries(3, wgpu::Default);
@@ -611,9 +610,9 @@ SlsChanWgpu::generateCRN(float maxX,
         fillBgDesc.layout = fillLayout;
         fillBgDesc.entryCount = 3;
         fillBgDesc.entries = fillEntries.data();
-        fprintf(stderr, "[DEBUG] dispatchGrid: creating fill bind group...\n");
+        SLS_LOG("[DEBUG] dispatchGrid: creating fill bind group...\n");
         wgpu::BindGroup fillBg = device_.createBindGroup(fillBgDesc);
-        fprintf(stderr, "[DEBUG] dispatchGrid: fill bind group created, fillBg=%p\n", (void*)fillBg);
+        SLS_LOG("[DEBUG] dispatchGrid: fill bind group created, fillBg=%p\n", (void*)fillBg);
 
         // ── Conv bind group ──
         auto convLayout = crnConvPipeline_.getBindGroupLayout(0);
@@ -654,7 +653,7 @@ SlsChanWgpu::generateCRN(float maxX,
             // chunk_total = padded_nx * chunk_ny (elements to process in this chunk)
             const uint64_t chunk_total = (chunkY > 0) ? (pnx * chunkY) : (pnx * pny);
             const uint32_t workgroups = static_cast<uint32_t>((chunk_total + 255u) / 256u);
-            fprintf(stderr, "[DEBUG] dispatchGrid: dispatching %u workgroups for %llu elements\\n",
+            SLS_LOG("[DEBUG] dispatchGrid: dispatching %u workgroups for %llu elements\\n",
                     workgroups, (unsigned long long)chunk_total);
             wgpu::CommandEncoder enc1 = device_.createCommandEncoder(wgpu::Default);
             auto pass = enc1.beginComputePass(wgpu::Default);
@@ -673,7 +672,7 @@ SlsChanWgpu::generateCRN(float maxX,
                 // Convolve dispatch: use 1D grid to stay under WebGPU 65535 limit
                 const uint64_t chunk_total = (chunkY > 0) ? (pnx * chunkY) : (pnx * pny);
                 const uint32_t convWorkgroups = static_cast<uint32_t>((chunk_total + 255u) / 256u);
-                fprintf(stderr, "[DEBUG] dispatchGrid: convolve dispatching %u workgroups for %llu elements\\n",
+                SLS_LOG("[DEBUG] dispatchGrid: convolve dispatching %u workgroups for %llu elements\\n",
                         convWorkgroups, (unsigned long long)chunk_total);
                 auto pass1 = enc2.beginComputePass(wgpu::Default);
                 pass1.setPipeline(crnConvPipeline_);
@@ -708,7 +707,7 @@ SlsChanWgpu::generateCRN(float maxX,
     const uint64_t wgLimitChunkY = 16776961u / static_cast<uint64_t>(nX);
     const uint64_t clampedMaxChunkY = std::min(maxChunkY, std::max(static_cast<uint64_t>(1u), wgLimitChunkY));
     const uint64_t nChunksY = (static_cast<uint64_t>(nY) + clampedMaxChunkY - 1) / clampedMaxChunkY;
-    fprintf(stderr, "[DEBUG] CRN chunking: nX=%d nY=%d maxChunkY=%llu nChunksY=%llu\n",
+    SLS_LOG("[DEBUG] CRN chunking: nX=%d nY=%d maxChunkY=%llu nChunksY=%llu\n",
             nX, nY, (unsigned long long)clampedMaxChunkY, (unsigned long long)nChunksY);
 
     // Also chunk the output buffers: create them on CPU side to avoid GPU memory limit
@@ -719,7 +718,7 @@ SlsChanWgpu::generateCRN(float maxX,
     std::vector<float> losOutBuf(losBufSize, 0.0f);
     std::vector<float> nlosOutBuf(nlosBufSize, 0.0f);
     std::vector<float> o2iOutBuf(o2iBufSize, 0.0f);
-    fprintf(stderr, "[DEBUG] CRN: GPU output buffers created (los=%lluMB, nlos=%lluMB, o2i=%lluMB)\n",
+    SLS_LOG("[DEBUG] CRN: GPU output buffers created (los=%lluMB, nlos=%lluMB, o2i=%lluMB)\n",
             (unsigned long long)(losOutBuf.size() * sizeof(float)) / (1024 * 1024),
             (unsigned long long)(nlosOutBuf.size() * sizeof(float)) / (1024 * 1024),
             (unsigned long long)(o2iOutBuf.size() * sizeof(float)) / (1024 * 1024));
@@ -727,12 +726,12 @@ SlsChanWgpu::generateCRN(float maxX,
     // Create staging buffers for chunked output (small enough to fit in GPU memory)
     const uint64_t stagingGridBytes = static_cast<uint64_t>(clampedMaxChunkY) * nX * sizeof(float);
     wgpu::Buffer stagingBuf = makeBuffer(stagingGridBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
-    fprintf(stderr, "[DEBUG] CRN: stagingBuf created (%llu bytes)\n", (unsigned long long)stagingGridBytes);
+    SLS_LOG("[DEBUG] CRN: stagingBuf created (%llu bytes)\n", (unsigned long long)stagingGridBytes);
 
-    fprintf(stderr, "[DEBUG] Starting CRN generation loop\n");
+    SLS_LOG("[DEBUG] Starting CRN generation loop\n");
     for (uint32_t s = 0; s < nSite_; s++)
     {
-        fprintf(stderr, "[DEBUG] LOS site %u\n", s);
+        SLS_LOG("[DEBUG] LOS site %u\n", s);
         for (uint32_t ch = 0; ch < 8; ch++)
         {
             for (uint32_t c = 0; c < nChunksY; c++)
@@ -741,7 +740,7 @@ SlsChanWgpu::generateCRN(float maxX,
                 const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
                                                                        static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 const uint32_t gridIdx = static_cast<uint32_t>(s) * 8 + ch;
-                fprintf(stderr, "[DEBUG]   dispatchGrid LOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                SLS_LOG("[DEBUG]   dispatchGrid LOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
                 // Use stagingBuf as output instead of crnLosBuf_
                 dispatchGrid(stagingBuf, corrLos[ch], gridIdx, yOff, yRows);
                 // Copy staging buffer to CPU output buffer
@@ -772,12 +771,12 @@ SlsChanWgpu::generateCRN(float maxX,
                 wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfo);
                 waitIdle();
                 if (g_mapStatus != WGPUMapMode_Read) {
-                    fprintf(stderr, "[ERROR] Failed to map stagingReadBuf\n");
+                    SLS_LOG("[ERROR] Failed to map stagingReadBuf\n");
                     continue;
                 }
                 const void* mapped = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
                 if (!mapped) {
-                    fprintf(stderr, "[ERROR] Failed to get mapped range\n");
+                    SLS_LOG("[ERROR] Failed to get mapped range\n");
                     continue;
                 }
                 memcpy(stagingData.data(), mapped, chunkBytes);
@@ -787,13 +786,13 @@ SlsChanWgpu::generateCRN(float maxX,
                 {
                     losOutBuf[cpuOffset + i] = stagingData[i];
                 }
-                fprintf(stderr, "[DEBUG]   LOS chunk %u copied to CPU buffer\n", c);
+                SLS_LOG("[DEBUG]   LOS chunk %u copied to CPU buffer\n", c);
             }
         }
     }
     for (uint32_t s = 0; s < nSite_; s++)
     {
-        fprintf(stderr, "[DEBUG] NLOS site %u\n", s);
+        SLS_LOG("[DEBUG] NLOS site %u\n", s);
         for (uint32_t ch = 0; ch < 7; ch++)
         {
             for (uint32_t c = 0; c < nChunksY; c++)
@@ -802,7 +801,7 @@ SlsChanWgpu::generateCRN(float maxX,
                 const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
                                                                        static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
-                fprintf(stderr, "[DEBUG]   dispatchGrid NLOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                SLS_LOG("[DEBUG]   dispatchGrid NLOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
                 dispatchGrid(stagingBuf, corrNlos[ch], gridIdx, yOff, yRows);
                 const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
                                            static_cast<uint64_t>(ch) * nX * nY +
@@ -830,12 +829,12 @@ SlsChanWgpu::generateCRN(float maxX,
                 wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfoNlos);
                 waitIdle();
                 if (g_mapStatusNlos != WGPUMapMode_Read) {
-                    fprintf(stderr, "[ERROR] Failed to map stagingReadBuf (NLOS)\n");
+                    SLS_LOG("[ERROR] Failed to map stagingReadBuf (NLOS)\n");
                     continue;
                 }
                 const void* mappedNlos = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
                 if (!mappedNlos) {
-                    fprintf(stderr, "[ERROR] Failed to get mapped range (NLOS)\n");
+                    SLS_LOG("[ERROR] Failed to get mapped range (NLOS)\n");
                     continue;
                 }
                 memcpy(stagingData.data(), mappedNlos, chunkBytes);
@@ -844,13 +843,13 @@ SlsChanWgpu::generateCRN(float maxX,
                 {
                     nlosOutBuf[cpuOffset + i] = stagingData[i];
                 }
-                fprintf(stderr, "[DEBUG]   NLOS chunk %u copied to CPU buffer\n", c);
+                SLS_LOG("[DEBUG]   NLOS chunk %u copied to CPU buffer\n", c);
             }
         }
     }
     for (uint32_t s = 0; s < nSite_; s++)
     {
-        fprintf(stderr, "[DEBUG] O2I site %u\n", s);
+        SLS_LOG("[DEBUG] O2I site %u\n", s);
         for (uint32_t ch = 0; ch < 7; ch++)
         {
             for (uint32_t c = 0; c < nChunksY; c++)
@@ -859,7 +858,7 @@ SlsChanWgpu::generateCRN(float maxX,
                 const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
                                                                        static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
-                fprintf(stderr, "[DEBUG]   dispatchGrid O2I s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                SLS_LOG("[DEBUG]   dispatchGrid O2I s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
                 dispatchGrid(stagingBuf, corrO2i[ch], gridIdx, yOff, yRows);
                 const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
                                            static_cast<uint64_t>(ch) * nX * nY +
@@ -887,12 +886,12 @@ SlsChanWgpu::generateCRN(float maxX,
                 wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfoO2i);
                 waitIdle();
                 if (g_mapStatusO2i != WGPUMapMode_Read) {
-                    fprintf(stderr, "[ERROR] Failed to map stagingReadBuf (O2I)\n");
+                    SLS_LOG("[ERROR] Failed to map stagingReadBuf (O2I)\n");
                     continue;
                 }
                 const void* mappedO2i = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
                 if (!mappedO2i) {
-                    fprintf(stderr, "[ERROR] Failed to get mapped range (O2I)\n");
+                    SLS_LOG("[ERROR] Failed to get mapped range (O2I)\n");
                     continue;
                 }
                 memcpy(stagingData.data(), mappedO2i, chunkBytes);
@@ -901,11 +900,11 @@ SlsChanWgpu::generateCRN(float maxX,
                 {
                     o2iOutBuf[cpuOffset + i] = stagingData[i];
                 }
-                fprintf(stderr, "[DEBUG]   O2I chunk %u copied to CPU buffer\n", c);
+                SLS_LOG("[DEBUG]   O2I chunk %u copied to CPU buffer\n", c);
             }
         }
     }
-    fprintf(stderr, "[DEBUG] All CRN generation complete\n");
+    SLS_LOG("[DEBUG] All CRN generation complete\n");
 
     // Final guard before the large GPU uploads. The earlier guard at the top of
     // generateCRN already rejects oversized configs, but keep this as a tripwire
@@ -915,8 +914,7 @@ SlsChanWgpu::generateCRN(float maxX,
                              std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
         if (bytes > cap)
         {
-            fprintf(stderr,
-                    "[FATAL] CRN %s upload %.2f GB > safety cap %.2f GB\n",
+            SLS_LOG("[FATAL] CRN %s upload %.2f GB > safety cap %.2f GB\n",
                     tag,
                     (double)bytes / (1024.0 * 1024.0 * 1024.0),
                     (double)cap / (1024.0 * 1024.0 * 1024.0));
@@ -1126,7 +1124,7 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
         entries[i].size = size;
         if (!buf)
         {
-            std::cerr << "null buffer at entry " << i << " (binding " << binding << ")" << std::endl;
+            SLS_CERR << "null buffer at entry " << i << " (binding " << binding << ")" << std::endl;
             abort();
         }
     };
@@ -1432,15 +1430,14 @@ SlsChanWgpu::generateCFR(const std::vector<ActiveLink>& activeLinks,
 
     // Probe device health before doing anything
     wgpuDevicePoll(device_, false, nullptr);
-    std::cerr << "CFR entry: device alive" << std::endl;
+    SLS_CERR << "CFR entry: device alive" << std::endl;
 
     if (!freqChanPrbgBuf_)
     {
         const uint64_t cfrElems =
             uint64_t(nActiveLinks) * nSnapshots * ssNBsAnt_ * ssNUeAnt_ * ssNPrbg_;
         const uint64_t bufBytes = cfrElems * sizeof(float) * 2;
-        fprintf(stderr,
-                "CFR: cfrElems=%llu, freqChanPrbgBuf size=%.1f MB\n",
+        SLS_LOG("CFR: cfrElems=%llu, freqChanPrbgBuf size=%.1f MB\n",
                 (unsigned long long)cfrElems,
                 (double)bufBytes / (1024.0 * 1024.0));
         freqChanPrbgBuf_ = makeBuffer(cfrElems * sizeof(float) * 2,
@@ -1543,7 +1540,7 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
         wgpuDevicePoll(device_, false, nullptr);
         if (isDead())
         {
-            std::cerr << "CFR batch " << b << ": device lost before buffer alloc" << std::endl;
+            SLS_CERR << "CFR batch " << b << ": device lost before buffer alloc" << std::endl;
             return;
         }
 
@@ -1659,7 +1656,7 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
     m_cfrBatchedNActiveLinks_ = nActiveLinks;
     m_cfrBatchedNSnapshots_ = nSnapshots;
 
-    std::cerr << "CFR batched done: " << nActiveLinks << " links in " << nBatches << " batches" << std::endl;
+    SLS_CERR << "CFR batched done: " << nActiveLinks << " links in " << nBatches << " batches" << std::endl;
 }
 
 void
@@ -1736,12 +1733,12 @@ SlsChanWgpu::isDead()
     WGPUBuffer probe = wgpuDeviceCreateBuffer(device_, &probeDesc);
     if (probe)
     {
-        fprintf(stderr, "Device alive\n");
+        SLS_LOG("Device alive\n");
         return false;
     }
     else
     {
-        fprintf(stderr, "Device dead\n");
+        SLS_LOG("Device dead\n");
         return true;
     }
 }
@@ -1913,7 +1910,7 @@ saveSlsChanToHdf5(
     // message instead of cascading HDF5 errors.
     if (std::filesystem::exists(filename))
     {
-        std::cerr << "saveSlsChanToHdf5: " << filename
+        SLS_CERR << "saveSlsChanToHdf5: " << filename
                   << " already exists — close it in any external program and retry"
                   << std::endl;
         return;
@@ -1922,7 +1919,7 @@ saveSlsChanToHdf5(
     hid_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
     if (file < 0)
     {
-        std::cerr << "saveSlsChanToHdf5: failed to create " << filename << std::endl;
+        SLS_CERR << "saveSlsChanToHdf5: failed to create " << filename << std::endl;
         return;
     }
 
@@ -2589,7 +2586,7 @@ saveSlsChanToHdf5(
     H5Gclose(grpTopo);
 
     H5Fclose(file);
-    std::cout << "Wrote HDF5: " << filename
+    SLS_COUT << "Wrote HDF5: " << filename
               << " (" << nLinks << " links, " << nLinks << " active)\n";
 }
 #endif // SLS_CHAN_HDF5
