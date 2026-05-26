@@ -2847,6 +2847,47 @@ ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
     const float fMaxY = static_cast<float>(maxY) + pad;
     const float fMinY = static_cast<float>(minY) - pad;
 
+    // Step 2.5 — figure out the system-level config. Two pieces matter:
+    //
+    //   - scenario: map ns-3's `m_scenario` string to the GPU's u32 enum.
+    //   - forceLosOutdoor: ns-3's ChannelConditionModel has already
+    //     decided each link's LOS state. The GPU has its own
+    //     LOS-probability formulas in `cal_los_prob` and will happily
+    //     disagree if we don't override. If every dirty link agrees on
+    //     LOS (or every link agrees on NLOS), we can tell the GPU to
+    //     force that verdict; otherwise we leave the formula in place
+    //     and accept some statistical mismatch on K-factor.
+    //
+    // SCENARIO_UMA=0 / SCENARIO_UMI=1 / SCENARIO_RMA=2 in sls-chan.wgsl.
+    uint32_t gpuScenario = 0;
+    if (m_scenario == "UMi-StreetCanyon" || m_scenario == "UMi")
+        gpuScenario = 1;
+    else if (m_scenario == "RMa")
+        gpuScenario = 2;
+
+    int losAgreedCount = 0;
+    int nlosAgreedCount = 0;
+    for (uint64_t key : dirty)
+    {
+        const auto& ep = m_linkEndpoints.find(key)->second;
+        auto cond = m_channelConditionModel->GetChannelCondition(ep.aMob, ep.bMob);
+        if (cond->GetLosCondition() == ChannelCondition::LOS)
+            ++losAgreedCount;
+        else if (cond->GetLosCondition() == ChannelCondition::NLOS)
+            ++nlosAgreedCount;
+    }
+    float forceLosOutdoor = -1.0f;
+    if (losAgreedCount == static_cast<int>(dirty.size()))
+        forceLosOutdoor = 1.0f;
+    else if (nlosAgreedCount == static_cast<int>(dirty.size()))
+        forceLosOutdoor = 0.0f;
+    m_gpu->setSystemLevelConfig(gpuScenario,
+                                /*enablePropagationDelay=*/1,
+                                /*o2iBldg=*/0,
+                                /*o2iCar=*/0,
+                                /*forceLosIndoor=*/forceLosOutdoor,
+                                forceLosOutdoor);
+
     // Step 3 — upload topology + dispatch the large-scale pipeline.
     // Pass nSectorPerSite=1 so SlsChanWgpu's nSite_ tracking lines up
     // with our "one cell per site" convention.

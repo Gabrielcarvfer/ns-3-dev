@@ -337,6 +337,29 @@ SlsChanWgpu::uploadUtParams(const std::vector<UtParam>& uts)
     utParamsBuf_ = makeBuffer(uts.size() * sizeof(UtParam), WGPUBufferUsage_Storage, uts.data());
 }
 
+void
+SlsChanWgpu::setSystemLevelConfig(uint32_t scenario,
+                                  uint32_t enablePropagationDelay,
+                                  uint32_t o2iBldg,
+                                  uint32_t o2iCar,
+                                  float forceLosIndoor,
+                                  float forceLosOutdoor)
+{
+    SystemLevelConfigGPU slc{scenario,
+                             enablePropagationDelay,
+                             o2iBldg,
+                             o2iCar,
+                             forceLosIndoor,
+                             forceLosOutdoor,
+                             {0.0f, 0.0f}};
+    // `calLinkParam` lazily allocates this buffer if it doesn't already
+    // exist; for an explicit caller override we (re)create it with the
+    // provided values so subsequent calLinkParam runs pick them up.
+    sysConfigBuf_ = makeBuffer(sizeof(SystemLevelConfigGPU),
+                               WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+                               &slc);
+}
+
 // ── Small-scale topology uploads ─────────────────────────────────────────────
 void
 SlsChanWgpu::uploadCellParamsSS(const std::vector<CellParamSS>& cells)

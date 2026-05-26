@@ -392,6 +392,18 @@ class SlsChanWgpu
     void uploadCellParams(const std::vector<CellParam>& cells, uint32_t nSectorPerSite = 3);
     void uploadUtParams(const std::vector<UtParam>& uts);
 
+    // Override the system-level config that calLinkParam would otherwise
+    // lazily initialise to "UMa / formula LOS / no O2I". Pass force_los_*
+    // as 1.0 to force LOS for that UT class, 0.0 to force NLOS, or
+    // -1.0 to use the TR 38.901 LOS-probability formula. Call this
+    // BEFORE calLinkParam; subsequent calls overwrite the buffer.
+    void setSystemLevelConfig(uint32_t scenario,
+                              uint32_t enablePropagationDelay,
+                              uint32_t o2iBldg,
+                              uint32_t o2iCar,
+                              float forceLosIndoor,
+                              float forceLosOutdoor);
+
     // Check if running in GPU mode (always true now)
     bool isCpuOnlyMode() const
     {
