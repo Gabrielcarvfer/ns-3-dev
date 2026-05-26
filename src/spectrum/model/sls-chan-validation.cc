@@ -159,12 +159,41 @@ main()
     std::vector<UtParam> uts(nUT);
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> uDist01(0.0f, 1.0f);
+    std::normal_distribution<float>       gauss(0.0f, 1.0f);
     // 3GPP TR 38.901 specifies a 10 m minimum BS-UE 2D separation for UMa, but
     // if maxDist is tiny (sandbox harness, e.g. maxDist=10), every sample
     // inside the disk would fail that test and the loop wedges. Clamp to a
     // fraction of maxDist so we always make progress.
     const float minBsUeDist = std::min(10.0f, 0.25f * maxDist);
     constexpr int MAX_PLACEMENT_TRIES = 1000;
+
+    // ── O2I penetration loss (TR 38.901 §7.4.3, table 7.4.3-2) at fc=6 GHz ──
+    // Low-loss model:  L_glass = 2 + 0.2*fc, L_concrete = 5 + 4*fc
+    //   PL_tw_low  = 5 - 10·log10(0.3·10^(-L_glass/10) + 0.7·10^(-L_concrete/10))
+    //   σ_low      = 4.4 dB
+    // High-loss model: L_IRRglass = 23 + 0.3*fc, L_concrete unchanged
+    //   PL_tw_high = 5 - 10·log10(0.7·10^(-L_IRRglass/10) + 0.3·10^(-L_concrete/10))
+    //   σ_high     = 6.5 dB
+    // Indoor distance loss PL_in = 0.5 * d_2d_in (dB)
+    const float Lglass    = 2.0f  + 0.2f  * fc_ghz;
+    const float Lconcrete = 5.0f  + 4.0f  * fc_ghz;
+    const float Lirrglass = 23.0f + 0.3f  * fc_ghz;
+    const float PL_tw_low  = 5.0f - 10.0f * std::log10(
+        0.3f * std::pow(10.0f, -Lglass    / 10.0f) +
+        0.7f * std::pow(10.0f, -Lconcrete / 10.0f));
+    const float PL_tw_high = 5.0f - 10.0f * std::log10(
+        0.7f * std::pow(10.0f, -Lirrglass / 10.0f) +
+        0.3f * std::pow(10.0f, -Lconcrete / 10.0f));
+    const float SIGMA_LOW  = 4.4f;
+    const float SIGMA_HIGH = 6.5f;
+    // Phase-1 UMa: 80% indoor (o2i_building_penetr_loss_ind=2 → 50% low / 50% high),
+    // 20% outdoor. d_2d_in for indoor UEs ~ uniform [0, 25 m] per TR 38.901.
+    constexpr float P_INDOOR     = 0.8f;
+    constexpr float P_HIGH_LOSS  = 0.5f;
+    constexpr float D2D_IN_MAX_M = 25.0f;
+
+    uint32_t nIndoor = 0;
+    uint32_t nHigh   = 0;
     for (uint32_t u = 0; u < nUT; u++)
     {
         float x = 0.0f;
@@ -192,10 +221,34 @@ main()
         } while (closestCellDistance < minBsUeDist && tries < MAX_PLACEMENT_TRIES);
 
         uts[u].loc = {x, y, h_ut, 0.0f};
-        uts[u].d_2d_in = 0.0f;
-        uts[u].outdoor_ind = 1u;
-        uts[u].o2i_penetration_loss = 0.0f;
+
+        const bool isIndoor = (uDist01(rng) < P_INDOOR);
+        if (isIndoor)
+        {
+            const float d2dIn = D2D_IN_MAX_M * uDist01(rng);
+            const bool highLoss = (uDist01(rng) < P_HIGH_LOSS);
+            const float PL_tw  = highLoss ? PL_tw_high : PL_tw_low;
+            const float sigma  = highLoss ? SIGMA_HIGH : SIGMA_LOW;
+            const float PL_in  = 0.5f * d2dIn;
+            const float noise  = sigma * gauss(rng);
+            uts[u].d_2d_in = d2dIn;
+            uts[u].outdoor_ind = 0u;
+            uts[u].o2i_penetration_loss = PL_tw + PL_in + noise;
+            nIndoor++;
+            if (highLoss) { nHigh++; }
+        }
+        else
+        {
+            uts[u].d_2d_in = 0.0f;
+            uts[u].outdoor_ind = 1u;
+            uts[u].o2i_penetration_loss = 0.0f;
+        }
     }
+    fprintf(stderr,
+            "[DEBUG] UE mix: %u indoor (%u high-loss / %u low-loss), %u outdoor "
+            "(PL_tw_low=%.1f dB, PL_tw_high=%.1f dB at fc=%.1f GHz)\n",
+            nIndoor, nHigh, nIndoor - nHigh, nUT - nIndoor,
+            PL_tw_low, PL_tw_high, fc_ghz);
     sls.uploadUtParams(uts);
 
     // ── CRN correlation distances (TR 38.901 Table 7.5-6 UMa) ──────────────

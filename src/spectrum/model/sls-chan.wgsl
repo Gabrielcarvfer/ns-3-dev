@@ -713,11 +713,13 @@ fn cal_link_param_kernel(
             cal_sf_std(sc.scenario, is_los, is_indoor, fc, d2d, h_bs, h_ut, link_uni.updateOptionalPl);
 
         if uni.updateAllLSPs != 0u {
-    // K-factor (Rician K factor for LOS, 0 for NLOS)
-            // Per CUDA: K = pow(10.0, (mu_K + sigma_K*r)/10.0) for LOS, 0 for NLOS
-            if lsp_idx != 0u {
-                // LOS: mu/sigma indexed by scenario [UMi=0, UMa=1, RMa=2]
-                let K_lin = pow(10.0, (cl.mu_K[lsp_idx] + cv[K_IDX] * cl.sigma_K[lsp_idx]) / 10.0);
+            // K-factor (Rician). LOS only; lsp_idx convention: LOS=0, NLOS=1, O2I=2.
+            // mu_K / sigma_K are stored in dB (per CmnLinkParams init); the
+            // downstream cluster/CIR kernels expect K in *linear* units, so
+            // convert once here and never again. (NLOS / O2I leave K = 0.)
+            if lsp_idx == 0u {
+                let K_lin = pow(10.0,
+                    (cl.mu_K[lsp_idx] + cv[K_IDX] * cl.sigma_K[lsp_idx]) / 10.0);
                 link_params[link_idx].K = K_lin;
             } else {
                 link_params[link_idx].K = 0.0;
@@ -1558,11 +1560,11 @@ fn generate_cir_kernel(
     let n_cl   = cp.nCluster;
     let n_ray  = cp.nRayPerCluster;
 
-    // K-factor
+    // K-factor (Rician). lk.K is stored in *linear* units by cal_link_param.
     var KR       = 0.0;
     var los_power = 0.0;
     if lk.losInd != 0u && is_o2i == 0u {
-        KR        = pow(10.0, lk.K / 10.0);
+        KR        = lk.K;
         los_power = KR / (KR + 1.0);
     }
 
