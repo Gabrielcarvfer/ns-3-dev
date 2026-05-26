@@ -445,6 +445,7 @@ build_lib(
     test/wifi-operating-channel-test.cc
     test/wifi-tx-stats-helper-test.cc
     ${applications_test_sources}
+    test/wifi-traced-callback-typedef-test-suite.cc
   TEST_LIBRARIES_TO_LINK ${applications_lib}
   GENERATE_EXPORT_HEADER
 )

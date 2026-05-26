@@ -385,6 +385,7 @@ set(test_sources
     test/tcp-yeah-test.cc
     test/tcp-zero-window-test.cc
     test/udp-test.cc
+    test/internet-traced-callback-typedef-test-suite.cc
 )
 
 build_lib(

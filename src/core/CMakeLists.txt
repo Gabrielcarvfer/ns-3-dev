@@ -295,6 +295,7 @@ set(header_files
     model/val-array.h
     model/matrix-array.h
     model/example-as-test.h
+    test/traced-callback-typedef-test.h
 )
 
 set(test_sources

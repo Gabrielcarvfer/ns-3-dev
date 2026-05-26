@@ -46,4 +46,5 @@ build_lib(
     test/lr-wpan-ifs-test.cc
     test/lr-wpan-slotted-csmaca-test.cc
     test/lr-wpan-mac-test.cc
+    test/lr-wpan-traced-callback-typedef-test-suite.cc
 )

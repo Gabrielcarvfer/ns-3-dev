@@ -38,4 +38,5 @@ build_lib(
     test/sixlowpan-nd-binding-table-test.cc
     test/sixlowpan-nd-rovr-test.cc
     test/sixlowpan-nd-test-utils.cc
+    test/sixlowpan-traced-callback-typedef-test-suite.cc
 )

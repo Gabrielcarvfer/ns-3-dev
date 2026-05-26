@@ -32,4 +32,5 @@ build_lib(
     model/dsr-rsendbuff.h
   LIBRARIES_TO_LINK ${libmesh}
   TEST_SOURCES test/dsr-test-suite.cc
+               test/dsr-traced-callback-typedef-test-suite.cc
 )
