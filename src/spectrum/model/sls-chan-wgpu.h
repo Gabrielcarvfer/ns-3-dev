@@ -423,6 +423,10 @@ class SlsChanWgpu
     uint32_t nSite_ = 0;
     int32_t nX_ = 0;
     int32_t nY_ = 0;
+    // Metres per CRN grid cell. The CRN sizing scales as O(area / step)^2, so a
+    // coarser step keeps the per-buffer footprint bounded for spec-sized
+    // deployments. Default matches the CUDA reference (10 m).
+    float crnStep_ = 10.0f;
 
     wgpu::Buffer makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data = nullptr);
     void waitIdle();

@@ -411,10 +411,17 @@ SlsChanWgpu::generateCRN(float maxX,
     for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrNlos[i]);
     for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrO2i[i]);
     
-    fprintf(stderr, "[DEBUG] generateCRN: maxCorrDist=%.1f\n", maxCorrDist);
-    float D = 3.0f * maxCorrDist;
-    const int32_t nX = static_cast<int32_t>((maxX - minX) + 1.0f + 2.0f * D + 0.5f);
-    const int32_t nY = static_cast<int32_t>((maxY - minY) + 1.0f + 2.0f * D + 0.5f);
+    fprintf(stderr, "[DEBUG] generateCRN: maxCorrDist=%.1f step=%.1f\n",
+            maxCorrDist, crnStep_);
+    // All grid sizing is in PIXELS. corrDist (metres) maps to corrDist/step
+    // pixels of correlation; D = 3*corr_px is the per-side filter pad; the
+    // total grid is round(bound/step + 1 + 2*D) pixels per axis.
+    const float step_m = std::max(crnStep_, 1.0f);
+    const float D_px = 3.0f * (maxCorrDist / step_m);
+    const int32_t nX = static_cast<int32_t>(
+        (maxX - minX) / step_m + 1.0f + 2.0f * D_px + 0.5f);
+    const int32_t nY = static_cast<int32_t>(
+        (maxY - minY) / step_m + 1.0f + 2.0f * D_px + 0.5f);
     fprintf(stderr, "[DEBUG] generateCRN: nX=%d, nY=%d, gridSz=%llu\n", nX, nY, (unsigned long long)uint64_t(nX) * nY);
 
     nX_ = nX;
@@ -426,11 +433,47 @@ SlsChanWgpu::generateCRN(float maxX,
     const uint64_t o2iBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
     fprintf(stderr, "[DEBUG] generateCRN: losBufSz=%llu, nlosBufSz=%llu, o2iBufSz=%llu\n", (unsigned long long)losBufSz, (unsigned long long)nlosBufSz, (unsigned long long)o2iBufSz);
 
-    auto tempBufBytes = [&](float cd) -> uint64_t {
-        // Match WGSL/CPU: D = 3*corrDist, grid = round(bound + 1 + 2*D)
-        float D = 3.0f * cd;
-        const uint64_t pnx = static_cast<uint64_t>((maxX - minX) + 1.0f + 2.0f * D + 0.5f);
-        const uint64_t pny = static_cast<uint64_t>((maxY - minY) + 1.0f + 2.0f * D + 0.5f);
+    // Hard safety guard. On D3D12 we have observed that requesting a CRN buffer
+    // anywhere near the device's maxStorageBufferBindingSize triggers a BSOD
+    // (VIDEO_SCHEDULER_INTERNAL_ERROR / 0x119) — likely a dxgkrnl TDR cascading
+    // on the multi-GB allocation + chunked dispatch. Refuse to allocate any CRN
+    // buffer larger than 1 GB. The buffer scales linearly with deployment area
+    // squared and site count; if you blow this budget, shrink the deployment
+    // (and/or coarsen the CRN grid step via the third arg to generateCRN).
+    const uint64_t maxCrn = std::max({losBufSz, nlosBufSz, o2iBufSz});
+    constexpr uint64_t CRN_BUFFER_SAFETY_CAP = 1ULL << 30; // 1 GB
+    uint64_t effectiveCap = CRN_BUFFER_SAFETY_CAP;
+    if (m_maxGpuBuffer_ != 0)
+    {
+        effectiveCap = std::min(effectiveCap, m_maxGpuBuffer_);
+    }
+    if (maxCrn > effectiveCap)
+    {
+        fprintf(stderr,
+                "[FATAL] CRN buffer size %.2f GB exceeds safety cap %.2f GB "
+                "(device limit %.2f GB).\n"
+                "        nSite=%u, gridSz=%llu (nX=%d nY=%d).\n"
+                "        Reduce deployment radius / site count or coarsen the "
+                "CRN grid step.\n",
+                (double)maxCrn / (1024.0 * 1024.0 * 1024.0),
+                (double)effectiveCap / (1024.0 * 1024.0 * 1024.0),
+                (double)m_maxGpuBuffer_ / (1024.0 * 1024.0 * 1024.0),
+                nSite_,
+                (unsigned long long)gridSz,
+                nX,
+                nY);
+        std::fflush(stderr);
+        std::abort();
+    }
+
+    auto tempBufBytes = [&, step_m](float cd) -> uint64_t {
+        // Match WGSL: grid in pixels = round(bound/step + 1 + 2*D)
+        // where D = 3 * (corrDist / step).
+        const float Dpx = 3.0f * (cd / step_m);
+        const uint64_t pnx = static_cast<uint64_t>(
+            (maxX - minX) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
+        const uint64_t pny = static_cast<uint64_t>(
+            (maxY - minY) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
         return pnx * pny * sizeof(float);
     };
 
@@ -481,10 +524,13 @@ SlsChanWgpu::generateCRN(float maxX,
                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
 
     auto dispatchGrid = [&](wgpu::Buffer& outputBuf, float corrDist, uint32_t gridIndex, uint32_t rowOffset = 0, uint32_t chunkY = 0) {
-        // Calculate grid size matching WGSL shader: round(bound + 1 + 2*D) where D=3*corrDist
-        float D = 3.0f * corrDist;
-        const uint64_t pnx = static_cast<uint64_t>((maxX - minX) + 1.0f + 2.0f * D + 0.5f);
-        const uint64_t pny = static_cast<uint64_t>((maxY - minY) + 1.0f + 2.0f * D + 0.5f);
+        // Match WGSL: grid in pixels = round(bound/step + 1 + 2*D)
+        // where D = 3 * (corrDist / step).
+        const float Dpx = 3.0f * (corrDist / step_m);
+        const uint64_t pnx = static_cast<uint64_t>(
+            (maxX - minX) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
+        const uint64_t pny = static_cast<uint64_t>(
+            (maxY - minY) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
         const uint64_t curTempBytes = pnx * pny * sizeof(float);
         // Use chunkY for the output grid size if chunking; otherwise use full gridSz
         const uint64_t gridBytes = (chunkY > 0) ? static_cast<uint64_t>(chunkY) * nX * sizeof(float) : gridSz * sizeof(float);
@@ -527,7 +573,7 @@ SlsChanWgpu::generateCRN(float maxX,
                               0u,
                               (uint32_t)nX,
                               (uint32_t)nY,
-                              10.0f,
+                              step_m,
                               0u,
                               boundX_val,
                               boundY_val,
@@ -860,9 +906,28 @@ SlsChanWgpu::generateCRN(float maxX,
         }
     }
     fprintf(stderr, "[DEBUG] All CRN generation complete\n");
-    
+
+    // Final guard before the large GPU uploads. The earlier guard at the top of
+    // generateCRN already rejects oversized configs, but keep this as a tripwire
+    // so any future code path that gets here with a huge buffer fails loudly.
+    auto guardCrnSize = [&](const char* tag, uint64_t bytes) {
+        const uint64_t cap = (m_maxGpuBuffer_ == 0) ? (1ULL << 30) :
+                             std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
+        if (bytes > cap)
+        {
+            fprintf(stderr,
+                    "[FATAL] CRN %s upload %.2f GB > safety cap %.2f GB\n",
+                    tag,
+                    (double)bytes / (1024.0 * 1024.0 * 1024.0),
+                    (double)cap / (1024.0 * 1024.0 * 1024.0));
+            std::fflush(stderr);
+            std::abort();
+        }
+    };
+
     // Create GPU-side CRN buffers and copy CPU data to them
     if (!crnLosBuf_) {
+        guardCrnSize("LOS", losOutBuf.size() * sizeof(float));
         crnLosBuf_ = makeBuffer(losOutBuf.size() * sizeof(float),
                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                 losOutBuf.data());
@@ -876,6 +941,7 @@ SlsChanWgpu::generateCRN(float maxX,
                                    losOffsets.data());
     }
     if (!crnNlosBuf_) {
+        guardCrnSize("NLOS", nlosOutBuf.size() * sizeof(float));
         crnNlosBuf_ = makeBuffer(nlosOutBuf.size() * sizeof(float),
                                  WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                  nlosOutBuf.data());
@@ -888,6 +954,7 @@ SlsChanWgpu::generateCRN(float maxX,
                                     nlosOffsets.data());
     }
     if (!crnO2iBuf_) {
+        guardCrnSize("O2I", o2iOutBuf.size() * sizeof(float));
         crnO2iBuf_ = makeBuffer(o2iOutBuf.size() * sizeof(float),
                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                 o2iOutBuf.data());
@@ -1045,8 +1112,8 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     }
 
     auto bg0Layout = linkParamPipeline_.getBindGroupLayout(0);
-    // Bindings 0-19 required by WGSL shader, but we only use 6-19
-    std::vector<wgpu::BindGroupEntry> entries(20, wgpu::Default);
+    // cal_link_param_kernel uses bindings 6-19 only (14 entries).
+    std::vector<wgpu::BindGroupEntry> entries(14, wgpu::Default);
     auto E = [&](int i, uint32_t binding, wgpu::Buffer buf, uint64_t size = WGPU_WHOLE_SIZE) {
         entries[i].binding = binding;
         entries[i].buffer = buf;
@@ -1058,30 +1125,20 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
             abort();
         }
     };
-    E(6, 6, uniBuf, sizeof(uniData));
-    E(7, 7, cellParamsBuf_, cellParamsSz);
-    E(8, 8, utParamsBuf_, utParamsSz);
-    E(9, 9, sysConfigBuf_, sizeof(SystemLevelConfigGPU));
-    E(10, 10, simConfigBuf_, sizeof(SimConfigGPU));
-    E(11, 11, cmnLinkBuf_, sizeof(CmnLinkParamsGPU));
-    E(12, 12, linkParamsBuf_, linkParamsSz);
-    E(13, 13, rngStatesBuf_, rngStatesSz);
-    E(14, 14, crnLosBuf_, nSite_ * 8ULL * uint64_t(nX_) * nY_ * sizeof(float));
-    E(15, 15, crnNlosBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
-    E(16, 16, crnO2iBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
-    E(17, 17, crnLosOffBuf_, nSite_ * 8ULL * sizeof(uint32_t));
-    E(18, 18, crnNlosOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
-    E(19, 19, crnO2iOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
-
-    // Debug: verify all buffers are valid
-    fprintf(stderr, "[DEBUG] calLinkParam: checking bind group buffers...\n");
-    for (int i = 0; i < 20; i++) {
-        if (entries[i].buffer) {
-            fprintf(stderr, "[DEBUG]   entry[%d] (binding %u): buf=%p size=%llu\n", i, entries[i].binding, (void*)entries[i].buffer, (unsigned long long)entries[i].size);
-        } else {
-            fprintf(stderr, "[DEBUG]   entry[%d] (binding %u): NULL BUFFER!\n", i, entries[i].binding);
-        }
-    }
+    E(0, 6, uniBuf, sizeof(uniData));
+    E(1, 7, cellParamsBuf_, cellParamsSz);
+    E(2, 8, utParamsBuf_, utParamsSz);
+    E(3, 9, sysConfigBuf_, sizeof(SystemLevelConfigGPU));
+    E(4, 10, simConfigBuf_, sizeof(SimConfigGPU));
+    E(5, 11, cmnLinkBuf_, sizeof(CmnLinkParamsGPU));
+    E(6, 12, linkParamsBuf_, linkParamsSz);
+    E(7, 13, rngStatesBuf_, rngStatesSz);
+    E(8, 14, crnLosBuf_, nSite_ * 8ULL * uint64_t(nX_) * nY_ * sizeof(float));
+    E(9, 15, crnNlosBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
+    E(10, 16, crnO2iBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
+    E(11, 17, crnLosOffBuf_, nSite_ * 8ULL * sizeof(uint32_t));
+    E(12, 18, crnNlosOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
+    E(13, 19, crnO2iOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
 
     wgpu::BindGroupDescriptor bgDesc = wgpu::Default;
     bgDesc.layout = bg0Layout;

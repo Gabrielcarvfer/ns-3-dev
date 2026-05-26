@@ -333,15 +333,19 @@ fn fill_crn_kernel(
     @builtin(global_invocation_id) gid: vec3<u32>,
 ) {
     let uni      = fill_uni;
-    // Match CPU reference: D = 3*corrDist (not corrDist/step)
-    let D        = select(3.0 * uni.corrDist, 0.0, uni.corrDist == 0.0);
+    // step = metres per grid cell. The filter pad and grid extent are both in
+    // *pixels*, so divide the metre-valued corrDist / bound by step.
+    let step     = max(uni.step, 1.0);
+    // Correlation distance and pad expressed in pixels.
+    let corr_px  = uni.corrDist / step;
+    let D        = select(3.0 * corr_px, 0.0, corr_px == 0.0);
     let iD       = u32(D);
-    // padded grid = round(bound + 1 + 2*D) matching CPU: round(maxX-minX+1+2*D)
-    let boundF   = uni.boundX;  // = maxX - minX as f32
-    let boundFY  = uni.boundY;  // = maxY - minY as f32
-    // Use u32(x + 0.5) for rounding positive floats to nearest integer
-    let padded_n = select(u32(0u), u32(boundF + 1.0 + 2.0 * D + 0.5), iD > 0u);
-    let padded_m = select(u32(0u), u32(boundFY + 1.0 + 2.0 * D + 0.5), iD > 0u);
+    // padded grid = round(bound/step + 1 + 2*D) matching the new CPU sizing.
+    let boundF   = uni.boundX;  // = maxX - minX (metres)
+    let boundFY  = uni.boundY;  // = maxY - minY (metres)
+    // Use u32(x + 0.5) for rounding positive floats to nearest integer.
+    let padded_n = select(u32(0u), u32(boundF / step + 1.0 + 2.0 * D + 0.5), iD > 0u);
+    let padded_m = select(u32(0u), u32(boundFY / step + 1.0 + 2.0 * D + 0.5), iD > 0u);
     let padded_nx = padded_n;
     let padded_ny = padded_m;
     let total_pad = padded_nx * padded_ny;
@@ -373,14 +377,16 @@ fn convolve_crn_kernel(
     @builtin(local_invocation_id)  lid: vec3<u32>,
 ) {
     let uni      = fill_uni;
-    // Match CPU reference: D = 3*corrDist (not corrDist/step)
-    let corr_px  = select(uni.corrDist, 0.0, uni.corrDist == 0.0);
+    // Pixel-domain correlation length: corrDist (m) / step (m/px). All
+    // sizing below works in pixels.
+    let step     = max(uni.step, 1.0);
+    let corr_px  = select(uni.corrDist / step, 0.0, uni.corrDist == 0.0);
     let D        = 3.0 * corr_px;
     let iD       = u32(D);
     let L        = select(2u * iD + 1u, 1u, corr_px == 0.0);
-    // final grid = round(bound + 1 + 2*D) matching CPU
-    let final_nx = select(u32(0u), u32(uni.boundX + 1.0 + 2.0 * D), iD > 0u);
-    let final_ny = select(u32(0u), u32(uni.boundY + 1.0 + 2.0 * D), iD > 0u);
+    // final grid = round(bound/step + 1 + 2*D) matching CPU
+    let final_nx = select(u32(0u), u32(uni.boundX / step + 1.0 + 2.0 * D), iD > 0u);
+    let final_ny = select(u32(0u), u32(uni.boundY / step + 1.0 + 2.0 * D), iD > 0u);
     let padded_nx = final_nx + L - 1u;
     let padded_ny = final_ny + L - 1u;
     // Use chunkY to compute total elements for this chunk

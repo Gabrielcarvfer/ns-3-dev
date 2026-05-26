@@ -121,10 +121,15 @@ main()
     const float fc_ghz = 6.0f;  // Phase 1 reference: 6 GHz
     const float h_bs = 25.0f;
     const float h_ut = 1.5f;
-    const float isd = 1732.0f;
+    // 3GPP Phase-1 UMa calibration uses ISD = 500 m; the WGSL CRN grid step
+    // (10 m) keeps the per-buffer footprint of the 19-site disk well under
+    // the per-buffer cap (~27 MB total for the LOS CRN at maxCorrDist=50 m).
+    const float isd = 500.0f;
 
     const uint32_t nUT = 570;
-    const float maxDist = 10.0f;
+    // Scatter UEs uniformly across a disk covering ring-2 (2*ISD) plus a
+    // small margin so edge sectors get coverage.
+    const float maxDist = 2.0f * isd + 100.0f;
 
     std::vector<CellParam> cells;
     buildHexCells(nSite, nSector, isd, h_bs, cells);
@@ -134,18 +139,27 @@ main()
 
     std::vector<UtParam> uts(nUT);
     std::mt19937 rng(42);
-    std::uniform_real_distribution<float> uDist(-1.0f, 1.0f);
+    std::uniform_real_distribution<float> uDist01(0.0f, 1.0f);
+    // 3GPP TR 38.901 specifies a 10 m minimum BS-UE 2D separation for UMa, but
+    // if maxDist is tiny (sandbox harness, e.g. maxDist=10), every sample
+    // inside the disk would fail that test and the loop wedges. Clamp to a
+    // fraction of maxDist so we always make progress.
+    const float minBsUeDist = std::min(10.0f, 0.25f * maxDist);
+    constexpr int MAX_PLACEMENT_TRIES = 1000;
     for (uint32_t u = 0; u < nUT; u++)
     {
-        float x, y;
-        double closestCellDistance;
+        float x = 0.0f;
+        float y = 0.0f;
+        double closestCellDistance = 0.0;
+        int tries = 0;
         do
         {
-            // Create UE position
-            x = uDist(rng) * maxDist;
-            y = uDist(rng) * maxDist;
+            // Sample uniformly inside the deployment disk of radius maxDist.
+            const float r = maxDist * std::sqrt(uDist01(rng));
+            const float theta = 2.0f * float(M_PI) * uDist01(rng);
+            x = r * std::cos(theta);
+            y = r * std::sin(theta);
 
-            // Check UE is further away from all cells at least 10m
             closestCellDistance = std::numeric_limits<double>::max();
             for (auto& cell : cells)
             {
@@ -155,7 +169,8 @@ main()
                     closestCellDistance = d;
                 }
             }
-        } while (closestCellDistance < 10);
+            tries++;
+        } while (closestCellDistance < minBsUeDist && tries < MAX_PLACEMENT_TRIES);
 
         uts[u].loc = {x, y, h_ut, 0.0f};
         uts[u].d_2d_in = 0.0f;
@@ -172,7 +187,8 @@ main()
     // O2I: [SF, DS, ASD, ASA, ZSD, ZSA, delta_tau] (no K)
     float corrO2i[7]  = {10.f, 10.f, 11.f, 17.f, 25.f, 25.f, 50.f};
 
-    const float area = maxDist + 100.0f;
+    // CRN bounding box: just enough to contain every UE and the conv kernel margin.
+    const float area = maxDist + 50.0f;
 
     // Check large system parameters
     fprintf(stderr, "[DEBUG] corrLos = {%f, %f, %f, %f, %f, %f, %f, %f}\n",
@@ -181,6 +197,51 @@ main()
             corrNlos[0], corrNlos[1], corrNlos[2], corrNlos[3], corrNlos[4], corrNlos[5], corrNlos[6]);
     fprintf(stderr, "[DEBUG] corrO2i = {%f, %f, %f, %f, %f, %f, %f}\n",
             corrO2i[0], corrO2i[1], corrO2i[2], corrO2i[3], corrO2i[4], corrO2i[5], corrO2i[6]);
+
+    // ── Preflight CRN sizing ─────────────────────────────────────────────────
+    // The CRN buffer scales as O(nSite * area² / step²). On D3D12, requesting
+    // multi-GB buffers has BSOD'd the host (VIDEO_SCHEDULER_INTERNAL_ERROR /
+    // 0x119), so fail loudly *before* any GPU call if the harness has crept
+    // out of the safe envelope.
+    {
+        float maxCorrAny = 0.0f;
+        for (float c : corrLos)  { maxCorrAny = std::max(maxCorrAny, c); }
+        for (float c : corrNlos) { maxCorrAny = std::max(maxCorrAny, c); }
+        for (float c : corrO2i)  { maxCorrAny = std::max(maxCorrAny, c); }
+        // Mirrors SlsChanWgpu::generateCRN sizing formula with the new
+        // step-aware grid (default 10 m/pixel). Must stay in sync with
+        // crnStep_ in sls-chan-wgpu.h.
+        constexpr float CRN_STEP_M = 10.0f;
+        const float D_pad_px = 3.0f * (maxCorrAny / CRN_STEP_M);
+        const uint64_t nXp = static_cast<uint64_t>(
+            (2.0f * area) / CRN_STEP_M + 1.0f + 2.0f * D_pad_px + 0.5f);
+        const uint64_t nYp = nXp;
+        const uint64_t losBytes  = uint64_t(nSite) * 8 * nXp * nYp * sizeof(float);
+        const uint64_t nlosBytes = uint64_t(nSite) * 7 * nXp * nYp * sizeof(float);
+        const uint64_t o2iBytes  = uint64_t(nSite) * 7 * nXp * nYp * sizeof(float);
+        const uint64_t maxBytes  = std::max({losBytes, nlosBytes, o2iBytes});
+        constexpr uint64_t SAFE_CAP = 1ULL << 30; // 1 GB
+        fprintf(stderr,
+                "[PREFLIGHT] area=%.1fm nX=%llu nY=%llu maxCorr=%.1f "
+                "los=%.2f GB nlos=%.2f GB o2i=%.2f GB (cap=%.2f GB)\n",
+                area,
+                (unsigned long long)nXp,
+                (unsigned long long)nYp,
+                maxCorrAny,
+                (double)losBytes  / (1024.0 * 1024.0 * 1024.0),
+                (double)nlosBytes / (1024.0 * 1024.0 * 1024.0),
+                (double)o2iBytes  / (1024.0 * 1024.0 * 1024.0),
+                (double)SAFE_CAP  / (1024.0 * 1024.0 * 1024.0));
+        if (maxBytes > SAFE_CAP)
+        {
+            fprintf(stderr,
+                    "[PREFLIGHT FATAL] CRN buffers exceed 1 GB cap. "
+                    "Shrink isd / maxDist or wait until step is plumbed.\n");
+            std::fflush(stderr);
+            return 2;
+        }
+    }
+
     fprintf(stderr, "About to call generateCRN\n");
     fflush(stderr);
     sls.generateCRN(area, -area, area, -area, corrLos, corrNlos, corrO2i);
@@ -194,10 +255,10 @@ main()
                      -area,
                      area,
                      -area,
-                     true,
-                     true,
-                     false,
-                     false,
+                     /*updatePL=*/true,
+                     /*updateAllLSPs=*/true,
+                     /*updateLos=*/true,
+                     /*updateOptionalPL=*/false,
                      sls.nX(),
                      sls.nY());
     std::cerr << "calLinkParam ok" << std::endl;
@@ -228,34 +289,34 @@ main()
 
     std::cout << "Wrote link_params.csv (" << uint64_t(nCell) * nUT << " links)\n";
 
-    // Check small scale parameters
+    // ── Small-scale config (Phase-1 UMa 6 GHz: 20 MHz / 15 kHz SCS) ─────────
     sls.uploadSmallScaleConfig(
         /*scSpacingHz=*/15000.0f,
-        /*fftSize=*/4096,
+        /*fftSize=*/2048,
         /*nPrb=*/106,
         /*nPrbg=*/53,
-        /*nSnapshotPerSlot=*/14,
+        /*nSnapshotPerSlot=*/1,
         /*enablePropagationDelay=*/0,
         /*disableSmallScaleFading=*/0,
         /*disablePlShadowing=*/0,
-        /*optionalCfrDim=*/0,       // 0 = use nPrbg as CFR dimension
-        /*lambda0=*/3e8f / (fc_ghz * 1e9f) // c/fc wavelength at Phase 1 freq (6 GHz → ~0.05 m)
+        /*optionalCfrDim=*/0,
+        /*lambda0=*/3e8f / (fc_ghz * 1e9f)
     );
     std::cerr << "uploadSmallScaleConfig ok" << std::endl;
 
-    // ── Antenna panel configs (matches default_antenna_config.yaml) ──────────
-    // panel 0 = BS: nAnt=4, antSize=[1,1,1,2,2], antSpacing=[0,0,0.5,0.5], polarAngles=[45,-45]
-    // panel 1 = UE: nAnt=1, antSize=[1,1,2,2,1], antSpacing=[0,0,0.5,0.5], polarAngles=[0,0]
+    // ── Antenna panel configs (Phase-1: 10-element BS panel, 1-element UE) ──
+    // panel 0 = BS: nAnt=10, antSize=[1,1,10,1,1], antSpacing=[0,0,0.5,0.5], polarAngles=[45,-45]
+    // panel 1 = UE: nAnt=1,  antSize=[1,1,1,1,1],  antSpacing=[0,0,0.5,0.5], polarAngles=[0,90]
     std::vector<AntPanelConfigGPU> antCfgs(2);
 
     // BS panel (index 0)
-    antCfgs[0].nAnt = 4;
+    antCfgs[0].nAnt = 10;
     antCfgs[0].antModel = 1; // directional
-    antCfgs[0].antSize[0] = 1;
-    antCfgs[0].antSize[1] = 1;
-    antCfgs[0].antSize[2] = 1;
-    antCfgs[0].antSize[3] = 2;
-    antCfgs[0].antSize[4] = 2;
+    antCfgs[0].antSize[0] = 1;  // Mg
+    antCfgs[0].antSize[1] = 1;  // Ng
+    antCfgs[0].antSize[2] = 10; // M (vertical)
+    antCfgs[0].antSize[3] = 1;  // N (horizontal)
+    antCfgs[0].antSize[4] = 1;  // P (polarization)
     antCfgs[0].antSpacing[0] = 0.0f;
     antCfgs[0].antSpacing[1] = 0.0f;
     antCfgs[0].antSpacing[2] = 0.5f;
@@ -278,7 +339,7 @@ main()
     antCfgs[1].antSpacing[2] = 0.5f;
     antCfgs[1].antSpacing[3] = 0.5f;
     antCfgs[1].antPolarAngles[0] = 0.0f;
-    antCfgs[1].antPolarAngles[1] = 0.0f;
+    antCfgs[1].antPolarAngles[1] = 90.0f;
     antCfgs[1].thetaOffset = 181; // second block in flat theta table
     antCfgs[1].phiOffset = 360;   // second block in flat phi table
 
@@ -288,7 +349,7 @@ main()
     std::vector<float> antThetaFlat(2 * 181, 0.0f); // 0 dB for all angles
     std::vector<float> antPhiFlat(2 * 360, 0.0f);
 
-    const uint32_t nBsAnt = antCfgs[0].nAnt; // 4
+    const uint32_t nBsAnt = antCfgs[0].nAnt; // 10 (Phase-1)
     const uint32_t nUeAnt = antCfgs[1].nAnt; // 1
     sls.uploadAntPanelConfigs(antCfgs, antThetaFlat, antPhiFlat);
     std::cerr << "uploadAntPanelConfigs ok" << std::endl;
@@ -426,7 +487,7 @@ main()
     std::cerr << "uploadCmnLinkParamsSmallScale ok" << std::endl;
 
     // ── Build active links: all nSite × nUT pairs ────────────────────────────
-    const uint32_t nSnapshots = 14; // n_snapshot_per_slot
+    const uint32_t nSnapshots = 1; // n_snapshot_per_slot (Phase-1)
     const uint32_t nPrbg = 53;
 
     std::vector<ActiveLink> activeLinks;
@@ -529,7 +590,7 @@ main()
         freqChanPrbg, nPrbg,
         xpr, phiNmAoA, phiNmAoD,
         thetaNmZOA, thetaNmZOD,
-        15000.0f, 4096u, 106u, 14u,
+        15000.0f, 2048u, 106u, nSnapshots,
         centerFreqHz, bandwidthHz,
         nUeAnt, nBsAnt,
         ssCmn,
