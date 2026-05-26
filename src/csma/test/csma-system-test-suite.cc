@@ -40,7 +40,7 @@
 using namespace ns3;
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA Bridge mode test.
  */
@@ -157,7 +157,7 @@ CsmaBridgeTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA Broadcast mode test.
  */
@@ -300,7 +300,7 @@ CsmaBroadcastTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA Multicast mode test.
  */
@@ -483,7 +483,7 @@ CsmaMulticastTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA One Subnet mode test.
  */
@@ -633,7 +633,7 @@ CsmaOneSubnetTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA PacketSocket test.
  */
@@ -759,7 +759,7 @@ CsmaPacketSocketTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA PING test.
  */
@@ -900,7 +900,7 @@ CsmaPingTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA Raw IP test.
  */
@@ -1018,7 +1018,7 @@ CsmaRawIpSocketTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA star mode test.
  */
@@ -1221,7 +1221,7 @@ CsmaStarTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-csma
+ * @ingroup csma
  *
  * @brief CSMA TestSuite.
  */
