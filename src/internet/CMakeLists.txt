@@ -260,7 +260,51 @@ if(WIN32)
   )
 endif()
 
+# ns3tcp system tests live here because they exercise TCP; they pull in
+# applications and point-to-point (and csma for the no-delay / socket tests) so
+# they are linked conditionally to keep internet's test binary buildable when
+# those modules are not enabled.
+set(ns3tcp_sources)
+set(ns3tcp_libs)
+if((applications
+    IN_LIST
+    ns3-all-enabled-modules
+   )
+   AND (point-to-point
+        IN_LIST
+        ns3-all-enabled-modules
+       )
+)
+  set(ns3tcp_sources
+      test/ns3tcp-cubic-test-suite.cc
+      test/ns3tcp-loss-test-suite.cc
+      test/ns3tcp-socket-writer.cc
+      test/ns3tcp-state-test-suite.cc
+  )
+  set(ns3tcp_libs
+      ${libapplications}
+      ${libpoint-to-point}
+  )
+  if(csma
+     IN_LIST
+     ns3-all-enabled-modules
+  )
+    list(
+      APPEND
+      ns3tcp_sources
+      test/ns3tcp-no-delay-test-suite.cc
+      test/ns3tcp-socket-test-suite.cc
+    )
+    list(
+      APPEND
+      ns3tcp_libs
+      ${libcsma}
+    )
+  endif()
+endif()
+
 set(test_sources
+    ${ns3tcp_sources}
     test/global-route-manager-impl-test-suite.cc
     test/icmp-test.cc
     test/internet-stack-helper-test-suite.cc
@@ -347,5 +391,6 @@ build_lib(
   LIBRARIES_TO_LINK ${libbridge}
                     ${libtraffic-control}
   TEST_SOURCES ${test_sources}
+  TEST_LIBRARIES_TO_LINK ${ns3tcp_libs}
   GENERATE_EXPORT_HEADER
 )

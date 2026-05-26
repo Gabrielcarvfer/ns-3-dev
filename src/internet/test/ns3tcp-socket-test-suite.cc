@@ -30,7 +30,7 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE("Ns3SocketTest");
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
  * @brief Tests of TCP implementations from the application/socket perspective
  * using point-to-point links.
@@ -155,7 +155,7 @@ Ns3TcpSocketTestCaseP2P::DoRun()
 }
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
  * @brief Tests of TCP implementations from the application/socket perspective
  * using CSMA links.
@@ -287,7 +287,7 @@ Ns3TcpSocketTestCaseCsma::DoRun()
 }
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
  * TCP implementations from the application/socket perspective TestSuite.
  */

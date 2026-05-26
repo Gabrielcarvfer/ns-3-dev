@@ -9,26 +9,11 @@ if((dsr IN_LIST ns3-all-enabled-modules)
 endif()
 # cmake-format: on
 
-set(application_sources)
 set(csma_sources)
 if(applications
    IN_LIST
    ns3-all-enabled-modules
 )
-  if(point-to-point
-     IN_LIST
-     ns3-all-enabled-modules
-  )
-    # cmake-format: off
-    set(applications_sources
-        ns3tcp/ns3tcp-cubic-test-suite.cc
-        ns3tcp/ns3tcp-loss-test-suite.cc
-        ns3tcp/ns3tcp-no-delay-test-suite.cc
-        ns3tcp/ns3tcp-socket-test-suite.cc
-        ns3tcp/ns3tcp-state-test-suite.cc
-    )
-    # cmake-format: on
-  endif()
   if((csma-layout
       IN_LIST
       ns3-all-enabled-modules
@@ -42,16 +27,6 @@ if(applications
         csma-system-test-suite.cc
     )
   endif()
-endif()
-
-set(internet_sources)
-if(internet
-   IN_LIST
-   ns3-all-enabled-modules
-)
-  set(internet_sources
-      ns3tcp/ns3tcp-socket-writer.cc
-  )
 endif()
 
 set(network_sources)
@@ -82,10 +57,8 @@ add_library(
   OBJECT
   ${PROJECT_SOURCE_DIR}/build-support/empty.cc # empty source file if only
   # libcore is enabled
-  ${applications_sources}
   ${csma_sources}
   ${dsr_sources}
-  ${internet_sources}
   ${network_sources}
   ${traffic-control_sources}
 )
