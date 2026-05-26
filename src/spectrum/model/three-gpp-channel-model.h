@@ -1154,6 +1154,45 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      */
     std::vector<uint64_t> CollectDirtyLinks() const;
 
+#ifdef NS3_ENABLE_3GPP_GPU
+    /**
+     * @brief Run the SlsChanWgpu pipeline once for every link in `dirty`
+     * and populate `m_gpuLspCache` with the resulting large-scale
+     * parameters.
+     *
+     * Phase 1.c scope is intentionally narrow: we only consume the GPU
+     * LSP output (DS, ASD, ASA, ZSD, ZSA, K). Cluster/ray/phase work
+     * still falls through to the CPU random draws inside
+     * `GenerateChannelParameters`. This keeps the GPU integration
+     * incrementally testable — if it goes wrong, the per-link blast
+     * radius is one LSP draw rather than the entire matrix.
+     *
+     * Topology mapping uses a simple convention: in each link's
+     * canonical (lower-id, higher-id) pair, the lower id is treated as
+     * the cell, the higher as the UT. Cells and UTs are deduplicated
+     * across all dirty links so the GPU runs (nCells x nUTs) once and
+     * each link picks up its slice afterwards.
+     *
+     * @param dirty Keys returned by `CollectDirtyLinks`.
+     */
+    void RunGpuLspBatch(const std::vector<uint64_t>& dirty);
+#endif
+
+    /**
+     * @brief Return LSPs for the given link key, consuming a
+     * GPU-populated entry if one is present.
+     *
+     * When `m_gpuLspCache` has an entry for `channelParamsKey`, that
+     * entry is returned and removed from the cache (one-shot
+     * consumption — the next regeneration of this link will hit the GPU
+     * again on the next tick). Otherwise this method falls back to the
+     * normal CPU draw via `GenerateLSPs`.
+     */
+    LargeScaleParameters GenerateOrFetchLSPs(
+        uint64_t channelParamsKey,
+        ChannelCondition::LosConditionValue losCondition,
+        Ptr<const ParamsTable> table3gpp) const;
+
     /**
      * map containing the channel realizations per a pair of
      * PhasedAntennaArray instances; the key of this map is reciprocal
@@ -1167,6 +1206,14 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * pair as `m_channelParamsMap`.
      */
     std::unordered_map<uint64_t, LinkEndpoints> m_linkEndpoints;
+    /**
+     * One-shot LSP cache filled by `EnsureBatchFresh`/`RunGpuLspBatch`
+     * and consumed by `GenerateOrFetchLSPs` during the immediately
+     * following `GetChannel` calls. `mutable` because the consumption
+     * removes entries from inside the `const` channel-parameter
+     * generator. Empty between batches when `UseGpu=false`.
+     */
+    mutable std::unordered_map<uint64_t, LargeScaleParameters> m_gpuLspCache;
     /**
      * map containing the common channel parameters per a pair of nodes, the
      * key of this map is reciprocal and uniquely identifies a pair of

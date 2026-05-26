@@ -318,11 +318,17 @@ SlsChanWgpu::waitIdle()
 
 // ── Large-scale topology uploads ──────────────────────────────────────────────
 void
-SlsChanWgpu::uploadCellParams(const std::vector<CellParam>& cells)
+SlsChanWgpu::uploadCellParams(const std::vector<CellParam>& cells, uint32_t nSectorPerSite)
 {
     cellParamsBuf_ =
         makeBuffer(cells.size() * sizeof(CellParam), WGPUBufferUsage_Storage, cells.data());
-    nSite_ = uint32_t(cells.size() / 3);
+    // nSite_ is the number of *sites*. With a sectorised deployment the
+    // CellParam vector holds nSite * nSectorPerSite entries — the
+    // Phase-1 calibration harness uses 3-sectors-per-site. Callers that
+    // pass a single cell per site (e.g. the ThreeGppChannelModel batch
+    // back-end) should pass `nSectorPerSite=1`.
+    assert(nSectorPerSite > 0 && "nSectorPerSite must be > 0");
+    nSite_ = static_cast<uint32_t>(cells.size() / nSectorPerSite);
 }
 
 void

@@ -194,4 +194,22 @@ if(NS3_ENABLE_3GPP_GPU)
         target_compile_definitions(sls_chan_validation PRIVATE ${WEBGPU_DEFS} SLS_CHAN_HDF5)
         target_copy_webgpu_binaries(sls_chan_validation)
     endif()
+
+    # Tiny end-to-end smoke test for the channel model's UseGpu attribute.
+    # Links directly against the spectrum DLL + its deps (no test-runner
+    # dependency, which currently fails to link on Windows-MinGW due to a
+    # wifi DLL export-ordinal overflow). Run it after configure/build:
+    #
+    #     ./build/gpu_batch_smoke.exe
+    #
+    # Should print `gpu_batch_smoke OK` if the GPU integration is healthy.
+    add_executable(gpu_batch_smoke model/gpu-batch-smoke.cc)
+    target_link_libraries(gpu_batch_smoke PRIVATE
+        ${libspectrum}
+        ${libcore}
+        ${libnetwork}
+        ${libmobility}
+        ${libpropagation}
+        ${libantenna}
+    )
 endif()

@@ -2687,43 +2687,253 @@ ThreeGppChannelModel::EnsureBatchFresh()
     const std::vector<uint64_t> dirty = CollectDirtyLinks();
     NS_LOG_DEBUG("EnsureBatchFresh: " << dirty.size() << " dirty link(s) out of "
                                       << m_linkEndpoints.size() << " tracked");
-    if (dirty.empty())
+    if (!dirty.empty())
     {
-        m_lastBatchTime = now;
-        return;
+        // Phase 1.c — run the GPU pipeline for these links and stash the
+        // resulting LSPs so the next per-link `GetChannel` call can
+        // consume them via `GenerateOrFetchLSPs` instead of drawing
+        // fresh on the CPU.
+        RunGpuLspBatch(dirty);
     }
-
-    // Phase 1.c — populate flat CellParam / UtParam / antenna buffers,
-    // run the SlsChanWgpu pipeline, read back, and write into
-    // m_channelParamsMap. This is the hard part: the GPU pipeline does
-    // not produce the exact ns-3 ThreeGppChannelParams shape; it
-    // produces LinkParams (large-scale), ClusterParams (delays, powers,
-    // angles), and per-ray buffers (XPR, random phases, AoA/AoD/ZoA/ZoD
-    // per ray). Mapping these into ThreeGppChannelParams requires:
-    //   - LinkParams.SF/K/DS/ASD/ASA/ZSD/ZSA  ->  m_DS, m_K_factor and
-    //     LargeScaleParameters consumed by downstream consistency code.
-    //   - ClusterParams.delays  ->  ThreeGppChannelParams.m_delay (after
-    //     adjusting for LOS via AdjustClusterDelaysForLosCondition,
-    //     which the GPU does internally).
-    //   - ClusterParams.powers  ->  m_clusterPower (after RemoveWeakClusters).
-    //   - phinAoA/phinAoD/thetanZOA/thetanZOD  ->  cluster mean angles;
-    //     per-ray buffers populate m_rayAoaRadian / m_rayAodRadian /
-    //     m_rayZoaRadian / m_rayZodRadian (with the same intra-cluster
-    //     offsets the CPU path applies in ComputeRayAngles).
-    //   - cluster phases buffer  ->  m_clusterPhase (4 phases per ray).
-    //   - XPR buffer  ->  m_crossPolarizationPowerRatios.
-    //
-    // Until that mapping + a parity test land, fail loudly rather than
-    // silently producing wrong matrices.
-    NS_FATAL_ERROR("ThreeGppChannelModel::EnsureBatchFresh: GPU dispatch path not yet "
-                   "implemented (Phase 1.c). "
-                   << dirty.size()
-                   << " link(s) would be batched. "
-                      "Set UseGpu=false or wait until Phase 1.c lands.");
 
     m_lastBatchTime = now;
 #endif
 }
+
+ThreeGppChannelModel::LargeScaleParameters
+ThreeGppChannelModel::GenerateOrFetchLSPs(uint64_t channelParamsKey,
+                                          ChannelCondition::LosConditionValue losCondition,
+                                          Ptr<const ParamsTable> table3gpp) const
+{
+    NS_LOG_FUNCTION(this);
+    const auto it = m_gpuLspCache.find(channelParamsKey);
+    if (it != m_gpuLspCache.end())
+    {
+        LargeScaleParameters lsps = it->second;
+        m_gpuLspCache.erase(it);
+        NS_LOG_DEBUG("LSP cache HIT for key " << channelParamsKey
+                                              << " — using GPU-computed LSPs");
+        return lsps;
+    }
+    return GenerateLSPs(losCondition, table3gpp);
+}
+
+#ifdef NS3_ENABLE_3GPP_GPU
+void
+ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
+{
+    NS_LOG_FUNCTION(this << dirty.size());
+    NS_ASSERT(!dirty.empty());
+
+    // Lazy-create the GPU pipeline on first use. The constructor talks to
+    // the WGPU runtime (adapter + device), which is non-trivial work we
+    // only want to pay once.
+    if (!m_gpu)
+    {
+        NS_LOG_INFO("Creating SlsChanWgpu instance for GPU batch back-end");
+        m_gpu = std::make_unique<::SlsChanWgpu>();
+    }
+
+    // Step 1 — partition the dirty links' endpoints into cells (lower id)
+    // and UTs (higher id). The same node may appear in multiple links;
+    // dedup by node id so we run the GPU pipeline over the unique union.
+    std::map<uint32_t, Ptr<const MobilityModel>> cellMobById;
+    std::map<uint32_t, Ptr<const MobilityModel>> utMobById;
+    for (uint64_t key : dirty)
+    {
+        const auto epIt = m_linkEndpoints.find(key);
+        NS_ASSERT(epIt != m_linkEndpoints.end());
+        const auto& ep = epIt->second;
+        const uint32_t aId = ep.aMob->GetObject<Node>()->GetId();
+        const uint32_t bId = ep.bMob->GetObject<Node>()->GetId();
+        if (aId < bId)
+        {
+            cellMobById[aId] = ep.aMob;
+            utMobById[bId] = ep.bMob;
+        }
+        else
+        {
+            cellMobById[bId] = ep.bMob;
+            utMobById[aId] = ep.aMob;
+        }
+    }
+
+    if (cellMobById.empty() || utMobById.empty())
+    {
+        NS_LOG_WARN("RunGpuLspBatch: empty cell or UT set after partition; skipping");
+        return;
+    }
+
+    // Step 2 — build flat CellParam / UtParam vectors and an idx map for
+    // the slice lookup afterwards.
+    std::vector<CellParam> cells;
+    std::vector<UtParam> uts;
+    std::unordered_map<uint32_t, uint32_t> cellIdToIdx;
+    std::unordered_map<uint32_t, uint32_t> utIdToIdx;
+    cells.reserve(cellMobById.size());
+    uts.reserve(utMobById.size());
+
+    double minX = std::numeric_limits<double>::infinity();
+    double maxX = -std::numeric_limits<double>::infinity();
+    double minY = std::numeric_limits<double>::infinity();
+    double maxY = -std::numeric_limits<double>::infinity();
+
+    uint32_t cellIdx = 0;
+    for (const auto& [nodeId, mob] : cellMobById)
+    {
+        const Vector p = mob->GetPosition();
+        CellParam c{};
+        c.cid = cellIdx;
+        c.siteId = cellIdx;
+        c.loc[0] = static_cast<float>(p.x);
+        c.loc[1] = static_cast<float>(p.y);
+        c.loc[2] = static_cast<float>(p.z);
+        c.antPanelIdx = 0;
+        // Reasonable default boresight pattern; antenna pattern integration
+        // is a separate Phase. theta_tilt = 102 deg (12 deg downtilt from
+        // 90 deg horizon), phi/zeta = 0.
+        c.antPanelOrientation[0] = static_cast<float>(102.0 * M_PI / 180.0);
+        c.antPanelOrientation[1] = 0.0f;
+        c.antPanelOrientation[2] = 0.0f;
+        c.monostaticInd = 0;
+        c.secondAntPanelIdx = 0;
+        c.secondAntPanelOrientation[0] = 0.0f;
+        c.secondAntPanelOrientation[1] = 0.0f;
+        c.secondAntPanelOrientation[2] = 0.0f;
+        cellIdToIdx[nodeId] = cellIdx;
+        cells.push_back(c);
+
+        minX = std::min(minX, p.x);
+        maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+        cellIdx++;
+    }
+
+    uint32_t utIdx = 0;
+    for (const auto& [nodeId, mob] : utMobById)
+    {
+        const Vector p = mob->GetPosition();
+        UtParam u{};
+        u.loc.x = static_cast<float>(p.x);
+        u.loc.y = static_cast<float>(p.y);
+        u.loc.z = static_cast<float>(p.z);
+        u.loc._p = 0;
+        u.d_2d_in = 0.0f;
+        u.outdoor_ind = 1; // default outdoor; O2I handled by ns-3's ChannelConditionModel
+        u.o2i_penetration_loss = 0.0f;
+        u._p = 0;
+        utIdToIdx[nodeId] = utIdx;
+        uts.push_back(u);
+
+        minX = std::min(minX, p.x);
+        maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+        utIdx++;
+    }
+
+    const uint32_t nSite = static_cast<uint32_t>(cells.size());
+    const uint32_t nUT = static_cast<uint32_t>(uts.size());
+    NS_LOG_INFO("RunGpuLspBatch: " << nSite << " cells, " << nUT << " UTs, "
+                                   << dirty.size() << " dirty links");
+
+    // Pad area bounds by 3x the largest correlation distance so the CRN
+    // grid covers every link even at the deployment edges (the kernels
+    // bilinear-sample the grid at (x,y) so out-of-bounds reads break).
+    const float pad = 200.0f;
+    const float fMaxX = static_cast<float>(maxX) + pad;
+    const float fMinX = static_cast<float>(minX) - pad;
+    const float fMaxY = static_cast<float>(maxY) + pad;
+    const float fMinY = static_cast<float>(minY) - pad;
+
+    // Step 3 — upload topology + dispatch the large-scale pipeline.
+    // Pass nSectorPerSite=1 so SlsChanWgpu's nSite_ tracking lines up
+    // with our "one cell per site" convention.
+    m_gpu->uploadCellParams(cells, /*nSectorPerSite=*/1);
+    m_gpu->uploadUtParams(uts);
+
+    // UMa Table 7.5-6 correlation distances. Other scenarios will get
+    // their own tables in a later phase; for now everything runs as UMa.
+    const float corrLos[8] = {37.0f, 50.0f, 37.0f, 25.0f, 25.0f, 15.0f, 15.0f, 40.0f};
+    const float corrNlos[7] = {50.0f, 40.0f, 50.0f, 50.0f, 50.0f, 50.0f, 40.0f};
+    const float corrO2i[7] = {15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f};
+
+    m_gpu->generateCRN(fMaxX, fMinX, fMaxY, fMinY, corrLos, corrNlos, corrO2i);
+
+    m_gpu->calLinkParam(nSite,
+                        nUT,
+                        /*nSectorPerSite=*/1,
+                        fMaxX,
+                        fMinX,
+                        fMaxY,
+                        fMinY,
+                        /*updatePL=*/true,
+                        /*updateAllLSPs=*/true,
+                        /*updateLos=*/true,
+                        /*updateOptionalPL=*/false,
+                        m_gpu->nX(),
+                        m_gpu->nY());
+
+    // Step 4 — read back and slice.
+    const std::vector<LinkParams> lps = m_gpu->readLinkParams(nSite, nUT);
+    NS_ASSERT_MSG(lps.size() == static_cast<size_t>(nSite) * nUT,
+                  "readLinkParams returned " << lps.size() << " entries, expected "
+                                             << static_cast<size_t>(nSite) * nUT);
+
+    uint32_t cacheStored = 0;
+    uint32_t paramsUpdated = 0;
+    for (uint64_t key : dirty)
+    {
+        const auto& ep = m_linkEndpoints[key];
+        const uint32_t aId = ep.aMob->GetObject<Node>()->GetId();
+        const uint32_t bId = ep.bMob->GetObject<Node>()->GetId();
+        const uint32_t cellId = std::min(aId, bId);
+        const uint32_t utId = std::max(aId, bId);
+        const uint32_t ci = cellIdToIdx.at(cellId);
+        const uint32_t ui = utIdToIdx.at(utId);
+        const LinkParams& lp = lps[ci * nUT + ui];
+
+        LargeScaleParameters lsps;
+        lsps.DS = lp.DS;
+        lsps.ASD = lp.ASD;
+        lsps.ASA = lp.ASA;
+        lsps.ZSD = lp.ZSD;
+        lsps.ZSA = lp.ZSA;
+        lsps.kFactor = lp.K;
+
+        // Two cases for how the LSPs feed into the next `GetChannel`
+        // call for this key:
+        //
+        //  (a) Link is brand new (no entry in m_channelParamsMap yet)
+        //      -- next call will go through GenerateChannelParameters,
+        //      which calls GenerateOrFetchLSPs. Stash in the cache.
+        //
+        //  (b) Link already exists and just needs a consistency update
+        //      -- next call will go through UpdateChannelParameters,
+        //      which does NOT re-draw LSPs; it keeps the m_DS /
+        //      m_K_factor values stored on the existing params. So we
+        //      have to mutate them in place here, otherwise the GPU
+        //      LSPs are silently discarded. ASD/ASA/ZSD/ZSA aren't
+        //      stored on the params struct (they're only used at draw
+        //      time), so we only need to write DS and K.
+        auto pit = m_channelParamsMap.find(key);
+        if (pit == m_channelParamsMap.end())
+        {
+            m_gpuLspCache[key] = lsps;
+            ++cacheStored;
+        }
+        else
+        {
+            pit->second->m_DS = lsps.DS;
+            pit->second->m_K_factor = lsps.kFactor;
+            ++paramsUpdated;
+        }
+    }
+    NS_LOG_INFO("RunGpuLspBatch wrote " << cacheStored << " cache entr(y/ies) and updated "
+                                        << paramsUpdated << " existing param block(s)");
+}
+#endif // NS3_ENABLE_3GPP_GPU
 
 ThreeGppChannelModel::LargeScaleParameters
 ThreeGppChannelModel::GenerateLSPs(const ChannelCondition::LosConditionValue losCondition,
@@ -3855,7 +4065,12 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                        &channelParams->m_lastRelativePosition2D);
 
     // Step 4: Generate large-scale parameters. All LSPS are uncorrelated.
-    const LargeScaleParameters lsps = GenerateLSPs(channelParams->m_losCondition, table3gpp);
+    // When the GPU batch back-end is active and has a fresh LSP entry
+    // for this link, consume that one shot; otherwise draw on the CPU.
+    const uint64_t lspKey = GetKey(aMobOrdered->GetObject<Node>()->GetId(),
+                                   bMobOrdered->GetObject<Node>()->GetId());
+    const LargeScaleParameters lsps =
+        GenerateOrFetchLSPs(lspKey, channelParams->m_losCondition, table3gpp);
 
     channelParams->m_DS = lsps.DS;
     channelParams->m_K_factor = lsps.kFactor;

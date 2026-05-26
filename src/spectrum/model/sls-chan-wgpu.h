@@ -383,8 +383,13 @@ class SlsChanWgpu
     SlsChanWgpu();
     ~SlsChanWgpu() = default;
 
-    // Upload topology/config once (or whenever it changes)
-    void uploadCellParams(const std::vector<CellParam>& cells);
+    // Upload topology/config once (or whenever it changes).
+    // `nSectorPerSite` is the number of sector cells per radio site; the
+    // total number of sites (used to size per-site buffers in
+    // `generateCRN`) is computed as `cells.size() / nSectorPerSite`.
+    // Defaults to 3 to preserve the Phase-1 calibration harness's prior
+    // behaviour; the ThreeGppChannelModel batch back-end passes 1.
+    void uploadCellParams(const std::vector<CellParam>& cells, uint32_t nSectorPerSite = 3);
     void uploadUtParams(const std::vector<UtParam>& uts);
 
     // Check if running in GPU mode (always true now)
