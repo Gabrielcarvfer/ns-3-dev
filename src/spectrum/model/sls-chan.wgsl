@@ -384,17 +384,23 @@ fn convolve_crn_kernel(
     let D        = 3.0 * corr_px;
     let iD       = u32(D);
     let L        = select(2u * iD + 1u, 1u, corr_px == 0.0);
-    // final grid = round(bound/step + 1 + 2*D) matching CPU
+    // final grid = round(bound/step + 1 + 2*D) — valid pixels per channel.
     let final_nx = select(u32(0u), u32(uni.boundX / step + 1.0 + 2.0 * D), iD > 0u);
     let final_ny = select(u32(0u), u32(uni.boundY / step + 1.0 + 2.0 * D), iD > 0u);
     let padded_nx = final_nx + L - 1u;
     let padded_ny = final_ny + L - 1u;
-    // Use chunkY to compute total elements for this chunk
-    let chunk_ny = select(padded_ny, uni.chunkY, uni.chunkY > 0u);
-    let total_out = padded_nx * chunk_ny;
+    // Each per-(site, LSP) slot in conv_output is sized uni.nX × uni.nY (the
+    // maximum corrDist's final grid). The reader (lsp_at_loc_*) indexes
+    // cells at stride uni.nX, so we write at the same stride and only emit
+    // the channel's `final_nx × final_ny` valid sub-rectangle. Cells past
+    // (final_nx-1, final_ny-1) stay zero — they're outside the UE deployment
+    // disk anyway and would never be sampled.
+    let stride_nx = uni.nX;
+    let chunk_ny  = select(final_ny, uni.chunkY, uni.chunkY > 0u);
+    let valid_total = final_nx * chunk_ny;
 
     let total_threads = 128u * 256u;
-    let elems_per_thr = (total_out + total_threads - 1u) / total_threads;
+    let elems_per_thr = (valid_total + total_threads - 1u) / total_threads;
     let tid = gid.x + gid.y * 256u + uni.rowOffset;
 
     if lid.x == 0u {
@@ -415,9 +421,10 @@ fn convolve_crn_kernel(
 
     for (var e = 0u; e < elems_per_thr; e++) {
         let lin = tid * elems_per_thr + e;
-        if lin >= total_out { break; }
-        let ci = lin / final_ny;
-        let cj = lin % final_ny;
+        if lin >= valid_total { break; }
+        // (ci, cj) now ranges only over the valid output rectangle.
+        let ci = lin / final_ny;   // 0 .. final_nx-1
+        let cj = lin % final_ny;   // 0 .. final_ny-1
         var s  = 0.0;
         if corr_px == 0.0 {
             s = fill_temp[ci * padded_ny + cj];
@@ -432,7 +439,9 @@ fn convolve_crn_kernel(
                 }
             }
         }
-        conv_output[uni.outputGridOffset + lin] = s;
+        // Write at the slot's stride (uni.nX), not the channel's packed
+        // stride — this is what `lsp_at_loc_*` indexes with.
+        conv_output[uni.outputGridOffset + ci * stride_nx + cj] = s;
     }
 }
 
@@ -879,18 +888,32 @@ struct AntPanelConfig {
     _pad0         : u32,
 }
 
+// SspCellParam: tail-padded to 32 B to match the C++ host struct's 16-byte
+// alignment. The natural WGSL std430 size would be 20 B, but the host's
+// `alignas(16)` rounds it up to 32 B; without the matching padding here,
+// the reader sees every (32/20)-th cell shifted into the prior cell's
+// orientation field, producing a garbage `antPanelIdx` whose `nAnt` lookup
+// returns zero and silently skips the BS antenna loop for those links.
 struct SspCellParam {
     antPanelIdx         : u32,
     antPanelOrientation : array<f32, 3>,  // [theta_tilt, phi_tilt, zeta_offset]
     _pad0               : u32,
+    _pad1               : u32,
+    _pad2               : u32,
+    _pad3               : u32,
 }
 
+// Same story: WGSL std430 layout is 36 B (4+4+12+12+4), but the host pads
+// to 48 B via `alignas(16)`. Match it explicitly here.
 struct SspUtParam {
     antPanelIdx         : u32,
     outdoor_ind         : u32,            // 1 = outdoor, 0 = indoor (O2I)
     antPanelOrientation : array<f32, 3>,
     velocity            : array<f32, 3>,
     _pad0               : u32,
+    _pad1               : u32,
+    _pad2               : u32,
+    _pad3               : u32,
 }
 
 // Common link parameters (scenario-level, 3 entries: NLOS=0, LOS=1, O2I=2)
@@ -1674,17 +1697,24 @@ fn generate_cir_kernel(
 
                     if li.x == 0u {
                         for (var ri = 0u; ri < sc_size; ri++) {
-                            var ray_global_idx = 0u;
-                            if sc == 0u { ray_global_idx = c * n_ray + cir_buf_cmn.raysInSubCluster0[ri]; }
-                            else if sc == 1u { ray_global_idx = c * n_ray + cir_buf_cmn.raysInSubCluster1[ri]; }
-                            else             { ray_global_idx = c * n_ray + cir_buf_cmn.raysInSubCluster2[ri]; }
+                            // cal_cluster_ray writes per-link at stride
+                            // MAX_CR (= MAX_CLUSTERS*MAX_RAYS = 400); the
+                            // reader must add the same per-link offset.
+                            let link_ray_base = al.lspReadIdx * MAX_CR;
+                            var ray_local_idx = 0u;
+                            if sc == 0u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster0[ri]; }
+                            else if sc == 1u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster1[ri]; }
+                            else             { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster2[ri]; }
+                            let ray_global_idx = link_ray_base + ray_local_idx;
 
                             let tZOA = cir_buf_theta_nm_ZOA[ray_global_idx] - ut.antPanelOrientation[0];
                             let pAOA = cir_buf_phi_nm_AoA[ray_global_idx]   - ut.antPanelOrientation[1];
                             let tZOD = cir_buf_theta_nm_ZOD[ray_global_idx] - cell.antPanelOrientation[0];
                             let pAOD = cir_buf_phi_nm_AoD[ray_global_idx]   - cell.antPanelOrientation[1];
                             let xpr  = cir_buf_xpr[ray_global_idx];
-                            let rph_off = ray_global_idx * 4u;
+                            // randomPhases buffer has 4 entries per ray at
+                            // stride MAX_CR4 = 4*MAX_CR per link.
+                            let rph_off = al.lspReadIdx * MAX_CR4 + ray_local_idx * 4u;
 
                             for (var ua = 0u; ua < nUtAnt; ua++) {
                                 let rc = calc_ray_coeff(
@@ -1716,13 +1746,15 @@ fn generate_cir_kernel(
                 let power = sqrt(cl_power / f32(n_ray));
                 if li.x == 0u {
                     for (var r = 0u; r < n_ray; r++) {
-                        let ray_global_idx = c * n_ray + r;
+                        // Same per-link offset as the strongest-cluster path.
+                        let ray_local_idx = c * n_ray + r;
+                        let ray_global_idx = al.lspReadIdx * MAX_CR + ray_local_idx;
                         let tZOA = cir_buf_theta_nm_ZOA[ray_global_idx] - ut.antPanelOrientation[0];
                         let pAOA = cir_buf_phi_nm_AoA[ray_global_idx]   - ut.antPanelOrientation[1];
                         let tZOD = cir_buf_theta_nm_ZOD[ray_global_idx] - cell.antPanelOrientation[0];
                         let pAOD = cir_buf_phi_nm_AoD[ray_global_idx]   - cell.antPanelOrientation[1];
                         let xpr  = cir_buf_xpr[ray_global_idx];
-                        let rph_off = ray_global_idx * 4u;
+                        let rph_off = al.lspReadIdx * MAX_CR4 + ray_local_idx * 4u;
 
                         for (var ua = 0u; ua < nUtAnt; ua++) {
                             let rc = calc_ray_coeff(

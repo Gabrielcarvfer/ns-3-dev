@@ -246,6 +246,8 @@ main()
             uts[u].o2i_penetration_loss = 0.0f;
         }
     }
+    SLS_LOG("[SIZEOF] CellParamSS=%zu UtParamSS=%zu (WGSL expects 20 / 36)\n",
+            sizeof(CellParamSS), sizeof(UtParamSS));
     SLS_LOG("[DEBUG] UE mix: %u indoor (%u high-loss / %u low-loss), %u outdoor "
             "(PL_tw_low=%.1f dB, PL_tw_high=%.1f dB at fc=%.1f GHz)\n",
             nIndoor, nHigh, nIndoor - nHigh, nUT - nIndoor,

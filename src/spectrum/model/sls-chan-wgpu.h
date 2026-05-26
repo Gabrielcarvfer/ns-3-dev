@@ -110,14 +110,19 @@ struct alignas(16) UtParam
 };
 
 // ── Small-scale CellParam / UtParam ──────────────────────────────────────────
-// Used by calClusterRay / generateCIR / generateCFR (bindings 23 & 24)
-// Must match the WGSL small-scale CellParam / UtParam structs exactly.
+// Used by calClusterRay / generateCIR / generateCFR (bindings 23 & 24).
+// Layout MUST match the WGSL SspCellParam / SspUtParam structs. The
+// element stride for arrays of these in storage buffers is 32 / 48 B in
+// the running wgpu-native implementation (16-byte structure stride). The
+// WGSL structs include explicit trailing padding to land at that stride;
+// the host structs use `alignas(16)` to do the same.
 struct alignas(16) CellParamSS
 {
     uint32_t antPanelIdx;
     float antPanelOrientation[3]; // [theta_tilt, phi_tilt, zeta_offset]
     uint32_t _pad0;
 };
+static_assert(sizeof(CellParamSS) == 32, "CellParamSS must be 32 bytes to match WGSL stride");
 
 struct alignas(16) UtParamSS
 {
@@ -127,6 +132,7 @@ struct alignas(16) UtParamSS
     float velocity[3];
     uint32_t _pad0;
 };
+static_assert(sizeof(UtParamSS) == 48, "UtParamSS must be 48 bytes to match WGSL stride");
 
 // ── Large-scale LinkParams ────────────────────────────────────────────────────
 struct LinkParamsHdf5
@@ -334,6 +340,11 @@ struct SsCmnParams
     float RayOffsetAngles[20];
 };
 
+// AntPanelConfigGPU: layout must match WGSL `AntPanelConfig` (64 bytes).
+// The previous version had two trailing u32 pads (68 bytes), which made the
+// UE panel (index 1) read with a 4-byte shift — the GPU saw nUtAnt = 0 and
+// silently skipped the UE-antenna loop in calc_los_coeff / calc_ray_coeff,
+// producing zero CIR for every link.
 struct AntPanelConfigGPU
 {
     uint32_t nAnt;
@@ -344,8 +355,8 @@ struct AntPanelConfigGPU
     uint32_t thetaOffset;    // offset into flat antTheta buffer (181 entries per panel)
     uint32_t phiOffset;      // offset into flat antPhi buffer   (360 entries per panel)
     uint32_t _pad0;
-    uint32_t _pad1;
 };
+static_assert(sizeof(AntPanelConfigGPU) == 64, "AntPanelConfigGPU must be 64 B (WGSL stride)");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // String helper for v24 WGPUStringView

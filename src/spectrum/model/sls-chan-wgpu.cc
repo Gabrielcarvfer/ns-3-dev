@@ -466,14 +466,20 @@ SlsChanWgpu::generateCRN(float maxX,
     }
 
     auto tempBufBytes = [&, step_m](float cd) -> uint64_t {
-        // Match WGSL: grid in pixels = round(bound/step + 1 + 2*D)
-        // where D = 3 * (corrDist / step).
-        const float Dpx = 3.0f * (cd / step_m);
-        const uint64_t pnx = static_cast<uint64_t>(
+        // Must match what fill_crn_kernel writes: padded_nx × padded_ny
+        // floats, where padded = final + (L-1) and L = 2*floor(3*cd/step)+1.
+        // The convolve kernel ALSO reads at padded stride. Sizing this for
+        // the *final* grid (which is what the previous version did) left
+        // the filter-padding tail spilling into adjacent allocations.
+        const float Dpx       = 3.0f * (cd / step_m);
+        const uint64_t iDpx   = static_cast<uint64_t>(Dpx);
+        const uint64_t L      = (cd > 0.0f) ? (2 * iDpx + 1) : 1ULL;
+        const uint64_t pad    = (L > 0) ? (L - 1) : 0;
+        const uint64_t finalX = static_cast<uint64_t>(
             (maxX - minX) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
-        const uint64_t pny = static_cast<uint64_t>(
+        const uint64_t finalY = static_cast<uint64_t>(
             (maxY - minY) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
-        return pnx * pny * sizeof(float);
+        return (finalX + pad) * (finalY + pad) * sizeof(float);
     };
 
     float maxCorr = 0.0f;
