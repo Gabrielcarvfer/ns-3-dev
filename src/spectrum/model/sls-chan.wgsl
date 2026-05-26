@@ -1309,8 +1309,12 @@ fn cal_cluster_ray_kernel(
     // Normalise
     for (var n = 0u; n < n_cluster; n++) { powers[n] /= p_sum; }
 
-    // Convert delays to nanoseconds
-    for (var n = 0u; n < n_cluster; n++) { delays[n] *= 1e9; }
+    // Delays are already in nanoseconds here: lk.DS is stored as 10^(mu+9)
+    // (3GPP TR 38.901 gives mu_lgDS in log10(seconds); the +9 in
+    // cal_link_param_kernel pre-converts to log10(nanoseconds)). The previous
+    // `delays[n] *= 1e9` second-to-ns conversion was a leftover from CUDA where
+    // lk.DS is in seconds, and it bloated tap_idx by 1e9 (and made delays in
+    // the cluster_buf nonsensically large for downstream consumers).
 
     // Filter clusters below threshold (1e-3 relative to max)
     var max_p = powers[0];

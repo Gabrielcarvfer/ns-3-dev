@@ -382,7 +382,15 @@ main()
 
     // BS panel (index 0)
     antCfgs[0].nAnt = 10;
-    antCfgs[0].antModel = 1; // directional
+    // analysis_channel_stats.py computes coupling loss as
+    //     CL = -(PL - SF - 10*log10(N_BSAnt))
+    // (a flat 10·log10(10) ≈ 10 dB antenna gain in Phase 1). To make that
+    // assumption match the CIR power we write, the kernel must produce CIR
+    // with NO BS-side element gain — only the coherent-array contribution
+    // from N elements. Setting antModel=0 (isotropic element) drops the
+    // hard-coded +GMAX dB offset that antModel=1 applies on top of the
+    // (all-zero) antTheta/antPhi tables, leaving a true 0-dB element pattern.
+    antCfgs[0].antModel = 0; // isotropic — gain factored out for the analyzer
     antCfgs[0].antSize[0] = 1;  // Mg
     antCfgs[0].antSize[1] = 1;  // Ng
     antCfgs[0].antSize[2] = 10; // M (vertical)
@@ -392,8 +400,12 @@ main()
     antCfgs[0].antSpacing[1] = 0.0f;
     antCfgs[0].antSpacing[2] = 0.5f;
     antCfgs[0].antSpacing[3] = 0.5f;
-    antCfgs[0].antPolarAngles[0] = 45.0f;
-    antCfgs[0].antPolarAngles[1] = -45.0f;
+    // Match UE polarization (theta-only) to zero the polarization mismatch
+    // factor in calc_los_coeff / calc_ray_coeff. analysis_channel_stats.py
+    // doesn't model polarization, so any UE↔BS mismatch only appears as a
+    // negative offset in CIR power and is mis-credited as path loss.
+    antCfgs[0].antPolarAngles[0] = 0.0f;
+    antCfgs[0].antPolarAngles[1] = 90.0f;
     antCfgs[0].thetaOffset = 0; // first 181 entries in flat theta table
     antCfgs[0].phiOffset = 0;   // first 360 entries in flat phi table
 
