@@ -182,8 +182,6 @@ macro(process_options)
     set(ENABLE_TESTS ON)
     # CTest creates a TEST target that conflicts with ns-3 test library
     # enable_testing()
-  else()
-    list(REMOVE_ITEM libs_to_build test)
   endif()
 
   set(profiles_without_suffixes release)
