@@ -549,9 +549,15 @@ function(build_lib_tests libname ignore_pch folder test_sources
             ${LIB_AS_NEEDED_POST}
           )
         else()
+          # Keep linking the module's full LIBRARIES_TO_LINK alongside any extra
+          # TEST_LIBRARIES_TO_LINK: third-party libs declared as PRIVATE module
+          # deps (e.g. GSL) do not propagate transitively when
+          # NS3_REEXPORT_THIRD_PARTY_LIBRARIES is OFF, and would otherwise leave
+          # test sources that #include them unresolvable.
           target_link_libraries(
             ${test${libname}} ${LIB_AS_NEEDED_PRE} ${libname}
-            "${test_libraries_to_link}" ${LIB_AS_NEEDED_POST}
+            "${BLIB_LIBRARIES_TO_LINK}" "${test_libraries_to_link}"
+            ${LIB_AS_NEEDED_POST}
           )
         endif()
         set_target_properties(
