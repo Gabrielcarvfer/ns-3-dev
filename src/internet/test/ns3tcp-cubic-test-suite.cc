@@ -67,7 +67,7 @@ static constexpr bool WRITE_PCAP = false;    //!< Set to true to write out pcap.
 static constexpr bool WRITE_GNUPLOT = false; //!< Set to true to write out gnuplot.
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
  * Add sample trace values to data structures
  * @param gnuplotTimeSeries Gnuplot data structure
@@ -88,7 +88,7 @@ CubicCwndTracer(Gnuplot2dDataset* gnuplotTimeSeries,
 }
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  * Test Cubic response
  */
 class Ns3TcpCubicTestCase : public TestCase
@@ -391,7 +391,7 @@ Ns3TcpCubicTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  * TestSuite for module tcp-cubic
  */
 class Ns3TcpCubicTestSuite : public TestSuite

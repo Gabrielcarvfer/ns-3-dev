@@ -29,7 +29,7 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE("Ns3TcpNoDelayTest");
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
  * @brief Tests of Nagle's algorithm and the TCP no delay option.
  */
@@ -201,7 +201,7 @@ Ns3TcpNoDelayTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
  * TCP Nagle's algorithm and the TCP no delay option TestSuite.
  */

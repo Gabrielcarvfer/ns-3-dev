@@ -17,7 +17,7 @@ namespace ns3
 {
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
  * @brief Simple class to write data to sockets.
  */

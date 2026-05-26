@@ -7,7 +7,6 @@
 #include "ns3tcp-socket-writer.h"
 
 #include "ns3/abort.h"
-#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
 #include "ns3/error-model.h"
@@ -25,16 +24,15 @@
 #include "ns3/string.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-socket-factory.h"
+#include "ns3/tcp-westwood-plus.h"
 #include "ns3/test.h"
-#include "ns3/traffic-control-helper.h"
 #include "ns3/uinteger.h"
 
 #include <iomanip>
-#include <string>
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("Ns3TcpStateTest");
+NS_LOG_COMPONENT_DEFINE("Ns3TcpLossTest");
 
 // The below boolean constants should only be changed to 'true'
 // during test debugging (i.e. do not commit the value 'true')
@@ -49,25 +47,28 @@ const bool WRITE_VECTORS = false; //!< Set to true to write response vectors.
 const bool WRITE_PCAP = false;    //!< Set to true to write out pcap.
 const bool WRITE_LOGGING = false; //!< Set to true to write logging.
 const uint32_t PCAP_LINK_TYPE =
-    1187373554; //!< Some large random number -- we use to verify data was written by this program.
+    1187373557; //!< Some large random number -- we use to verify data was written by this program.
 const uint32_t PCAP_SNAPLEN = 64; //!< Don't bother to save much data.
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
- * @brief Tests of TCP implementation state machine behavior
+ * @brief Tests of TCP implementation loss behavior.
  */
-class Ns3TcpStateTestCase : public TestCase
+class Ns3TcpLossTestCase : public TestCase
 {
   public:
-    Ns3TcpStateTestCase();
+    Ns3TcpLossTestCase();
+
     /**
      * Constructor.
+     *
+     * @param tcpModel The TCP model name.
      * @param testCase Testcase number.
      */
-    Ns3TcpStateTestCase(uint32_t testCase);
+    Ns3TcpLossTestCase(std::string tcpModel, uint32_t testCase);
 
-    ~Ns3TcpStateTestCase() override
+    ~Ns3TcpLossTestCase() override
     {
     }
 
@@ -76,15 +77,17 @@ class Ns3TcpStateTestCase : public TestCase
     void DoRun() override;
     void DoTeardown() override;
 
-    std::string m_pcapFilename; //!< The PCAP filename.
-    PcapFile m_pcapFile;        //!< The PCAP ffile.
-    uint32_t m_testCase;        //!< Testcase number.
-    uint32_t m_totalTxBytes;    //!< Total number of bytes to send.
-    uint32_t m_currentTxBytes;  //!< Current number of bytes sent.
-    bool m_writeVectors;        //!< True if response vectors have to be written (and not read).
-    bool m_writeResults;        //!< True if write PCAP files.
-    bool m_writeLogging;        //!< True if write logging.
-    bool m_needToClose;         //!< Check if the sending socket need to be closed.
+    Ptr<OutputStreamWrapper> m_osw; //!< The output stream.
+    std::string m_pcapFilename;     //!< The PCAP filename.
+    PcapFile m_pcapFile;            //!< The PCAP ffile.
+    uint32_t m_testCase;            //!< Testcase number.
+    uint32_t m_totalTxBytes;        //!< Total number of bytes to send.
+    uint32_t m_currentTxBytes;      //!< Current number of bytes sent.
+    bool m_writeVectors;            //!< True if response vectors have to be written (and not read).
+    bool m_writeResults;            //!< True if write PCAP files.
+    bool m_writeLogging;            //!< True if write logging.
+    bool m_needToClose;             //!< Check if the sending socket need to be closed.
+    std::string m_tcpModel;         //!< The TCP model name.
 
     /**
      * Check that the transmitted packets are consistent with the trace.
@@ -100,18 +103,12 @@ class Ns3TcpStateTestCase : public TestCase
                   Ptr<Ipv4> ipv4,
                   uint32_t interface);
     /**
-     * Check that the received packets are consistent with the trace.
-     * This callback is hooked to ns3::Ipv4L3Protocol/Tx.
+     * CWND trace.
      *
-     * @param context The callback context (unused).
-     * @param packet The transmitted packet.
-     * @param ipv4 The IPv4 object that did send the packet (unused).
-     * @param interface The IPv4 interface that did send the packet (unused).
+     * @param oldval The old value.
+     * @param newval The new value.
      */
-    void Ipv4L3Rx(std::string context,
-                  Ptr<const Packet> packet,
-                  Ptr<Ipv4> ipv4,
-                  uint32_t interface);
+    void CwndTracer(uint32_t oldval, uint32_t newval);
     /**
      * Write to the socket until the buffer is full.
      *
@@ -129,41 +126,50 @@ class Ns3TcpStateTestCase : public TestCase
     void StartFlow(Ptr<Socket> localSocket, Ipv4Address servAddress, uint16_t servPort);
 };
 
-Ns3TcpStateTestCase::Ns3TcpStateTestCase()
+Ns3TcpLossTestCase::Ns3TcpLossTestCase()
     : TestCase("Check the operation of the TCP state machine for several cases"),
       m_testCase(0),
-      m_totalTxBytes(20000),
+      m_totalTxBytes(200000),
       m_currentTxBytes(0),
       m_writeVectors(WRITE_VECTORS),
       m_writeResults(WRITE_PCAP),
       m_writeLogging(WRITE_LOGGING),
-      m_needToClose(true)
+      m_needToClose(true),
+      m_tcpModel("ns3::TcpWestwoodPlus")
 {
 }
 
-Ns3TcpStateTestCase::Ns3TcpStateTestCase(uint32_t testCase)
-    : TestCase("Check the operation of the TCP state machine for several cases"),
+Ns3TcpLossTestCase::Ns3TcpLossTestCase(std::string tcpModel, uint32_t testCase)
+    : TestCase("Check the behaviour of TCP upon packet losses"),
       m_testCase(testCase),
-      m_totalTxBytes(20000),
+      m_totalTxBytes(200000),
       m_currentTxBytes(0),
       m_writeVectors(WRITE_VECTORS),
       m_writeResults(WRITE_PCAP),
       m_writeLogging(WRITE_LOGGING),
-      m_needToClose(true)
+      m_needToClose(true),
+      m_tcpModel(tcpModel)
 {
 }
 
 void
-Ns3TcpStateTestCase::DoSetup()
+Ns3TcpLossTestCase::DoSetup()
 {
+    // This test was written before SACK was added to ns-3
+    Config::SetDefault("ns3::TcpSocketBase::Sack", BooleanValue(false));
+    // This test was written with initial window of 1 segment
+    Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(1));
+    // This test was written with the TCP Classic Recovery algorithm
+    Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
+                       TypeIdValue(TypeId(ns3::TcpClassicRecovery::GetTypeId())));
+
     //
     // We expect there to be a file called ns3tcp-state-response-vectors.pcap in
     // the data directory
     //
     std::ostringstream oss;
-    oss << "ns3tcp-state" << m_testCase << "-response-vectors.pcap";
+    oss << "ns3tcp-loss-" << m_tcpModel << m_testCase << "-response-vectors.pcap";
     m_pcapFilename = CreateDataDirFilename(oss.str());
-    NS_LOG_INFO("m_pcapFilename=" << m_pcapFilename);
 
     if (m_writeVectors)
     {
@@ -179,25 +185,13 @@ Ns3TcpStateTestCase::DoSetup()
 }
 
 void
-Ns3TcpStateTestCase::DoTeardown()
+Ns3TcpLossTestCase::DoTeardown()
 {
     m_pcapFile.Close();
 }
 
 void
-Ns3TcpStateTestCase::Ipv4L3Rx(std::string, Ptr<const Packet> packet, Ptr<Ipv4>, uint32_t)
-{
-    Ptr<Packet> received = packet->Copy();
-    Ipv4Header ipHeader;
-    TcpHeader tcpHeader;
-    received->RemoveHeader(ipHeader);
-    received->RemoveHeader(tcpHeader);
-
-    NS_LOG_DEBUG("Received: " << tcpHeader);
-}
-
-void
-Ns3TcpStateTestCase::Ipv4L3Tx(std::string, Ptr<const Packet> packet, Ptr<Ipv4>, uint32_t)
+Ns3TcpLossTestCase::Ipv4L3Tx(std::string, Ptr<const Packet> packet, Ptr<Ipv4>, uint32_t)
 {
     //
     // We're not testing IP so remove and toss the header.  In order to do this,
@@ -262,15 +256,28 @@ Ns3TcpStateTestCase::Ipv4L3Tx(std::string, Ptr<const Packet> packet, Ptr<Ipv4>, 
         //
         if (IsStatusSuccess())
         {
-            NS_TEST_EXPECT_MSG_EQ(result, 0, "Expected data comparison error");
+            NS_TEST_EXPECT_MSG_EQ(result,
+                                  0,
+                                  "Expected data comparison error: " << m_tcpModel << "-"
+                                                                     << m_testCase);
         }
+    }
+}
+
+void
+Ns3TcpLossTestCase::CwndTracer(uint32_t oldval, uint32_t newval)
+{
+    if (m_writeLogging)
+    {
+        *(m_osw->GetStream()) << "Moving cwnd from " << oldval << " to " << newval << " at time "
+                              << Simulator::Now().GetSeconds() << " seconds" << std::endl;
     }
 }
 
 ////////////////////////////////////////////////////////////////////
 // Implementing an "application" to send bytes over a TCP connection
 void
-Ns3TcpStateTestCase::WriteUntilBufferFull(Ptr<Socket> localSocket, uint32_t txSpace)
+Ns3TcpLossTestCase::WriteUntilBufferFull(Ptr<Socket> localSocket, uint32_t)
 {
     while (m_currentTxBytes < m_totalTxBytes)
     {
@@ -304,43 +311,47 @@ Ns3TcpStateTestCase::WriteUntilBufferFull(Ptr<Socket> localSocket, uint32_t txSp
 }
 
 void
-Ns3TcpStateTestCase::StartFlow(Ptr<Socket> localSocket, Ipv4Address servAddress, uint16_t servPort)
+Ns3TcpLossTestCase::StartFlow(Ptr<Socket> localSocket, Ipv4Address servAddress, uint16_t servPort)
 {
     if (m_writeLogging)
     {
         std::clog << "Starting flow at time " << Simulator::Now().GetSeconds() << std::endl;
     }
-
     localSocket->Connect(InetSocketAddress(servAddress, servPort)); // connect
 
     // tell the tcp implementation to call WriteUntilBufferFull again
     // if we blocked and new tx buffer space becomes available
-    localSocket->SetSendCallback(MakeCallback(&Ns3TcpStateTestCase::WriteUntilBufferFull, this));
+    localSocket->SetSendCallback(MakeCallback(&Ns3TcpLossTestCase::WriteUntilBufferFull, this));
     WriteUntilBufferFull(localSocket, localSocket->GetTxAvailable());
 }
 
 void
-Ns3TcpStateTestCase::DoRun()
+Ns3TcpLossTestCase::DoRun()
 {
     // Network topology
     //
-    //           10Mb/s, 0.1ms      10Mb/s, 0.1ms
-    //       n0-----------------n1-----------------n2
-
-    std::string tcpModel("ns3::TcpNewReno");
+    //           8Mb/s, 0.1ms       0.8Mb/s, 100ms
+    //       s1-----------------r1-----------------k1
+    //
+    // Example corresponding to simulations in the paper "Simulation-based
+    // Comparisons of Tahoe, Reno, and SACK TCP
 
     Config::SetDefault("ns3::TcpSocketBase::Sack", BooleanValue(false));
-    Config::SetDefault("ns3::TcpL4Protocol::SocketType", StringValue(tcpModel));
+
+    std::ostringstream tcpModel;
+    tcpModel << "ns3::Tcp" << m_tcpModel;
+    Config::SetDefault("ns3::TcpL4Protocol::SocketType", StringValue(tcpModel.str()));
+
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1000));
     Config::SetDefault("ns3::TcpSocket::DelAckCount", UintegerValue(1));
-    Config::SetDefault("ns3::DropTailQueue<Packet>::MaxSize", StringValue("20p"));
     Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
 
     if (m_writeLogging)
     {
         LogComponentEnableAll(LOG_PREFIX_FUNC);
+        LogComponentEnable("Ns3TcpLossTest", LOG_LEVEL_ALL);
         LogComponentEnable("ErrorModel", LOG_LEVEL_DEBUG);
-        LogComponentEnable("Ns3TcpStateTest", LOG_LEVEL_DEBUG);
+        LogComponentEnable("TcpWestwoodPlus", LOG_LEVEL_ALL);
         LogComponentEnable("TcpCongestionOps", LOG_LEVEL_INFO);
         LogComponentEnable("TcpSocketBase", LOG_LEVEL_INFO);
     }
@@ -349,13 +360,13 @@ Ns3TcpStateTestCase::DoRun()
     // Topology construction
     //
 
-    // Create three nodes
-    NodeContainer n0n1;
-    n0n1.Create(2);
+    // Create three nodes: s1, r1, and k1
+    NodeContainer s1r1;
+    s1r1.Create(2);
 
-    NodeContainer n1n2;
-    n1n2.Add(n0n1.Get(1));
-    n1n2.Create(1);
+    NodeContainer r1k1;
+    r1k1.Add(s1r1.Get(1));
+    r1k1.Create(1);
 
     // Set up TCP/IP stack to all nodes (and create loopback device at device 0)
     InternetStackHelper internet;
@@ -363,16 +374,12 @@ Ns3TcpStateTestCase::DoRun()
 
     // Connect the nodes
     PointToPointHelper p2p;
-    p2p.SetDeviceAttribute("DataRate", DataRateValue(DataRate(1000000)));
+    p2p.SetDeviceAttribute("DataRate", DataRateValue(DataRate(8000000)));
     p2p.SetChannelAttribute("Delay", TimeValue(Seconds(0.0001)));
-    NetDeviceContainer dev0 = p2p.Install(n0n1);
-    NetDeviceContainer dev1 = p2p.Install(n1n2);
-
-    // Use PfifoFast queue disc
-    TrafficControlHelper tch;
-    tch.SetRootQueueDisc("ns3::PfifoFastQueueDisc");
-    tch.Install(dev0);
-    tch.Install(dev1);
+    NetDeviceContainer dev0 = p2p.Install(s1r1);
+    p2p.SetDeviceAttribute("DataRate", DataRateValue(DataRate(800000)));
+    p2p.SetChannelAttribute("Delay", TimeValue(Seconds(0.1)));
+    NetDeviceContainer dev1 = p2p.Install(r1k1);
 
     // Add IP addresses to each network interfaces
     Ipv4AddressHelper ipv4;
@@ -385,120 +392,92 @@ Ns3TcpStateTestCase::DoRun()
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
     ////////////////////////////////////////////////////////
-    // A flow from node n0 to node n2
+    // Send 20000 (totalTxBytes) bytes from node s1 to node k1
     //
 
-    // Create a packet sink to receive packets on node n2
+    // Create a packet sink to receive packets on node k1
     uint16_t servPort = 50000; // Destination port number
     PacketSinkHelper sink("ns3::TcpSocketFactory",
                           InetSocketAddress(Ipv4Address::GetAny(), servPort));
-    ApplicationContainer sinkApps = sink.Install(n1n2.Get(1));
-    sinkApps.Start(Seconds(0));
-    sinkApps.Stop(Seconds(100));
+    ApplicationContainer apps = sink.Install(r1k1.Get(1));
+    apps.Start(Seconds(0));
+    apps.Stop(Seconds(100));
 
-    // Create a data source to send packets on node n0
+    // Create a data source to send packets on node s0.
     // Instead of full application, here use the socket directly by
     // registering callbacks in function StarFlow().
-    Ptr<Socket> localSocket = Socket::CreateSocket(n0n1.Get(0), TcpSocketFactory::GetTypeId());
+    Ptr<Socket> localSocket = Socket::CreateSocket(s1r1.Get(0), TcpSocketFactory::GetTypeId());
     localSocket->Bind();
-    Simulator::ScheduleNow(&Ns3TcpStateTestCase::StartFlow,
+    Simulator::ScheduleNow(&Ns3TcpLossTestCase::StartFlow,
                            this,
                            localSocket,
                            ipInterfs.GetAddress(1),
                            servPort);
 
     Config::Connect("/NodeList/0/$ns3::Ipv4L3Protocol/Tx",
-                    MakeCallback(&Ns3TcpStateTestCase::Ipv4L3Tx, this));
+                    MakeCallback(&Ns3TcpLossTestCase::Ipv4L3Tx, this));
 
-    Config::Connect("/NodeList/0/$ns3::Ipv4L3Protocol/Rx",
-                    MakeCallback(&Ns3TcpStateTestCase::Ipv4L3Rx, this));
+    Config::ConnectWithoutContext("/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/CongestionWindow",
+                                  MakeCallback(&Ns3TcpLossTestCase::CwndTracer, this));
 
     ////////////////////////////////////////////////////////
-    // Set up different test cases: Lost model at node n1, different file size
+    // Set up loss model at node k1
     //
-
-    std::list<uint32_t> dropListN0;
-    std::list<uint32_t> dropListN1;
-    std::string caseDescription;
+    std::list<uint32_t> sampleList;
     switch (m_testCase)
     {
     case 0:
-        m_totalTxBytes = 1000;
-        caseDescription = "Verify connection establishment";
         break;
     case 1:
-        m_totalTxBytes = 100 * 1000;
-        caseDescription = "Verify a bigger (100 pkts) transfer: Sliding window operation, etc.";
+        // Force a loss for 15th data packet. TCP cwnd will be at 14 segments
+        // (14000 bytes) when duplicate acknowledgments start to come.
+        sampleList.push_back(16);
         break;
     case 2:
-        m_totalTxBytes = 1000;
-        caseDescription = "Survive a SYN lost";
-        dropListN0.push_back(0);
+        sampleList.push_back(16);
+        sampleList.push_back(17);
         break;
     case 3:
-        m_totalTxBytes = 2000;
-        caseDescription = "Survive a SYN+ACK lost";
-        dropListN1.push_back(0);
+        sampleList.push_back(16);
+        sampleList.push_back(17);
+        sampleList.push_back(18);
         break;
     case 4:
-        m_totalTxBytes = 2000;
-        caseDescription = "Survive a ACK (last packet in 3-way handshake) lost";
-        dropListN0.push_back(1);
-        break;
-    case 5:
-        m_totalTxBytes = 0;
-        caseDescription = "Immediate FIN upon SYN_RCVD";
-        m_needToClose = false;
-        dropListN0.push_back(1); // Hide the ACK in 3WHS
-        Simulator::Schedule(Seconds(0.002), &Socket::Close, localSocket);
-        break;
-    case 6:
-        m_totalTxBytes = 5000;
-        caseDescription = "Simulated simultaneous close";
-        dropListN1.push_back(5); // Hide the ACK-to-FIN from n2
-        break;
-    case 7:
-        m_totalTxBytes = 5000;
-        caseDescription = "FIN check 1: Loss of initiator's FIN. Wait until app close";
-        m_needToClose = false;
-        dropListN0.push_back(7); // Hide the FIN from n0
-        Simulator::Schedule(Seconds(0.04), &Socket::Close, localSocket);
-        break;
-    case 8:
-        m_totalTxBytes = 5000;
-        caseDescription =
-            "FIN check 2: Loss responder's FIN. FIN will be resent after last ack timeout";
-        dropListN1.push_back(6); // Hide the FIN from n2
+        sampleList.push_back(16);
+        sampleList.push_back(17);
+        sampleList.push_back(18);
+        sampleList.push_back(19);
         break;
     default:
-        NS_FATAL_ERROR("Program fatal error: specified test case not supported: " << m_testCase);
+        NS_FATAL_ERROR("Program fatal error: loss value " << m_testCase << " not supported.");
         break;
     }
 
-    Ptr<ReceiveListErrorModel> errN0 = CreateObject<ReceiveListErrorModel>();
-    errN0->SetList(dropListN0);
-    dev0.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(errN0));
+    Ptr<ReceiveListErrorModel> pem = CreateObject<ReceiveListErrorModel>();
+    pem->SetList(sampleList);
+    dev1.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(pem));
 
-    Ptr<ReceiveListErrorModel> errN1 = CreateObject<ReceiveListErrorModel>();
-    errN1->SetList(dropListN1);
-    dev1.Get(0)->SetAttribute("ReceiveErrorModel", PointerValue(errN1));
+    // One can toggle the comment for the following line on or off to see the
+    // effects of finite send buffer modelling.  One can also change the size of
+    // that buffer.
+    // localSocket->SetAttribute("SndBufSize", UintegerValue(4096));
 
     std::ostringstream oss;
-    oss << "tcp-state" << m_testCase << "-test-case";
+    oss << "tcp-loss-" << m_tcpModel << m_testCase << "-test-case";
     if (m_writeResults)
     {
         p2p.EnablePcapAll(oss.str());
         p2p.EnableAsciiAll(oss.str());
     }
 
+    std::ostringstream oss2;
+    oss2 << "src/internet/test/Tcp" << m_tcpModel << "." << m_testCase << ".log";
+    AsciiTraceHelper ascii;
     if (m_writeLogging)
     {
-        Ptr<OutputStreamWrapper> osw = Create<OutputStreamWrapper>(&std::clog);
-        *(osw->GetStream()) << std::setprecision(9) << std::fixed;
-        p2p.EnableAsciiAll(osw);
-
-        std::clog << std::endl
-                  << "Running TCP test-case " << m_testCase << ": " << caseDescription << std::endl;
+        m_osw = ascii.CreateFileStream(oss2.str());
+        *(m_osw->GetStream()) << std::setprecision(9) << std::fixed;
+        p2p.EnableAsciiAll(m_osw);
     }
 
     // Finally, set up the simulator to run.  The 1000 second hard limit is a
@@ -509,33 +488,35 @@ Ns3TcpStateTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-tcp
+ * @ingroup internet-test
  *
- * TCP implementation state machine behavior TestSuite.
+ * TCP implementation loss behavior TestSuite.
  */
-class Ns3TcpStateTestSuite : public TestSuite
+class Ns3TcpLossTestSuite : public TestSuite
 {
   public:
-    Ns3TcpStateTestSuite();
+    Ns3TcpLossTestSuite();
 };
 
-Ns3TcpStateTestSuite::Ns3TcpStateTestSuite()
-    : TestSuite("ns3-tcp-state", Type::SYSTEM)
+Ns3TcpLossTestSuite::Ns3TcpLossTestSuite()
+    : TestSuite("ns3-tcp-loss", Type::SYSTEM)
 {
     // We can't use NS_TEST_SOURCEDIR variable here because we use subdirectories
-    SetDataDir("src/test/ns3tcp/response-vectors");
+    SetDataDir("src/internet/test/response-vectors");
     Packet::EnablePrinting(); // Enable packet metadata for all test cases
 
-    AddTestCase(new Ns3TcpStateTestCase(0), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(1), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(2), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(3), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(4), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(5), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(6), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(7), TestCase::Duration::QUICK);
-    AddTestCase(new Ns3TcpStateTestCase(8), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("NewReno", 0), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("NewReno", 1), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("NewReno", 2), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("NewReno", 3), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("NewReno", 4), TestCase::Duration::QUICK);
+
+    AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 0), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 1), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 2), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 3), TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 4), TestCase::Duration::QUICK);
 }
 
 /// Do not forget to allocate an instance of this TestSuite.
-static Ns3TcpStateTestSuite g_ns3TcpLossTestSuite;
+static Ns3TcpLossTestSuite g_ns3TcpLossTestSuite;
