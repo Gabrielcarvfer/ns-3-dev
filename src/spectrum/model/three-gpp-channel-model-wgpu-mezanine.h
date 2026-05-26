@@ -5,12 +5,16 @@
 #ifndef THREE_GPP_CHANNEL_MODEL_WGPU_MEZANINE_H
 #define THREE_GPP_CHANNEL_MODEL_WGPU_MEZANINE_H
 
-#include <memory>
 #include "three-gpp-channel-model.h"
+
 #include "ns3/phased-array-model.h"
 
+#include <memory>
+
 class SlsChanWgpu; // forward declaration because we use an opaque pointer here
-namespace ns3 {
+
+namespace ns3
+{
 /***
  * @ingroup spectrum
  *
@@ -19,24 +23,26 @@ namespace ns3 {
  * the 3GPP WGPU channel model to load settings from the CPU 3GPP
  * channel model, without exposing WGPU channel model internals.
  */
-class ThreeGppChannelModelWgpuMezanine: public ThreeGppChannelModel
+class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
 {
-public:
+  public:
     ThreeGppChannelModelWgpuMezanine();
     ~ThreeGppChannelModelWgpuMezanine();
     static TypeId GetTypeId();
     void UpdateChannel();
-    Ptr<MatrixBasedChannelModel::ChannelMatrix> GetNewChannel(Ptr<const ThreeGppChannelParams> channelParams,
-                                        Ptr<const ParamsTable> table3gpp,
-                                        Ptr<const MobilityModel> sMob,
-                                        Ptr<const MobilityModel> uMob,
-                                        Ptr<const PhasedArrayModel> sAntenna,
-                                        Ptr<const PhasedArrayModel> uAntenna) const override;
-private:
+    Ptr<MatrixBasedChannelModel::ChannelMatrix> GetNewChannel(
+        Ptr<const ThreeGppChannelParams> channelParams,
+        Ptr<const ParamsTable> table3gpp,
+        Ptr<const MobilityModel> sMob,
+        Ptr<const MobilityModel> uMob,
+        Ptr<const PhasedArrayModel> sAntenna,
+        Ptr<const PhasedArrayModel> uAntenna) const override;
+
+  private:
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
-    mutable std::unordered_map<uint32_t , Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
+    mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
 };
 
-} // ns3
+} // namespace ns3
 
-#endif //THREE_GPP_CHANNEL_MODEL_WGPU_MEZANINE_H
+#endif // THREE_GPP_CHANNEL_MODEL_WGPU_MEZANINE_H

@@ -77,27 +77,29 @@ struct alignas(16) Vec3f
 // size is 80 bytes.
 struct alignas(16) CellParam
 {
-    uint32_t cid;                              // 0
-    uint32_t siteId;                           // 4
-    uint32_t _pad_a[2];                        // 8  — pad to 16 for `loc`
-    float    loc[3];                           // 16-27 (vec3<f32>, 12 bytes)
-    uint32_t antPanelIdx;                      // 28 — fits in the implicit-pad slot
-    float    antPanelOrientation[3];           // 32-43 (vec3<f32>, 12 bytes)
-    uint32_t monostaticInd;                    // 44
-    uint32_t _pad1;                            // 48
-    uint32_t _pad2;                            // 52
-    uint32_t secondAntPanelIdx;                // 56
-    uint32_t _pad_b;                           // 60 — pad to 64 for next vec3
-    float    secondAntPanelOrientation[3];     // 64-75
+    uint32_t cid;                       // 0
+    uint32_t siteId;                    // 4
+    uint32_t _pad_a[2];                 // 8  — pad to 16 for `loc`
+    float loc[3];                       // 16-27 (vec3<f32>, 12 bytes)
+    uint32_t antPanelIdx;               // 28 — fits in the implicit-pad slot
+    float antPanelOrientation[3];       // 32-43 (vec3<f32>, 12 bytes)
+    uint32_t monostaticInd;             // 44
+    uint32_t _pad1;                     // 48
+    uint32_t _pad2;                     // 52
+    uint32_t secondAntPanelIdx;         // 56
+    uint32_t _pad_b;                    // 60 — pad to 64 for next vec3
+    float secondAntPanelOrientation[3]; // 64-75
     // alignas(16) pads to 80
 };
+
 static_assert(sizeof(CellParam) == 80, "CellParam size must match WGSL layout (80 B)");
 static_assert(offsetof(CellParam, loc) == 16, "CellParam.loc must be at offset 16");
 static_assert(offsetof(CellParam, antPanelIdx) == 28, "CellParam.antPanelIdx offset 28");
 static_assert(offsetof(CellParam, antPanelOrientation) == 32, "antPanelOrientation offset 32");
 static_assert(offsetof(CellParam, monostaticInd) == 44, "monostaticInd offset 44");
 static_assert(offsetof(CellParam, secondAntPanelIdx) == 56, "secondAntPanelIdx offset 56");
-static_assert(offsetof(CellParam, secondAntPanelOrientation) == 64, "secondAntPanelOrientation offset 64");
+static_assert(offsetof(CellParam, secondAntPanelOrientation) == 64,
+              "secondAntPanelOrientation offset 64");
 
 struct alignas(16) UtParam
 {
@@ -122,6 +124,7 @@ struct alignas(16) CellParamSS
     float antPanelOrientation[3]; // [theta_tilt, phi_tilt, zeta_offset]
     uint32_t _pad0;
 };
+
 static_assert(sizeof(CellParamSS) == 32, "CellParamSS must be 32 bytes to match WGSL stride");
 
 struct alignas(16) UtParamSS
@@ -132,12 +135,13 @@ struct alignas(16) UtParamSS
     float velocity[3];
     uint32_t _pad0;
 };
+
 static_assert(sizeof(UtParamSS) == 48, "UtParamSS must be 48 bytes to match WGSL stride");
 
 // ── Large-scale LinkParams ────────────────────────────────────────────────────
 struct LinkParamsHdf5
 {
-    uint32_t cid;     ///< Serving cell (sector) ID
+    uint32_t cid; ///< Serving cell (sector) ID
     float d2d;
     float d2d_in;
     float d2d_out;
@@ -162,6 +166,7 @@ struct LinkParamsHdf5
     float ZSA;
     float delta_tau;
 };
+
 static_assert(sizeof(LinkParamsHdf5) == 96, "LinkParamsHdf5 size mismatch");
 
 // ── Large-scale LinkParams ────────
@@ -194,6 +199,7 @@ struct LinkParamUniforms
     uint32_t updatePL, updateAllLSPs, updateLosState, updateOptionalPL;
     int32_t nX, nY;
 };
+
 static_assert(sizeof(LinkParamUniforms) == 52, "LinkParamUniforms size mismatch with WGSL");
 
 // Binding 9  — sys_config (large-scale kernel)
@@ -207,6 +213,7 @@ struct SystemLevelConfigGPU
     float force_los_outdoor; // -1.0 = use formula
     float _p2[2];
 };
+
 static_assert(sizeof(SystemLevelConfigGPU) == 32, "SystemLevelConfigGPU size mismatch");
 
 // Binding 10 — sim_config (large-scale kernel)
@@ -356,6 +363,7 @@ struct AntPanelConfigGPU
     uint32_t phiOffset;      // offset into flat antPhi buffer   (360 entries per panel)
     uint32_t _pad0;
 };
+
 static_assert(sizeof(AntPanelConfigGPU) == 64, "AntPanelConfigGPU must be 64 B (WGSL stride)");
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -379,9 +387,12 @@ class SlsChanWgpu
     void uploadCellParams(const std::vector<CellParam>& cells);
     void uploadUtParams(const std::vector<UtParam>& uts);
 
-
     // Check if running in GPU mode (always true now)
-    bool isCpuOnlyMode() const { return false; }
+    bool isCpuOnlyMode() const
+    {
+        return false;
+    }
+
     // Upload small-scale cell/UT params (different layout from large-scale)
     void uploadCellParamsSS(const std::vector<CellParamSS>& cells);
     void uploadUtParamsSS(const std::vector<UtParamSS>& uts);
@@ -578,40 +589,47 @@ class SlsChanWgpu
 #ifdef SLS_CHAN_HDF5
 // Free function to save all SLS channel metrics to an HDF5 file
 // Matches the NVIDIA slsChan::saveSlsChanToH5File structure
-void saveSlsChanToHdf5(
-    const std::string& filename,
-    // Large-scale link parameters
-    const std::vector<LinkParams>& links,
-    uint32_t nSite, uint32_t nUT,
-    // Cluster parameters
-    const std::vector<ClusterParamsGpu>& clusterParams,
-    // Active link params
-    const std::vector<ActiveLink>& activeLinks,
-    // CIR data
-    const std::vector<std::complex<float>>& cirCoe,
-    const std::vector<uint32_t>& cirNormDelay,
-    const std::vector<uint32_t>& cirNtaps,
-    // CFR data
-    const std::vector<std::complex<float>>& cfrPrbg,
-    uint32_t nPrbg,
-    // Small-scale parameters
-    const std::vector<float>& xpr,
-    const std::vector<float>& phiNmAoA,
-    const std::vector<float>& phiNmAoD,
-    const std::vector<float>& thetaNmZOA,
-    const std::vector<float>& thetaNmZOD,
-    // Configuration
-    float scSpacingHz, uint32_t fftSize, uint32_t nPrb,
-    uint32_t nSnapshotPerSlot, float centerFreqHz, float bandwidthHz,
-    uint32_t nUeAnt, uint32_t nBsAnt,
-    // Common link params
-    const SsCmnParams& ssCmn,
-    // Topology
-    const std::vector<CellParam>& cells,
-    const std::vector<CellParamSS>& cellsSS,
-    const std::vector<UtParam>& uts,
-    float isd, float bsHeight, float minBsUeDist2d,
-    float maxBsUeDist2dIndoor, float indoorUtPercent,
-    uint32_t nSectorPerSite
-);
+void saveSlsChanToHdf5(const std::string& filename,
+                       // Large-scale link parameters
+                       const std::vector<LinkParams>& links,
+                       uint32_t nSite,
+                       uint32_t nUT,
+                       // Cluster parameters
+                       const std::vector<ClusterParamsGpu>& clusterParams,
+                       // Active link params
+                       const std::vector<ActiveLink>& activeLinks,
+                       // CIR data
+                       const std::vector<std::complex<float>>& cirCoe,
+                       const std::vector<uint32_t>& cirNormDelay,
+                       const std::vector<uint32_t>& cirNtaps,
+                       // CFR data
+                       const std::vector<std::complex<float>>& cfrPrbg,
+                       uint32_t nPrbg,
+                       // Small-scale parameters
+                       const std::vector<float>& xpr,
+                       const std::vector<float>& phiNmAoA,
+                       const std::vector<float>& phiNmAoD,
+                       const std::vector<float>& thetaNmZOA,
+                       const std::vector<float>& thetaNmZOD,
+                       // Configuration
+                       float scSpacingHz,
+                       uint32_t fftSize,
+                       uint32_t nPrb,
+                       uint32_t nSnapshotPerSlot,
+                       float centerFreqHz,
+                       float bandwidthHz,
+                       uint32_t nUeAnt,
+                       uint32_t nBsAnt,
+                       // Common link params
+                       const SsCmnParams& ssCmn,
+                       // Topology
+                       const std::vector<CellParam>& cells,
+                       const std::vector<CellParamSS>& cellsSS,
+                       const std::vector<UtParam>& uts,
+                       float isd,
+                       float bsHeight,
+                       float minBsUeDist2d,
+                       float maxBsUeDist2dIndoor,
+                       float indoorUtPercent,
+                       uint32_t nSectorPerSite);
 #endif

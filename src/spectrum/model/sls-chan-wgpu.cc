@@ -5,16 +5,16 @@
 #define WEBGPU_CPP_IMPLEMENTATION
 #include "sls-chan-wgpu.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
-#include <random>
-#include <vector>
 #include <fstream>
 #include <iostream>
 #include <map>
-#include <algorithm>
+#include <random>
+#include <vector>
 
 #ifdef SLS_CHAN_HDF5
 #include <H5Cpp.h>
@@ -41,10 +41,40 @@ createDevice()
     aopts.backendType = WGPUBackendType_D3D12;
     SLS_LOG("[DEBUG] Trying D3D12 backend...\n");
     wgpuInstanceRequestAdapter(
+        instance,
+        &aopts,
+        WGPURequestAdapterCallbackInfo{
+            .mode = WGPUCallbackMode_AllowSpontaneous,
+            .callback =
+                [](WGPURequestAdapterStatus status,
+                   WGPUAdapter a,
+                   WGPUStringView,
+                   void* ud1,
+                   void*) {
+                    if (status == WGPURequestAdapterStatus_Success)
+                    {
+                        SLS_LOG("[DEBUG] D3D12 adapter acquired\n");
+                        *static_cast<WGPUAdapter*>(ud1) = a;
+                    }
+                    else
+                    {
+                        SLS_LOG("[DEBUG] D3D12 adapter failed (status=%d), trying Vulkan...\n",
+                                status);
+                    }
+                },
+            .userdata1 = &adapter});
+    wgpuInstanceProcessEvents(instance); // process async callback
+    if (!adapter)
+    {
+        // Try Vulkan backend as fallback
+        aopts.backendType = WGPUBackendType_Vulkan;
+        SLS_LOG("[DEBUG] Trying Vulkan backend...\n");
+        wgpuInstanceRequestAdapter(
             instance,
             &aopts,
-            WGPURequestAdapterCallbackInfo{.mode = WGPUCallbackMode_AllowSpontaneous,
-                    .callback =
+            WGPURequestAdapterCallbackInfo{
+                .mode = WGPUCallbackMode_AllowSpontaneous,
+                .callback =
                     [](WGPURequestAdapterStatus status,
                        WGPUAdapter a,
                        WGPUStringView,
@@ -52,71 +82,49 @@ createDevice()
                        void*) {
                         if (status == WGPURequestAdapterStatus_Success)
                         {
-                            SLS_LOG("[DEBUG] D3D12 adapter acquired\n");
+                            SLS_LOG("[DEBUG] Vulkan adapter acquired\n");
                             *static_cast<WGPUAdapter*>(ud1) = a;
                         }
                         else
                         {
-                            SLS_LOG("[DEBUG] D3D12 adapter failed (status=%d), trying Vulkan...\n", status);
+                            SLS_LOG("[DEBUG] Vulkan adapter failed (status=%d), trying auto...\n",
+                                    status);
                         }
                     },
-                    .userdata1 = &adapter});
-    wgpuInstanceProcessEvents(instance);  // process async callback
-    if (!adapter) {
-        // Try Vulkan backend as fallback
-        aopts.backendType = WGPUBackendType_Vulkan;
-        SLS_LOG("[DEBUG] Trying Vulkan backend...\n");
-        wgpuInstanceRequestAdapter(
-                instance,
-                &aopts,
-                WGPURequestAdapterCallbackInfo{.mode = WGPUCallbackMode_AllowSpontaneous,
-                        .callback =
-                        [](WGPURequestAdapterStatus status,
-                           WGPUAdapter a,
-                           WGPUStringView,
-                           void* ud1,
-                           void*) {
-                            if (status == WGPURequestAdapterStatus_Success)
-                            {
-                                SLS_LOG("[DEBUG] Vulkan adapter acquired\n");
-                                *static_cast<WGPUAdapter*>(ud1) = a;
-                            }
-                            else
-                            {
-                                SLS_LOG("[DEBUG] Vulkan adapter failed (status=%d), trying auto...\n", status);
-                            }
-                        },
-                        .userdata1 = &adapter});
-        wgpuInstanceProcessEvents(instance);  // process async callback
+                .userdata1 = &adapter});
+        wgpuInstanceProcessEvents(instance); // process async callback
     }
-    if (!adapter) {
+    if (!adapter)
+    {
         // Try auto-select
         aopts.backendType = WGPUBackendType_Undefined;
         SLS_LOG("[DEBUG] Trying auto-select backend...\n");
         wgpuInstanceRequestAdapter(
-                instance,
-                &aopts,
-                WGPURequestAdapterCallbackInfo{.mode = WGPUCallbackMode_AllowSpontaneous,
-                        .callback =
-                        [](WGPURequestAdapterStatus status,
-                           WGPUAdapter a,
-                           WGPUStringView,
-                           void* ud1,
-                           void*) {
-                            if (status == WGPURequestAdapterStatus_Success)
-                            {
-                                SLS_LOG("[DEBUG] Auto-selected adapter acquired\n");
-                                *static_cast<WGPUAdapter*>(ud1) = a;
-                            }
-                            else
-                            {
-                                SLS_LOG("[DEBUG] Auto-select adapter failed (status=%d)\n", status);
-                            }
-                        },
-                        .userdata1 = &adapter});
-        wgpuInstanceProcessEvents(instance);  // process async callback
+            instance,
+            &aopts,
+            WGPURequestAdapterCallbackInfo{
+                .mode = WGPUCallbackMode_AllowSpontaneous,
+                .callback =
+                    [](WGPURequestAdapterStatus status,
+                       WGPUAdapter a,
+                       WGPUStringView,
+                       void* ud1,
+                       void*) {
+                        if (status == WGPURequestAdapterStatus_Success)
+                        {
+                            SLS_LOG("[DEBUG] Auto-selected adapter acquired\n");
+                            *static_cast<WGPUAdapter*>(ud1) = a;
+                        }
+                        else
+                        {
+                            SLS_LOG("[DEBUG] Auto-select adapter failed (status=%d)\n", status);
+                        }
+                    },
+                .userdata1 = &adapter});
+        wgpuInstanceProcessEvents(instance); // process async callback
     }
-    if (!adapter) {
+    if (!adapter)
+    {
         SLS_LOG("[FATAL] No GPU adapter available!\n");
         wgpuInstanceRelease(instance);
         exit(1);
@@ -133,9 +141,9 @@ createDevice()
     // So we just set the limit to WGPU_LIMIT_U64_UNDEFINED (unlimited)
     WGPUDeviceDescriptor ddesc{};
     ddesc.uncapturedErrorCallbackInfo.callback =
-            [](const WGPUDevice*, WGPUErrorType t, WGPUStringView msg, void*, void*) {
-                SLS_LOG("[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
-            };
+        [](const WGPUDevice*, WGPUErrorType t, WGPUStringView msg, void*, void*) {
+            SLS_LOG("[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
+        };
     // Set unlimited buffer size limit
     WGPULimits limits{};
     limits.maxBufferSize = WGPU_LIMIT_U64_UNDEFINED;
@@ -174,23 +182,24 @@ createDevice()
     SLS_LOG("[DEBUG] Device created with maxStorageBufSize=%llu\n",
             (unsigned long long)requiredLimits.maxStorageBufferBindingSize);
     wgpuAdapterRequestDevice(
-            adapter,
-            &ddesc,
-            WGPURequestDeviceCallbackInfo{
-                    .callback =
-                    [](WGPURequestDeviceStatus status, WGPUDevice d, WGPUStringView, void* ud1, void*) {
-                        if (status == WGPURequestDeviceStatus_Success)
-                        {
-                            *static_cast<WGPUDevice*>(ud1) = d;
-                        }
-                        else
-                        {
-                            SLS_LOG("requestDevice failed\n");
-                        }
-                    },
-                    .userdata1 = &device});
-    wgpuInstanceProcessEvents(instance);  // process async callback
-    if (!device) {
+        adapter,
+        &ddesc,
+        WGPURequestDeviceCallbackInfo{
+            .callback =
+                [](WGPURequestDeviceStatus status, WGPUDevice d, WGPUStringView, void* ud1, void*) {
+                    if (status == WGPURequestDeviceStatus_Success)
+                    {
+                        *static_cast<WGPUDevice*>(ud1) = d;
+                    }
+                    else
+                    {
+                        SLS_LOG("requestDevice failed\n");
+                    }
+                },
+            .userdata1 = &device});
+    wgpuInstanceProcessEvents(instance); // process async callback
+    if (!device)
+    {
         SLS_LOG("[FATAL] Failed to create WGPU device!\n");
         wgpuAdapterRelease(adapter);
         wgpuInstanceRelease(instance);
@@ -209,10 +218,12 @@ SlsChanWgpu::SlsChanWgpu()
     device_ = std::move(result.first);
     m_maxGpuBuffer_ = result.second;
     SLS_LOG("[DEBUG] Constructor: GPU max buffer size = %llu bytes (%.1f GB)\n",
-            (unsigned long long)m_maxGpuBuffer_, (double)m_maxGpuBuffer_ / (1024.0*1024.0*1024.0));
+            (unsigned long long)m_maxGpuBuffer_,
+            (double)m_maxGpuBuffer_ / (1024.0 * 1024.0 * 1024.0));
     queue_ = device_.getQueue();
     std::string wgsl = readFile("C:/tools/sources/ns-3-dev/src/spectrum/model/sls-chan.wgsl");
-    if (wgsl.empty()) {
+    if (wgsl.empty())
+    {
         SLS_LOG("ERROR: Failed to read WGSL shader\n");
         throw std::runtime_error("Failed to read WGSL shader");
     }
@@ -227,7 +238,8 @@ SlsChanWgpu::SlsChanWgpu()
     smDescC.nextInChain = &wgslSource.chain;
     SLS_LOG("[DEBUG] Creating WGSL shader module (%zu bytes)...\n", wgsl.size());
     shader_ = wgpu::ShaderModule(wgpuDeviceCreateShaderModule(device_, &smDescC));
-    if (!shader_) {
+    if (!shader_)
+    {
         SLS_LOG("[FATAL] WGSL shader module creation failed\n");
         throw std::runtime_error("WGSL failed to compile");
     }
@@ -403,26 +415,40 @@ SlsChanWgpu::generateCRN(float maxX,
                          const float corrNlos[7],
                          const float corrO2i[7])
 {
-    SLS_LOG("[DEBUG] generateCRN: nSite=%u, maxX=%.1f, minX=%.1f, maxY=%.1f, minY=%.1f\n", nSite_, maxX, minX, maxY, minY);
+    SLS_LOG("[DEBUG] generateCRN: nSite=%u, maxX=%.1f, minX=%.1f, maxY=%.1f, minY=%.1f\n",
+            nSite_,
+            maxX,
+            minX,
+            maxY,
+            minY);
     fflush(stderr);
     // Calculate grid dimensions matching WGSL shader: round(bound + 1 + 2*D) where D=3*corrDist
     float maxCorrDist = 0.0f;
-    for (int i = 0; i < 8; i++) maxCorrDist = std::max(maxCorrDist, corrLos[i]);
-    for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrNlos[i]);
-    for (int i = 0; i < 7; i++) maxCorrDist = std::max(maxCorrDist, corrO2i[i]);
-    
-    SLS_LOG("[DEBUG] generateCRN: maxCorrDist=%.1f step=%.1f\n",
-            maxCorrDist, crnStep_);
+    for (int i = 0; i < 8; i++)
+    {
+        maxCorrDist = std::max(maxCorrDist, corrLos[i]);
+    }
+    for (int i = 0; i < 7; i++)
+    {
+        maxCorrDist = std::max(maxCorrDist, corrNlos[i]);
+    }
+    for (int i = 0; i < 7; i++)
+    {
+        maxCorrDist = std::max(maxCorrDist, corrO2i[i]);
+    }
+
+    SLS_LOG("[DEBUG] generateCRN: maxCorrDist=%.1f step=%.1f\n", maxCorrDist, crnStep_);
     // All grid sizing is in PIXELS. corrDist (metres) maps to corrDist/step
     // pixels of correlation; D = 3*corr_px is the per-side filter pad; the
     // total grid is round(bound/step + 1 + 2*D) pixels per axis.
     const float step_m = std::max(crnStep_, 1.0f);
     const float D_px = 3.0f * (maxCorrDist / step_m);
-    const int32_t nX = static_cast<int32_t>(
-        (maxX - minX) / step_m + 1.0f + 2.0f * D_px + 0.5f);
-    const int32_t nY = static_cast<int32_t>(
-        (maxY - minY) / step_m + 1.0f + 2.0f * D_px + 0.5f);
-    SLS_LOG("[DEBUG] generateCRN: nX=%d, nY=%d, gridSz=%llu\n", nX, nY, (unsigned long long)uint64_t(nX) * nY);
+    const int32_t nX = static_cast<int32_t>((maxX - minX) / step_m + 1.0f + 2.0f * D_px + 0.5f);
+    const int32_t nY = static_cast<int32_t>((maxY - minY) / step_m + 1.0f + 2.0f * D_px + 0.5f);
+    SLS_LOG("[DEBUG] generateCRN: nX=%d, nY=%d, gridSz=%llu\n",
+            nX,
+            nY,
+            (unsigned long long)uint64_t(nX) * nY);
 
     nX_ = nX;
     nY_ = nY;
@@ -431,7 +457,10 @@ SlsChanWgpu::generateCRN(float maxX,
     const uint64_t losBufSz = uint64_t(nSite_) * 8 * gridSz * sizeof(float);
     const uint64_t nlosBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
     const uint64_t o2iBufSz = uint64_t(nSite_) * 7 * gridSz * sizeof(float);
-    SLS_LOG("[DEBUG] generateCRN: losBufSz=%llu, nlosBufSz=%llu, o2iBufSz=%llu\n", (unsigned long long)losBufSz, (unsigned long long)nlosBufSz, (unsigned long long)o2iBufSz);
+    SLS_LOG("[DEBUG] generateCRN: losBufSz=%llu, nlosBufSz=%llu, o2iBufSz=%llu\n",
+            (unsigned long long)losBufSz,
+            (unsigned long long)nlosBufSz,
+            (unsigned long long)o2iBufSz);
 
     // Hard safety guard. On D3D12 we have observed that requesting a CRN buffer
     // anywhere near the device's maxStorageBufferBindingSize triggers a BSOD
@@ -471,14 +500,14 @@ SlsChanWgpu::generateCRN(float maxX,
         // The convolve kernel ALSO reads at padded stride. Sizing this for
         // the *final* grid (which is what the previous version did) left
         // the filter-padding tail spilling into adjacent allocations.
-        const float Dpx       = 3.0f * (cd / step_m);
-        const uint64_t iDpx   = static_cast<uint64_t>(Dpx);
-        const uint64_t L      = (cd > 0.0f) ? (2 * iDpx + 1) : 1ULL;
-        const uint64_t pad    = (L > 0) ? (L - 1) : 0;
-        const uint64_t finalX = static_cast<uint64_t>(
-            (maxX - minX) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
-        const uint64_t finalY = static_cast<uint64_t>(
-            (maxY - minY) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
+        const float Dpx = 3.0f * (cd / step_m);
+        const uint64_t iDpx = static_cast<uint64_t>(Dpx);
+        const uint64_t L = (cd > 0.0f) ? (2 * iDpx + 1) : 1ULL;
+        const uint64_t pad = (L > 0) ? (L - 1) : 0;
+        const uint64_t finalX =
+            static_cast<uint64_t>((maxX - minX) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
+        const uint64_t finalY =
+            static_cast<uint64_t>((maxY - minY) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
         return (finalX + pad) * (finalY + pad) * sizeof(float);
     };
 
@@ -495,7 +524,9 @@ SlsChanWgpu::generateCRN(float maxX,
     {
         maxCorr = std::max(maxCorr, corrO2i[i]);
     }
-    SLS_LOG("[DEBUG] generateCRN: maxCorr=%.1f, tempBufBytes=%llu\n", maxCorr, (unsigned long long)tempBufBytes(maxCorr));
+    SLS_LOG("[DEBUG] generateCRN: maxCorr=%.1f, tempBufBytes=%llu\n",
+            maxCorr,
+            (unsigned long long)tempBufBytes(maxCorr));
 
     wgpu::Buffer tempBuf =
         makeBuffer(tempBufBytes(maxCorr), WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -506,7 +537,8 @@ SlsChanWgpu::generateCRN(float maxX,
     // With nSite=19, gridSz=20259001: LOS=11.5GB, NLOS/O2I=10GB
     // Use the adapter's actual maxStorageBufferBindingSize (set in createDevice)
     SLS_LOG("[DEBUG] generateCRN: GPU max buffer size = %llu bytes (%.1f GB)\n",
-            (unsigned long long)m_maxGpuBuffer_, (double)m_maxGpuBuffer_ / (1024.0*1024.0*1024.0));
+            (unsigned long long)m_maxGpuBuffer_,
+            (double)m_maxGpuBuffer_ / (1024.0 * 1024.0 * 1024.0));
 
     // NOTE: This wgpu-native version does NOT support the max-buffer-size feature
     // (WGPUFeatureName_MaxBufferSize is not in the enum). Large buffers (>256MB) will
@@ -528,21 +560,29 @@ SlsChanWgpu::generateCRN(float maxX,
         makeBuffer(gridSz * sizeof(float),
                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
 
-    auto dispatchGrid = [&](wgpu::Buffer& outputBuf, float corrDist, uint32_t gridIndex, uint32_t rowOffset = 0, uint32_t chunkY = 0) {
+    auto dispatchGrid = [&](wgpu::Buffer& outputBuf,
+                            float corrDist,
+                            uint32_t gridIndex,
+                            uint32_t rowOffset = 0,
+                            uint32_t chunkY = 0) {
         // Match WGSL: grid in pixels = round(bound/step + 1 + 2*D)
         // where D = 3 * (corrDist / step).
         const float Dpx = 3.0f * (corrDist / step_m);
-        const uint64_t pnx = static_cast<uint64_t>(
-            (maxX - minX) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
-        const uint64_t pny = static_cast<uint64_t>(
-            (maxY - minY) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
+        const uint64_t pnx =
+            static_cast<uint64_t>((maxX - minX) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
+        const uint64_t pny =
+            static_cast<uint64_t>((maxY - minY) / step_m + 1.0f + 2.0f * Dpx + 0.5f);
         const uint64_t curTempBytes = pnx * pny * sizeof(float);
         // Use chunkY for the output grid size if chunking; otherwise use full gridSz
-        const uint64_t gridBytes = (chunkY > 0) ? static_cast<uint64_t>(chunkY) * nX * sizeof(float) : gridSz * sizeof(float);
+        const uint64_t gridBytes = (chunkY > 0) ? static_cast<uint64_t>(chunkY) * nX * sizeof(float)
+                                                : gridSz * sizeof(float);
         // destOffset = channel offset (full grid) + Y offset from rowOffset
         const uint64_t fullGridBytes = static_cast<uint64_t>(nX) * nY * sizeof(float);
-        // When chunking, write to staging buffer at rowOffset position; otherwise write to output buffer
-        const uint64_t destOffset = (chunkY > 0) ? uint64_t(rowOffset) * nX * sizeof(float) : uint64_t(gridIndex) * fullGridBytes + uint64_t(rowOffset) * nX * sizeof(float);
+        // When chunking, write to staging buffer at rowOffset position; otherwise write to output
+        // buffer
+        const uint64_t destOffset = (chunkY > 0) ? uint64_t(rowOffset) * nX * sizeof(float)
+                                                 : uint64_t(gridIndex) * fullGridBytes +
+                                                       uint64_t(rowOffset) * nX * sizeof(float);
         const uint64_t rngBytes = uint64_t(nCrnRng) * sizeof(RngState);
 
         // Clamp to tempBuf size to avoid OOB
@@ -597,10 +637,30 @@ SlsChanWgpu::generateCRN(float maxX,
                                              &normUni);
 
         // ── Fill bind group ──
-        SLS_LOG("[DEBUG] dispatchGrid: corrDist=%.1f, curTempBytes=%llu, actualTempBytes=%llu, pnx=%llu, pny=%llu\n", corrDist, (unsigned long long)curTempBytes, (unsigned long long)actualTempBytes, (unsigned long long)pnx, (unsigned long long)pny);
-        SLS_LOG("[DEBUG] dispatchGrid: genUniBuf=%p, tempBuf=%p, crnRngBuf=%p\n", (void*)genUniBuf, (void*)tempBuf, (void*)crnRngBuf);
-        SLS_LOG("[DEBUG] dispatchGrid: genUni values: maxX=%.1f minX=%.1f maxY=%.1f minY=%.1f corrDist=%.1f maxRngStates=%u nX=%u nY=%u step=%.1f boundX=%.1f boundY=%.1f\n",
-                genUni.maxX, genUni.minX, genUni.maxY, genUni.minY, genUni.corrDist, genUni.maxRngStates, genUni.nX, genUni.nY, genUni.step, genUni.boundX, genUni.boundY);
+        SLS_LOG("[DEBUG] dispatchGrid: corrDist=%.1f, curTempBytes=%llu, actualTempBytes=%llu, "
+                "pnx=%llu, pny=%llu\n",
+                corrDist,
+                (unsigned long long)curTempBytes,
+                (unsigned long long)actualTempBytes,
+                (unsigned long long)pnx,
+                (unsigned long long)pny);
+        SLS_LOG("[DEBUG] dispatchGrid: genUniBuf=%p, tempBuf=%p, crnRngBuf=%p\n",
+                (void*)genUniBuf,
+                (void*)tempBuf,
+                (void*)crnRngBuf);
+        SLS_LOG("[DEBUG] dispatchGrid: genUni values: maxX=%.1f minX=%.1f maxY=%.1f minY=%.1f "
+                "corrDist=%.1f maxRngStates=%u nX=%u nY=%u step=%.1f boundX=%.1f boundY=%.1f\n",
+                genUni.maxX,
+                genUni.minX,
+                genUni.maxY,
+                genUni.minY,
+                genUni.corrDist,
+                genUni.maxRngStates,
+                genUni.nX,
+                genUni.nY,
+                genUni.step,
+                genUni.boundX,
+                genUni.boundY);
         auto fillLayout = crnFillPipeline_.getBindGroupLayout(0);
         std::vector<wgpu::BindGroupEntry> fillEntries(3, wgpu::Default);
         fillEntries[0].binding = 0;
@@ -660,7 +720,8 @@ SlsChanWgpu::generateCRN(float maxX,
             const uint64_t chunk_total = (chunkY > 0) ? (pnx * chunkY) : (pnx * pny);
             const uint32_t workgroups = static_cast<uint32_t>((chunk_total + 255u) / 256u);
             SLS_LOG("[DEBUG] dispatchGrid: dispatching %u workgroups for %llu elements\\n",
-                    workgroups, (unsigned long long)chunk_total);
+                    workgroups,
+                    (unsigned long long)chunk_total);
             wgpu::CommandEncoder enc1 = device_.createCommandEncoder(wgpu::Default);
             auto pass = enc1.beginComputePass(wgpu::Default);
             pass.setPipeline(crnFillPipeline_);
@@ -678,8 +739,10 @@ SlsChanWgpu::generateCRN(float maxX,
                 // Convolve dispatch: use 1D grid to stay under WebGPU 65535 limit
                 const uint64_t chunk_total = (chunkY > 0) ? (pnx * chunkY) : (pnx * pny);
                 const uint32_t convWorkgroups = static_cast<uint32_t>((chunk_total + 255u) / 256u);
-                SLS_LOG("[DEBUG] dispatchGrid: convolve dispatching %u workgroups for %llu elements\\n",
-                        convWorkgroups, (unsigned long long)chunk_total);
+                SLS_LOG(
+                    "[DEBUG] dispatchGrid: convolve dispatching %u workgroups for %llu elements\\n",
+                    convWorkgroups,
+                    (unsigned long long)chunk_total);
                 auto pass1 = enc2.beginComputePass(wgpu::Default);
                 pass1.setPipeline(crnConvPipeline_);
                 pass1.setBindGroup(0u, convBg, (size_t)0, nullptr);
@@ -705,16 +768,20 @@ SlsChanWgpu::generateCRN(float maxX,
     //   maxChunkY <= (65535 * 256) / pnx where pnx ~ boundX + 2*3*corrDist
     // For pnx=4423: maxChunkY = 16777216/4423 = 3794
     // Use 128MB to get maxChunkY=7108, nChunksY=1 (reduces iterations from 8360 to 570)
-    const uint64_t maxGridBufBytes = 128ULL * 1024ULL * 1024ULL;  // 128MB per chunk
+    const uint64_t maxGridBufBytes = 128ULL * 1024ULL * 1024ULL; // 128MB per chunk
     const uint64_t maxChunkY = maxGridBufBytes / (static_cast<uint64_t>(nX) * sizeof(float));
     // Clamp to respect WebGPU 65535 workgroup limit per dimension:
     // workgroups = (pnx * chunkY + 255) / 256 <= 65535
     // => pnx * chunkY <= 16776961  (pnx <= nX, so nX is safe upper bound)
     const uint64_t wgLimitChunkY = 16776961u / static_cast<uint64_t>(nX);
-    const uint64_t clampedMaxChunkY = std::min(maxChunkY, std::max(static_cast<uint64_t>(1u), wgLimitChunkY));
+    const uint64_t clampedMaxChunkY =
+        std::min(maxChunkY, std::max(static_cast<uint64_t>(1u), wgLimitChunkY));
     const uint64_t nChunksY = (static_cast<uint64_t>(nY) + clampedMaxChunkY - 1) / clampedMaxChunkY;
     SLS_LOG("[DEBUG] CRN chunking: nX=%d nY=%d maxChunkY=%llu nChunksY=%llu\n",
-            nX, nY, (unsigned long long)clampedMaxChunkY, (unsigned long long)nChunksY);
+            nX,
+            nY,
+            (unsigned long long)clampedMaxChunkY,
+            (unsigned long long)nChunksY);
 
     // Also chunk the output buffers: create them on CPU side to avoid GPU memory limit
     // LOS: nSite * 8 channels, NLOS: nSite * 7 channels, O2I: nSite * 7 channels
@@ -731,7 +798,9 @@ SlsChanWgpu::generateCRN(float maxX,
 
     // Create staging buffers for chunked output (small enough to fit in GPU memory)
     const uint64_t stagingGridBytes = static_cast<uint64_t>(clampedMaxChunkY) * nX * sizeof(float);
-    wgpu::Buffer stagingBuf = makeBuffer(stagingGridBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
+    wgpu::Buffer stagingBuf =
+        makeBuffer(stagingGridBytes,
+                   WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
     SLS_LOG("[DEBUG] CRN: stagingBuf created (%llu bytes)\n", (unsigned long long)stagingGridBytes);
 
     SLS_LOG("[DEBUG] Starting CRN generation loop\n");
@@ -743,10 +812,16 @@ SlsChanWgpu::generateCRN(float maxX,
             for (uint32_t c = 0; c < nChunksY; c++)
             {
                 const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
-                const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
-                                                                       static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                const uint32_t yRows = static_cast<uint32_t>(
+                    std::min(static_cast<uint64_t>(clampedMaxChunkY),
+                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 const uint32_t gridIdx = static_cast<uint32_t>(s) * 8 + ch;
-                SLS_LOG("[DEBUG]   dispatchGrid LOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                SLS_LOG("[DEBUG]   dispatchGrid LOS s=%u ch=%u c=%u yOff=%u yRows=%u\n",
+                        s,
+                        ch,
+                        c,
+                        yOff,
+                        yRows);
                 // Use stagingBuf as output instead of crnLosBuf_
                 dispatchGrid(stagingBuf, corrLos[ch], gridIdx, yOff, yRows);
                 // Copy staging buffer to CPU output buffer
@@ -755,7 +830,8 @@ SlsChanWgpu::generateCRN(float maxX,
                                            static_cast<uint64_t>(yOff) * nX;
                 const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
                 std::vector<float> stagingData(chunkBytes / sizeof(float));
-                wgpu::Buffer stagingReadBuf = makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+                wgpu::Buffer stagingReadBuf =
+                    makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
                 // Copy staging to stagingReadBuf
                 {
                     wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
@@ -765,23 +841,33 @@ SlsChanWgpu::generateCRN(float maxX,
                 }
                 // Map and read using wgpu-native C API
                 static WGPUMapMode g_mapStatus = WGPUMapMode_None;
-                auto g_callback = [](WGPUMapAsyncStatus status, WGPUStringView message, void* userdata, void* /*another*/) {
+                auto g_callback = [](WGPUMapAsyncStatus status,
+                                     WGPUStringView message,
+                                     void* userdata,
+                                     void* /*another*/) {
                     (void)message;
-                    *(reinterpret_cast<WGPUMapMode*>(userdata)) = status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
+                    *(reinterpret_cast<WGPUMapMode*>(userdata)) =
+                        status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
                 };
                 WGPUBufferMapCallbackInfo mapCbInfo = {};
                 mapCbInfo.nextInChain = nullptr;
                 mapCbInfo.callback = g_callback;
                 mapCbInfo.userdata1 = &g_mapStatus;
                 mapCbInfo.userdata2 = nullptr;
-                wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfo);
+                wgpuBufferMapAsync(stagingReadBuf,
+                                   WGPUMapMode_Read,
+                                   0,
+                                   static_cast<uint64_t>(chunkBytes),
+                                   mapCbInfo);
                 waitIdle();
-                if (g_mapStatus != WGPUMapMode_Read) {
+                if (g_mapStatus != WGPUMapMode_Read)
+                {
                     SLS_LOG("[ERROR] Failed to map stagingReadBuf\n");
                     continue;
                 }
                 const void* mapped = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
-                if (!mapped) {
+                if (!mapped)
+                {
                     SLS_LOG("[ERROR] Failed to get mapped range\n");
                     continue;
                 }
@@ -804,17 +890,24 @@ SlsChanWgpu::generateCRN(float maxX,
             for (uint32_t c = 0; c < nChunksY; c++)
             {
                 const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
-                const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
-                                                                       static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                const uint32_t yRows = static_cast<uint32_t>(
+                    std::min(static_cast<uint64_t>(clampedMaxChunkY),
+                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
-                SLS_LOG("[DEBUG]   dispatchGrid NLOS s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                SLS_LOG("[DEBUG]   dispatchGrid NLOS s=%u ch=%u c=%u yOff=%u yRows=%u\n",
+                        s,
+                        ch,
+                        c,
+                        yOff,
+                        yRows);
                 dispatchGrid(stagingBuf, corrNlos[ch], gridIdx, yOff, yRows);
                 const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
                                            static_cast<uint64_t>(ch) * nX * nY +
                                            static_cast<uint64_t>(yOff) * nX;
                 const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
                 std::vector<float> stagingData(chunkBytes / sizeof(float));
-                wgpu::Buffer stagingReadBuf = makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+                wgpu::Buffer stagingReadBuf =
+                    makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
                 {
                     wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
                     enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
@@ -823,23 +916,34 @@ SlsChanWgpu::generateCRN(float maxX,
                 }
                 // Map and read using wgpu-native C API
                 static WGPUMapMode g_mapStatusNlos = WGPUMapMode_None;
-                auto g_callbackNlos = [](WGPUMapAsyncStatus status, WGPUStringView message, void* userdata, void* /*another*/) {
+                auto g_callbackNlos = [](WGPUMapAsyncStatus status,
+                                         WGPUStringView message,
+                                         void* userdata,
+                                         void* /*another*/) {
                     (void)message;
-                    *(reinterpret_cast<WGPUMapMode*>(userdata)) = status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
+                    *(reinterpret_cast<WGPUMapMode*>(userdata)) =
+                        status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
                 };
                 WGPUBufferMapCallbackInfo mapCbInfoNlos = {};
                 mapCbInfoNlos.nextInChain = nullptr;
                 mapCbInfoNlos.callback = g_callbackNlos;
                 mapCbInfoNlos.userdata1 = &g_mapStatusNlos;
                 mapCbInfoNlos.userdata2 = nullptr;
-                wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfoNlos);
+                wgpuBufferMapAsync(stagingReadBuf,
+                                   WGPUMapMode_Read,
+                                   0,
+                                   static_cast<uint64_t>(chunkBytes),
+                                   mapCbInfoNlos);
                 waitIdle();
-                if (g_mapStatusNlos != WGPUMapMode_Read) {
+                if (g_mapStatusNlos != WGPUMapMode_Read)
+                {
                     SLS_LOG("[ERROR] Failed to map stagingReadBuf (NLOS)\n");
                     continue;
                 }
-                const void* mappedNlos = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
-                if (!mappedNlos) {
+                const void* mappedNlos =
+                    wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
+                if (!mappedNlos)
+                {
                     SLS_LOG("[ERROR] Failed to get mapped range (NLOS)\n");
                     continue;
                 }
@@ -861,17 +965,24 @@ SlsChanWgpu::generateCRN(float maxX,
             for (uint32_t c = 0; c < nChunksY; c++)
             {
                 const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
-                const uint32_t yRows = static_cast<uint32_t>(std::min(static_cast<uint64_t>(clampedMaxChunkY),
-                                                                       static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                const uint32_t yRows = static_cast<uint32_t>(
+                    std::min(static_cast<uint64_t>(clampedMaxChunkY),
+                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
-                SLS_LOG("[DEBUG]   dispatchGrid O2I s=%u ch=%u c=%u yOff=%u yRows=%u\n", s, ch, c, yOff, yRows);
+                SLS_LOG("[DEBUG]   dispatchGrid O2I s=%u ch=%u c=%u yOff=%u yRows=%u\n",
+                        s,
+                        ch,
+                        c,
+                        yOff,
+                        yRows);
                 dispatchGrid(stagingBuf, corrO2i[ch], gridIdx, yOff, yRows);
                 const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
                                            static_cast<uint64_t>(ch) * nX * nY +
                                            static_cast<uint64_t>(yOff) * nX;
                 const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
                 std::vector<float> stagingData(chunkBytes / sizeof(float));
-                wgpu::Buffer stagingReadBuf = makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+                wgpu::Buffer stagingReadBuf =
+                    makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
                 {
                     wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
                     enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
@@ -880,23 +991,34 @@ SlsChanWgpu::generateCRN(float maxX,
                 }
                 // Map and read using wgpu-native C API
                 static WGPUMapMode g_mapStatusO2i = WGPUMapMode_None;
-                auto g_callbackO2i = [](WGPUMapAsyncStatus status, WGPUStringView message, void* userdata, void* /*another*/) {
+                auto g_callbackO2i = [](WGPUMapAsyncStatus status,
+                                        WGPUStringView message,
+                                        void* userdata,
+                                        void* /*another*/) {
                     (void)message;
-                    *(reinterpret_cast<WGPUMapMode*>(userdata)) = status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
+                    *(reinterpret_cast<WGPUMapMode*>(userdata)) =
+                        status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
                 };
                 WGPUBufferMapCallbackInfo mapCbInfoO2i = {};
                 mapCbInfoO2i.nextInChain = nullptr;
                 mapCbInfoO2i.callback = g_callbackO2i;
                 mapCbInfoO2i.userdata1 = &g_mapStatusO2i;
                 mapCbInfoO2i.userdata2 = nullptr;
-                wgpuBufferMapAsync(stagingReadBuf, WGPUMapMode_Read, 0, static_cast<uint64_t>(chunkBytes), mapCbInfoO2i);
+                wgpuBufferMapAsync(stagingReadBuf,
+                                   WGPUMapMode_Read,
+                                   0,
+                                   static_cast<uint64_t>(chunkBytes),
+                                   mapCbInfoO2i);
                 waitIdle();
-                if (g_mapStatusO2i != WGPUMapMode_Read) {
+                if (g_mapStatusO2i != WGPUMapMode_Read)
+                {
                     SLS_LOG("[ERROR] Failed to map stagingReadBuf (O2I)\n");
                     continue;
                 }
-                const void* mappedO2i = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
-                if (!mappedO2i) {
+                const void* mappedO2i =
+                    wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
+                if (!mappedO2i)
+                {
                     SLS_LOG("[ERROR] Failed to get mapped range (O2I)\n");
                     continue;
                 }
@@ -916,8 +1038,8 @@ SlsChanWgpu::generateCRN(float maxX,
     // generateCRN already rejects oversized configs, but keep this as a tripwire
     // so any future code path that gets here with a huge buffer fails loudly.
     auto guardCrnSize = [&](const char* tag, uint64_t bytes) {
-        const uint64_t cap = (m_maxGpuBuffer_ == 0) ? (1ULL << 30) :
-                             std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
+        const uint64_t cap =
+            (m_maxGpuBuffer_ == 0) ? (1ULL << 30) : std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
         if (bytes > cap)
         {
             SLS_LOG("[FATAL] CRN %s upload %.2f GB > safety cap %.2f GB\n",
@@ -930,40 +1052,46 @@ SlsChanWgpu::generateCRN(float maxX,
     };
 
     // Create GPU-side CRN buffers and copy CPU data to them
-    if (!crnLosBuf_) {
+    if (!crnLosBuf_)
+    {
         guardCrnSize("LOS", losOutBuf.size() * sizeof(float));
         crnLosBuf_ = makeBuffer(losOutBuf.size() * sizeof(float),
                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                 losOutBuf.data());
         // Initialize offset buffer directly using mappedAtCreation
         std::vector<uint32_t> losOffsets(nSite_ * 8);
-        for (uint32_t i = 0; i < nSite_ * 8; i++) {
+        for (uint32_t i = 0; i < nSite_ * 8; i++)
+        {
             losOffsets[i] = i * nX_ * nY_;
         }
         crnLosOffBuf_ = makeBuffer(nSite_ * 8ULL * sizeof(uint32_t),
                                    WGPUBufferUsage_Storage,
                                    losOffsets.data());
     }
-    if (!crnNlosBuf_) {
+    if (!crnNlosBuf_)
+    {
         guardCrnSize("NLOS", nlosOutBuf.size() * sizeof(float));
         crnNlosBuf_ = makeBuffer(nlosOutBuf.size() * sizeof(float),
                                  WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                  nlosOutBuf.data());
         std::vector<uint32_t> nlosOffsets(nSite_ * 7);
-        for (uint32_t i = 0; i < nSite_ * 7; i++) {
+        for (uint32_t i = 0; i < nSite_ * 7; i++)
+        {
             nlosOffsets[i] = i * nX_ * nY_;
         }
         crnNlosOffBuf_ = makeBuffer(nSite_ * 7ULL * sizeof(uint32_t),
                                     WGPUBufferUsage_Storage,
                                     nlosOffsets.data());
     }
-    if (!crnO2iBuf_) {
+    if (!crnO2iBuf_)
+    {
         guardCrnSize("O2I", o2iOutBuf.size() * sizeof(float));
         crnO2iBuf_ = makeBuffer(o2iOutBuf.size() * sizeof(float),
                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
                                 o2iOutBuf.data());
         std::vector<uint32_t> o2iOffsets(nSite_ * 7);
-        for (uint32_t i = 0; i < nSite_ * 7; i++) {
+        for (uint32_t i = 0; i < nSite_ * 7; i++)
+        {
             o2iOffsets[i] = i * nX_ * nY_;
         }
         crnO2iOffBuf_ = makeBuffer(nSite_ * 7ULL * sizeof(uint32_t),
@@ -981,12 +1109,12 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
                           float minX,
                           float maxY,
                           float minY,
-                         bool updatePL,
-                         bool updateAllLSPs,
-                         bool updateLos,
-                         bool updateOptionalPL,
-                         int32_t nX,
-                         int32_t nY)
+                          bool updatePL,
+                          bool updateAllLSPs,
+                          bool updateLos,
+                          bool updateOptionalPL,
+                          int32_t nX,
+                          int32_t nY)
 {
     assert(!isDead());
 
@@ -1019,8 +1147,7 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     // cell_params[site_idx * nSectorPerSite + sector]. Sizing the binding by
     // nSite alone clips the buffer to the first nSite/nSectorPerSite-th of
     // the data and the kernel reads zeros for higher site indices.
-    const uint64_t cellParamsSz =
-        uint64_t(nSite) * uint64_t(nSectorPerSite) * sizeof(CellParam);
+    const uint64_t cellParamsSz = uint64_t(nSite) * uint64_t(nSectorPerSite) * sizeof(CellParam);
     const uint64_t utParamsSz = nUT * sizeof(UtParam);
     const uint64_t linkParamsSz = uint64_t(nSite) * nUT * sizeof(LinkParams);
     const uint64_t rngStatesSz = uint64_t(nSite) * nUT * sizeof(RngState);
@@ -1284,18 +1411,18 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
         v[i].buffer = buf;
         v[i].size = sz;
     };
-    E(e0, 0, 0, linkParamsBuf_);      // cray_buf_link
-    E(e0, 1, 1, ssUtParamsBuf_);      // cray_buf_ut
-    E(e0, 2, 2, ssCmnLinkBuf_, sizeof(SsCmnParams));       // cray_buf_cmn (non-array storage)
-    E(e0, 3, 3, clusterParamsBuf_);   // cray_buf_cluster
-    E(e0, 4, 4, rngStatesBuf_);       // cray_buf_rng
-    E(e0, 5, 5, ssDispatchBuf_);      // cray_disp
-    E(e0, 6, 6, xpr_Buf_);            // cray_buf_xpr
-    E(e0, 7, 7, randomPhases_Buf_);   // cray_buf_randomPhases
-    E(e0, 8, 8, phi_nm_AoA_Buf_);     // cray_buf_phi_nm_AoA
-    E(e0, 9, 9, phi_nm_AoD_Buf_);     // cray_buf_phi_nm_AoD
-    E(e0, 10, 10, theta_nm_ZOA_Buf_); //  cray_buf_theta_nm_ZOA
-    E(e0, 11, 11, theta_nm_ZOD_Buf_); //  cray_buf_theta_nm_ZOD
+    E(e0, 0, 0, linkParamsBuf_);                     // cray_buf_link
+    E(e0, 1, 1, ssUtParamsBuf_);                     // cray_buf_ut
+    E(e0, 2, 2, ssCmnLinkBuf_, sizeof(SsCmnParams)); // cray_buf_cmn (non-array storage)
+    E(e0, 3, 3, clusterParamsBuf_);                  // cray_buf_cluster
+    E(e0, 4, 4, rngStatesBuf_);                      // cray_buf_rng
+    E(e0, 5, 5, ssDispatchBuf_);                     // cray_disp
+    E(e0, 6, 6, xpr_Buf_);                           // cray_buf_xpr
+    E(e0, 7, 7, randomPhases_Buf_);                  // cray_buf_randomPhases
+    E(e0, 8, 8, phi_nm_AoA_Buf_);                    // cray_buf_phi_nm_AoA
+    E(e0, 9, 9, phi_nm_AoD_Buf_);                    // cray_buf_phi_nm_AoD
+    E(e0, 10, 10, theta_nm_ZOA_Buf_);                //  cray_buf_theta_nm_ZOA
+    E(e0, 11, 11, theta_nm_ZOD_Buf_);                //  cray_buf_theta_nm_ZOD
 
     wgpu::BindGroupDescriptor bgd1 = wgpu::Default;
     bgd1.layout = layout1;
@@ -1543,7 +1670,9 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
         const uint32_t batchStart = b * CFR_BATCH_SIZE;
         const uint32_t batchLen = std::min(CFR_BATCH_SIZE, nActiveLinks - batchStart);
         if (batchLen == 0u)
+        {
             break;
+        }
 
         // Allocate per-batch GPU buffer
         const uint64_t batchElems = uint64_t(batchLen) * elemsPerLink;
@@ -1557,7 +1686,9 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
             return;
         }
 
-        auto batchBuf = makeBuffer(batchBufBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst | WGPUBufferUsage_CopySrc);
+        auto batchBuf =
+            makeBuffer(batchBufBytes,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst | WGPUBufferUsage_CopySrc);
 
         // Build per-batch active-link info: same layout as ActiveLink for WGSL
         struct BatchLinkInfo
@@ -1571,6 +1702,7 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
             uint32_t cirNtapsOffset;
             uint32_t freqChanPrbgOffset; // offset into the per-batch output buffer
         };
+
         std::vector<BatchLinkInfo> batchLinks(batchLen);
         for (uint32_t i = 0; i < batchLen; ++i)
         {
@@ -1581,7 +1713,8 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
             batchLinks[i].cirCoeOffset = activeLinks[batchStart + i].cirCoeOffset;
             batchLinks[i].cirNormDelayOffset = activeLinks[batchStart + i].cirNormDelayOffset;
             batchLinks[i].cirNtapsOffset = activeLinks[batchStart + i].cirNtapsOffset;
-            batchLinks[i].freqChanPrbgOffset = i * elemsPerLink; // relative offset within per-batch buffer
+            batchLinks[i].freqChanPrbgOffset =
+                i * elemsPerLink; // relative offset within per-batch buffer
         }
         auto batchLinkBuf = makeBuffer(sizeof(BatchLinkInfo) * batchLen,
                                        WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
@@ -1594,6 +1727,7 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
             float refTime, cfr_norm;
             uint32_t _p0, _p1, _p2;
         };
+
         DispUni du{0u, 0u, batchLen, 0.0f, 1.0f, 0, 0, 0};
         auto ssDispatchBuf = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform, &du);
 
@@ -1669,7 +1803,8 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
     m_cfrBatchedNActiveLinks_ = nActiveLinks;
     m_cfrBatchedNSnapshots_ = nSnapshots;
 
-    SLS_CERR << "CFR batched done: " << nActiveLinks << " links in " << nBatches << " batches" << std::endl;
+    SLS_CERR << "CFR batched done: " << nActiveLinks << " links in " << nBatches << " batches"
+             << std::endl;
 }
 
 void
@@ -1678,6 +1813,7 @@ SlsChanWgpu::readFreqChanPrbgBatched(std::vector<std::complex<float>>& outBuf)
     assert(m_cfrBatchedNActiveLinks_ > 0 && "call generateCFRBatched first");
     outBuf = m_cfrBatchedResult_;
 }
+
 std::vector<std::complex<float>>
 SlsChanWgpu::readCirCoe(uint32_t nActiveLinks,
                         uint32_t nSnapshots,
@@ -1787,7 +1923,10 @@ SlsChanWgpu::readCirNtaps()
 std::vector<float>
 SlsChanWgpu::readCirDebug(uint32_t nActiveLinks)
 {
-    if (!cirDbgBuf_) { return {}; }
+    if (!cirDbgBuf_)
+    {
+        return {};
+    }
     const uint64_t sz = uint64_t(nActiveLinks) * 16ULL * sizeof(float);
     wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     auto enc = device_.createCommandEncoder(wgpu::Default);
@@ -1859,7 +1998,8 @@ SlsChanWgpu::readThetaNmZOD()
 
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
 #ifdef SLS_CHAN_HDF5
-namespace {
+namespace
+{
 
 void
 createGroup(hid_t loc, const char* name)
@@ -1898,32 +2038,40 @@ writeDatasetUint32(hid_t loc, const char* name, const uint32_t* data, hsize_t co
 } // namespace
 
 void
-saveSlsChanToHdf5(
-    const std::string& filename,
-    const std::vector<LinkParams>& links,
-    uint32_t nSite, uint32_t nUT,
-    const std::vector<ClusterParamsGpu>& clusterParams,
-    const std::vector<ActiveLink>& activeLinks,
-    const std::vector<std::complex<float>>& cirCoe,
-    const std::vector<uint32_t>& cirNormDelay,
-    const std::vector<uint32_t>& cirNtaps,
-    const std::vector<std::complex<float>>& cfrPrbg,
-    uint32_t nPrbg,
-    const std::vector<float>& xpr,
-    const std::vector<float>& phiNmAoA,
-    const std::vector<float>& phiNmAoD,
-    const std::vector<float>& thetaNmZOA,
-    const std::vector<float>& thetaNmZOD,
-    float scSpacingHz, uint32_t fftSize, uint32_t nPrb,
-    uint32_t nSnapshotPerSlot, float centerFreqHz, float bandwidthHz,
-    uint32_t nUeAnt, uint32_t nBsAnt,
-    const SsCmnParams& ssCmn,
-    const std::vector<CellParam>& cells,
-    const std::vector<CellParamSS>& cellsSS,
-    const std::vector<UtParam>& uts,
-    float isd, float bsHeight, float minBsUeDist2d,
-    float maxBsUeDist2dIndoor, float indoorUtPercent,
-    uint32_t nSectorPerSite)
+saveSlsChanToHdf5(const std::string& filename,
+                  const std::vector<LinkParams>& links,
+                  uint32_t nSite,
+                  uint32_t nUT,
+                  const std::vector<ClusterParamsGpu>& clusterParams,
+                  const std::vector<ActiveLink>& activeLinks,
+                  const std::vector<std::complex<float>>& cirCoe,
+                  const std::vector<uint32_t>& cirNormDelay,
+                  const std::vector<uint32_t>& cirNtaps,
+                  const std::vector<std::complex<float>>& cfrPrbg,
+                  uint32_t nPrbg,
+                  const std::vector<float>& xpr,
+                  const std::vector<float>& phiNmAoA,
+                  const std::vector<float>& phiNmAoD,
+                  const std::vector<float>& thetaNmZOA,
+                  const std::vector<float>& thetaNmZOD,
+                  float scSpacingHz,
+                  uint32_t fftSize,
+                  uint32_t nPrb,
+                  uint32_t nSnapshotPerSlot,
+                  float centerFreqHz,
+                  float bandwidthHz,
+                  uint32_t nUeAnt,
+                  uint32_t nBsAnt,
+                  const SsCmnParams& ssCmn,
+                  const std::vector<CellParam>& cells,
+                  const std::vector<CellParamSS>& cellsSS,
+                  const std::vector<UtParam>& uts,
+                  float isd,
+                  float bsHeight,
+                  float minBsUeDist2d,
+                  float maxBsUeDist2dIndoor,
+                  float indoorUtPercent,
+                  uint32_t nSectorPerSite)
 {
     const uint32_t nLinks = nSite * nUT;
     const uint32_t nCells = nSite * nSectorPerSite;
@@ -1937,8 +2085,7 @@ saveSlsChanToHdf5(
     if (std::filesystem::exists(filename))
     {
         SLS_CERR << "saveSlsChanToHdf5: " << filename
-                  << " already exists — close it in any external program and retry"
-                  << std::endl;
+                 << " already exists — close it in any external program and retry" << std::endl;
         return;
     }
 
@@ -1951,7 +2098,8 @@ saveSlsChanToHdf5(
 
     // ── simConfig (compound dataset for Python compatibility) ──
     {
-        struct SimConfigRecord {
+        struct SimConfigRecord
+        {
             uint32_t link_sim_ind;
             float center_freq_hz;
             float bandwidth_hz;
@@ -1968,39 +2116,44 @@ saveSlsChanToHdf5(
         };
 
         hid_t compoundType = H5Tcreate(H5T_COMPOUND, sizeof(SimConfigRecord));
-        H5Tinsert(compoundType, "link_sim_ind",  0 * 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "link_sim_ind", 0 * 4, H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "center_freq_hz", 1 * 4, H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType, "bandwidth_hz",   2 * 4, H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType, "sc_spacing_hz",  3 * 4, H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType, "fft_size",       4 * 4, H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "n_prb",          5 * 4, H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "n_prbg",         6 * 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "bandwidth_hz", 2 * 4, H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "sc_spacing_hz", 3 * 4, H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "fft_size", 4 * 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "n_prb", 5 * 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "n_prbg", 6 * 4, H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "n_snapshot_per_slot", 7 * 4, H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "run_mode",       8 * 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "run_mode", 8 * 4, H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "internal_memory_mode", 9 * 4, H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "freq_convert_type", 10 * 4, H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "sc_sampling",    11 * 4, H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "proc_sig_freq",  12 * 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "sc_sampling", 11 * 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "proc_sig_freq", 12 * 4, H5T_NATIVE_UINT32);
 
         SimConfigRecord sc{};
-        sc.link_sim_ind          = 0;  // not available from caller
-        sc.center_freq_hz        = centerFreqHz;
-        sc.bandwidth_hz          = bandwidthHz;
-        sc.sc_spacing_hz         = scSpacingHz;
-        sc.fft_size              = fftSize;
-        sc.n_prb                 = nPrb;
-        sc.n_prbg               = nPrbg;
-        sc.n_snapshot_per_slot   = nSnapshotPerSlot;
-        sc.run_mode              = 0;   // not available
-        sc.internal_memory_mode  = 0;   // not available
-        sc.freq_convert_type     = 0;   // not available
-        sc.sc_sampling           = 0;   // not available
-        sc.proc_sig_freq         = 0;   // not available
+        sc.link_sim_ind = 0; // not available from caller
+        sc.center_freq_hz = centerFreqHz;
+        sc.bandwidth_hz = bandwidthHz;
+        sc.sc_spacing_hz = scSpacingHz;
+        sc.fft_size = fftSize;
+        sc.n_prb = nPrb;
+        sc.n_prbg = nPrbg;
+        sc.n_snapshot_per_slot = nSnapshotPerSlot;
+        sc.run_mode = 0;             // not available
+        sc.internal_memory_mode = 0; // not available
+        sc.freq_convert_type = 0;    // not available
+        sc.sc_sampling = 0;          // not available
+        sc.proc_sig_freq = 0;        // not available
 
         hsize_t dims = 1;
         hid_t dataspace = H5Screate_simple(1, &dims, nullptr);
-        hid_t dataset = H5Dcreate2(file, "simConfig", compoundType, dataspace,
-                                   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dataset = H5Dcreate2(file,
+                                   "simConfig",
+                                   compoundType,
+                                   dataspace,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT);
         hid_t memspace = H5Screate_simple(1, &dims, nullptr);
         H5Dwrite(dataset, compoundType, memspace, dataspace, H5P_DEFAULT, &sc);
         H5Sclose(memspace);
@@ -2037,49 +2190,54 @@ saveSlsChanToHdf5(
         hid_t arrType1f = H5Tarray_create2(H5T_NATIVE_FLOAT, 1, &dim1);
         hid_t compoundType = H5Tcreate(H5T_COMPOUND, sizeof(SystemLevelConfigRecord));
 
-        H5Tinsert(compoundType, "scenario",                         0,                  H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "isd",                              4,                  H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType, "n_site",                           8,                  H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "n_sector_per_site",               12,                 H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "n_ut",                            16,                 H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "optional_pl_ind",                 20,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "o2i_building_penetr_loss_ind",    24,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "o2i_car_penetr_loss_ind",        28,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "enable_near_field_effect",       32,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "enable_non_stationarity",        36,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "force_los_prob",                 40,                 arrType1f);
-        H5Tinsert(compoundType, "force_ut_speed",                 44,                 arrType1f);
-        H5Tinsert(compoundType, "force_indoor_ratio",             48,                 H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType, "disable_pl_shadowing",           52,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "disable_small_scale_fading",     56,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "enable_per_tti_lsp",             60,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "enable_propagation_delay",       64,                 H5T_NATIVE_INT32);
-        H5Tinsert(compoundType, "ut_drop_option",                 68,                 H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "scenario", 0, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "isd", 4, H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "n_site", 8, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "n_sector_per_site", 12, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "n_ut", 16, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "optional_pl_ind", 20, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "o2i_building_penetr_loss_ind", 24, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "o2i_car_penetr_loss_ind", 28, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "enable_near_field_effect", 32, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "enable_non_stationarity", 36, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "force_los_prob", 40, arrType1f);
+        H5Tinsert(compoundType, "force_ut_speed", 44, arrType1f);
+        H5Tinsert(compoundType, "force_indoor_ratio", 48, H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "disable_pl_shadowing", 52, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "disable_small_scale_fading", 56, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "enable_per_tti_lsp", 60, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "enable_propagation_delay", 64, H5T_NATIVE_INT32);
+        H5Tinsert(compoundType, "ut_drop_option", 68, H5T_NATIVE_INT32);
 
         SystemLevelConfigRecord slc{};
-        slc.scenario                          = 0; // UMa
-        slc.isd                               = isd;
-        slc.n_site                            = nSite;
-        slc.n_sector_per_site                 = nSectorPerSite;
-        slc.n_ut                              = nUT;
-        slc.optional_pl_ind                   = 0;
-        slc.o2i_building_penetr_loss_ind      = 0;
-        slc.o2i_car_penetr_loss_ind           = 0;
-        slc.enable_near_field_effect          = 0;
-        slc.enable_non_stationarity           = 0;
-        slc.force_los_prob[0]                 = 0.0f;
-        slc.force_ut_speed[0]                 = 0.0f;
-        slc.force_indoor_ratio                = indoorUtPercent / 100.0f;
-        slc.disable_pl_shadowing              = 0;
-        slc.disable_small_scale_fading        = 0;
-        slc.enable_per_tti_lsp                = 0;
-        slc.enable_propagation_delay          = 0;
-        slc.ut_drop_option                    = 0;
+        slc.scenario = 0; // UMa
+        slc.isd = isd;
+        slc.n_site = nSite;
+        slc.n_sector_per_site = nSectorPerSite;
+        slc.n_ut = nUT;
+        slc.optional_pl_ind = 0;
+        slc.o2i_building_penetr_loss_ind = 0;
+        slc.o2i_car_penetr_loss_ind = 0;
+        slc.enable_near_field_effect = 0;
+        slc.enable_non_stationarity = 0;
+        slc.force_los_prob[0] = 0.0f;
+        slc.force_ut_speed[0] = 0.0f;
+        slc.force_indoor_ratio = indoorUtPercent / 100.0f;
+        slc.disable_pl_shadowing = 0;
+        slc.disable_small_scale_fading = 0;
+        slc.enable_per_tti_lsp = 0;
+        slc.enable_propagation_delay = 0;
+        slc.ut_drop_option = 0;
 
         hsize_t dims = 1;
         hid_t dataspace = H5Screate_simple(1, &dims, nullptr);
-        hid_t dataset = H5Dcreate2(file, "systemLevelConfig", compoundType, dataspace,
-                                   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dataset = H5Dcreate2(file,
+                                   "systemLevelConfig",
+                                   compoundType,
+                                   dataspace,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT);
         hid_t memspace = H5Screate_simple(1, &dims, nullptr);
         H5Dwrite(dataset, compoundType, memspace, dataspace, H5P_DEFAULT, &slc);
         H5Sclose(memspace);
@@ -2146,36 +2304,41 @@ saveSlsChanToHdf5(
         for (uint32_t i = 0; i < nLinks; ++i)
         {
             const LinkParams& lk = links[i];
-            hdf5Links[i].cid          = activeLinks[i].cid;  // Serving cell (sector) ID
-            hdf5Links[i].d2d          = lk.d2d;
-            hdf5Links[i].d2d_in       = lk.d2d_in;
-            hdf5Links[i].d2d_out      = lk.d2d_out;
-            hdf5Links[i].d3d          = lk.d3d;
-            hdf5Links[i].d3d_in       = lk.d3d_in;
-            hdf5Links[i].d3d_out      = lk.d3d_out;
-            hdf5Links[i].phi_LOS_AOD  = lk.phi_LOS_AOD;
-            hdf5Links[i].theta_LOS_ZOD= lk.theta_LOS_ZOD;
-            hdf5Links[i].phi_LOS_AOA  = lk.phi_LOS_AOA;
-            hdf5Links[i].theta_LOS_ZOA= lk.theta_LOS_ZOA;
-            hdf5Links[i].losInd       = lk.losInd;
-            hdf5Links[i].pathloss     = lk.pathloss;
-            hdf5Links[i].SF           = lk.SF;
-            hdf5Links[i].K            = lk.K;
-            hdf5Links[i].DS           = lk.DS;
-            hdf5Links[i].ASD          = lk.ASD;
-            hdf5Links[i].ASA          = lk.ASA;
-            hdf5Links[i].ZSD          = lk.ZSD;
-            hdf5Links[i].ZSA          = lk.ZSA;
-            hdf5Links[i].mu_lgZSD     = lk.mu_lgZSD;
-            hdf5Links[i].sigma_lgZSD  = lk.sigma_lgZSD;
-            hdf5Links[i].mu_offset_ZOD= lk.mu_offset_ZOD;
-            hdf5Links[i].delta_tau    = lk._pad; // delta_tau was 0 in the original code
+            hdf5Links[i].cid = activeLinks[i].cid; // Serving cell (sector) ID
+            hdf5Links[i].d2d = lk.d2d;
+            hdf5Links[i].d2d_in = lk.d2d_in;
+            hdf5Links[i].d2d_out = lk.d2d_out;
+            hdf5Links[i].d3d = lk.d3d;
+            hdf5Links[i].d3d_in = lk.d3d_in;
+            hdf5Links[i].d3d_out = lk.d3d_out;
+            hdf5Links[i].phi_LOS_AOD = lk.phi_LOS_AOD;
+            hdf5Links[i].theta_LOS_ZOD = lk.theta_LOS_ZOD;
+            hdf5Links[i].phi_LOS_AOA = lk.phi_LOS_AOA;
+            hdf5Links[i].theta_LOS_ZOA = lk.theta_LOS_ZOA;
+            hdf5Links[i].losInd = lk.losInd;
+            hdf5Links[i].pathloss = lk.pathloss;
+            hdf5Links[i].SF = lk.SF;
+            hdf5Links[i].K = lk.K;
+            hdf5Links[i].DS = lk.DS;
+            hdf5Links[i].ASD = lk.ASD;
+            hdf5Links[i].ASA = lk.ASA;
+            hdf5Links[i].ZSD = lk.ZSD;
+            hdf5Links[i].ZSA = lk.ZSA;
+            hdf5Links[i].mu_lgZSD = lk.mu_lgZSD;
+            hdf5Links[i].sigma_lgZSD = lk.sigma_lgZSD;
+            hdf5Links[i].mu_offset_ZOD = lk.mu_offset_ZOD;
+            hdf5Links[i].delta_tau = lk._pad; // delta_tau was 0 in the original code
         }
 
         hsize_t dims = static_cast<hsize_t>(nLinks);
         hid_t dataspace = H5Screate_simple(1, &dims, nullptr);
-        hid_t dataset = H5Dcreate2(file, "linkParams", compoundType, dataspace,
-                                   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dataset = H5Dcreate2(file,
+                                   "linkParams",
+                                   compoundType,
+                                   dataspace,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT);
         hid_t memspace = H5Screate_simple(1, &dims, nullptr);
         H5Dwrite(dataset, compoundType, memspace, dataspace, H5P_DEFAULT, hdf5Links.data());
         H5Sclose(memspace);
@@ -2214,8 +2377,13 @@ saveSlsChanToHdf5(
         hsize_t dims = nLinks;
         hid_t dataspace = H5Screate_simple(1, &dims, nullptr);
         hid_t memspace = H5Screate_simple(1, &dims, nullptr);
-        hid_t dataset = H5Dcreate2(file, "clusterParams", compoundType, dataspace,
-                                   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dataset = H5Dcreate2(file,
+                                   "clusterParams",
+                                   compoundType,
+                                   dataspace,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT);
         H5Dwrite(dataset, compoundType, memspace, dataspace, H5P_DEFAULT, clusterParams.data());
         H5Sclose(memspace);
         H5Sclose(dataspace);
@@ -2235,31 +2403,46 @@ saveSlsChanToHdf5(
 
         // xpr
         {
-            hid_t dsetId = H5Dcreate(file, "xpr", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            hid_t dsetId =
+                H5Dcreate(file, "xpr", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
             H5Dwrite(dsetId, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, xpr.data());
             H5Dclose(dsetId);
         }
         // phi_n_m_AoA
         {
-            hid_t dsetId = H5Dcreate(file, "phi_n_m_AoA", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            hid_t dsetId =
+                H5Dcreate(file, "phi_n_m_AoA", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
             H5Dwrite(dsetId, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, phiNmAoA.data());
             H5Dclose(dsetId);
         }
         // phi_n_m_AoD
         {
-            hid_t dsetId = H5Dcreate(file, "phi_n_m_AoD", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            hid_t dsetId =
+                H5Dcreate(file, "phi_n_m_AoD", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
             H5Dwrite(dsetId, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, phiNmAoD.data());
             H5Dclose(dsetId);
         }
         // theta_n_m_ZOA
         {
-            hid_t dsetId = H5Dcreate(file, "theta_n_m_ZOA", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            hid_t dsetId = H5Dcreate(file,
+                                     "theta_n_m_ZOA",
+                                     dset,
+                                     space,
+                                     H5P_DEFAULT,
+                                     H5P_DEFAULT,
+                                     H5P_DEFAULT);
             H5Dwrite(dsetId, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, thetaNmZOA.data());
             H5Dclose(dsetId);
         }
         // theta_n_m_ZOD
         {
-            hid_t dsetId = H5Dcreate(file, "theta_n_m_ZOD", dset, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            hid_t dsetId = H5Dcreate(file,
+                                     "theta_n_m_ZOD",
+                                     dset,
+                                     space,
+                                     H5P_DEFAULT,
+                                     H5P_DEFAULT,
+                                     H5P_DEFAULT);
             H5Dwrite(dsetId, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, thetaNmZOD.data());
             H5Dclose(dsetId);
         }
@@ -2276,26 +2459,34 @@ saveSlsChanToHdf5(
         H5Tinsert(compoundType, "uid", 1 * sizeof(uint32_t), H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "linkIdx", 2 * sizeof(uint32_t), H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "lspReadIdx", 3 * sizeof(uint32_t), H5T_NATIVE_UINT32);
-        
-        struct ActiveLinkRecord {
+
+        struct ActiveLinkRecord
+        {
             uint32_t cid;
             uint32_t uid;
             uint32_t linkIdx;
             uint32_t lspReadIdx;
         };
-        
+
         std::vector<ActiveLinkRecord> activeLinkRecords(nLinks);
-        for (uint32_t i = 0; i < nLinks; ++i) {
+        for (uint32_t i = 0; i < nLinks; ++i)
+        {
             activeLinkRecords[i].cid = activeLinks[i].cid;
             activeLinkRecords[i].uid = activeLinks[i].uid;
             activeLinkRecords[i].linkIdx = activeLinks[i].linkIdx;
             activeLinkRecords[i].lspReadIdx = activeLinks[i].lspReadIdx;
         }
-        
+
         hsize_t dims = nLinks;
-        
+
         hid_t dataspace = H5Screate_simple(1, &dims, &dims);
-        hid_t dataset = H5Dcreate2(file, "activeLinkParams", compoundType, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dataset = H5Dcreate2(file,
+                                   "activeLinkParams",
+                                   compoundType,
+                                   dataspace,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT);
         hid_t memspace = H5Screate_simple(1, &dims, nullptr);
         H5Dwrite(dataset, compoundType, memspace, dataspace, H5P_DEFAULT, activeLinkRecords.data());
         H5Sclose(memspace);
@@ -2323,8 +2514,8 @@ saveSlsChanToHdf5(
     const uint32_t nTapsPerLink = nBsAntN * nUeAntN * NMAXTAPS;
 
     // Write per-cell complex datasets matching Python API:
-    //   cirPerCell/cirCoe_cell{cell_id}  -> complex dtype shape (nActiveUt, nSnapshots, nUtAnt, nBsAnt, nTaps)
-    //   cirPerCell/cirNtaps_cell{cell_id} -> uint32 shape (nActiveUt,)
+    //   cirPerCell/cirCoe_cell{cell_id}  -> complex dtype shape (nActiveUt, nSnapshots, nUtAnt,
+    //   nBsAnt, nTaps) cirPerCell/cirNtaps_cell{cell_id} -> uint32 shape (nActiveUt,)
     for (auto& [cellId, linkIdxs] : cellToLinks)
     {
         const uint32_t nActiveUtForCell = static_cast<uint32_t>(linkIdxs.size());
@@ -2344,11 +2535,12 @@ saveSlsChanToHdf5(
         hid_t cirDataspace = H5Screate_simple(5, cirDims, nullptr);
 
         // Allocate host buffer: [nActiveUt, nSnapshots, nBsAnt, nUeAnt, NMAXTAPS] as complex
-        std::vector<std::complex<float>> cellCir(
-            static_cast<size_t>(nActiveUtForCell) * nSnapshots * nBsAntN * nUeAntN * NMAXTAPS);
+        std::vector<std::complex<float>> cellCir(static_cast<size_t>(nActiveUtForCell) *
+                                                 nSnapshots * nBsAntN * nUeAntN * NMAXTAPS);
 
         // Scatter from flat cirCoe buffer into per-cell buffer
-        // Flat layout: [link, snap, bs_ant, ue_ant, tap] -> [link * nSnapshots * nBsAnt * nUeAnt * NMAXTAPS
+        // Flat layout: [link, snap, bs_ant, ue_ant, tap] -> [link * nSnapshots * nBsAnt * nUeAnt *
+        // NMAXTAPS
         //                                                     + snap * nBsAnt * nUeAnt * NMAXTAPS
         //                                                     + bs_ant * nUeAnt * NMAXTAPS
         //                                                     + ue_ant * NMAXTAPS
@@ -2366,15 +2558,14 @@ saveSlsChanToHdf5(
                     {
                         for (uint32_t tap = 0; tap < NMAXTAPS; ++tap)
                         {
-                            const size_t flatIdx = cirOffset
-                                + static_cast<size_t>(snap) * nBsAntN * nUeAntN * NMAXTAPS
-                                + static_cast<size_t>(bs_ant) * nUeAntN * NMAXTAPS
-                                + static_cast<size_t>(ue_ant) * NMAXTAPS
-                                + tap;
-                            cellCir[(ueInCell * nSnapshots + snap) * nTapsPerLink
-                                    + bs_ant * nUeAntN * NMAXTAPS
-                                    + ue_ant * NMAXTAPS
-                                    + tap] = cirCoe[flatIdx];
+                            const size_t flatIdx =
+                                cirOffset +
+                                static_cast<size_t>(snap) * nBsAntN * nUeAntN * NMAXTAPS +
+                                static_cast<size_t>(bs_ant) * nUeAntN * NMAXTAPS +
+                                static_cast<size_t>(ue_ant) * NMAXTAPS + tap;
+                            cellCir[(ueInCell * nSnapshots + snap) * nTapsPerLink +
+                                    bs_ant * nUeAntN * NMAXTAPS + ue_ant * NMAXTAPS + tap] =
+                                cirCoe[flatIdx];
                         }
                     }
                 }
@@ -2385,8 +2576,13 @@ saveSlsChanToHdf5(
         std::string cirDatasetName = "cirCoe_cell" + std::to_string(cellId);
 
         // Write CIR data
-        hid_t cirDataset = H5Dcreate2(grpCir, cirDatasetName.c_str(), complexType,
-                                       cirDataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t cirDataset = H5Dcreate2(grpCir,
+                                      cirDatasetName.c_str(),
+                                      complexType,
+                                      cirDataspace,
+                                      H5P_DEFAULT,
+                                      H5P_DEFAULT,
+                                      H5P_DEFAULT);
         H5Dwrite(cirDataset, complexType, H5S_ALL, H5S_ALL, H5P_DEFAULT, cellCir.data());
         H5Dclose(cirDataset);
         H5Sclose(cirDataspace);
@@ -2404,10 +2600,19 @@ saveSlsChanToHdf5(
             std::string ntapsDatasetName = "cirNtaps_cell" + std::to_string(cellId);
             hsize_t ntapsDim = nActiveUtForCell;
             hid_t ntapsDataspace = H5Screate_simple(1, &ntapsDim, nullptr);
-            hid_t ntapsDataset = H5Dcreate2(grpCir, ntapsDatasetName.c_str(),
-                                            H5T_NATIVE_UINT32, ntapsDataspace,
-                                            H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-            H5Dwrite(ntapsDataset, H5T_NATIVE_UINT32, H5S_ALL, H5S_ALL, H5P_DEFAULT, cellNtaps.data());
+            hid_t ntapsDataset = H5Dcreate2(grpCir,
+                                            ntapsDatasetName.c_str(),
+                                            H5T_NATIVE_UINT32,
+                                            ntapsDataspace,
+                                            H5P_DEFAULT,
+                                            H5P_DEFAULT,
+                                            H5P_DEFAULT);
+            H5Dwrite(ntapsDataset,
+                     H5T_NATIVE_UINT32,
+                     H5S_ALL,
+                     H5S_ALL,
+                     H5P_DEFAULT,
+                     cellNtaps.data());
             H5Dclose(ntapsDataset);
             H5Sclose(ntapsDataspace);
         }
@@ -2424,10 +2629,19 @@ saveSlsChanToHdf5(
             std::string mappingName = "ue_mapping_cell" + std::to_string(cellId);
             hsize_t mappingDim = nActiveUtForCell;
             hid_t mappingDataspace = H5Screate_simple(1, &mappingDim, nullptr);
-            hid_t mappingDataset = H5Dcreate2(grpCir, mappingName.c_str(),
-                                              H5T_NATIVE_UINT16, mappingDataspace,
-                                              H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-            H5Dwrite(mappingDataset, H5T_NATIVE_UINT16, H5S_ALL, H5S_ALL, H5P_DEFAULT, ueMapping.data());
+            hid_t mappingDataset = H5Dcreate2(grpCir,
+                                              mappingName.c_str(),
+                                              H5T_NATIVE_UINT16,
+                                              mappingDataspace,
+                                              H5P_DEFAULT,
+                                              H5P_DEFAULT,
+                                              H5P_DEFAULT);
+            H5Dwrite(mappingDataset,
+                     H5T_NATIVE_UINT16,
+                     H5S_ALL,
+                     H5S_ALL,
+                     H5P_DEFAULT,
+                     ueMapping.data());
             H5Dclose(mappingDataset);
             H5Sclose(mappingDataspace);
         }
@@ -2515,7 +2729,7 @@ saveSlsChanToHdf5(
         {
             uint32_t cid;
             uint32_t siteId;
-            float loc[3];       // [x, y, z]
+            float loc[3]; // [x, y, z]
             uint32_t antPanelIdx;
             float antPanelOrientation[3]; // [theta_tilt, phi_tilt, zeta_offset]
         };
@@ -2526,30 +2740,35 @@ saveSlsChanToHdf5(
         hid_t antOrType = H5Tarray_create2(H5T_NATIVE_FLOAT, 1, &dim3);
 
         hid_t compoundType = H5Tcreate(H5T_COMPOUND, sizeof(CellParamsRecord));
-        H5Tinsert(compoundType, "cid",                     0,             H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "siteId",                  4,             H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "loc",                     8,             locType);
-        H5Tinsert(compoundType, "antPanelIdx",             20,            H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType, "antPanelOrientation",     24,            antOrType);
+        H5Tinsert(compoundType, "cid", 0, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "siteId", 4, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "loc", 8, locType);
+        H5Tinsert(compoundType, "antPanelIdx", 20, H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "antPanelOrientation", 24, antOrType);
 
         std::vector<CellParamsRecord> records(nCells);
         for (uint32_t i = 0; i < nCells; ++i)
         {
-            records[i].cid                      = i;
-            records[i].siteId                   = i / nSectorPerSite;
-            records[i].loc[0]                   = cells[i].loc[0];
-            records[i].loc[1]                   = cells[i].loc[1];
-            records[i].loc[2]                   = cells[i].loc[2];
-            records[i].antPanelIdx              = cellsSS[i].antPanelIdx;
-            records[i].antPanelOrientation[0]   = cellsSS[i].antPanelOrientation[0];
-            records[i].antPanelOrientation[1]   = cellsSS[i].antPanelOrientation[1];
-            records[i].antPanelOrientation[2]   = cellsSS[i].antPanelOrientation[2];
+            records[i].cid = i;
+            records[i].siteId = i / nSectorPerSite;
+            records[i].loc[0] = cells[i].loc[0];
+            records[i].loc[1] = cells[i].loc[1];
+            records[i].loc[2] = cells[i].loc[2];
+            records[i].antPanelIdx = cellsSS[i].antPanelIdx;
+            records[i].antPanelOrientation[0] = cellsSS[i].antPanelOrientation[0];
+            records[i].antPanelOrientation[1] = cellsSS[i].antPanelOrientation[1];
+            records[i].antPanelOrientation[2] = cellsSS[i].antPanelOrientation[2];
         }
 
         hsize_t dims = static_cast<hsize_t>(nCells);
         hid_t dataspace = H5Screate_simple(1, &dims, &dims);
-        hid_t dataset = H5Dcreate2(file, "cellParams", compoundType, dataspace,
-                                   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dataset = H5Dcreate2(file,
+                                   "cellParams",
+                                   compoundType,
+                                   dataspace,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT,
+                                   H5P_DEFAULT);
         hid_t memspace = H5Screate_simple(1, &dims, nullptr);
         H5Dwrite(dataset, compoundType, memspace, dataspace, H5P_DEFAULT, records.data());
         H5Sclose(memspace);
@@ -2612,7 +2831,7 @@ saveSlsChanToHdf5(
     H5Gclose(grpTopo);
 
     H5Fclose(file);
-    SLS_COUT << "Wrote HDF5: " << filename
-              << " (" << nLinks << " links, " << nLinks << " active)\n";
+    SLS_COUT << "Wrote HDF5: " << filename << " (" << nLinks << " links, " << nLinks
+             << " active)\n";
 }
 #endif // SLS_CHAN_HDF5
