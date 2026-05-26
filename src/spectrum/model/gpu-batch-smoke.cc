@@ -90,11 +90,16 @@ DriveOnce(Ptr<ThreeGppChannelModel> model, const LinkPair& lp)
 }
 
 void
-RunScenario(const char* label, bool useGpu)
+RunScenario(const char* label, bool useGpu, bool nlos = false)
 {
-    std::printf("---- %s (UseGpu=%s) ----\n", label, useGpu ? "true" : "false");
+    std::printf("---- %s (UseGpu=%s, NLOS=%s) ----\n",
+                label,
+                useGpu ? "true" : "false",
+                nlos ? "true" : "false");
 
-    Ptr<ChannelConditionModel> ccm = CreateObject<AlwaysLosChannelConditionModel>();
+    Ptr<ChannelConditionModel> ccm =
+        nlos ? Ptr<ChannelConditionModel>(CreateObject<NeverLosChannelConditionModel>())
+             : Ptr<ChannelConditionModel>(CreateObject<AlwaysLosChannelConditionModel>());
 
     Ptr<ThreeGppChannelModel> model = CreateObject<ThreeGppChannelModel>();
     model->SetAttribute("Frequency", DoubleValue(6.0e9));
@@ -209,12 +214,22 @@ main()
 
     try
     {
-        RunScenario("GPU batch path", true);
+        RunScenario("GPU batch path (LOS)", true);
     }
     catch (const std::exception& e)
     {
-        std::fprintf(stderr, "GPU scenario crashed: %s\n", e.what());
+        std::fprintf(stderr, "GPU LOS scenario crashed: %s\n", e.what());
         return 2;
+    }
+
+    try
+    {
+        RunScenario("GPU batch path (NLOS)", true, /*nlos=*/true);
+    }
+    catch (const std::exception& e)
+    {
+        std::fprintf(stderr, "GPU NLOS scenario crashed: %s\n", e.what());
+        return 4;
     }
 
     if (g_failures > 0)

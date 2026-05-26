@@ -2727,11 +2727,24 @@ ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
 
     // Lazy-create the GPU pipeline on first use. The constructor talks to
     // the WGPU runtime (adapter + device), which is non-trivial work we
-    // only want to pay once.
+    // only want to pay once. If the device isn't available (no GPU, no
+    // permission, missing shader file, ...) the constructor throws --
+    // catch and silently fall back to the CPU path for the rest of the
+    // simulation rather than abort.
     if (!m_gpu)
     {
         NS_LOG_INFO("Creating SlsChanWgpu instance for GPU batch back-end");
-        m_gpu = std::make_unique<::SlsChanWgpu>();
+        try
+        {
+            m_gpu = std::make_unique<::SlsChanWgpu>();
+        }
+        catch (const std::exception& e)
+        {
+            NS_LOG_WARN("SlsChanWgpu construction failed (" << e.what()
+                                                            << "); falling back to CPU path");
+            m_useGpu = false;
+            return;
+        }
     }
 
     // Step 1 — partition the dirty links' endpoints into cells (lower id)
@@ -2810,18 +2823,36 @@ ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
         cellIdx++;
     }
 
+    // Look at each UT's O2I state across all the dirty links that touch
+    // it. If ANY of those links reports the UT as indoor, mark the UT
+    // indoor for the GPU — the GPU's per-UT outdoor_ind is global to
+    // the link batch, not per-link, so we have to collapse the choice.
+    std::unordered_map<uint32_t, bool> utIsIndoor;
+    for (uint64_t key : dirty)
+    {
+        const auto& ep = m_linkEndpoints.find(key)->second;
+        const uint32_t aId = ep.aMob->GetObject<Node>()->GetId();
+        const uint32_t bId = ep.bMob->GetObject<Node>()->GetId();
+        const uint32_t utId = std::max(aId, bId);
+        auto cond = m_channelConditionModel->GetChannelCondition(ep.aMob, ep.bMob);
+        const bool indoor = cond->GetO2iCondition() == ChannelCondition::O2I;
+        // Latch indoor=true wins.
+        utIsIndoor[utId] = utIsIndoor[utId] || indoor;
+    }
+
     uint32_t utIdx = 0;
     for (const auto& [nodeId, mob] : utMobById)
     {
         const Vector p = mob->GetPosition();
+        const bool indoor = utIsIndoor.count(nodeId) ? utIsIndoor[nodeId] : false;
         UtParam u{};
         u.loc.x = static_cast<float>(p.x);
         u.loc.y = static_cast<float>(p.y);
         u.loc.z = static_cast<float>(p.z);
         u.loc._p = 0;
-        u.d_2d_in = 0.0f;
-        u.outdoor_ind = 1; // default outdoor; O2I handled by ns-3's ChannelConditionModel
-        u.o2i_penetration_loss = 0.0f;
+        u.d_2d_in = indoor ? 10.0f : 0.0f; // 10 m indoor penetration default
+        u.outdoor_ind = indoor ? 0u : 1u;
+        u.o2i_penetration_loss = 0.0f; // ns-3 propagation loss model handles penetration
         u._p = 0;
         utIdToIdx[nodeId] = utIdx;
         uts.push_back(u);
