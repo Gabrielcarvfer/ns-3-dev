@@ -20,7 +20,7 @@ using namespace ns3;
 
 /**
  * @file
- * @ingroup system-tests-traced
+ * @ingroup network-test
  *
  * TracedValueCallback tests to verify that they work with different types
  * of classes - it tests bool, double, various types of integers types,
@@ -31,7 +31,7 @@ namespace
 {
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup network-test
  *
  * Result of callback test.
  *
@@ -44,7 +44,7 @@ namespace
 std::string g_Result = "";
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup network-test
  *
  * Template for TracedValue sink functions.
  *
@@ -75,7 +75,7 @@ TracedValueCbSink(T oldValue, T newValue)
 } // TracedValueCbSink<>()
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup network-test
  *
  * TracedValueCbSink specialization for Time.
  * @param oldValue The old value
@@ -89,7 +89,7 @@ TracedValueCbSink<Time>(Time oldValue, Time newValue)
 }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup network-test
  *
  * TracedValueCbSink specialization for SequenceNumber32.
  * @param oldValue The old value
@@ -105,7 +105,7 @@ TracedValueCbSink<SequenceNumber32>(SequenceNumber32 oldValue, SequenceNumber32 
 } // unnamed namespace
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup network-test
  *
  * @brief TracedValueCallback Test Case
  */
@@ -238,7 +238,7 @@ TracedValueCallbackTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup network-test
  *
  * @brief TracedValueCallback TestSuite
  */
