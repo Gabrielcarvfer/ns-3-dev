@@ -297,9 +297,52 @@ set(header_files
     model/example-as-test.h
 )
 
+# traced-callback-typedef-test-suite.cc exercises TracedCallback typedefs
+# declared by many modules, so it is only built when those modules are all
+# enabled (and their libraries are linked into core's test binary).
+set(traced_callback_typedef_sources)
+set(traced_callback_typedef_libs)
+if((dsr
+    IN_LIST
+    ns3-all-enabled-modules
+   )
+   AND (uan
+        IN_LIST
+        ns3-all-enabled-modules
+       )
+   AND (olsr
+        IN_LIST
+        ns3-all-enabled-modules
+       )
+   AND (lte
+        IN_LIST
+        ns3-all-enabled-modules
+       )
+)
+  set(traced_callback_typedef_sources
+      test/traced-callback-typedef-test-suite.cc
+  )
+  set(traced_callback_typedef_libs
+      ${libdsr}
+      ${libinternet}
+      ${liblr-wpan}
+      ${liblte}
+      ${libmesh}
+      ${libmobility}
+      ${libnetwork}
+      ${libolsr}
+      ${libsixlowpan}
+      ${libspectrum}
+      ${libstats}
+      ${libuan}
+      ${libwifi}
+  )
+endif()
+
 set(test_sources
     ${example_as_test_suite}
     ${gsl_test_sources}
+    ${traced_callback_typedef_sources}
     test/attribute-container-test-suite.cc
     test/attribute-test-suite.cc
     test/build-profile-test-suite.cc
@@ -341,6 +384,7 @@ build_lib(
   HEADER_FILES ${header_files}
   LIBRARIES_TO_LINK ${libraries_to_link}
   TEST_SOURCES ${test_sources}
+  TEST_LIBRARIES_TO_LINK ${traced_callback_typedef_libs}
   GENERATE_EXPORT_HEADER
 )
 

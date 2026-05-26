@@ -36,14 +36,14 @@ using namespace ns3;
 
 /**
  * @file
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * TracedCallback tests to verify if they are called with
  * the right type and number of arguments.
  */
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * TracedCallback Testcase.
  *
@@ -98,7 +98,7 @@ namespace
 {
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Record typedefs which are identical to previously declared.
  * @return a container of strings representing the duplicates.
@@ -118,14 +118,14 @@ Duplicates()
 }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Container for duplicate types.
  */
 std::set<std::string> g_dupes = Duplicates();
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Stringify the known TracedCallback type names.
  *
@@ -141,7 +141,7 @@ TypeName(int N)
 }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Returns a string representing the type of a class.
  */
@@ -155,7 +155,7 @@ TypeName(int N)
     }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * @name Stringify known typename.
  */
@@ -222,7 +222,7 @@ TYPENAME(WifiRemoteStationManager::RateChangeTracedCallback);
 #undef TYPENAME
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Log that a callback was invoked.
  *
@@ -239,7 +239,7 @@ SinkIt(std::size_t N)
 }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Sink functions.
  */
@@ -334,7 +334,7 @@ TracedCallbackTypedefTestCase::TracedCallbackTypedefTestCase()
 }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Check the TracedCallback duplicate by checking if it matches the TracedCallback
  * it is supposed to be equal to.
@@ -358,7 +358,7 @@ TracedCallbackTypedefTestCase::TracedCallbackTypedefTestCase()
     }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * Check the TracedCallback by calling its Invoke function.
  */
@@ -540,7 +540,7 @@ TracedCallbackTypedefTestCase::DoRun()
 }
 
 /**
- * @ingroup system-tests-traced
+ * @ingroup core-tests
  *
  * @brief TracedCallback typedef TestSuite
  */

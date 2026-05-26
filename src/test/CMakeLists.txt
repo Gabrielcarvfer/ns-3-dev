@@ -1,14 +1,3 @@
-set(dsr_sources)
-
-# cmake-format: off
-if((dsr IN_LIST ns3-all-enabled-modules)
-    AND (uan IN_LIST ns3-all-enabled-modules)
-    AND (olsr IN_LIST ns3-all-enabled-modules)
-    AND (lte IN_LIST ns3-all-enabled-modules))
-  set(dsr_sources traced/traced-callback-typedef-test-suite.cc)
-endif()
-# cmake-format: on
-
 set(csma_sources)
 if(applications
    IN_LIST
@@ -35,7 +24,6 @@ add_library(
   ${PROJECT_SOURCE_DIR}/build-support/empty.cc # empty source file if only
   # libcore is enabled
   ${csma_sources}
-  ${dsr_sources}
 )
 
 add_dependencies(
