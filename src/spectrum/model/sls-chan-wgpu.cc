@@ -1357,8 +1357,14 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
     DispUni du{0u, 0u, nActiveLinks, refTime, 1.0f, 0, 0, 0};
     ssDispatchBuf_ = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
 
+    if (!cirDbgBuf_)
+    {
+        cirDbgBuf_ = makeBuffer(uint64_t(nActiveLinks) * 16ULL * sizeof(float),
+                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    }
+
     auto layout2 = generateCIRPipeline_.getBindGroupLayout(2);
-    std::vector<wgpu::BindGroupEntry> e0(21, wgpu::Default);
+    std::vector<wgpu::BindGroupEntry> e0(22, wgpu::Default);
     auto E = [](std::vector<wgpu::BindGroupEntry>& v,
                 int i,
                 uint32_t b,
@@ -1389,6 +1395,7 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
     E(e0, 18, 18, phi_nm_AoD_Buf_);   // cir_buf_phi_nm_AoD
     E(e0, 19, 19, theta_nm_ZOA_Buf_); // cir_buf_theta_nm_ZOA
     E(e0, 20, 20, theta_nm_ZOD_Buf_); // cir_buf_theta_nm_ZOD
+    E(e0, 21, 21, cirDbgBuf_);        // cir_dbg
 
     wgpu::BindGroupDescriptor bgd2 = wgpu::Default;
     bgd2.layout = layout2;
@@ -1769,6 +1776,19 @@ SlsChanWgpu::readCirNtaps()
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
     return mapReadBuffer<uint32_t>(staging, sz);
+}
+
+std::vector<float>
+SlsChanWgpu::readCirDebug(uint32_t nActiveLinks)
+{
+    if (!cirDbgBuf_) { return {}; }
+    const uint64_t sz = uint64_t(nActiveLinks) * 16ULL * sizeof(float);
+    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(cirDbgBuf_, 0, staging, 0, sz);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    return mapReadBuffer<float>(staging, sz);
 }
 
 std::vector<float>

@@ -639,7 +639,13 @@ fn cal_link_param_kernel(
         let cl = cmn_link[0];
         let nx = uni.nX;  let ny = uni.nY;
         let ux = ut.loc.x;  let uy = ut.loc.y;
-        let true_site = site_idx / uni.nSectorPerSite;
+        // The dispatch is (nSite, ceil(nUT/256), 1) — wg_id.x is already a
+        // site index, not a cell index. Dividing by nSectorPerSite was a bug
+        // left over from a per-cell dispatch: it (a) made sites 0/1/2 all
+        // read CRN-site-0, sites 3/4/5 share CRN-site-1, etc., and (b) had
+        // the upper-third of sites reading uninitialised slots, producing
+        // extreme cv[K_IDX] values that underflow K to 0 for ~5 % of links.
+        let true_site = site_idx;
         let s7 = true_site * 7u;
         let s8 = true_site * 8u;
         let s6 = true_site * 6u;
@@ -1004,6 +1010,26 @@ struct DispatchUniforms {
 @group(2) @binding(18) var<storage, read> cir_buf_phi_nm_AoD    : array<f32>;
 @group(2) @binding(19) var<storage, read> cir_buf_theta_nm_ZOA  : array<f32>;
 @group(2) @binding(20) var<storage, read> cir_buf_theta_nm_ZOD  : array<f32>;
+// Debug buffer — 16 f32 slots per link. Thread 0 writes intermediate values
+// so the host can diagnose which stage of generate_cir_kernel is collapsing
+// the output for the ~5 % of links that emit zero CIR. Slot layout:
+//   [0]  n_cl                                (cluster count)
+//   [1]  losInd ? 1 : 0
+//   [2]  los_power                           (K/(K+1) for LOS, 0 otherwise)
+//   [3]  los_scale                           (sqrt(K/(K+1)))
+//   [4]  KR                                  (raw K_lin from cal_link_param)
+//   [5]  tap_count after cluster loop
+//   [6]  sum |wg_Hlink[tap]|² BEFORE PL+LOS  (last BS antenna; pre-LOS)
+//   [7]  |H_los|²                            (last BS antenna)
+//   [8]  sum |wg_Hlink[tap]|² AFTER LOS add  (last BS antenna)
+//   [9]  ps²                                 (= 10^(-(PL-SF)/10))
+//   [10] sum |wg_Hlink[tap]|² AFTER PL scale (last BS antenna)
+//   [11] count of zero-power clusters after LOS sub
+//   [12] strongest2[0]
+//   [13] strongest2[1]
+//   [14] sum cluster_power (over all clusters, post-LOS-sub)
+//   [15] reserved
+@group(2) @binding(21) var<storage, read_write> cir_dbg : array<f32>;
 
 // ── group 3: generate_cfr_kernel_mode1 ───────────────────────────────────
 @group(3) @binding(0) var<uniform>             cfr_uni_sim          : SmallScaleSimConfig;
@@ -1572,6 +1598,31 @@ fn generate_cir_kernel(
         los_power = KR / (KR + 1.0);
     }
 
+    // Debug: record link-level scalars (thread 0 only).
+    let dbg_base = active_link_idx * 16u;
+    if li.x == 0u && snapshot_idx == 0u {
+        cir_dbg[dbg_base + 0u] = f32(n_cl);
+        cir_dbg[dbg_base + 1u] = select(0.0, 1.0, lk.losInd != 0u);
+        cir_dbg[dbg_base + 2u] = los_power;
+        cir_dbg[dbg_base + 3u] = sqrt(max(KR / (KR + 1.0), 0.0));
+        cir_dbg[dbg_base + 4u] = KR;
+        cir_dbg[dbg_base + 12u] = f32(cp.strongest2[0]);
+        cir_dbg[dbg_base + 13u] = f32(cp.strongest2[1]);
+        // Sum effective cluster power after LOS subtraction.
+        var cl_sum: f32 = 0.0;
+        var zero_cnt: u32 = 0u;
+        for (var cc = 0u; cc < n_cl; cc++) {
+            var pp = cp.powers[cc];
+            if lk.losInd != 0u && is_o2i == 0u && cc == 0u {
+                pp = max(pp - los_power, 0.0);
+            }
+            cl_sum += pp;
+            if pp <= 0.0 { zero_cnt = zero_cnt + 1u; }
+        }
+        cir_dbg[dbg_base + 11u] = f32(zero_cnt);
+        cir_dbg[dbg_base + 14u] = cl_sum;
+    }
+
     let zetaBs = cell.antPanelOrientation[2];
     let zetaUt = ut.antPanelOrientation[2];
 
@@ -1691,6 +1742,18 @@ fn generate_cir_kernel(
 
         workgroupBarrier();
 
+        // DEBUG: capture pre-LOS wg_Hlink power for the LAST BS antenna only
+        // (so the value is whatever the loop wrote on its final iteration).
+        if li.x == 0u && snapshot_idx == 0u && ba == nCellAnt - 1u {
+            var pre_los: f32 = 0.0;
+            for (var ti = 0u; ti < NMAXTAPS; ti++) {
+                let v = wg_Hlink[ti];
+                pre_los += v.x * v.x + v.y * v.y;
+            }
+            cir_dbg[dbg_base + 5u] = f32(tap_count);
+            cir_dbg[dbg_base + 6u] = pre_los;
+        }
+
         // LOS component (added at tap 0)
         if lk.losInd != 0u && is_o2i == 0u && li.x == 0u {
             let los_scale = sqrt(KR / (KR + 1.0));
@@ -1707,7 +1770,21 @@ fn generate_cir_kernel(
                 );
                 let hi = ua * NMAXTAPS; // tap 0
                 wg_Hlink[hi] = cadd(H_los * los_scale, wg_Hlink[hi]);
+                // DEBUG: |H_los|² for the LAST BS antenna.
+                if snapshot_idx == 0u && ba == nCellAnt - 1u && ua == 0u {
+                    cir_dbg[dbg_base + 7u] = H_los.x * H_los.x + H_los.y * H_los.y;
+                }
             }
+        }
+
+        // DEBUG: capture post-LOS / pre-PL power for the LAST BS antenna.
+        if li.x == 0u && snapshot_idx == 0u && ba == nCellAnt - 1u {
+            var post_los: f32 = 0.0;
+            for (var ti = 0u; ti < NMAXTAPS; ti++) {
+                let v = wg_Hlink[ti];
+                post_los += v.x * v.x + v.y * v.y;
+            }
+            cir_dbg[dbg_base + 8u] = post_los;
         }
 
         // Path loss scaling
@@ -1718,6 +1795,16 @@ fn generate_cir_kernel(
                 for (var t2 = 0u; t2 < NMAXTAPS; t2++) {
                     wg_Hlink[ua * NMAXTAPS + t2] = wg_Hlink[ua * NMAXTAPS + t2] * ps;
                 }
+            }
+            // DEBUG: ps² and final |wg_Hlink|² for LAST BS antenna.
+            if snapshot_idx == 0u && ba == nCellAnt - 1u {
+                cir_dbg[dbg_base + 9u] = ps * ps;
+                var post_pl: f32 = 0.0;
+                for (var ti = 0u; ti < NMAXTAPS; ti++) {
+                    let v = wg_Hlink[ti];
+                    post_pl += v.x * v.x + v.y * v.y;
+                }
+                cir_dbg[dbg_base + 10u] = post_pl;
             }
         }
 

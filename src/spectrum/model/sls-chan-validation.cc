@@ -666,6 +666,139 @@ main()
     auto thetaNmZOA = sls.readThetaNmZOA();
     auto thetaNmZOD = sls.readThetaNmZOD();
 
+    // ── CIR-magnitude diagnostic ──────────────────────────────────────────
+    // For each active link, sum |CIR_coeff|² across (snapshot, BS_ant, UE_ant,
+    // tap) and compare against the analyzer's assumption:
+    //      expected_power = N_BSAnt × |path_gain|² × |pol|² × |LOS_phase|²
+    //                     = N_BSAnt × 10^(-(PL-SF)/10)
+    // (with the BS isotropic-element, polarization-matched setup we've left
+    // BS gain at +0 dB per element, so |pol|² should be 1).
+    // Print summary stats + the worst-deviation links.
+    if (slsDebugEnabled())
+    {
+        const uint32_t elemsPerLink = nSnapshots * nUeAnt * nBsAnt * 24u;
+        struct Diag {
+            uint32_t linkIdx;
+            uint32_t site;
+            uint32_t uid;
+            uint32_t cid;
+            float    pathloss;
+            float    sf;
+            float    measured_dB;
+            float    expected_dB;
+            float    delta_dB;
+            uint32_t losInd;
+        };
+        std::vector<Diag> diag;
+        diag.reserve(nActiveLinks);
+        for (uint32_t i = 0; i < nActiveLinks; ++i)
+        {
+            const auto& al = activeLinks[i];
+            const LinkParams& lk = links[al.lspReadIdx];
+            double sumSq = 0.0;
+            const size_t base = al.cirCoeOffset;
+            for (uint32_t e = 0; e < elemsPerLink; ++e)
+            {
+                const auto& c = cirCoe[base + e];
+                sumSq += double(c.real()) * c.real() +
+                         double(c.imag()) * c.imag();
+            }
+            const double measured_dB = (sumSq > 0.0)
+                                            ? 10.0 * std::log10(sumSq)
+                                            : -300.0;
+            // Expected: N_BSAnt × |10^(-(PL-SF)/20)|² = N × 10^(-(PL-SF)/10).
+            const double expected_dB =
+                10.0 * std::log10(double(nBsAnt)) - double(lk.pathloss - lk.SF);
+            Diag d;
+            d.linkIdx     = al.linkIdx;
+            d.site        = al.linkIdx / nUT;
+            d.uid         = al.uid;
+            d.cid         = al.cid;
+            d.pathloss    = lk.pathloss;
+            d.sf          = lk.SF;
+            d.measured_dB = float(measured_dB);
+            d.expected_dB = float(expected_dB);
+            d.delta_dB    = float(measured_dB - expected_dB);
+            d.losInd      = lk.losInd;
+            diag.push_back(d);
+        }
+
+        // Summary
+        double mean_delta = 0.0;
+        double max_dev = 0.0;
+        uint32_t losCnt = 0, nlosCnt = 0, zeroCnt = 0;
+        double mean_delta_los = 0.0, mean_delta_nlos = 0.0;
+        for (const auto& d : diag)
+        {
+            mean_delta += d.delta_dB;
+            if (std::fabs(d.delta_dB) > std::fabs(max_dev))
+            {
+                max_dev = d.delta_dB;
+            }
+            if (d.measured_dB <= -290.0f) { zeroCnt++; }
+            if (d.losInd != 0u) { losCnt++; mean_delta_los += d.delta_dB; }
+            else                { nlosCnt++; mean_delta_nlos += d.delta_dB; }
+        }
+        mean_delta /= double(nActiveLinks);
+        if (losCnt > 0)  { mean_delta_los  /= double(losCnt); }
+        if (nlosCnt > 0) { mean_delta_nlos /= double(nlosCnt); }
+
+        // Sort by |delta| descending, print top 10 outliers
+        std::sort(diag.begin(), diag.end(),
+                  [](const Diag& a, const Diag& b) {
+                      return std::fabs(a.delta_dB) > std::fabs(b.delta_dB);
+                  });
+
+        fprintf(stderr, "\n[CIR-DIAG] over %u active links:\n", nActiveLinks);
+        fprintf(stderr, "[CIR-DIAG]   mean delta (measured - expected): %.2f dB\n",
+                mean_delta);
+        fprintf(stderr, "[CIR-DIAG]   max |delta|: %.2f dB\n", max_dev);
+        fprintf(stderr, "[CIR-DIAG]   links with sumSq == 0: %u (%.1f%%)\n",
+                zeroCnt, 100.0 * double(zeroCnt) / nActiveLinks);
+        fprintf(stderr, "[CIR-DIAG]   LOS links: %u, mean delta = %.2f dB\n",
+                losCnt, mean_delta_los);
+        fprintf(stderr, "[CIR-DIAG]   NLOS links: %u, mean delta = %.2f dB\n",
+                nlosCnt, mean_delta_nlos);
+        fprintf(stderr, "[CIR-DIAG] worst 10 outliers:\n");
+        fprintf(stderr,
+                "[CIR-DIAG]   %-9s %-5s %-5s %-5s %-7s %-7s %-9s %-9s %-8s %-3s\n",
+                "linkIdx", "site", "uid", "cid", "PL_dB", "SF_dB",
+                "meas_dB", "exp_dB", "delta_dB", "LOS");
+        for (uint32_t i = 0; i < std::min<uint32_t>(10u, uint32_t(diag.size())); ++i)
+        {
+            const auto& d = diag[i];
+            fprintf(stderr,
+                    "[CIR-DIAG]   %-9u %-5u %-5u %-5u %-7.1f %-7.2f %-9.2f %-9.2f %-+8.2f %-3u\n",
+                    d.linkIdx, d.site, d.uid, d.cid,
+                    d.pathloss, d.sf, d.measured_dB, d.expected_dB,
+                    d.delta_dB, d.losInd);
+        }
+
+        // ── WGSL kernel debug buffer dump (cir_dbg @ binding 21) ────────
+        auto dbg = sls.readCirDebug(nActiveLinks);
+        if (!dbg.empty())
+        {
+            fprintf(stderr, "[CIR-DBG] worst 10 outliers — kernel intermediates:\n");
+            fprintf(stderr,
+                    "[CIR-DBG]   %-9s %-3s %-4s %-7s %-7s %-7s %-9s %-9s %-9s %-9s %-9s %-4s %-4s %-7s\n",
+                    "linkIdx", "LOS", "nCl",
+                    "los_pwr", "los_sc", "KR_lin",
+                    "preLOS|H|", "|H_los|^2", "postLOS|H|", "ps^2", "postPL|H|",
+                    "s2_0", "s2_1", "cl_sum");
+            for (uint32_t i = 0; i < std::min<uint32_t>(10u, uint32_t(diag.size())); ++i)
+            {
+                const auto& d = diag[i];
+                const float* db = &dbg[d.linkIdx * 16ULL];
+                fprintf(stderr,
+                        "[CIR-DBG]   %-9u %-3.0f %-4.0f %-7.3f %-7.3f %-7.3f %-9.2e %-9.2e %-9.2e %-9.2e %-9.2e %-4.0f %-4.0f %-7.3f\n",
+                        d.linkIdx, db[1], db[0],
+                        db[2], db[3], db[4],
+                        db[6], db[7], db[8], db[9], db[10],
+                        db[12], db[13], db[14]);
+            }
+        }
+    }
+
 #ifdef SLS_CHAN_HDF5
     // ── Write all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
     float centerFreqHz = fc_ghz * 1e9f;

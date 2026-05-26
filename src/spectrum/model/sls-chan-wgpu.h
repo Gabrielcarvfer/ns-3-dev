@@ -477,6 +477,9 @@ class SlsChanWgpu
     std::vector<float> readPhiNmAoD();
     std::vector<float> readThetaNmZOA();
     std::vector<float> readThetaNmZOD();
+    // 16 f32 per link, populated by generate_cir_kernel. Layout described in
+    // sls-chan.wgsl near the `cir_dbg` binding.
+    std::vector<float> readCirDebug(uint32_t nActiveLinks);
     void saveSlsChanToHdf5(const std::string& filename);
 
   private:
@@ -540,6 +543,9 @@ class SlsChanWgpu
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24
+
+    // Debug buffer for generate_cir_kernel — 16 f32 per link (binding 21).
+    wgpu::Buffer cirDbgBuf_;
 
     // Staging for small-scale readback
     wgpu::Buffer cirStagingBuf_;
