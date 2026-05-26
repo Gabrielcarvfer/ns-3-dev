@@ -29,7 +29,7 @@ using namespace ns3;
 static int32_t g_hash;
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * Simple test packet filter able to classify IPv4 packets.
  */
@@ -92,7 +92,7 @@ Ipv4TestPacketFilter::CheckProtocol(Ptr<QueueDiscItem> item) const
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests packets for which there is no suitable filter.
  */
@@ -150,7 +150,7 @@ FqCoDelQueueDiscNoSuitableFilter::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the IP flows separation and the packet limit.
  */
@@ -245,7 +245,7 @@ FqCoDelQueueDiscIPFlowsSeparationAndPacketLimit::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the deficit per flow.
  */
@@ -471,7 +471,7 @@ FqCoDelQueueDiscDeficit::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the TCP flows separation.
  */
@@ -596,7 +596,7 @@ FqCoDelQueueDiscTCPFlowsSeparation::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the UDP flows separation
  */
@@ -721,7 +721,7 @@ FqCoDelQueueDiscUDPFlowsSeparation::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * @brief This class tests ECN marking.
  *
@@ -1341,7 +1341,7 @@ FqCoDelQueueDiscECNMarking::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * @brief This class tests linear probing, collision response, and set
  * creation capability of set associative hashing in FqCodel.
@@ -1478,7 +1478,7 @@ FqCoDelQueueDiscSetLinearProbing::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * @brief This class tests L4S mode.
  * Any future classifier options (e.g. SetAssociativeHash) should be
@@ -1746,7 +1746,7 @@ FqCoDelQueueDiscL4sMode::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * FQ-CoDel queue disc test suite.
  */

@@ -20,7 +20,7 @@
 using namespace ns3;
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests that each possible TOS is enqueued in the right band
  */
@@ -110,7 +110,7 @@ PfifoFastQueueDiscTosPrioritization::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests that each possible DSCP is enqueued in the right band.
  */
@@ -205,7 +205,7 @@ PfifoFastQueueDiscDscpPrioritization::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests that each band is txqueuelen deep.
  */
@@ -302,7 +302,7 @@ PfifoFastQueueDiscOverflow::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests that packets without a priority tag are handled by placing
  * them into band 1.
@@ -375,7 +375,7 @@ PfifoFastQueueDiscNoPriority::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * PfifoFast queue disc test suite.
  */

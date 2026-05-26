@@ -31,7 +31,7 @@ using namespace ns3;
 static int32_t g_hash;
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * Simple test packet filter able to classify IPv4 packets.
  */
@@ -94,7 +94,7 @@ Ipv4FqCobaltTestPacketFilter::CheckProtocol(Ptr<QueueDiscItem> item) const
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests packets for which there is no suitable filter.
  */
@@ -152,7 +152,7 @@ FqCobaltQueueDiscNoSuitableFilter::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the IP flows separation and the packet limit.
  */
@@ -248,7 +248,7 @@ FqCobaltQueueDiscIPFlowsSeparationAndPacketLimit::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the deficit per flow.
  */
@@ -474,7 +474,7 @@ FqCobaltQueueDiscDeficit::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the TCP flows separation.
  */
@@ -599,7 +599,7 @@ FqCobaltQueueDiscTCPFlowsSeparation::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * This class tests the UDP flows separation
  */
@@ -724,7 +724,7 @@ FqCobaltQueueDiscUDPFlowsSeparation::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * @brief This class tests ECN marking.
  *
@@ -1277,7 +1277,7 @@ FqCobaltQueueDiscEcnMarking::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * @brief This class tests linear probing, collision response, and set
  * creation capability of set associative hashing in FqCobalt.
@@ -1414,7 +1414,7 @@ FqCobaltQueueDiscSetLinearProbing::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * @brief This class tests L4S mode.
  *
@@ -1696,7 +1696,7 @@ FqCobaltQueueDiscL4sMode::DoRun()
 }
 
 /**
- * @ingroup system-tests-tc
+ * @ingroup traffic-control-test
  *
  * FQ-COBALT queue disc test suite.
  */
