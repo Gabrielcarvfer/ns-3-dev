@@ -24,6 +24,7 @@
 #include "ns3/isotropic-antenna-model.h"
 #include "ns3/node-container.h"
 #include "ns3/pointer.h"
+#include "ns3/random-variable-stream.h"
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
@@ -80,13 +81,19 @@ DriveOnce(Ptr<ThreeGppChannelModel> model, const LinkPair& lp)
                      k);
         ++g_failures;
     }
-    std::printf("  [%s] H=(%llux%llux%llu) DS=%.3e K=%.3f\n",
-                lp.label,
-                static_cast<unsigned long long>(mat->m_channel.GetNumRows()),
-                static_cast<unsigned long long>(mat->m_channel.GetNumCols()),
-                static_cast<unsigned long long>(mat->m_channel.GetNumPages()),
-                ds,
-                k);
+    // Per-link prints get noisy with 700 links; quiet unless the link
+    // tripped the sanity check.
+    (void)mat;
+    if (!dsOk || !kOk)
+    {
+        std::printf("  [%s] H=(%llux%llux%llu) DS=%.3e K=%.3f\n",
+                    lp.label,
+                    static_cast<unsigned long long>(mat->m_channel.GetNumRows()),
+                    static_cast<unsigned long long>(mat->m_channel.GetNumCols()),
+                    static_cast<unsigned long long>(mat->m_channel.GetNumPages()),
+                    ds,
+                    k);
+    }
 }
 
 void
@@ -109,11 +116,18 @@ RunScenario(const char* label, bool useGpu, bool nlos = false)
     model->SetAttribute("UseGpu", BooleanValue(useGpu));
     model->AssignStreams(1);
 
+    // Deployment scaled up enough to feed the NVIDIA
+    // analysis_channel_stats.py with statistically-meaningful samples
+    // (SIR/SINR computations collapse on tiny scenarios). Layout:
+    // 7 cells in a hex pattern (ISD=150m), 100 UEs scattered in a
+    // 600m x 600m box centred on the cells.
+    constexpr uint32_t kNumCells = 7;
+    constexpr uint32_t kNumUes = 100;
     NodeContainer nodes;
-    nodes.Create(5);
+    nodes.Create(kNumCells + kNumUes);
 
-    // 3 cells (nodes 0..2) on a small triangle, 2 UEs (nodes 3,4)
-    // somewhere in the middle. Lower node IDs become "cells" in the
+    // Cells (nodes 0..kNumCells-1) on a hex centred at origin, UEs
+    // (kNumCells..) scattered. Lower node IDs become "cells" in the
     // RunGpuLspBatch partition heuristic.
     auto mkMob = [](double x, double y, double z) {
         auto m = CreateObject<ConstantPositionMobilityModel>();
@@ -137,31 +151,45 @@ RunScenario(const char* label, bool useGpu, bool nlos = false)
     };
 
     std::vector<Ptr<MobilityModel>> mobs;
+    // 7-cell hex: centre + 6 ring cells at ISD ~150m.
+    const double isd = 150.0;
     mobs.push_back(mkMob(0.0, 0.0, 25.0));
-    mobs.push_back(mkMob(150.0, 0.0, 25.0));
-    mobs.push_back(mkMob(75.0, 130.0, 25.0));
-    // Give UEs non-zero velocity so the spatial-consistency update path
-    // marks links dirty between tick 1 and tick 2, which is what
-    // exercises the GPU batch refresh.
-    mobs.push_back(mkVelMob(60.0, 50.0, 1.5, 5.0, 0.0));
-    mobs.push_back(mkVelMob(110.0, 80.0, 1.5, 0.0, 3.0));
+    for (uint32_t k = 0; k < 6; ++k)
+    {
+        const double th = k * (M_PI / 3.0);
+        mobs.push_back(mkMob(isd * std::cos(th), isd * std::sin(th), 25.0));
+    }
+    // UEs uniform in a 600x600m box, deterministic positions (RNG-seeded).
+    // Give them small velocities so the spatial-consistency update marks
+    // links dirty between tick 1 and tick 2 (which is what exercises
+    // RunGpuLspBatch on the GPU).
+    auto rng = CreateObject<UniformRandomVariable>();
+    rng->SetStream(2);
+    for (uint32_t u = 0; u < kNumUes; ++u)
+    {
+        const double x = rng->GetValue(-200.0, 350.0);
+        const double y = rng->GetValue(-200.0, 350.0);
+        const double vx = rng->GetValue(-3.0, 3.0);
+        const double vy = rng->GetValue(-3.0, 3.0);
+        mobs.push_back(mkVelMob(x, y, 1.5, vx, vy));
+    }
 
     std::vector<Ptr<PhasedArrayModel>> ants;
-    for (uint32_t i = 0; i < 3; ++i)
+    for (uint32_t i = 0; i < kNumCells; ++i)
         ants.push_back(mkAnt(2));
-    for (uint32_t i = 3; i < 5; ++i)
+    for (uint32_t i = 0; i < kNumUes; ++i)
         ants.push_back(mkAnt(1));
 
-    for (uint32_t i = 0; i < 5; ++i)
+    for (uint32_t i = 0; i < kNumCells + kNumUes; ++i)
         nodes.Get(i)->AggregateObject(mobs[i]);
 
     std::vector<LinkPair> links;
-    for (uint32_t c = 0; c < 3; ++c)
+    for (uint32_t c = 0; c < kNumCells; ++c)
     {
-        for (uint32_t u = 3; u < 5; ++u)
+        for (uint32_t u = kNumCells; u < kNumCells + kNumUes; ++u)
         {
             char buf[32];
-            std::snprintf(buf, sizeof(buf), "cell%u-ue%u", c, u);
+            std::snprintf(buf, sizeof(buf), "c%u-u%u", c, u - kNumCells);
             links.push_back({mobs[c], mobs[u], ants[c], ants[u], _strdup(buf)});
         }
     }

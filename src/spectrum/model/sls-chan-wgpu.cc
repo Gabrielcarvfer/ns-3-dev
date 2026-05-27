@@ -2139,9 +2139,13 @@ namespace
 static void
 writeLspOnlyHdf5(const std::string& filename,
                  const std::vector<LinkParams>& links,
+                 const std::vector<CellParam>& cells,
+                 const std::vector<UtParam>& uts,
                  uint32_t nSite,
                  uint32_t nUT,
-                 uint32_t nSectorPerSite)
+                 uint32_t nSectorPerSite,
+                 uint32_t gpuScenario,
+                 float centerFreqHz)
 {
     if (std::filesystem::exists(filename))
     {
@@ -2156,35 +2160,92 @@ writeLspOnlyHdf5(const std::string& filename,
     }
     const uint32_t nLinks = nSite * nUT;
 
-    // linkParams compound: pathloss, SF, K, DS, ASD, ASA, ZSD, ZSA,
-    // losInd. Minimal_analyzer only needs pathloss + SF, but we emit
-    // the full LSP set so analysis_channel_stats can also consume it.
+    // linkParams compound matches the LinkParamsHdf5 layout the
+    // NVIDIA analyzer reads. All 24 fields are emitted; the LSP-only
+    // path leaves the small-scale-specific ones (mu_lgZSD etc) at
+    // their GPU-computed values from cal_link_param_kernel.
     {
         hid_t compoundType = H5Tcreate(H5T_COMPOUND, sizeof(LinkParamsHdf5));
         H5Tinsert(compoundType, "cid", offsetof(LinkParamsHdf5, cid), H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "d2d", offsetof(LinkParamsHdf5, d2d), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "d2d_in", offsetof(LinkParamsHdf5, d2d_in), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "d2d_out", offsetof(LinkParamsHdf5, d2d_out), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "d3d", offsetof(LinkParamsHdf5, d3d), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "d3d_in", offsetof(LinkParamsHdf5, d3d_in), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "d3d_out", offsetof(LinkParamsHdf5, d3d_out), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType,
+                  "phi_LOS_AOD",
+                  offsetof(LinkParamsHdf5, phi_LOS_AOD),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType,
+                  "theta_LOS_ZOD",
+                  offsetof(LinkParamsHdf5, theta_LOS_ZOD),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType,
+                  "phi_LOS_AOA",
+                  offsetof(LinkParamsHdf5, phi_LOS_AOA),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType,
+                  "theta_LOS_ZOA",
+                  offsetof(LinkParamsHdf5, theta_LOS_ZOA),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "losInd", offsetof(LinkParamsHdf5, losInd), H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "pathloss", offsetof(LinkParamsHdf5, pathloss), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "SF", offsetof(LinkParamsHdf5, SF), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "K", offsetof(LinkParamsHdf5, K), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "DS", offsetof(LinkParamsHdf5, DS), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ASD", offsetof(LinkParamsHdf5, ASD), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ASA", offsetof(LinkParamsHdf5, ASA), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType,
+                  "mu_lgZSD",
+                  offsetof(LinkParamsHdf5, mu_lgZSD),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType,
+                  "sigma_lgZSD",
+                  offsetof(LinkParamsHdf5, sigma_lgZSD),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType,
+                  "mu_offset_ZOD",
+                  offsetof(LinkParamsHdf5, mu_offset_ZOD),
+                  H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ZSD", offsetof(LinkParamsHdf5, ZSD), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ZSA", offsetof(LinkParamsHdf5, ZSA), H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType, "losInd", offsetof(LinkParamsHdf5, losInd), H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType,
+                  "delta_tau",
+                  offsetof(LinkParamsHdf5, delta_tau),
+                  H5T_NATIVE_FLOAT);
 
         std::vector<LinkParamsHdf5> h5(nLinks);
         for (uint32_t i = 0; i < nLinks && i < links.size(); ++i)
         {
+            const LinkParams& lk = links[i];
             h5[i].cid = (nUT > 0) ? i / nUT : 0u;
-            h5[i].pathloss = links[i].pathloss;
-            h5[i].SF = links[i].SF;
-            h5[i].K = links[i].K;
-            h5[i].DS = links[i].DS;
-            h5[i].ASD = links[i].ASD;
-            h5[i].ASA = links[i].ASA;
-            h5[i].ZSD = links[i].ZSD;
-            h5[i].ZSA = links[i].ZSA;
-            h5[i].losInd = links[i].losInd;
+            h5[i].d2d = lk.d2d;
+            h5[i].d2d_in = lk.d2d_in;
+            h5[i].d2d_out = lk.d2d_out;
+            h5[i].d3d = lk.d3d;
+            h5[i].d3d_in = lk.d3d_in;
+            h5[i].d3d_out = lk.d3d_out;
+            // Note: LinkParams stores phi/theta in
+            //   phi_LOS_AOD, phi_LOS_AOA, theta_LOS_ZOD, theta_LOS_ZOA
+            // which matches the HDF5 names.
+            h5[i].phi_LOS_AOD = lk.phi_LOS_AOD;
+            h5[i].phi_LOS_AOA = lk.phi_LOS_AOA;
+            h5[i].theta_LOS_ZOD = lk.theta_LOS_ZOD;
+            h5[i].theta_LOS_ZOA = lk.theta_LOS_ZOA;
+            h5[i].losInd = lk.losInd;
+            h5[i].pathloss = lk.pathloss;
+            h5[i].SF = lk.SF;
+            h5[i].K = lk.K;
+            h5[i].DS = lk.DS;
+            h5[i].ASD = lk.ASD;
+            h5[i].ASA = lk.ASA;
+            h5[i].ZSD = lk.ZSD;
+            h5[i].ZSA = lk.ZSA;
+            h5[i].mu_lgZSD = lk.mu_lgZSD;
+            h5[i].sigma_lgZSD = lk.sigma_lgZSD;
+            h5[i].mu_offset_ZOD = lk.mu_offset_ZOD;
+            h5[i].delta_tau = 0.0f;
         }
         hsize_t dims = nLinks;
         hid_t space = H5Screate_simple(1, &dims, nullptr);
@@ -2241,7 +2302,8 @@ writeLspOnlyHdf5(const std::string& filename,
         H5Tclose(compoundType);
     }
 
-    // topology group with nSite / nUT / nSector scalars.
+    // topology group with nSite / nUT / nSector scalars + cellParams +
+    // utParams (group-of-arrays layout the analyzer expects).
     {
         hid_t topo = H5Gcreate2(file, "topology", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         auto writeU32 = [&](const char* name, uint32_t val) {
@@ -2261,7 +2323,292 @@ writeLspOnlyHdf5(const std::string& filename,
         writeU32("nSite", nSite);
         writeU32("nUT", nUT);
         writeU32("nSector", nSectorPerSite);
+
+        // topology/cellParams: compound dataset with cid, siteId,
+        // loc[3], antPanelIdx, antPanelOrientation[3].
+        if (!cells.empty())
+        {
+            struct CellRec
+            {
+                uint32_t cid;
+                uint32_t siteId;
+                float loc[3];
+                uint32_t antPanelIdx;
+                float antPanelOrientation[3];
+            };
+            hid_t arr3 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, (const hsize_t[]){3});
+            hid_t cellType = H5Tcreate(H5T_COMPOUND, sizeof(CellRec));
+            H5Tinsert(cellType, "cid", offsetof(CellRec, cid), H5T_NATIVE_UINT32);
+            H5Tinsert(cellType, "siteId", offsetof(CellRec, siteId), H5T_NATIVE_UINT32);
+            H5Tinsert(cellType, "loc", offsetof(CellRec, loc), arr3);
+            H5Tinsert(cellType,
+                      "antPanelIdx",
+                      offsetof(CellRec, antPanelIdx),
+                      H5T_NATIVE_UINT32);
+            H5Tinsert(cellType,
+                      "antPanelOrientation",
+                      offsetof(CellRec, antPanelOrientation),
+                      arr3);
+
+            std::vector<CellRec> rec(cells.size());
+            for (size_t i = 0; i < cells.size(); ++i)
+            {
+                rec[i].cid = cells[i].cid;
+                rec[i].siteId = cells[i].siteId;
+                rec[i].loc[0] = cells[i].loc[0];
+                rec[i].loc[1] = cells[i].loc[1];
+                rec[i].loc[2] = cells[i].loc[2];
+                rec[i].antPanelIdx = cells[i].antPanelIdx;
+                rec[i].antPanelOrientation[0] = cells[i].antPanelOrientation[0];
+                rec[i].antPanelOrientation[1] = cells[i].antPanelOrientation[1];
+                rec[i].antPanelOrientation[2] = cells[i].antPanelOrientation[2];
+            }
+            hsize_t dims = rec.size();
+            hid_t space = H5Screate_simple(1, &dims, nullptr);
+            hid_t dset = H5Dcreate2(topo,
+                                    "cellParams",
+                                    cellType,
+                                    space,
+                                    H5P_DEFAULT,
+                                    H5P_DEFAULT,
+                                    H5P_DEFAULT);
+            H5Dwrite(dset, cellType, H5S_ALL, H5S_ALL, H5P_DEFAULT, rec.data());
+            H5Dclose(dset);
+            H5Sclose(space);
+            H5Tclose(cellType);
+            H5Tclose(arr3);
+        }
+
+        // topology/utParams: group of separate-array datasets. The
+        // analyzer reads uid / loc_x / loc_y / loc_z / outdoor_ind /
+        // antPanelIdx / velocity_x/y/z / d_2d_in.
+        if (!uts.empty())
+        {
+            hid_t utg = H5Gcreate2(topo, "utParams", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            const size_t n = uts.size();
+            std::vector<uint32_t> uid(n), outdoor(n), antIdx(n);
+            std::vector<float> lx(n), ly(n), lz(n), vx(n), vy(n), vz(n), d2din(n);
+            for (size_t i = 0; i < n; ++i)
+            {
+                uid[i] = static_cast<uint32_t>(i);
+                lx[i] = uts[i].loc.x;
+                ly[i] = uts[i].loc.y;
+                lz[i] = uts[i].loc.z;
+                outdoor[i] = uts[i].outdoor_ind;
+                antIdx[i] = 0u;
+                vx[i] = 0.0f;
+                vy[i] = 0.0f;
+                vz[i] = 0.0f;
+                d2din[i] = uts[i].d_2d_in;
+            }
+            auto writeArr = [&](const char* name, hid_t dtype, const void* data) {
+                hsize_t dims = n;
+                hid_t space = H5Screate_simple(1, &dims, nullptr);
+                hid_t dset = H5Dcreate2(utg,
+                                        name,
+                                        dtype,
+                                        space,
+                                        H5P_DEFAULT,
+                                        H5P_DEFAULT,
+                                        H5P_DEFAULT);
+                H5Dwrite(dset, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+                H5Dclose(dset);
+                H5Sclose(space);
+            };
+            writeArr("uid", H5T_NATIVE_UINT32, uid.data());
+            writeArr("loc_x", H5T_NATIVE_FLOAT, lx.data());
+            writeArr("loc_y", H5T_NATIVE_FLOAT, ly.data());
+            writeArr("loc_z", H5T_NATIVE_FLOAT, lz.data());
+            writeArr("outdoor_ind", H5T_NATIVE_UINT32, outdoor.data());
+            writeArr("antPanelIdx", H5T_NATIVE_UINT32, antIdx.data());
+            writeArr("velocity_x", H5T_NATIVE_FLOAT, vx.data());
+            writeArr("velocity_y", H5T_NATIVE_FLOAT, vy.data());
+            writeArr("velocity_z", H5T_NATIVE_FLOAT, vz.data());
+            writeArr("d_2d_in", H5T_NATIVE_FLOAT, d2din.data());
+            H5Gclose(utg);
+        }
         H5Gclose(topo);
+    }
+
+    // systemLevelConfig compound: the analyzer reads scenario + isd +
+    // n_site etc here. Minimal-but-sufficient set.
+    {
+        struct SysRec
+        {
+            uint32_t scenario;
+            float isd;
+            uint32_t n_site;
+            uint32_t n_sector_per_site;
+            uint32_t n_ut;
+            uint32_t optional_pl_ind;
+            uint32_t o2i_building_penetr_loss_ind;
+            uint32_t o2i_car_penetr_loss_ind;
+            uint32_t enable_near_field_effect;
+            uint32_t enable_non_stationarity;
+            float force_los_prob[2];
+            float force_ut_speed[3];
+            float force_indoor_ratio;
+            uint32_t disable_pl_shadowing;
+            uint32_t disable_small_scale_fading;
+            uint32_t enable_per_tti_lsp;
+            uint32_t enable_propagation_delay;
+        };
+        SysRec rec{};
+        rec.scenario = gpuScenario;
+        rec.isd = 0.0f;
+        rec.n_site = nSite;
+        rec.n_sector_per_site = nSectorPerSite;
+        rec.n_ut = nUT;
+        rec.force_los_prob[0] = -1.0f;
+        rec.force_los_prob[1] = -1.0f;
+        rec.enable_propagation_delay = 1u;
+
+        hid_t arr2 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, (const hsize_t[]){2});
+        hid_t arr3 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, (const hsize_t[]){3});
+        hid_t sysType = H5Tcreate(H5T_COMPOUND, sizeof(SysRec));
+        H5Tinsert(sysType, "scenario", offsetof(SysRec, scenario), H5T_NATIVE_UINT32);
+        H5Tinsert(sysType, "isd", offsetof(SysRec, isd), H5T_NATIVE_FLOAT);
+        H5Tinsert(sysType, "n_site", offsetof(SysRec, n_site), H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "n_sector_per_site",
+                  offsetof(SysRec, n_sector_per_site),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType, "n_ut", offsetof(SysRec, n_ut), H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "optional_pl_ind",
+                  offsetof(SysRec, optional_pl_ind),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "o2i_building_penetr_loss_ind",
+                  offsetof(SysRec, o2i_building_penetr_loss_ind),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "o2i_car_penetr_loss_ind",
+                  offsetof(SysRec, o2i_car_penetr_loss_ind),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "enable_near_field_effect",
+                  offsetof(SysRec, enable_near_field_effect),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "enable_non_stationarity",
+                  offsetof(SysRec, enable_non_stationarity),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType, "force_los_prob", offsetof(SysRec, force_los_prob), arr2);
+        H5Tinsert(sysType, "force_ut_speed", offsetof(SysRec, force_ut_speed), arr3);
+        H5Tinsert(sysType,
+                  "force_indoor_ratio",
+                  offsetof(SysRec, force_indoor_ratio),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(sysType,
+                  "disable_pl_shadowing",
+                  offsetof(SysRec, disable_pl_shadowing),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "disable_small_scale_fading",
+                  offsetof(SysRec, disable_small_scale_fading),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "enable_per_tti_lsp",
+                  offsetof(SysRec, enable_per_tti_lsp),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType,
+                  "enable_propagation_delay",
+                  offsetof(SysRec, enable_propagation_delay),
+                  H5T_NATIVE_UINT32);
+
+        hsize_t one = 1;
+        hid_t space = H5Screate_simple(1, &one, nullptr);
+        hid_t dset = H5Dcreate2(file,
+                                "systemLevelConfig",
+                                sysType,
+                                space,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT);
+        H5Dwrite(dset, sysType, H5S_ALL, H5S_ALL, H5P_DEFAULT, &rec);
+        H5Dclose(dset);
+        H5Sclose(space);
+        H5Tclose(sysType);
+        H5Tclose(arr2);
+        H5Tclose(arr3);
+    }
+
+    // simConfig compound with at least center_freq_hz, so the analyzer
+    // knows the scenario frequency.
+    {
+        struct SimRec
+        {
+            uint32_t link_sim_ind;
+            float center_freq_hz;
+            float bandwidth_hz;
+            float sc_spacing_hz;
+            uint32_t fft_size;
+            uint32_t n_prb;
+            uint32_t n_prbg;
+            uint32_t n_snapshot_per_slot;
+            uint32_t run_mode;
+            uint32_t internal_memory_mode;
+            uint32_t freq_convert_type;
+            uint32_t sc_sampling;
+            uint32_t proc_sig_freq;
+        };
+        SimRec r{};
+        r.center_freq_hz = centerFreqHz;
+        hid_t simType = H5Tcreate(H5T_COMPOUND, sizeof(SimRec));
+        H5Tinsert(simType,
+                  "link_sim_ind",
+                  offsetof(SimRec, link_sim_ind),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(simType,
+                  "center_freq_hz",
+                  offsetof(SimRec, center_freq_hz),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(simType,
+                  "bandwidth_hz",
+                  offsetof(SimRec, bandwidth_hz),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(simType,
+                  "sc_spacing_hz",
+                  offsetof(SimRec, sc_spacing_hz),
+                  H5T_NATIVE_FLOAT);
+        H5Tinsert(simType, "fft_size", offsetof(SimRec, fft_size), H5T_NATIVE_UINT32);
+        H5Tinsert(simType, "n_prb", offsetof(SimRec, n_prb), H5T_NATIVE_UINT32);
+        H5Tinsert(simType, "n_prbg", offsetof(SimRec, n_prbg), H5T_NATIVE_UINT32);
+        H5Tinsert(simType,
+                  "n_snapshot_per_slot",
+                  offsetof(SimRec, n_snapshot_per_slot),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(simType, "run_mode", offsetof(SimRec, run_mode), H5T_NATIVE_UINT32);
+        H5Tinsert(simType,
+                  "internal_memory_mode",
+                  offsetof(SimRec, internal_memory_mode),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(simType,
+                  "freq_convert_type",
+                  offsetof(SimRec, freq_convert_type),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(simType,
+                  "sc_sampling",
+                  offsetof(SimRec, sc_sampling),
+                  H5T_NATIVE_UINT32);
+        H5Tinsert(simType,
+                  "proc_sig_freq",
+                  offsetof(SimRec, proc_sig_freq),
+                  H5T_NATIVE_UINT32);
+        hsize_t one = 1;
+        hid_t space = H5Screate_simple(1, &one, nullptr);
+        hid_t dset = H5Dcreate2(file,
+                                "simConfig",
+                                simType,
+                                space,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT);
+        H5Dwrite(dset, simType, H5S_ALL, H5S_ALL, H5P_DEFAULT, &r);
+        H5Dclose(dset);
+        H5Sclose(space);
+        H5Tclose(simType);
     }
 
     H5Fclose(file);
@@ -2289,8 +2636,20 @@ SlsChanWgpu::saveSlsChanToHdf5(const std::string& filename, const SceneMeta& met
     // coupling-loss / SIR / SINR calibration.
     if (activeLinksCache_.empty() || ssNUeAnt_ == 0 || ssNBsAnt_ == 0)
     {
-        writeLspOnlyHdf5(filename, links, nSite_, nUTCache_, nSectorPerSiteCache_);
-        (void)meta; // scene metadata is unused in the LSP-only file
+        // gpuScenario isn't directly cached; default to UMa(0). Callers
+        // that care can call setSystemLevelConfig before saving and the
+        // simConfig will reflect the right centerFreqHz at least.
+        writeLspOnlyHdf5(filename,
+                         links,
+                         cellsCache_,
+                         utsCache_,
+                         nSite_,
+                         nUTCache_,
+                         nSectorPerSiteCache_,
+                         /*gpuScenario=*/0u,
+                         centerFreqHzCache_);
+        (void)meta; // bandwidth/isd/etc. carried in SceneMeta are
+                    // unused by the LSP-only writer for now.
         return;
     }
 
