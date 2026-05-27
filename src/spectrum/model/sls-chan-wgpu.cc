@@ -138,10 +138,25 @@ resolveBackendOrder()
     return {WGPUBackendType_D3D12, WGPUBackendType_Vulkan, WGPUBackendType_Undefined};
 }
 
-static std::pair<wgpu::Device, uint64_t>
+struct DeviceBundle
+{
+    wgpu::Instance instance;
+    wgpu::Device device;
+    uint64_t maxStorageBufferBindingSize;
+};
+
+static DeviceBundle
 createDevice()
 {
     WGPUInstanceDescriptor idesc{};
+#ifdef WEBGPU_BACKEND_DAWN
+    // Dawn rejects `instance.waitAny(..., timeoutNS != 0)` unless the
+    // instance was created with the TimedWaitAny capability. wgpu-native
+    // doesn't expose this struct, so it stays inside the Dawn ifdef.
+    WGPUInstanceCapabilities caps{};
+    caps.timedWaitAnyEnable = true;
+    idesc.capabilities = caps;
+#endif
     WGPUInstance instance = wgpuCreateInstance(&idesc);
     assert(instance);
 
@@ -202,7 +217,22 @@ createDevice()
     requiredLimits.maxSamplersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
     // Request the largest maxStorageBufferBindingSize the adapter supports
     requiredLimits.maxStorageBufferBindingSize = supported.maxStorageBufferBindingSize;
+    // We use ~20 storage buffers per stage in cal_link_param / cluster_ray.
+    // Ask for what the adapter actually supports (Dawn rejects
+    // requests above adapter limits; wgpu-native is lenient).
+    // The shader uses ~13 storage buffers per stage in
+    // cal_link_param_kernel. Different runtimes handle this
+    // differently: wgpu-native v24 is lenient (over-request OK), Dawn
+    // enforces the WebGPU spec default of 10 even if the underlying
+    // hardware supports more. For wgpu-native we keep the historical
+    // 30; Dawn callers should refactor the shader to fewer SSBOs per
+    // stage or enable the relevant adapter feature.
+#ifdef WEBGPU_BACKEND_DAWN
+    requiredLimits.maxStorageBuffersPerShaderStage =
+        supported.maxStorageBuffersPerShaderStage;
+#else
     requiredLimits.maxStorageBuffersPerShaderStage = 30;
+#endif
     requiredLimits.maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
@@ -221,6 +251,7 @@ createDevice()
         adapter,
         &ddesc,
         WGPURequestDeviceCallbackInfo{
+            .mode = WGPUCallbackMode_AllowSpontaneous,
             .callback =
                 [](WGPURequestDeviceStatus status, WGPUDevice d, WGPUStringView, void* ud1, void*) {
                     if (status == WGPURequestDeviceStatus_Success)
@@ -242,17 +273,21 @@ createDevice()
         exit(1);
     }
     wgpu::Device dev(device);
+    wgpu::Instance inst(instance);
     wgpuAdapterRelease(adapter);
-    wgpuInstanceRelease(instance);
-    return std::make_pair(dev, supported.maxStorageBufferBindingSize);
+    // Don't release the instance here — its lifetime is tied to the
+    // device callbacks. The wrapper takes ownership; it'll release on
+    // its destructor.
+    return DeviceBundle{inst, dev, supported.maxStorageBufferBindingSize};
 }
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 SlsChanWgpu::SlsChanWgpu()
 {
     auto result = createDevice();
-    device_ = std::move(result.first);
-    m_maxGpuBuffer_ = result.second;
+    instance_ = std::move(result.instance);
+    device_ = std::move(result.device);
+    m_maxGpuBuffer_ = result.maxStorageBufferBindingSize;
     SLS_LOG("[DEBUG] Constructor: GPU max buffer size = %llu bytes (%.1f GB)\n",
             (unsigned long long)m_maxGpuBuffer_,
             (double)m_maxGpuBuffer_ / (1024.0 * 1024.0 * 1024.0));
@@ -343,10 +378,43 @@ SlsChanWgpu::makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data
     return buf;
 }
 
+// Shim: process queued GPU work. wgpu-native has `device.poll(wait,
+// submissionIdx)`; Dawn has `device.tick()` which is always
+// non-blocking. For Dawn we approximate "wait until idle" by calling
+// `queue.onSubmittedWorkDone` and ticking until the future resolves --
+// not strictly identical to wgpu-native's blocking poll, but adequate
+// for our pattern of "submit, then read back" since we sleep between
+// ticks.
+#ifdef WEBGPU_BACKEND_DAWN
+// Drive Dawn's event loop. `Instance::processEvents()` is what fires
+// callbacks registered with `AllowProcessEvents` mode (mapAsync,
+// onSubmittedWorkDone, ...). `Device::tick()` only drives
+// device-internal state and does NOT fire those user callbacks.
+inline void
+SlsChanWgpu::dawnPumpEvents()
+{
+    instance_.processEvents();
+    device_.tick();
+}
+#endif
+
 void
 SlsChanWgpu::waitIdle()
 {
+#ifdef WEBGPU_BACKEND_DAWN
+    // Wait for any submitted work to finish. We use waitAny on a
+    // queue.onSubmittedWorkDone future with WaitAnyOnly mode — this is
+    // the synchronous equivalent of wgpu-native's poll(wait=true).
+    auto fut = queue_.onSubmittedWorkDone(
+        wgpu::CallbackMode::WaitAnyOnly,
+        [](wgpu::QueueWorkDoneStatus) {});
+    wgpu::FutureWaitInfo waitInfo{};
+    waitInfo.future = fut;
+    waitInfo.completed = false;
+    instance_.waitAny(1, &waitInfo, UINT64_MAX);
+#else
     device_.poll(true, nullptr);
+#endif
 }
 
 // ── Large-scale topology uploads ──────────────────────────────────────────────
@@ -458,6 +526,19 @@ SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
 
     MapCtx ctx;
 
+#ifdef WEBGPU_BACKEND_DAWN
+    // Dawn's wrapper takes (mode, offset, size, callbackMode, lambda).
+    staging.mapAsync(wgpu::MapMode::Read,
+                     0,
+                     byteSize,
+                     wgpu::CallbackMode::AllowProcessEvents,
+                     [&ctx](wgpu::MapAsyncStatus, wgpu::StringView) { ctx.done = true; });
+    while (!ctx.done)
+    {
+        dawnPumpEvents();
+    }
+#else
+    // wgpu-native v24 takes (mode, offset, size, BufferMapCallbackInfo).
     wgpu::BufferMapCallbackInfo cbInfo = wgpu::Default;
     cbInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
     cbInfo.callback = [](WGPUMapAsyncStatus, WGPUStringView, void* ud1, void*) {
@@ -470,6 +551,7 @@ SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
     {
         device_.poll(false, nullptr);
     }
+#endif
 
     std::memcpy(result.data(), staging.getMappedRange(0, byteSize), byteSize);
     staging.unmap();
@@ -930,6 +1012,7 @@ SlsChanWgpu::generateCRN(float maxX,
                 };
                 WGPUBufferMapCallbackInfo mapCbInfo = {};
                 mapCbInfo.nextInChain = nullptr;
+                mapCbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
                 mapCbInfo.callback = g_callback;
                 mapCbInfo.userdata1 = &g_mapStatus;
                 mapCbInfo.userdata2 = nullptr;
@@ -1005,6 +1088,7 @@ SlsChanWgpu::generateCRN(float maxX,
                 };
                 WGPUBufferMapCallbackInfo mapCbInfoNlos = {};
                 mapCbInfoNlos.nextInChain = nullptr;
+                mapCbInfoNlos.mode = WGPUCallbackMode_AllowProcessEvents;
                 mapCbInfoNlos.callback = g_callbackNlos;
                 mapCbInfoNlos.userdata1 = &g_mapStatusNlos;
                 mapCbInfoNlos.userdata2 = nullptr;
@@ -1080,6 +1164,7 @@ SlsChanWgpu::generateCRN(float maxX,
                 };
                 WGPUBufferMapCallbackInfo mapCbInfoO2i = {};
                 mapCbInfoO2i.nextInChain = nullptr;
+                mapCbInfoO2i.mode = WGPUCallbackMode_AllowProcessEvents;
                 mapCbInfoO2i.callback = g_callbackO2i;
                 mapCbInfoO2i.userdata1 = &g_mapStatusO2i;
                 mapCbInfoO2i.userdata2 = nullptr;
@@ -1674,7 +1759,11 @@ SlsChanWgpu::generateCFR(const std::vector<ActiveLink>& activeLinks,
     assert(!isDead());
 
     // Probe device health before doing anything
+#ifdef WEBGPU_BACKEND_DAWN
+    dawnPumpEvents();
+#else
     wgpuDevicePoll(device_, false, nullptr);
+#endif
     SLS_CERR << "CFR entry: device alive" << std::endl;
 
     if (!freqChanPrbgBuf_)
@@ -1790,7 +1879,11 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
         const uint64_t batchBufBytes = batchElems * sizeof(float) * 2;
 
         // Check if device is healthy before allocating
-        wgpuDevicePoll(device_, false, nullptr);
+    #ifdef WEBGPU_BACKEND_DAWN
+    dawnPumpEvents();
+#else
+    wgpuDevicePoll(device_, false, nullptr);
+#endif
         if (isDead())
         {
             SLS_CERR << "CFR batch " << b << ": device lost before buffer alloc" << std::endl;

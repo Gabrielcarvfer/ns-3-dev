@@ -98,11 +98,30 @@ endif()
 # back-end at all (no wgpu-native dependency).
 option(NS3_ENABLE_3GPP_GPU "Build ThreeGppChannelModel with WebGPU batch back-end" ON)
 
-# Fetch prebuilt wgpu-native binaries (fastest) — must happen BEFORE build_lib
-# so the spectrum library target can link against the imported wgpu target.
+# Fetch prebuilt wgpu-native (or Dawn) binaries — must happen BEFORE
+# build_lib so the spectrum library target can link against the
+# imported `webgpu` target. Two knobs:
+#   - WEBGPU_BACKEND  WGPU (default) or DAWN. Picks the underlying
+#                     WebGPU implementation. Dawn is Chrome's; the
+#                     `wgpu` here is gfx-rs/wgpu-native.
+#   - WGPU_VERSION    Tag name of a gfx-rs/wgpu-native release.
+#                     Only consulted when WEBGPU_BACKEND=WGPU.
+#                     Warning: eliemichel's webgpu.hpp wrapper is
+#                     tuned to a specific wgpu-native version; major
+#                     upgrades may need a wrapper regeneration.
 include(FetchContent)
 set(WEBGPU_LINK_TYPE SHARED)
-set(WEBGPU_BACKEND_DEFAULT "WGPU")
+set(WEBGPU_BACKEND "WGPU" CACHE STRING "WebGPU implementation backend (WGPU or DAWN)" FORCE)
+# wgpu-native is pinned to v24.0.3.1 because eliemichel's C++ wrapper
+# (webgpu.hpp) is generated against v24's C API; newer wgpu-native
+# releases (v25+) removed types the wrapper references (e.g.
+# WGPUProgrammableStageDescriptor) and the wrapper itself doesn't get
+# regenerated for each version. To bump beyond this, either:
+#   - regenerate the wrapper from the matching webgpu.h (out of scope
+#     here), or
+#   - switch to WEBGPU_BACKEND=DAWN, which ships its own current
+#     wrapper.
+set(WGPU_VERSION "v24.0.3.1" CACHE STRING "gfx-rs/wgpu-native release tag (when WEBGPU_BACKEND=WGPU)" FORCE)
 FetchContent_Declare(webgpu
         GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
         GIT_TAG        main   # pin to a release tag in production
@@ -110,8 +129,20 @@ FetchContent_Declare(webgpu
 FetchContent_MakeAvailable(webgpu)
 
 get_target_property(WEBGPU_INCLUDES  webgpu INTERFACE_INCLUDE_DIRECTORIES)
-get_target_property(WEBGPU_LOCATION  webgpu IMPORTED_LOCATION)
 get_target_property(WEBGPU_DEFS      webgpu INTERFACE_COMPILE_DEFINITIONS)
+# WEBGPU_LOCATION is set differently per backend:
+#   - wgpu-native: the `webgpu` target IS the imported wgpu_native.dll,
+#     so `webgpu`'s IMPORTED_LOCATION is the .dll path.
+#   - Dawn: `webgpu` is an INTERFACE target that links to
+#     `dawn::webgpu_dawn`; the actual .dll path lives on the inner
+#     target as IMPORTED_LOCATION_RELEASE. The eliemichel module
+#     publishes that as a CACHE INTERNAL `WEBGPU_RUNTIME_LIB`.
+# We grab whichever is non-empty so downstream link rules work for
+# both backends.
+get_target_property(WEBGPU_LOCATION  webgpu IMPORTED_LOCATION)
+if(NOT WEBGPU_LOCATION OR WEBGPU_LOCATION STREQUAL "WEBGPU_LOCATION-NOTFOUND")
+    set(WEBGPU_LOCATION "${WEBGPU_RUNTIME_LIB}")
+endif()
 
 if(NS3_ENABLE_3GPP_GPU)
     message(STATUS "ThreeGppChannelModel GPU back-end: ENABLED (NS3_ENABLE_3GPP_GPU=ON)")
@@ -131,9 +162,12 @@ set(spectrum_link_libs
     ${libantenna}
     ${libbuildings}
 )
-if(NS3_ENABLE_3GPP_GPU)
-    list(APPEND spectrum_link_libs ${WEBGPU_LOCATION})
-endif()
+# Note: the webgpu link dependency is added below via
+# `target_link_libraries(${libspectrum} PRIVATE webgpu)` rather than
+# being threaded through `LIBRARIES_TO_LINK`. ns-3's build_lib emits
+# install(EXPORT ...) rules that reject targets which aren't in its
+# export set, and the `webgpu` interface target from FetchContent
+# isn't (and shouldn't be) installed.
 
 build_lib(
   LIBNAME spectrum
@@ -167,6 +201,8 @@ if(NS3_ENABLE_3GPP_GPU)
         ${WEBGPU_DEFS}
         NS3_ENABLE_3GPP_GPU=1
     )
+    # PRIVATE so the link doesn't leak into ns-3's install export set.
+    target_link_libraries(${libspectrum} PRIVATE webgpu)
     # Make sure the wgpu_native runtime ends up next to the spectrum library
     # so executables that link against it can find it at run-time.
     target_copy_webgpu_binaries(${libspectrum})
@@ -193,13 +229,13 @@ endif()
 # decouples the validation harness from the library's compile flags.
 if(NS3_ENABLE_3GPP_GPU)
     add_executable(sls_chan_test examples/sls-chan-example.cc model/sls-chan-wgpu.cc)
-    target_link_libraries(sls_chan_test PRIVATE ${WEBGPU_LOCATION})
+    target_link_libraries(sls_chan_test PRIVATE webgpu)
     target_include_directories(sls_chan_test PRIVATE model/ ${WEBGPU_INCLUDES})
     target_compile_definitions(sls_chan_test PRIVATE ${WEBGPU_DEFS})
 
     if(${HDF5_FOUND})
         add_executable(sls_chan_validation model/sls-chan-validation.cc model/sls-chan-wgpu.cc)
-        target_link_libraries(sls_chan_validation PRIVATE ${WEBGPU_LOCATION} HDF5::HDF5)
+        target_link_libraries(sls_chan_validation PRIVATE webgpu HDF5::HDF5)
         target_include_directories(sls_chan_validation PRIVATE model/ ${WEBGPU_INCLUDES})
         target_compile_definitions(sls_chan_validation PRIVATE ${WEBGPU_DEFS} SLS_CHAN_HDF5)
         target_copy_webgpu_binaries(sls_chan_validation)

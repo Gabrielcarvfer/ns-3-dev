@@ -562,6 +562,12 @@ class SlsChanWgpu
 #endif
 
   private:
+    // Keep the instance alive for the lifetime of the device. Dawn's
+    // `Instance::processEvents()` is the only way to fire
+    // `AllowProcessEvents`-mode callbacks (mapAsync, onSubmittedWorkDone).
+    // wgpu-native v24 doesn't need this (its `Device::poll` handles
+    // both), so the field is empty (`wgpu::Instance{}`) there.
+    wgpu::Instance instance_;
     wgpu::Device device_;
     wgpu::Queue queue_;
     wgpu::ShaderModule shader_;
@@ -576,6 +582,11 @@ class SlsChanWgpu
 
     wgpu::Buffer makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data = nullptr);
     void waitIdle();
+#ifdef WEBGPU_BACKEND_DAWN
+    // Pump Dawn's event queue. Used inside busy-wait loops on
+    // `AllowProcessEvents`-mode callbacks (mapAsync, etc).
+    void dawnPumpEvents();
+#endif
 
     // Compile a single compute kernel into a ComputePipeline. Used both
     // eagerly (large-scale kernels in the constructor) and lazily

@@ -253,20 +253,32 @@ main()
     try
     {
         RunScenario("CPU baseline", false);
+        std::fprintf(stderr, "[smoke] CPU baseline done\n");
     }
     catch (const std::exception& e)
     {
         std::fprintf(stderr, "CPU scenario crashed: %s\n", e.what());
         return 1;
     }
+    catch (...)
+    {
+        std::fprintf(stderr, "CPU scenario crashed (unknown)\n");
+        return 1;
+    }
 
     try
     {
         RunScenario("GPU batch path (LOS)", true);
+        std::fprintf(stderr, "[smoke] GPU LOS done\n");
     }
     catch (const std::exception& e)
     {
         std::fprintf(stderr, "GPU LOS scenario crashed: %s\n", e.what());
+        return 2;
+    }
+    catch (...)
+    {
+        std::fprintf(stderr, "GPU LOS scenario crashed (unknown)\n");
         return 2;
     }
 
