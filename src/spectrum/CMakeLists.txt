@@ -97,6 +97,9 @@ endif()
 # (cmake -DNS3_ENABLE_3GPP_GPU=OFF ..) to compile spectrum without the GPU
 # back-end at all (no wgpu-native dependency).
 option(NS3_ENABLE_3GPP_GPU "Build ThreeGppChannelModel with WebGPU batch back-end" ON)
+option(NS3_SLS_PROFILE
+       "Compile spectrum lib with sls phase-timing instrumentation"
+       OFF)
 
 # Fetch prebuilt wgpu-native (or Dawn) binaries — must happen BEFORE
 # build_lib so the spectrum library target can link against the
@@ -201,6 +204,9 @@ if(NS3_ENABLE_3GPP_GPU)
         ${WEBGPU_DEFS}
         NS3_ENABLE_3GPP_GPU=1
     )
+    if(NS3_SLS_PROFILE)
+        target_compile_definitions(${libspectrum} PRIVATE SLS_PROFILE_INSTRUMENT=1)
+    endif()
     # PRIVATE so the link doesn't leak into ns-3's install export set.
     target_link_libraries(${libspectrum} PRIVATE webgpu)
     # Make sure the wgpu_native/webgpu_dawn runtime ends up next to the
@@ -285,5 +291,21 @@ if(NS3_ENABLE_3GPP_GPU)
         ${libmobility}
         ${libpropagation}
         ${libantenna}
+    )
+
+    # Profiling harness for the 3GPP channel + spectrum propagation
+    # loss models. Standalone binary; the timing macros are compiled
+    # INTO the spectrum library when `NS3_SLS_PROFILE` is on (see the
+    # top-level option below). Default is off, so the macros are
+    # no-ops in normal builds.
+    add_executable(spectrum_profile_bench model/spectrum-profile-bench.cc)
+    target_link_libraries(spectrum_profile_bench PRIVATE
+        ${libspectrum}
+        ${libcore}
+        ${libnetwork}
+        ${libmobility}
+        ${libpropagation}
+        ${libantenna}
+        ${liblte}
     )
 endif()

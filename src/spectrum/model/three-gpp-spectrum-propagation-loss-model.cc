@@ -10,6 +10,7 @@
 
 #include "three-gpp-spectrum-propagation-loss-model.h"
 
+#include "sls-phase-timer.h"
 #include "spectrum-signal-parameters.h"
 #include "three-gpp-channel-model.h"
 
@@ -55,7 +56,7 @@ ThreeGppSpectrumPropagationLossModel::GetTypeId()
             .AddAttribute(
                 "ChannelModel",
                 "The channel model. It needs to implement the MatrixBasedChannelModel interface",
-                StringValue("ns3::ThreeGppChannelModelWgpuMezanine"),
+                StringValue("ns3::ThreeGppChannelModel"),
                 MakePointerAccessor(&ThreeGppSpectrumPropagationLossModel::SetChannelModel,
                                     &ThreeGppSpectrumPropagationLossModel::GetChannelModel),
                 MakePointerChecker<MatrixBasedChannelModel>());
@@ -105,6 +106,7 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
     Ptr<const PhasedArrayModel> sAnt,
     Ptr<const PhasedArrayModel> uAnt) const
 {
+    SLS_PHASE_SCOPE("PRX::CalcLongTerm");
     NS_LOG_FUNCTION(this);
 
     NS_ASSERT_MSG(sAnt != nullptr && uAnt != nullptr, "Improper call to the method");
@@ -209,6 +211,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     const bool isReverse) const
 
 {
+    SLS_PHASE_SCOPE("PRX::CalcBeamformingGain");
     NS_LOG_FUNCTION(this);
     Ptr<SpectrumSignalParameters> rxParams = params->Copy();
     const size_t numCluster = channelMatrix->m_channel.GetNumPages();
@@ -277,7 +280,8 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
              (zod[cIndex].first * aod[cIndex].second * sSpeed.x +
               zod[cIndex].first * aod[cIndex].first * sSpeed.y + zod[cIndex].second * sSpeed.z) +
              2 * alpha * D);
-        doppler[cIndex] = std::complex(cos(tempDoppler), sin(tempDoppler));
+        // std::polar folds cos+sin into one sincos on modern libstdc++.
+        doppler[cIndex] = std::polar(1.0, tempDoppler);
     }
 
     NS_ASSERT(numCluster <= doppler.GetSize());
@@ -301,49 +305,61 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
                   "Unexpected mismatch in the number of RBs and channel matrix and precoding "
                   "matrix. MultiModelSpectrumChannel conversion is not yet supported.");
 
-    // Calculate RX PSD from the spectrum channel matrix H and
-    // the precoding matrix P as: PSD = (H*P)^h * (H*P)
-    Ptr<const ComplexMatrixArray> p;
+    // Calculate RX PSD from the spectrum channel matrix H and the
+    // precoding matrix P as: PSD[rb] = sum_rx |sum_tx (P[tx,0,rb] *
+    //                                                    H[rx,tx,rb])|^2
+    // Fast path: when no explicit precoding is provided we use the
+    // default isotropic 1/sqrt(N) column. That collapses the H*P
+    // matmul into a per-(rx,rb) sum, and the trace-of-(HP)^H*(HP)
+    // reduces to sum_{rx,rb} |that sum|^2 / N. Skipping the
+    // intermediate `hP` allocation + matmul + |z|^2 pass saves
+    // ~25KB of allocation and the per-rb x per-(rx,tx) double walk
+    // through the H matrix.
+    auto specMat = rxParams->spectrumChannelMatrix;
+    const size_t hRxPorts = specMat->GetNumRows();
+    const size_t hTxPorts = specMat->GetNumCols();
+    const uint32_t psdN = rxParams->psd->GetValuesN();
     if (!rxParams->precodingMatrix)
     {
-        // When the precoding matrix P is not set, we create one with a single column
-        auto page = ComplexMatrixArray(rxParams->spectrumChannelMatrix->GetNumCols(), 1, 1);
-        // Initialize it to the inverse square of the number of txPorts
-        page.Elem(0, 0, 0) = 1.0 / sqrt(rxParams->spectrumChannelMatrix->GetNumCols());
-        for (size_t rowI = 0; rowI < rxParams->spectrumChannelMatrix->GetNumCols(); rowI++)
+        // Default isotropic precoding: P[tx, 0, rb] = 1/sqrt(numTx).
+        const double invN = 1.0 / static_cast<double>(hTxPorts);
+        for (uint32_t rb = 0; rb < psdN; ++rb)
         {
-            page.Elem(rowI, 0, 0) = page.Elem(0, 0, 0);
+            double acc = 0.0;
+            for (size_t rx = 0; rx < hRxPorts; ++rx)
+            {
+                std::complex<double> colSum(0.0, 0.0);
+                for (size_t tx = 0; tx < hTxPorts; ++tx)
+                {
+                    colSum += (*specMat)(rx, tx, rb);
+                }
+                acc += std::norm(colSum); // |sum|^2
+            }
+            (*rxParams->psd)[rb] = acc * invN;
         }
-        // Replicate vector to match the number of RBGs
-        p = Create<const ComplexMatrixArray>(
-            page.MakeNCopies(rxParams->spectrumChannelMatrix->GetNumPages()));
+        // The spectrumChannelMatrix on rxParams stays as the per-cluster
+        // matrix the doppler+delay pipeline produced; callers that ask
+        // for hP directly will trip on `rxParams->precodingMatrix
+        // == nullptr` and reconstruct.
     }
     else
     {
-        p = rxParams->precodingMatrix;
-    }
-    // When we have the precoding matrix P, we first do
-    // H(rxPorts,txPorts,numRbs) x P(txPorts,txStreams,numRbs) = HxP(rxPorts,txStreams,numRbs)
-    MatrixBasedChannelModel::Complex3DVector hP = *rxParams->spectrumChannelMatrix * *p;
-
-    // Then (HxP)^h dimensions are (txStreams, rxPorts, numRbs)
-    // MatrixBasedChannelModel::Complex3DVector hPHerm = hP.HermitianTranspose();
-
-    // Finally, (HxP)^h x (HxP) = PSD(txStreams, txStreams, numRbs)
-    // MatrixBasedChannelModel::Complex3DVector psd = hPHerm * hP;
-
-    // And the received psd is the Trace(PSD).
-    // To avoid wasting computations, we only compute the main diagonal of hPHerm*hP
-    for (uint32_t rbIdx = 0; rbIdx < rxParams->psd->GetValuesN(); ++rbIdx)
-    {
-        (*rxParams->psd)[rbIdx] = 0.0;
-        for (size_t rxPort = 0; rxPort < hP.GetNumRows(); ++rxPort)
+        // General path: explicit precoding matrix provided.
+        Ptr<const ComplexMatrixArray> p = rxParams->precodingMatrix;
+        MatrixBasedChannelModel::Complex3DVector hP = *specMat * *p;
+        for (uint32_t rb = 0; rb < psdN; ++rb)
         {
-            for (size_t txStream = 0; txStream < hP.GetNumCols(); ++txStream)
+            double acc = 0.0;
+            for (size_t rx = 0; rx < hP.GetNumRows(); ++rx)
             {
-                (*rxParams->psd)[rbIdx] +=
-                    std::real(std::conj(hP(rxPort, txStream, rbIdx)) * hP(rxPort, txStream, rbIdx));
+                for (size_t tx = 0; tx < hP.GetNumCols(); ++tx)
+                {
+                    // std::norm(z) == |z|^2 (real-only result, avoids
+                    // the conj*z complex multiply).
+                    acc += std::norm(hP(rx, tx, rb));
+                }
             }
+            (*rxParams->psd)[rb] = acc;
         }
     }
     return rxParams;
@@ -360,12 +376,23 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     uint8_t numRxPorts,
     const bool isReverse)
 {
+    SLS_PHASE_SCOPE("PRX::GenSpectrumChannelMatrix");
     const size_t numCluster = channelMatrix->m_channel.GetNumPages();
     const auto numRb = inPsd->GetValuesN();
     NS_ASSERT_MSG(numCluster <= channelParams->m_delay.size(),
                   "Channel params delays size is smaller than number of clusters");
 
-    auto directionalLongTerm = isReverse ? longTerm->Transpose() : *longTerm;
+    // Avoid the full-copy of `*longTerm` on the (common) non-reverse
+    // path. `directionalLongTerm` is read-only below; in the reverse
+    // case we still need the materialised Transpose, but otherwise
+    // we keep a pointer-aliased view of the cached matrix.
+    MatrixBasedChannelModel::Complex3DVector reversedLongTerm;
+    if (isReverse)
+    {
+        reversedLongTerm = longTerm->Transpose();
+    }
+    const MatrixBasedChannelModel::Complex3DVector& directionalLongTerm =
+        isReverse ? reversedLongTerm : *longTerm;
 
     Ptr<MatrixBasedChannelModel::Complex3DVector> chanSpct =
         Create<MatrixBasedChannelModel::Complex3DVector>(numRxPorts,
@@ -447,6 +474,7 @@ ThreeGppSpectrumPropagationLossModel::GetLongTerm(
     Ptr<const PhasedArrayModel> aPhasedArrayModel,
     Ptr<const PhasedArrayModel> bPhasedArrayModel) const
 {
+    SLS_PHASE_SCOPE("PRX::GetLongTerm");
     Ptr<const MatrixBasedChannelModel::Complex3DVector>
         longTerm; // vector containing the long term component for each cluster
 
@@ -523,6 +551,7 @@ ThreeGppSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(
     Ptr<const PhasedArrayModel> aPhasedArrayModel,
     Ptr<const PhasedArrayModel> bPhasedArrayModel) const
 {
+    SLS_PHASE_SCOPE("PRX::DoCalcRxPowerSpectralDensity");
     NS_LOG_FUNCTION(this << spectrumSignalParams << a << b << aPhasedArrayModel
                          << bPhasedArrayModel);
     NS_ASSERT_MSG(m_channelModel != nullptr, "Channel model is not set");

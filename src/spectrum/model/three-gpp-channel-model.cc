@@ -10,6 +10,8 @@
  */
 #include "three-gpp-channel-model.h"
 
+#include "sls-phase-timer.h"
+
 #ifdef NS3_ENABLE_3GPP_GPU
 #include "sls-chan-wgpu.h"
 #endif
@@ -2532,6 +2534,7 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
                                  Ptr<const PhasedArrayModel> aAntenna,
                                  Ptr<const PhasedArrayModel> bAntenna)
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::GetChannel");
     NS_LOG_FUNCTION(this);
 
     // Compute the channel params key. The key is reciprocal, i.e., key (a, b) = key (b, a)
@@ -4148,6 +4151,7 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                                                 Ptr<const MobilityModel> aMob,
                                                 Ptr<const MobilityModel> bMob) const
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::GenerateChannelParameters");
     NS_LOG_FUNCTION(this);
     // Enforce canonical ordering (by node id) for deterministic parameter generation.
     Ptr<const MobilityModel> aMobOrdered = aMob;
@@ -4309,6 +4313,7 @@ ThreeGppChannelModel::UpdateChannelParameters(Ptr<ThreeGppChannelParams> channel
                                               Ptr<const MobilityModel> aMob,
                                               Ptr<const MobilityModel> bMob) const
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::UpdateChannelParameters");
     NS_LOG_FUNCTION(this);
     NS_ASSERT_MSG(channelParams != nullptr, "Channel parameters cannot be null");
     NS_ASSERT_MSG(channelCondition != nullptr, "Channel condition cannot be null");
@@ -4434,6 +4439,7 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
                                     Ptr<const PhasedArrayModel> sAntenna,
                                     Ptr<const PhasedArrayModel> uAntenna) const
 {
+    SLS_PHASE_SCOPE("ThreeGppChannelModel::GetNewChannel");
     NS_LOG_FUNCTION(this);
 
     NS_ASSERT_MSG(m_frequency > 0.0, "Set the operating frequency first!");
@@ -4458,29 +4464,17 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
         std::make_pair(sAntenna->GetId(),
                        uAntenna->GetId()); // save antenna pair, with the exact order of s and u
 
-    Double2DVector rayAodRadian;
-    Double2DVector rayAoaRadian;
-    Double2DVector rayZodRadian;
-    Double2DVector rayZoaRadian;
-
-    // if channel params is generated in the same direction in which we
-    // generate the channel matrix, angles and zenith od departure and arrival are ok,
-    // just set them to corresponding variable that will be used for the generation
-    // of channel matrix, otherwise we need to flip angles and zeniths of departure and arrival
-    if (isSameDirection)
-    {
-        rayAodRadian = channelParams->m_rayAodRadian;
-        rayAoaRadian = channelParams->m_rayAoaRadian;
-        rayZodRadian = channelParams->m_rayZodRadian;
-        rayZoaRadian = channelParams->m_rayZoaRadian;
-    }
-    else
-    {
-        rayAodRadian = channelParams->m_rayAoaRadian;
-        rayAoaRadian = channelParams->m_rayAodRadian;
-        rayZodRadian = channelParams->m_rayZoaRadian;
-        rayZoaRadian = channelParams->m_rayZodRadian;
-    }
+    // ── Optimization: avoid the full deep-copy of four Double2DVectors
+    // (≈4 × 12 × 20 × 8 B = 7.6 KB per GetNewChannel call). Just bind
+    // const references; the kernel below only reads these.
+    const Double2DVector& rayAodRadian =
+        isSameDirection ? channelParams->m_rayAodRadian : channelParams->m_rayAoaRadian;
+    const Double2DVector& rayAoaRadian =
+        isSameDirection ? channelParams->m_rayAoaRadian : channelParams->m_rayAodRadian;
+    const Double2DVector& rayZodRadian =
+        isSameDirection ? channelParams->m_rayZodRadian : channelParams->m_rayZoaRadian;
+    const Double2DVector& rayZoaRadian =
+        isSameDirection ? channelParams->m_rayZoaRadian : channelParams->m_rayZodRadian;
 
     // Step 11: Generate channel coefficients for each cluster n and each receiver
     //  and transmitter element pair u,s.
@@ -4517,204 +4511,246 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
     Angles sAngle(uMob->GetPosition(), sMob->GetPosition());
     Angles uAngle(sMob->GetPosition(), uMob->GetPosition());
 
-    Double2DVector sinCosA; // cached multiplications of sin and cos of the ZoA and AoA angles
-    Double2DVector sinSinA; // cached multiplications of sines of the ZoA and AoA angles
-    Double2DVector cosZoA;  // cached cos of the ZoA angle
-    Double2DVector sinCosD; // cached multiplications of sin and cos of the ZoD and AoD angles
-    Double2DVector sinSinD; // cached multiplications of the cosines of the ZoA and AoA angles
-    Double2DVector cosZoD;  // cached cos of the ZoD angle
+    // ── Optimization: flatten the per-(cluster,ray) caches into one
+    // contiguous std::vector<double> rather than a 2D `Double2DVector`
+    // (which is std::vector<std::vector<double>> and pays double-indirection
+    // + per-row malloc on every GetNewChannel call). Layout is row-major
+    // [cluster][ray]; index = cluster*nRays + ray. Saves ~6 mallocs and a
+    // pointer chase per inner-loop access.
+    const uint8_t nClusters = channelParams->m_reducedClusterNumber;
+    const uint8_t nRays = table3gpp->m_raysPerCluster;
+    const size_t nm = static_cast<size_t>(nClusters) * nRays;
+    std::vector<double> sinCosA(nm), sinSinA(nm), cosZoA(nm);
+    std::vector<double> sinCosD(nm), sinSinD(nm), cosZoD(nm);
 
-    // contains part of the ray expression, cached as independent from the u- and s-indexes,
-    // but calculate it for different polarization angles of s and u
-    std::map<std::pair<uint8_t, uint8_t>, Complex2DVector> raysPreComp;
-    for (size_t polSa = 0; polSa < sAntenna->GetNumPols(); ++polSa)
+    // ── Optimization: replace `std::map<pair<u8,u8>, Complex2DVector>
+    // raysPreComp` with a flat 2x2 array of Complex2DVector. Two reasons:
+    //   (1) `std::map` allocates a tree node + the Complex2DVector value
+    //       for each (polS, polU) on every GetNewChannel call (per-link
+    //       per-tick), then frees them seconds later. The fixed array
+    //       lives on the stack.
+    //   (2) The innermost (s,u,n,m) loops below previously did a
+    //       `raysPreComp[std::make_pair(polS, polU)](n, m)` lookup ->
+    //       O(log#keys) compare per cell on a 2x2 table. With a flat
+    //       array the lookup is one indexed load.
+    const uint8_t numPolS = static_cast<uint8_t>(sAntenna->GetNumPols());
+    const uint8_t numPolU = static_cast<uint8_t>(uAntenna->GetNumPols());
+    NS_ASSERT_MSG(numPolS <= 2 && numPolU <= 2,
+                  "raysPreComp lookup table assumes at most 2 polarizations");
+    Complex2DVector raysPreComp[2][2];
+    for (uint8_t pS = 0; pS < numPolS; ++pS)
     {
-        for (size_t polUa = 0; polUa < uAntenna->GetNumPols(); ++polUa)
+        for (uint8_t pU = 0; pU < numPolU; ++pU)
         {
-            raysPreComp[std::make_pair(polSa, polUa)] =
-                Complex2DVector(channelParams->m_reducedClusterNumber, table3gpp->m_raysPerCluster);
+            raysPreComp[pS][pU] = Complex2DVector(nClusters, nRays);
         }
     }
 
-    // resize to appropriate dimensions
-    sinCosA.resize(channelParams->m_reducedClusterNumber);
-    sinSinA.resize(channelParams->m_reducedClusterNumber);
-    cosZoA.resize(channelParams->m_reducedClusterNumber);
-    sinCosD.resize(channelParams->m_reducedClusterNumber);
-    sinSinD.resize(channelParams->m_reducedClusterNumber);
-    cosZoD.resize(channelParams->m_reducedClusterNumber);
-    for (uint8_t nIndex = 0; nIndex < channelParams->m_reducedClusterNumber; nIndex++)
+    // Pre-compute the (n,m) terms that are independent of (u,s,polarization).
+    // Polarisation-dependent precomp lives in raysPreComp[pS][pU](n,m).
+    for (uint8_t nIndex = 0; nIndex < nClusters; nIndex++)
     {
-        sinCosA[nIndex].resize(table3gpp->m_raysPerCluster);
-        sinSinA[nIndex].resize(table3gpp->m_raysPerCluster);
-        cosZoA[nIndex].resize(table3gpp->m_raysPerCluster);
-        sinCosD[nIndex].resize(table3gpp->m_raysPerCluster);
-        sinSinD[nIndex].resize(table3gpp->m_raysPerCluster);
-        cosZoD[nIndex].resize(table3gpp->m_raysPerCluster);
-    }
-    // pre-compute the terms which are independent from uIndex and sIndex
-    for (uint8_t nIndex = 0; nIndex < channelParams->m_reducedClusterNumber; nIndex++)
-    {
-        for (uint8_t mIndex = 0; mIndex < table3gpp->m_raysPerCluster; mIndex++)
+        for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
         {
-            DoubleVector initialPhase = channelParams->m_clusterPhase[nIndex][mIndex];
+            const size_t idx = static_cast<size_t>(nIndex) * nRays + mIndex;
+            // Use *references* to the inner phase / xpr vectors to avoid
+            // the per-iteration copy-construct of a DoubleVector (was
+            // hitting the heap allocator for every ray).
+            const DoubleVector& initialPhase = channelParams->m_clusterPhase[nIndex][mIndex];
             NS_ASSERT(4 <= initialPhase.size());
-            double k = channelParams->m_crossPolarizationPowerRatios[nIndex][mIndex];
+            const double k = channelParams->m_crossPolarizationPowerRatios[nIndex][mIndex];
+            const double sqrtInvK = std::sqrt(1.0 / k);
 
-            // cache the component of the "rays" terms which depend on the random angle of arrivals
-            // and departures and initial phases only
-            for (uint8_t polUa = 0; polUa < uAntenna->GetNumPols(); ++polUa)
+            // std::polar(1, x) folds the cos+sin call to a single sincos
+            // on modern libstdc++/libc++.
+            const std::complex<double> ph0 = std::polar(1.0, initialPhase[0]);
+            const std::complex<double> ph1 = std::polar(1.0, initialPhase[1]) * sqrtInvK;
+            const std::complex<double> ph2 = std::polar(1.0, initialPhase[2]) * sqrtInvK;
+            const std::complex<double> ph3 = std::polar(1.0, initialPhase[3]);
+
+            const double rxAoa = channelParams->m_rayAoaRadian[nIndex][mIndex];
+            const double rxZoa = channelParams->m_rayZoaRadian[nIndex][mIndex];
+            const double txAod = channelParams->m_rayAodRadian[nIndex][mIndex];
+            const double txZod = channelParams->m_rayZodRadian[nIndex][mIndex];
+
+            for (uint8_t polUa = 0; polUa < numPolU; ++polUa)
             {
-                auto [rxFieldPatternPhi, rxFieldPatternTheta] = uAntenna->GetElementFieldPattern(
-                    Angles(channelParams->m_rayAoaRadian[nIndex][mIndex],
-                           channelParams->m_rayZoaRadian[nIndex][mIndex]),
-                    polUa);
-                for (uint8_t polSa = 0; polSa < sAntenna->GetNumPols(); ++polSa)
+                auto [rxPhi, rxTheta] = uAntenna->GetElementFieldPattern(
+                    Angles(rxAoa, rxZoa), polUa);
+                for (uint8_t polSa = 0; polSa < numPolS; ++polSa)
                 {
-                    auto [txFieldPatternPhi, txFieldPatternTheta] =
-                        sAntenna->GetElementFieldPattern(
-                            Angles(channelParams->m_rayAodRadian[nIndex][mIndex],
-                                   channelParams->m_rayZodRadian[nIndex][mIndex]),
-                            polSa);
-                    raysPreComp[std::make_pair(polSa, polUa)](nIndex, mIndex) =
-                        std::complex(cos(initialPhase[0]), sin(initialPhase[0])) *
-                            rxFieldPatternTheta * txFieldPatternTheta +
-                        std::complex(cos(initialPhase[1]), sin(initialPhase[1])) *
-                            std::sqrt(1.0 / k) * rxFieldPatternTheta * txFieldPatternPhi +
-                        std::complex(cos(initialPhase[2]), sin(initialPhase[2])) *
-                            std::sqrt(1.0 / k) * rxFieldPatternPhi * txFieldPatternTheta +
-                        std::complex(cos(initialPhase[3]), sin(initialPhase[3])) *
-                            rxFieldPatternPhi * txFieldPatternPhi;
+                    auto [txPhi, txTheta] =
+                        sAntenna->GetElementFieldPattern(Angles(txAod, txZod), polSa);
+                    raysPreComp[polSa][polUa](nIndex, mIndex) =
+                        ph0 * rxTheta * txTheta
+                      + ph1 * rxTheta * txPhi
+                      + ph2 * rxPhi * txTheta
+                      + ph3 * rxPhi * txPhi;
                 }
             }
 
-            // cache the component of the "rxPhaseDiff" terms which depend on the random angle of
-            // arrivals only
-            double sinRayZoa = sin(rayZoaRadian[nIndex][mIndex]);
-            double sinRayAoa = sin(rayAoaRadian[nIndex][mIndex]);
-            double cosRayAoa = cos(rayAoaRadian[nIndex][mIndex]);
-            sinCosA[nIndex][mIndex] = sinRayZoa * cosRayAoa;
-            sinSinA[nIndex][mIndex] = sinRayZoa * sinRayAoa;
-            cosZoA[nIndex][mIndex] = cos(rayZoaRadian[nIndex][mIndex]);
+            // (n,m) caches for the rxPhase / txPhase phase-difference math.
+            // Pre-baked in the same loop so we avoid a second pass over
+            // (n,m). Using *references* to the ray-angle Double2DVectors
+            // also avoids the per-iteration `operator[]` indirection
+            // (we resolve [nIndex] once and reuse the inner vector).
+            const double sinZoa = std::sin(rayZoaRadian[nIndex][mIndex]);
+            const double sinAoa = std::sin(rayAoaRadian[nIndex][mIndex]);
+            const double cosAoa = std::cos(rayAoaRadian[nIndex][mIndex]);
+            sinCosA[idx] = sinZoa * cosAoa;
+            sinSinA[idx] = sinZoa * sinAoa;
+            cosZoA[idx] = std::cos(rayZoaRadian[nIndex][mIndex]);
 
-            // cache the component of the "txPhaseDiff" terms which depend on the random angle of
-            // departure only
-            double sinRayZod = sin(rayZodRadian[nIndex][mIndex]);
-            double sinRayAod = sin(rayAodRadian[nIndex][mIndex]);
-            double cosRayAod = cos(rayAodRadian[nIndex][mIndex]);
-            sinCosD[nIndex][mIndex] = sinRayZod * cosRayAod;
-            sinSinD[nIndex][mIndex] = sinRayZod * sinRayAod;
-            cosZoD[nIndex][mIndex] = cos(rayZodRadian[nIndex][mIndex]);
+            const double sinZod = std::sin(rayZodRadian[nIndex][mIndex]);
+            const double sinAod = std::sin(rayAodRadian[nIndex][mIndex]);
+            const double cosAod = std::cos(rayAodRadian[nIndex][mIndex]);
+            sinCosD[idx] = sinZod * cosAod;
+            sinSinD[idx] = sinZod * sinAod;
+            cosZoD[idx] = std::cos(rayZodRadian[nIndex][mIndex]);
         }
     }
 
-    // The following for loops computes the channel coefficients
-    // Keeps track of how many sub-clusters have been added up to now
-    uint8_t numSubClustersAdded = 0;
-    for (uint8_t nIndex = 0; nIndex < channelParams->m_reducedClusterNumber; nIndex++)
+    // ── Optimization: cache antenna element locations and polarisations.
+    // The inner (s,u) loops call sAntenna->GetElementLocation(s) and
+    // ->GetElemPol(s) on every iteration; both are O(1) but go through
+    // a vtable + bounds-check. Pre-loading into stack vectors lets the
+    // compiler keep them in registers across the cluster/ray loops.
+    std::vector<Vector> uLocs(uSize), sLocs(sSize);
+    std::vector<uint8_t> uPols(uSize), sPols(sSize);
+    for (size_t i = 0; i < uSize; ++i)
     {
+        uLocs[i] = uAntenna->GetElementLocation(i);
+        uPols[i] = uAntenna->GetElemPol(i);
+    }
+    for (size_t i = 0; i < sSize; ++i)
+    {
+        sLocs[i] = sAntenna->GetElementLocation(i);
+        sPols[i] = sAntenna->GetElemPol(i);
+    }
+
+    // ── Optimization: hoist `rxPhaseDiff` (and its sincos) AND the
+    // `preComp(n,m) * rxPhase[m]` product out of the sIndex loop.
+    //   * rxPhaseDiff depends only on (n, u, m); the sIndex loop used
+    //     to redo this work sSize times per (u, m).
+    //   * preComp(n,m) depends on (n, m, polS, polU); polU is fixed per
+    //     uIndex but polS varies per sIndex. We fold rxPhase into both
+    //     polS variants up-front so the sIndex inner loop becomes
+    //     `rays += precompRxPhase[polS][m] * exp(j*txArg)` —
+    //     one fewer complex multiply per (sIndex, mIndex) iteration.
+    // For a 4×4 BS / 1×1 UE that's a 16x reduction in trig calls
+    // and ~6 KB less complex-multiply work per call on the hot path.
+    // [polS][mIndex] buffer reused per (cluster, uIndex). Sized at the
+    // outer scope so we don't malloc inside the loop.
+    std::array<std::vector<std::complex<double>>, 2> precompRxPhase{
+        std::vector<std::complex<double>>(nRays),
+        std::vector<std::complex<double>>(nRays)};
+
+    // Cluster-power normalisation factor: clusterPower changes per
+    // cluster but is constant across (u,s,m). Hoist sqrt out of the
+    // inner loop.
+    std::vector<double> clusterScale(nClusters);
+    const double invNRays = 1.0 / static_cast<double>(nRays);
+    for (uint8_t n = 0; n < nClusters; ++n)
+    {
+        clusterScale[n] = std::sqrt(channelParams->m_clusterPower[n] * invNRays);
+    }
+
+    // The following for loops computes the channel coefficients.
+    // Keeps track of how many sub-clusters have been added up to now.
+    uint8_t numSubClustersAdded = 0;
+    for (uint8_t nIndex = 0; nIndex < nClusters; nIndex++)
+    {
+        const bool isStrongest =
+            nIndex == channelParams->m_cluster1st || nIndex == channelParams->m_cluster2nd;
+        const size_t nmBase = static_cast<size_t>(nIndex) * nRays;
+        const double clusScale = clusterScale[nIndex];
+
         for (size_t uIndex = 0; uIndex < uSize; uIndex++)
         {
-            Vector uLoc = uAntenna->GetElementLocation(uIndex);
+            const Vector& uLoc = uLocs[uIndex];
+            const uint8_t polU = uPols[uIndex];
+
+            // Pre-compute rxPhase[m] for this (n, u) AND the
+            // precompRxPhase[polS][m] product for the two possible
+            // polS values. The sIndex inner loop reads these by
+            // indexed lookup, saving one complex multiply per (s, m).
+            for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
+            {
+                const size_t idx = nmBase + mIndex;
+                const double rxArg =
+                    2.0 * M_PI *
+                    (sinCosA[idx] * uLoc.x + sinSinA[idx] * uLoc.y + cosZoA[idx] * uLoc.z);
+                const std::complex<double> rxRot = std::polar(1.0, rxArg);
+                for (uint8_t pS = 0; pS < numPolS; ++pS)
+                {
+                    precompRxPhase[pS][mIndex] =
+                        raysPreComp[pS][polU](nIndex, mIndex) * rxRot;
+                }
+            }
 
             for (size_t sIndex = 0; sIndex < sSize; sIndex++)
             {
-                Vector sLoc = sAntenna->GetElementLocation(sIndex);
-                // Compute the N-2 weakest cluster, assuming 0 slant angle and a
-                // polarization slant angle configured in the array (7.5-22)
-                if (nIndex != channelParams->m_cluster1st && nIndex != channelParams->m_cluster2nd)
-                {
-                    std::complex<double> rays(0, 0);
-                    for (uint8_t mIndex = 0; mIndex < table3gpp->m_raysPerCluster; mIndex++)
-                    {
-                        // lambda_0 is accounted in the antenna spacing uLoc and sLoc.
-                        double rxPhaseDiff =
-                            2 * M_PI *
-                            (sinCosA[nIndex][mIndex] * uLoc.x + sinSinA[nIndex][mIndex] * uLoc.y +
-                             cosZoA[nIndex][mIndex] * uLoc.z);
+                const Vector& sLoc = sLocs[sIndex];
+                const uint8_t polS = sPols[sIndex];
+                const std::vector<std::complex<double>>& preCompRx = precompRxPhase[polS];
 
-                        double txPhaseDiff =
-                            2 * M_PI *
-                            (sinCosD[nIndex][mIndex] * sLoc.x + sinSinD[nIndex][mIndex] * sLoc.y +
-                             cosZoD[nIndex][mIndex] * sLoc.z);
-                        // NOTE Doppler is computed in the CalcBeamformingGain function and is
-                        // simplified to only account for the center angle of each cluster.
-                        rays += raysPreComp[std::make_pair(sAntenna->GetElemPol(sIndex),
-                                                           uAntenna->GetElemPol(uIndex))](nIndex,
-                                                                                          mIndex) *
-                                std::complex(cos(rxPhaseDiff), sin(rxPhaseDiff)) *
-                                std::complex(cos(txPhaseDiff), sin(txPhaseDiff));
-                    }
-                    rays *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    hUsn(uIndex, sIndex, nIndex) = rays;
-                }
-                else //(7.5-28)
+                if (!isStrongest)
                 {
+                    // (7.5-22) — N-2 weakest clusters
+                    std::complex<double> rays(0, 0);
+                    for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
+                    {
+                        const size_t idx = nmBase + mIndex;
+                        const double txArg =
+                            2.0 * M_PI *
+                            (sinCosD[idx] * sLoc.x + sinSinD[idx] * sLoc.y +
+                             cosZoD[idx] * sLoc.z);
+                        // NOTE Doppler is computed in CalcBeamformingGain and is
+                        // simplified to only account for the cluster centre angle.
+                        rays += preCompRx[mIndex] * std::polar(1.0, txArg);
+                    }
+                    hUsn(uIndex, sIndex, nIndex) = rays * clusScale;
+                }
+                else
+                {
+                    // (7.5-28) — strongest clusters get split into 3 subclusters
                     std::complex<double> raysSub1(0, 0);
                     std::complex<double> raysSub2(0, 0);
                     std::complex<double> raysSub3(0, 0);
-
-                    for (uint8_t mIndex = 0; mIndex < table3gpp->m_raysPerCluster; mIndex++)
+                    for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
                     {
-                        // ZML:Just remind me that the angle offsets for the 3 subclusters were not
-                        // generated correctly.
-                        double rxPhaseDiff =
-                            2 * M_PI *
-                            (sinCosA[nIndex][mIndex] * uLoc.x + sinSinA[nIndex][mIndex] * uLoc.y +
-                             cosZoA[nIndex][mIndex] * uLoc.z);
-
-                        double txPhaseDiff =
-                            2 * M_PI *
-                            (sinCosD[nIndex][mIndex] * sLoc.x + sinSinD[nIndex][mIndex] * sLoc.y +
-                             cosZoD[nIndex][mIndex] * sLoc.z);
-
-                        std::complex<double> raySub =
-                            raysPreComp[std::make_pair(sAntenna->GetElemPol(sIndex),
-                                                       uAntenna->GetElemPol(uIndex))](nIndex,
-                                                                                      mIndex) *
-                            std::complex(cos(rxPhaseDiff), sin(rxPhaseDiff)) *
-                            std::complex(cos(txPhaseDiff), sin(txPhaseDiff));
+                        const size_t idx = nmBase + mIndex;
+                        const double txArg =
+                            2.0 * M_PI *
+                            (sinCosD[idx] * sLoc.x + sinSinD[idx] * sLoc.y +
+                             cosZoD[idx] * sLoc.z);
+                        const std::complex<double> raySub =
+                            preCompRx[mIndex] * std::polar(1.0, txArg);
 
                         switch (mIndex)
                         {
-                        case 9:
-                        case 10:
-                        case 11:
-                        case 12:
-                        case 17:
-                        case 18:
+                        case 9: case 10: case 11: case 12: case 17: case 18:
                             raysSub2 += raySub;
                             break;
-                        case 13:
-                        case 14:
-                        case 15:
-                        case 16:
+                        case 13: case 14: case 15: case 16:
                             raysSub3 += raySub;
                             break;
-                        default: // case 1,2,3,4,5,6,7,8,19,20
+                        default: // 1..8, 19, 20
                             raysSub1 += raySub;
                             break;
                         }
                     }
-                    raysSub1 *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    raysSub2 *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    raysSub3 *=
-                        sqrt(channelParams->m_clusterPower[nIndex] / table3gpp->m_raysPerCluster);
-                    hUsn(uIndex, sIndex, nIndex) = raysSub1;
+                    hUsn(uIndex, sIndex, nIndex) = raysSub1 * clusScale;
                     hUsn(uIndex,
                          sIndex,
-                         channelParams->m_reducedClusterNumber + numSubClustersAdded) = raysSub2;
+                         nClusters + numSubClustersAdded) = raysSub2 * clusScale;
                     hUsn(uIndex,
                          sIndex,
-                         channelParams->m_reducedClusterNumber + numSubClustersAdded + 1) =
-                        raysSub3;
+                         nClusters + numSubClustersAdded + 1) = raysSub3 * clusScale;
                 }
             }
         }
-        if (nIndex == channelParams->m_cluster1st || nIndex == channelParams->m_cluster2nd)
+        if (isStrongest)
         {
             numSubClustersAdded += 2;
         }
@@ -4722,58 +4758,85 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
 
     if (channelParams->m_losCondition == ChannelCondition::LOS) //(7.5-29) && (7.5-30)
     {
-        double lambda = 3.0e8 / m_frequency; // the wavelength of the carrier frequency
-        std::complex phaseDiffDueToDistance(cos(-2 * M_PI * distance3D / lambda),
-                                            sin(-2 * M_PI * distance3D / lambda));
+        // ── Optimization: every per-link constant gets computed
+        // exactly once outside the (u,s) loops.
+        //   * kLinear, atten1 = sqrt(1/(K+1)), attenK = sqrt(K/(K+1)):
+        //     were pow/sqrt'd on every (u,s) iteration in the original.
+        //   * pow(10, attenuation_dB/10): same, plus a divide per cell.
+        //   * Per-element field patterns: the LOS ray direction
+        //     (uAngle, sAngle) is identical for all elements of one
+        //     panel, so we precompute one (Phi, Theta) pair per
+        //     polarisation instead of one per (u-elem, s-elem).
+        //   * Distance-driven `phaseDiffDueToDistance` and the
+        //     per-element rx/tx phase diffs use std::polar.
+        const double lambda = 3.0e8 / m_frequency;
+        const std::complex<double> phaseDiffDueToDistance =
+            std::polar(1.0, -2.0 * M_PI * distance3D / lambda);
 
-        const double sinUAngleIncl = sin(uAngle.GetInclination());
-        const double cosUAngleIncl = cos(uAngle.GetInclination());
-        const double sinUAngleAz = sin(uAngle.GetAzimuth());
-        const double cosUAngleAz = cos(uAngle.GetAzimuth());
-        const double sinSAngleIncl = sin(sAngle.GetInclination());
-        const double cosSAngleIncl = cos(sAngle.GetInclination());
-        const double sinSAngleAz = sin(sAngle.GetAzimuth());
-        const double cosSAngleAz = cos(sAngle.GetAzimuth());
+        const double sinUAngleIncl = std::sin(uAngle.GetInclination());
+        const double cosUAngleIncl = std::cos(uAngle.GetInclination());
+        const double sinUAngleAz = std::sin(uAngle.GetAzimuth());
+        const double cosUAngleAz = std::cos(uAngle.GetAzimuth());
+        const double sinSAngleIncl = std::sin(sAngle.GetInclination());
+        const double cosSAngleIncl = std::cos(sAngle.GetInclination());
+        const double sinSAngleAz = std::sin(sAngle.GetAzimuth());
+        const double cosSAngleAz = std::cos(sAngle.GetAzimuth());
 
+        const double kLinear = std::pow(10.0, channelParams->m_K_factor / 10.0);
+        const double atten1 = std::sqrt(1.0 / (kLinear + 1.0));
+        const double attenK = std::sqrt(kLinear / (1.0 + kLinear));
+        const double invAttenuationLin =
+            1.0 / std::pow(10.0, channelParams->m_attenuation_dB[0] / 10.0);
+        const std::complex<double> attenKOverPow = attenK * invAttenuationLin;
+
+        // Field patterns depend only on the angle and the panel
+        // polarisation, NOT on the element index. Cache one (Phi,
+        // Theta) per polarisation per side.
+        std::complex<double> rxFieldPhi[2]{}, rxFieldTheta[2]{};
+        std::complex<double> txFieldPhi[2]{}, txFieldTheta[2]{};
+        for (uint8_t p = 0; p < numPolU; ++p)
+        {
+            std::tie(rxFieldPhi[p], rxFieldTheta[p]) = uAntenna->GetElementFieldPattern(
+                Angles(uAngle.GetAzimuth(), uAngle.GetInclination()), p);
+        }
+        for (uint8_t p = 0; p < numPolS; ++p)
+        {
+            std::tie(txFieldPhi[p], txFieldTheta[p]) = sAntenna->GetElementFieldPattern(
+                Angles(sAngle.GetAzimuth(), sAngle.GetInclination()), p);
+        }
+
+        const size_t totalPages = hUsn.GetNumPages();
         for (size_t uIndex = 0; uIndex < uSize; uIndex++)
         {
-            Vector uLoc = uAntenna->GetElementLocation(uIndex);
-            double rxPhaseDiff = 2 * M_PI *
-                                 (sinUAngleIncl * cosUAngleAz * uLoc.x +
-                                  sinUAngleIncl * sinUAngleAz * uLoc.y + cosUAngleIncl * uLoc.z);
+            const Vector& uLoc = uLocs[uIndex];
+            const uint8_t polU = uPols[uIndex];
+            const double rxPhaseDiff =
+                2.0 * M_PI *
+                (sinUAngleIncl * cosUAngleAz * uLoc.x +
+                 sinUAngleIncl * sinUAngleAz * uLoc.y + cosUAngleIncl * uLoc.z);
+            const std::complex<double> rxRot = std::polar(1.0, rxPhaseDiff);
 
             for (size_t sIndex = 0; sIndex < sSize; sIndex++)
             {
-                Vector sLoc = sAntenna->GetElementLocation(sIndex);
-                std::complex<double> ray(0, 0);
-                double txPhaseDiff =
-                    2 * M_PI *
-                    (sinSAngleIncl * cosSAngleAz * sLoc.x + sinSAngleIncl * sinSAngleAz * sLoc.y +
-                     cosSAngleIncl * sLoc.z);
+                const Vector& sLoc = sLocs[sIndex];
+                const uint8_t polS = sPols[sIndex];
+                const double txPhaseDiff =
+                    2.0 * M_PI *
+                    (sinSAngleIncl * cosSAngleAz * sLoc.x +
+                     sinSAngleIncl * sinSAngleAz * sLoc.y + cosSAngleIncl * sLoc.z);
 
-                auto [rxFieldPatternPhi, rxFieldPatternTheta] = uAntenna->GetElementFieldPattern(
-                    Angles(uAngle.GetAzimuth(), uAngle.GetInclination()),
-                    uAntenna->GetElemPol(uIndex));
-                auto [txFieldPatternPhi, txFieldPatternTheta] = sAntenna->GetElementFieldPattern(
-                    Angles(sAngle.GetAzimuth(), sAngle.GetInclination()),
-                    sAntenna->GetElemPol(sIndex));
+                const std::complex<double> ray =
+                    (rxFieldTheta[polU] * txFieldTheta[polS] -
+                     rxFieldPhi[polU] * txFieldPhi[polS]) *
+                    phaseDiffDueToDistance * rxRot * std::polar(1.0, txPhaseDiff);
 
-                ray = (rxFieldPatternTheta * txFieldPatternTheta -
-                       rxFieldPatternPhi * txFieldPatternPhi) *
-                      phaseDiffDueToDistance * std::complex(cos(rxPhaseDiff), sin(rxPhaseDiff)) *
-                      std::complex(cos(txPhaseDiff), sin(txPhaseDiff));
-
-                double kLinear = pow(10, channelParams->m_K_factor / 10.0);
-                // the LOS path should be attenuated if blockage is enabled.
-                hUsn(uIndex, sIndex, 0) =
-                    sqrt(1.0 / (kLinear + 1)) * hUsn(uIndex, sIndex, 0) +
-                    sqrt(kLinear / (1 + kLinear)) * ray /
-                        pow(10,
-                            channelParams->m_attenuation_dB[0] / 10.0); //(7.5-30) for tau = tau1
-                for (size_t nIndex = 1; nIndex < hUsn.GetNumPages(); nIndex++)
+                // (7.5-30) for tau = tau1: cluster 0 = NLOS-cluster-0 scaled
+                // by 1/sqrt(K+1) plus the LOS ray scaled by sqrt(K/(K+1))/atten.
+                hUsn(uIndex, sIndex, 0) = atten1 * hUsn(uIndex, sIndex, 0) + attenKOverPow * ray;
+                // (7.5-30) for tau = tau2..tauN: scale remaining clusters by atten1.
+                for (size_t nIndex = 1; nIndex < totalPages; nIndex++)
                 {
-                    hUsn(uIndex, sIndex, nIndex) *=
-                        sqrt(1.0 / (kLinear + 1)); //(7.5-30) for tau = tau2...tauN
+                    hUsn(uIndex, sIndex, nIndex) *= atten1;
                 }
             }
         }
