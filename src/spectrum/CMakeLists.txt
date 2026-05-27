@@ -203,9 +203,37 @@ if(NS3_ENABLE_3GPP_GPU)
     )
     # PRIVATE so the link doesn't leak into ns-3's install export set.
     target_link_libraries(${libspectrum} PRIVATE webgpu)
-    # Make sure the wgpu_native runtime ends up next to the spectrum library
-    # so executables that link against it can find it at run-time.
+    # Make sure the wgpu_native/webgpu_dawn runtime ends up next to the
+    # spectrum library so executables that link against it can find it
+    # at run-time.
     target_copy_webgpu_binaries(${libspectrum})
+
+    # Dawn's D3D12 backend additionally needs the DirectX Shader
+    # Compiler (`dxcompiler.dll` + `dxil.dll`) at run-time. Windows SDK
+    # ships them at `Windows Kits\10\bin\<version>\x64\`. Copy the
+    # first version found next to the spectrum DLL so Dawn-D3D12 works
+    # out of the box; if missing, Dawn will fall back to Vulkan via
+    # SLS_BACKEND or fail with a clear error.
+    if(WEBGPU_BACKEND STREQUAL "DAWN" AND WIN32)
+        file(GLOB _dxc_candidates
+             "C:/Program Files (x86)/Windows Kits/10/bin/*/x64/dxcompiler.dll")
+        list(LENGTH _dxc_candidates _dxc_n)
+        if(_dxc_n GREATER 0)
+            list(GET _dxc_candidates 0 _dxc_dll)
+            get_filename_component(_dxc_dir "${_dxc_dll}" DIRECTORY)
+            message(STATUS "Copying DXC from ${_dxc_dir}")
+            configure_file("${_dxc_dir}/dxcompiler.dll"
+                           "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/lib/dxcompiler.dll"
+                           COPYONLY)
+            configure_file("${_dxc_dir}/dxil.dll"
+                           "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/lib/dxil.dll"
+                           COPYONLY)
+        else()
+            message(WARNING "Dawn D3D12 needs dxcompiler.dll + dxil.dll at "
+                            "run-time but none were found under Windows Kits. "
+                            "D3D12 backend will fail until they're available.")
+        endif()
+    endif()
 
     # When HDF5 is available, compile the SLS-channel GPU back-end with
     # SLS_CHAN_HDF5 so its saveSlsChanToHdf5() member is available to

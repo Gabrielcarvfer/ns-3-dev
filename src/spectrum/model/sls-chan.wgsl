@@ -509,18 +509,31 @@ fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
 @group(0) @binding(11)  var<storage, read>       cmn_link:         array<CmnLinkParams>;
 @group(0) @binding(12)  var<storage, read_write> link_params:      array<LinkParams>;
 @group(0) @binding(13)  var<storage, read_write> rng_states_lp:    array<RngState>;
-// Flat CRN buffers: all sites × LSPs concatenated; offset arrays give each grid's start
-@group(0) @binding(14)  var<storage, read>       crn_los:          array<f32>;
-@group(0) @binding(15)  var<storage, read>       crn_nlos:         array<f32>;
-@group(0) @binding(16) var<storage, read>       crn_o2i:          array<f32>;
-@group(0) @binding(17) var<storage, read>       crn_los_offsets:  array<u32>; // nSite*8
-@group(0) @binding(18) var<storage, read>       crn_nlos_offsets: array<u32>; // nSite*7
-@group(0) @binding(19) var<storage, read>       crn_o2i_offsets:  array<u32>; // nSite*7
+// Combined CRN buffer: concat(LOS data | NLOS data | O2I data) along the
+// element axis. `crn_offsets` is similarly concat(losOffs | nlosOffs |
+// o2iOffs) — losOffs has nSite*8 entries pointing into the LOS region,
+// nlosOffs has nSite*7 pointing into the NLOS region, etc. The host
+// pre-bakes the per-section base offset into the values so a single
+// indexed lookup `crn_data[crn_offsets[idx] + xy]` finds the right
+// sample without per-call section arithmetic.
+//
+// Why: the previous layout used 6 separate storage bindings
+// (3 data + 3 offsets), which together with the other LSP inputs put
+// cal_link_param_kernel at 13 storage buffers per stage — over the
+// WebGPU spec default of 10. Folding to 2 bindings (1 data + 1
+// offsets) brings the kernel to 9 SSBOs/stage, which is the limit
+// Dawn enforces by default.
+@group(0) @binding(14)  var<storage, read>       crn_data:         array<f32>;
+@group(0) @binding(15)  var<storage, read>       crn_offsets:      array<u32>; // nSite*(8+7+7)
 
-// Bilinear interpolation into a flat CRN buffer (LOS variant)
+// Bilinear interpolation into the combined CRN buffer. `grid_idx` is
+// the index WITHIN that section's offsets table (0..nSite*8 for LOS,
+// 0..nSite*7 for NLOS/O2I); the section base added below maps it to
+// the correct slot in the concatenated `crn_offsets` array.
 fn lsp_at_loc_los(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
     let uni = link_uni;
-    let base = crn_los_offsets[grid_idx];
+    // LOS section starts at index 0 in crn_offsets.
+    let base = crn_offsets[grid_idx];
     let nx = n_x; let ny = n_y;
     let norm_x = clamp((x - uni.minX) / (uni.maxX - uni.minX), 0.0, 1.0);
     let norm_y = clamp((y - uni.minY) / (uni.maxY - uni.minY), 0.0, 1.0);
@@ -528,16 +541,17 @@ fn lsp_at_loc_los(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
     let x0 = i32(floor(gx));        let y0 = i32(floor(gy));
     let x1 = min(x0 + 1, nx - 1);  let y1 = min(y0 + 1, ny - 1);
     let dx = gx - f32(x0);          let dy = gy - f32(y0);
-    let v00 = crn_los[base + u32(y0*nx + x0)];
-    let v10 = crn_los[base + u32(y0*nx + x1)];
-    let v01 = crn_los[base + u32(y1*nx + x0)];
-    let v11 = crn_los[base + u32(y1*nx + x1)];
+    let v00 = crn_data[base + u32(y0*nx + x0)];
+    let v10 = crn_data[base + u32(y0*nx + x1)];
+    let v01 = crn_data[base + u32(y1*nx + x0)];
+    let v11 = crn_data[base + u32(y1*nx + x1)];
     return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
 }
 
 fn lsp_at_loc_nlos(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
     let uni = link_uni;
-    let base = crn_nlos_offsets[grid_idx];
+    // NLOS section in crn_offsets starts at nSite*8.
+    let base = crn_offsets[grid_idx + uni.nSite * 8u];
     let nx = n_x; let ny = n_y;
     let norm_x = clamp((x - uni.minX) / (uni.maxX - uni.minX), 0.0, 1.0);
     let norm_y = clamp((y - uni.minY) / (uni.maxY - uni.minY), 0.0, 1.0);
@@ -545,14 +559,15 @@ fn lsp_at_loc_nlos(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
     let x0 = i32(floor(gx)); let y0 = i32(floor(gy));
     let x1 = min(x0+1, nx-1); let y1 = min(y0+1, ny-1);
     let dx = gx - f32(x0); let dy = gy - f32(y0);
-    let v00 = crn_nlos[base + u32(y0*nx+x0)]; let v10 = crn_nlos[base + u32(y0*nx+x1)];
-    let v01 = crn_nlos[base + u32(y1*nx+x0)]; let v11 = crn_nlos[base + u32(y1*nx+x1)];
+    let v00 = crn_data[base + u32(y0*nx+x0)]; let v10 = crn_data[base + u32(y0*nx+x1)];
+    let v01 = crn_data[base + u32(y1*nx+x0)]; let v11 = crn_data[base + u32(y1*nx+x1)];
     return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
 }
 
 fn lsp_at_loc_o2i(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
     let uni = link_uni;
-    let base = crn_o2i_offsets[grid_idx];
+    // O2I section in crn_offsets starts at nSite*(8+7) = nSite*15.
+    let base = crn_offsets[grid_idx + uni.nSite * 15u];
     let nx = n_x; let ny = n_y;
     let norm_x = clamp((x - uni.minX) / (uni.maxX - uni.minX), 0.0, 1.0);
     let norm_y = clamp((y - uni.minY) / (uni.maxY - uni.minY), 0.0, 1.0);
@@ -560,8 +575,8 @@ fn lsp_at_loc_o2i(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
     let x0 = i32(floor(gx)); let y0 = i32(floor(gy));
     let x1 = min(x0+1, nx-1); let y1 = min(y0+1, ny-1);
     let dx = gx - f32(x0); let dy = gy - f32(y0);
-    let v00 = crn_o2i[base + u32(y0*nx+x0)]; let v10 = crn_o2i[base + u32(y0*nx+x1)];
-    let v01 = crn_o2i[base + u32(y1*nx+x0)]; let v11 = crn_o2i[base + u32(y1*nx+x1)];
+    let v00 = crn_data[base + u32(y0*nx+x0)]; let v10 = crn_data[base + u32(y0*nx+x1)];
+    let v01 = crn_data[base + u32(y1*nx+x0)]; let v11 = crn_data[base + u32(y1*nx+x1)];
     return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
 }
 

@@ -412,6 +412,10 @@ SlsChanWgpu::waitIdle()
     waitInfo.future = fut;
     waitInfo.completed = false;
     instance_.waitAny(1, &waitInfo, UINT64_MAX);
+    // Also drive any AllowProcessEvents-mode callbacks (mapAsync,
+    // ...) that may be pending. wgpu-native's poll(wait=true) does
+    // both implicitly; Dawn splits them across waitAny + processEvents.
+    instance_.processEvents();
 #else
     device_.poll(true, nullptr);
 #endif
@@ -527,16 +531,21 @@ SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
     MapCtx ctx;
 
 #ifdef WEBGPU_BACKEND_DAWN
-    // Dawn's wrapper takes (mode, offset, size, callbackMode, lambda).
-    staging.mapAsync(wgpu::MapMode::Read,
-                     0,
-                     byteSize,
-                     wgpu::CallbackMode::AllowProcessEvents,
-                     [&ctx](wgpu::MapAsyncStatus, wgpu::StringView) { ctx.done = true; });
-    while (!ctx.done)
-    {
-        dawnPumpEvents();
-    }
+    // Dawn: use WaitAnyOnly + waitAny on the returned future for a true
+    // blocking wait. AllowProcessEvents + spin-on-tick races with the
+    // submit's onSubmittedWorkDone callback (different future);
+    // WaitAnyOnly is the synchronous primitive Dawn provides for this
+    // exact pattern.
+    auto fut = staging.mapAsync(
+        wgpu::MapMode::Read,
+        0,
+        byteSize,
+        wgpu::CallbackMode::WaitAnyOnly,
+        [&ctx](wgpu::MapAsyncStatus, wgpu::StringView) { ctx.done = true; });
+    wgpu::FutureWaitInfo waitInfo{};
+    waitInfo.future = fut;
+    waitInfo.completed = false;
+    instance_.waitAny(1, &waitInfo, UINT64_MAX);
 #else
     // wgpu-native v24 takes (mode, offset, size, BufferMapCallbackInfo).
     wgpu::BufferMapCallbackInfo cbInfo = wgpu::Default;
@@ -553,7 +562,19 @@ SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
     }
 #endif
 
-    std::memcpy(result.data(), staging.getMappedRange(0, byteSize), byteSize);
+    // Dawn validates that buffers mapped with MapMode::Read are read
+    // back via `getConstMappedRange` (writable getMappedRange returns
+    // null for read maps). wgpu-native accepts either, but the const
+    // variant is the WebGPU-spec way for read-only buffers.
+    const void* mapped = staging.getConstMappedRange(0, byteSize);
+    if (mapped)
+    {
+        std::memcpy(result.data(), mapped, byteSize);
+    }
+    else
+    {
+        SLS_LOG("[ERROR] mapReadBuffer: getConstMappedRange returned null\n");
+    }
     staging.unmap();
     return result;
 }
@@ -1215,52 +1236,59 @@ SlsChanWgpu::generateCRN(float maxX,
         }
     };
 
-    // Create GPU-side CRN buffers and copy CPU data to them
-    if (!crnLosBuf_)
+    // Build the combined CRN data buffer: concat(LOS | NLOS | O2I).
+    // Build the combined offsets buffer with each section's offsets
+    // PRE-BAKED to address into the concatenated data buffer:
+    //   losOffs[i]  = i*nX*nY                            (no shift)
+    //   nlosOffs[i] = losDataElems + i*nX*nY             (skip LOS region)
+    //   o2iOffs[i]  = losDataElems + nlosDataElems + i*nX*nY
+    // so the kernel can do a single indexed read without per-section
+    // arithmetic.
+    if (!crnDataBuf_)
     {
-        guardCrnSize("LOS", losOutBuf.size() * sizeof(float));
-        crnLosBuf_ = makeBuffer(losOutBuf.size() * sizeof(float),
-                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                                losOutBuf.data());
-        // Initialize offset buffer directly using mappedAtCreation
-        std::vector<uint32_t> losOffsets(nSite_ * 8);
-        for (uint32_t i = 0; i < nSite_ * 8; i++)
-        {
-            losOffsets[i] = i * nX_ * nY_;
-        }
-        crnLosOffBuf_ = makeBuffer(nSite_ * 8ULL * sizeof(uint32_t),
-                                   WGPUBufferUsage_Storage,
-                                   losOffsets.data());
-    }
-    if (!crnNlosBuf_)
-    {
-        guardCrnSize("NLOS", nlosOutBuf.size() * sizeof(float));
-        crnNlosBuf_ = makeBuffer(nlosOutBuf.size() * sizeof(float),
+        const uint64_t losBytes = losOutBuf.size() * sizeof(float);
+        const uint64_t nlosBytes = nlosOutBuf.size() * sizeof(float);
+        const uint64_t o2iBytes = o2iOutBuf.size() * sizeof(float);
+        const uint64_t combinedBytes = losBytes + nlosBytes + o2iBytes;
+        guardCrnSize("combined", combinedBytes);
+
+        std::vector<float> combinedData;
+        combinedData.reserve(combinedBytes / sizeof(float));
+        combinedData.insert(combinedData.end(), losOutBuf.begin(), losOutBuf.end());
+        combinedData.insert(combinedData.end(), nlosOutBuf.begin(), nlosOutBuf.end());
+        combinedData.insert(combinedData.end(), o2iOutBuf.begin(), o2iOutBuf.end());
+        crnDataBuf_ = makeBuffer(combinedBytes,
                                  WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                                 nlosOutBuf.data());
-        std::vector<uint32_t> nlosOffsets(nSite_ * 7);
-        for (uint32_t i = 0; i < nSite_ * 7; i++)
+                                 combinedData.data());
+
+        const uint32_t losElems = static_cast<uint32_t>(losOutBuf.size());
+        const uint32_t nlosElems = static_cast<uint32_t>(nlosOutBuf.size());
+        const uint32_t losOffsetCount = nSite_ * 8u;
+        const uint32_t nlosOffsetCount = nSite_ * 7u;
+        const uint32_t o2iOffsetCount = nSite_ * 7u;
+        const uint32_t totalOffsets = losOffsetCount + nlosOffsetCount + o2iOffsetCount;
+
+        std::vector<uint32_t> combinedOffsets(totalOffsets);
+        const uint32_t gridSz = uint32_t(nX_) * uint32_t(nY_);
+        // LOS section
+        for (uint32_t i = 0; i < losOffsetCount; ++i)
         {
-            nlosOffsets[i] = i * nX_ * nY_;
+            combinedOffsets[i] = i * gridSz;
         }
-        crnNlosOffBuf_ = makeBuffer(nSite_ * 7ULL * sizeof(uint32_t),
+        // NLOS section — element offsets shifted past the LOS region.
+        for (uint32_t i = 0; i < nlosOffsetCount; ++i)
+        {
+            combinedOffsets[losOffsetCount + i] = losElems + i * gridSz;
+        }
+        // O2I section — shifted past LOS + NLOS.
+        for (uint32_t i = 0; i < o2iOffsetCount; ++i)
+        {
+            combinedOffsets[losOffsetCount + nlosOffsetCount + i] =
+                losElems + nlosElems + i * gridSz;
+        }
+        crnOffsetsBuf_ = makeBuffer(totalOffsets * sizeof(uint32_t),
                                     WGPUBufferUsage_Storage,
-                                    nlosOffsets.data());
-    }
-    if (!crnO2iBuf_)
-    {
-        guardCrnSize("O2I", o2iOutBuf.size() * sizeof(float));
-        crnO2iBuf_ = makeBuffer(o2iOutBuf.size() * sizeof(float),
-                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                                o2iOutBuf.data());
-        std::vector<uint32_t> o2iOffsets(nSite_ * 7);
-        for (uint32_t i = 0; i < nSite_ * 7; i++)
-        {
-            o2iOffsets[i] = i * nX_ * nY_;
-        }
-        crnO2iOffBuf_ = makeBuffer(nSite_ * 7ULL * sizeof(uint32_t),
-                                   WGPUBufferUsage_Storage,
-                                   o2iOffsets.data());
+                                    combinedOffsets.data());
     }
 }
 
@@ -1412,8 +1440,10 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     }
 
     auto bg0Layout = linkParamPipeline_.getBindGroupLayout(0);
-    // cal_link_param_kernel uses bindings 6-19 only (14 entries).
-    std::vector<wgpu::BindGroupEntry> entries(14, wgpu::Default);
+    // cal_link_param_kernel now uses bindings 6-15 only (10 entries:
+    // 1 uniform + 9 storage). The combined crn_data + crn_offsets
+    // bindings replaced the previous 3+3 split.
+    std::vector<wgpu::BindGroupEntry> entries(10, wgpu::Default);
     auto E = [&](int i, uint32_t binding, wgpu::Buffer buf, uint64_t size = WGPU_WHOLE_SIZE) {
         entries[i].binding = binding;
         entries[i].buffer = buf;
@@ -1425,6 +1455,8 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
             abort();
         }
     };
+    const uint64_t combinedCrnSz = uint64_t(nSite_) * 22ULL * uint64_t(nX_) * nY_ * sizeof(float);
+    const uint64_t combinedOffSz = uint64_t(nSite_) * 22ULL * sizeof(uint32_t);
     E(0, 6, uniBuf, sizeof(uniData));
     E(1, 7, cellParamsBuf_, cellParamsSz);
     E(2, 8, utParamsBuf_, utParamsSz);
@@ -1433,12 +1465,8 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     E(5, 11, cmnLinkBuf_, sizeof(CmnLinkParamsGPU));
     E(6, 12, linkParamsBuf_, linkParamsSz);
     E(7, 13, rngStatesBuf_, rngStatesSz);
-    E(8, 14, crnLosBuf_, nSite_ * 8ULL * uint64_t(nX_) * nY_ * sizeof(float));
-    E(9, 15, crnNlosBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
-    E(10, 16, crnO2iBuf_, nSite_ * 7ULL * uint64_t(nX_) * nY_ * sizeof(float));
-    E(11, 17, crnLosOffBuf_, nSite_ * 8ULL * sizeof(uint32_t));
-    E(12, 18, crnNlosOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
-    E(13, 19, crnO2iOffBuf_, nSite_ * 7ULL * sizeof(uint32_t));
+    E(8, 14, crnDataBuf_, combinedCrnSz);
+    E(9, 15, crnOffsetsBuf_, combinedOffSz);
 
     wgpu::BindGroupDescriptor bgDesc = wgpu::Default;
     bgDesc.layout = bg0Layout;

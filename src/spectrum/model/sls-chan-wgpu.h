@@ -607,8 +607,16 @@ class SlsChanWgpu
     wgpu::Buffer cellParamsBuf_, utParamsBuf_;
     wgpu::Buffer sysConfigBuf_, simConfigBuf_, cmnLinkBuf_;
     wgpu::Buffer linkParamsBuf_, rngStatesBuf_, crnTempBuf_;
-    wgpu::Buffer crnLosBuf_, crnNlosBuf_, crnO2iBuf_;
-    wgpu::Buffer crnLosOffBuf_, crnNlosOffBuf_, crnO2iOffBuf_;
+    // Combined CRN data + offsets buffer. The old 3+3 split blew past
+    // the WebGPU per-stage SSBO limit of 10; concatenating reduces
+    // cal_link_param_kernel's storage-buffer count from 13 to 9.
+    // Layout of crnDataBuf_:    [LOS region | NLOS region | O2I region]
+    // Layout of crnOffsetsBuf_: [losOffs   | nlosOffs   | o2iOffs   ]
+    // with offsets pre-baked to address into the combined data buffer
+    // (so losOffs[i] is in [0, lossSize), nlosOffs[i] in [losSize,
+    // losSize+nlosSize), etc).
+    wgpu::Buffer crnDataBuf_;
+    wgpu::Buffer crnOffsetsBuf_;
     wgpu::Buffer stagingBuf_;
 
     ///////////////////////////////
