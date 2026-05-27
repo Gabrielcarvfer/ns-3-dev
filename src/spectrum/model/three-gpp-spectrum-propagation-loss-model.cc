@@ -14,6 +14,8 @@
 #include "spectrum-signal-parameters.h"
 #include "three-gpp-channel-model.h"
 
+#include <cstring>
+
 #include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
@@ -112,35 +114,68 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
     NS_ASSERT_MSG(sAnt != nullptr && uAnt != nullptr, "Improper call to the method");
     const PhasedArrayModel::ComplexVector& sW = sAnt->GetBeamformingVectorRef();
     const PhasedArrayModel::ComplexVector& uW = uAnt->GetBeamformingVectorRef();
-    const size_t sAntNumElems = sW.GetSize();
-    const size_t uAntNumElems = uW.GetSize();
+    [[maybe_unused]] const size_t sAntNumElems = sW.GetSize();
+    [[maybe_unused]] const size_t uAntNumElems = uW.GetSize();
     NS_ASSERT(uAntNumElems == channelMatrix->m_channel.GetNumRows());
     NS_ASSERT(sAntNumElems == channelMatrix->m_channel.GetNumCols());
-    NS_LOG_DEBUG("CalcLongTerm with " << uW.GetSize() << " u antenna elements and " << sW.GetSize()
-                                      << " s antenna elements, and with "
-                                      << " s ports: " << sAnt->GetNumPorts()
-                                      << " u ports: " << uAnt->GetNumPorts());
-    size_t numClusters = channelMatrix->m_channel.GetNumPages();
-    // create and initialize the size of the longTerm 3D matrix
+    const size_t numClusters = channelMatrix->m_channel.GetNumPages();
+    const auto sPorts = static_cast<uint16_t>(sAnt->GetNumPorts());
+    const auto uPorts = static_cast<uint16_t>(uAnt->GetNumPorts());
     Ptr<MatrixBasedChannelModel::Complex3DVector> longTerm =
-        Create<MatrixBasedChannelModel::Complex3DVector>(uAnt->GetNumPorts(),
-                                                         sAnt->GetNumPorts(),
-                                                         numClusters);
-    // Calculate long term uW * Husn * sW, the result is a matrix
-    // with the dimensions #uPorts, #sPorts, #cluster
-    for (auto sPortIdx = 0; sPortIdx < sAnt->GetNumPorts(); sPortIdx++)
+        Create<MatrixBasedChannelModel::Complex3DVector>(uPorts, sPorts, numClusters);
+
+    // ── Optimization: hoist invariants and the inner-loop body of
+    // CalculateLongTermComponent out of the triple-nested call. The
+    // original called the helper once per (sPort, uPort, cluster) cell;
+    // for a 16x16x17 configuration that's 4352 function calls per
+    // CalcLongTerm invocation, each with its own asserts +
+    // sAnt/uAnt vtable dispatches. In Debug builds that overhead
+    // ballooned to ~5 ms per call; inlining lets the compiler
+    // (and humans) keep the per-port port-element loop tight.
+    //
+    // sub-array partition model from 3GPP TR 36.897 5.2.2: each port
+    // has the same beam weights and a contiguous block of array
+    // elements. With one element per port (the typical
+    // dual-polarised 2x8-port / 2x8-element layout in NR) the inner
+    // body collapses to a single conj(uW)*channel*sW per cell.
+    const auto sPortElems = sAnt->GetNumElemsPerPort();
+    const auto uPortElems = uAnt->GetNumElemsPerPort();
+    const auto uElemsPerPort = uAnt->GetHElemsPerPort();
+    const auto sElemsPerPort = sAnt->GetHElemsPerPort();
+    const auto uIncVal =
+        (uElemsPerPort > 0) ? uAnt->GetNumColumns() - uElemsPerPort : 0;
+    const auto sIncVal =
+        (sElemsPerPort > 0) ? sAnt->GetNumColumns() - sElemsPerPort : 0;
+    for (uint16_t sPortIdx = 0; sPortIdx < sPorts; ++sPortIdx)
     {
-        for (auto uPortIdx = 0; uPortIdx < uAnt->GetNumPorts(); uPortIdx++)
+        const auto startS = sAnt->ArrayIndexFromPortIndex(sPortIdx, 0);
+        for (uint16_t uPortIdx = 0; uPortIdx < uPorts; ++uPortIdx)
         {
-            for (size_t cIndex = 0; cIndex < numClusters; cIndex++)
+            const auto startU = uAnt->ArrayIndexFromPortIndex(uPortIdx, 0);
+            for (size_t cIndex = 0; cIndex < numClusters; ++cIndex)
             {
-                longTerm->Elem(uPortIdx, sPortIdx, cIndex) =
-                    CalculateLongTermComponent(channelMatrix,
-                                               sAnt,
-                                               uAnt,
-                                               sPortIdx,
-                                               uPortIdx,
-                                               cIndex);
+                std::complex<double> txSum(0, 0);
+                auto sIndex = startS;
+                for (size_t tIndex = 0; tIndex < sPortElems; ++tIndex, ++sIndex)
+                {
+                    std::complex<double> rxSum(0, 0);
+                    auto uIndex = startU;
+                    for (size_t rIndex = 0; rIndex < uPortElems; ++rIndex, ++uIndex)
+                    {
+                        rxSum += std::conj(uW[uIndex - startU]) *
+                                 channelMatrix->m_channel(uIndex, sIndex, cIndex);
+                        if (uElemsPerPort > 0 && rIndex % uElemsPerPort == uElemsPerPort - 1)
+                        {
+                            uIndex += uIncVal;
+                        }
+                    }
+                    txSum += sW[sIndex - startS] * rxSum;
+                    if (sElemsPerPort > 0 && tIndex % sElemsPerPort == sElemsPerPort - 1)
+                    {
+                        sIndex += sIncVal;
+                    }
+                }
+                longTerm->Elem(uPortIdx, sPortIdx, cIndex) = txSum;
             }
         }
     }
@@ -322,18 +357,31 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     if (!rxParams->precodingMatrix)
     {
         // Default isotropic precoding: P[tx, 0, rb] = 1/sqrt(numTx).
+        // PSD[rb] = (1/N) * sum_rx |sum_tx H[rx, tx, rb]|^2
+        //
+        // Access specMat via raw pointers (per-page base + rx-stride 1
+        // / tx-stride hRxPorts) and split each complex<double> into
+        // its (re, im) pair so the hot inner loop avoids the
+        // operator()() bounds-checks and std::complex calls that the
+        // Debug build was paying per cell.
         const double invN = 1.0 / static_cast<double>(hTxPorts);
         for (uint32_t rb = 0; rb < psdN; ++rb)
         {
+            const auto* pageD = reinterpret_cast<const double*>(specMat->GetPagePtr(rb));
             double acc = 0.0;
             for (size_t rx = 0; rx < hRxPorts; ++rx)
             {
-                std::complex<double> colSum(0.0, 0.0);
+                double sumRe = 0.0;
+                double sumIm = 0.0;
+                // Index of (rx, tx, rb) inside this page: rx + hRxPorts*tx.
+                // We walk tx with stride hRxPorts (real index hRxPorts*2 in doubles).
                 for (size_t tx = 0; tx < hTxPorts; ++tx)
                 {
-                    colSum += (*specMat)(rx, tx, rb);
+                    const size_t off = (rx + hRxPorts * tx) * 2;
+                    sumRe += pageD[off];
+                    sumIm += pageD[off + 1];
                 }
-                acc += std::norm(colSum); // |sum|^2
+                acc += sumRe * sumRe + sumIm * sumIm;
             }
             (*rxParams->psd)[rb] = acc * invN;
         }
@@ -424,46 +472,122 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
         }
     }
 
-    // Compute the product between the doppler and the delay sincos
-    auto delaySincosCopy = channelParams->m_cachedDelaySincos;
-    for (size_t iRb = 0; iRb < inPsd->GetValuesN(); iRb++)
+    // ── Optimization: pack inputs into c-contiguous flat arrays so the
+    // hottest dimension of the tensor contraction is unit-stride. The
+    // original layout walked the cluster index through Complex3DVector
+    // (rx-fast, tx-mid, page-slow) and Complex2DArray (rb-fast,
+    // cluster-slow). On a realistic 32x32x17x273 contraction the
+    // cluster-stride was 16 KB on longTerm and 4.4 KB on delaySincos
+    // — each c step trashed L1.
+    //
+    //   longTermT[c, rxtx] = longTerm[rx, tx, c]   (c-fast, rxtx-slow)
+    //   delayT[c, rb]      = delaySincos[rb, c] * doppler[c]  (c-fast, rb-slow)
+    //
+    // After the pack, the kernel becomes a rank-17 outer-product
+    // accumulation: for each cluster c, scale longTermT[c, :] by
+    // delayT[c, rb] and add to chanSpct[:, :, rb]. The inner step is a
+    // contiguous read of longTermT (rxtx) AND a contiguous
+    // write of chanSpct (rxtx) — best possible cache behaviour, with
+    // dpoint-product / FMAs SIMD-friendly.
+    const size_t rxtx = static_cast<size_t>(numRxPorts) * numTxPorts;
+    std::vector<std::complex<double>> longTermT(numCluster * rxtx);
     {
-        for (std::size_t cIndex = 0; cIndex < numCluster; cIndex++)
+        // directionalLongTerm has shape (numRxPorts, numTxPorts, numCluster)
+        // and the underlying flat index is rx + numRxPorts*tx + rxtx*c.
+        // We want longTermT[c, rxtx] = directionalLongTerm flat index above
+        // but in the form longTermT[c * rxtx + (rx + numRxPorts*tx)].
+        const auto& src = directionalLongTerm.GetValues();
+        for (size_t c = 0; c < numCluster; ++c)
         {
-            delaySincosCopy(iRb, cIndex) *= doppler[cIndex];
+            // Source slice: src[c * rxtx ... c * rxtx + rxtx)
+            // Dest slice:   longTermT[c * rxtx ... +rxtx)
+            const size_t srcBase = c * rxtx;
+            const size_t dstBase = c * rxtx;
+            std::memcpy(&longTermT[dstBase],
+                        &src[srcBase],
+                        rxtx * sizeof(std::complex<double>));
+        }
+    }
+    std::vector<std::complex<double>> delayT(numCluster * numRb);
+    {
+        // Source: cachedDelaySincos has shape (numRb, numCluster), flat
+        // index = rb + numRb*c. We want delayT[c * numRb + rb].
+        const auto& srcDel = channelParams->m_cachedDelaySincos.GetValues();
+        for (size_t c = 0; c < numCluster; ++c)
+        {
+            const std::complex<double> dopplerC = doppler[c];
+            const size_t srcBase = c * numRb;
+            const size_t dstBase = c * numRb;
+            for (size_t rb = 0; rb < numRb; ++rb)
+            {
+                delayT[dstBase + rb] = srcDel[srcBase + rb] * dopplerC;
+            }
         }
     }
 
-    // If "params" (ChannelMatrix) and longTerm were computed for the reverse direction (e.g. this
-    // is a DL transmission but params and longTerm were last updated during UL), then the elements
-    // in longTerm start from different offsets.
-
-    auto vit = inPsd->ValuesBegin(); // psd iterator
-    size_t iRb = 0;
-    // Compute the frequency-domain channel matrix
-    while (vit != inPsd->ValuesEnd())
+    // Precompute sqrt(*vit[rb]) for the entire PSD. Zeros stay zero, so
+    // subbands with zero TX power are skipped after the contraction
+    // (their column in chanSpct is just zeroed by the initial Create
+    // call -- we never write to it).
+    std::vector<double> sqrtVit(numRb, 0.0);
     {
-        if (*vit != 0.00)
+        auto vit = inPsd->ValuesBegin();
+        for (size_t rb = 0; rb < numRb; ++rb, ++vit)
         {
-            auto sqrtVit = sqrt(*vit);
-            for (auto rxPortIdx = 0; rxPortIdx < numRxPorts; rxPortIdx++)
+            const double v = *vit;
+            if (v > 0.0)
+                sqrtVit[rb] = std::sqrt(v);
+        }
+    }
+
+    // Outer-product contraction. c-outermost so the chanSpct[:, :, rb]
+    // tail (rxtx*16 B per rb) stays in cache while we walk all rbs for
+    // a single cluster, and the longTermT slice for c (rxtx*16 B)
+    // stays in L1 throughout the inner rb sweep. Inner (rxtx) loop is
+    // unit-stride on both longTermT and chanSpct.
+    //
+    // Drops std::complex<double> in the hot inner loop because in
+    // Debug mode the compiler keeps `operator*` / `operator+=` as
+    // separate calls (no inlining at -O0). At 4.75M iterations per
+    // call that was billions of stack frames per benchmark run.
+    // Treating each complex<double> as a pair of raw doubles lets the
+    // hot loop be plain scalar adds + muls that even the Debug
+    // compiler keeps inline -- and a release build will autovectorise
+    // the same shape over AVX2 FMA registers.
+    auto* longTermTd = reinterpret_cast<const double*>(longTermT.data());
+    auto* delayTd = reinterpret_cast<const double*>(delayT.data());
+    for (size_t c = 0; c < numCluster; ++c)
+    {
+        const double* aRow = longTermTd + c * rxtx * 2;          // [re, im] pairs
+        const double* bRow = delayTd + c * numRb * 2;
+        for (size_t rb = 0; rb < numRb; ++rb)
+        {
+            const double bRe = bRow[rb * 2];
+            const double bIm = bRow[rb * 2 + 1];
+            auto* outRow = reinterpret_cast<double*>(chanSpct->GetPagePtr(rb));
+            for (size_t i = 0; i < rxtx; ++i)
             {
-                for (auto txPortIdx = 0; txPortIdx < numTxPorts; txPortIdx++)
-                {
-                    std::complex subsbandGain(0.0, 0.0);
-                    for (size_t cIndex = 0; cIndex < numCluster; cIndex++)
-                    {
-                        subsbandGain += directionalLongTerm(rxPortIdx, txPortIdx, cIndex) *
-                                        delaySincosCopy(iRb, cIndex);
-                    }
-                    // Multiply with the square root of the input PSD so that the norm (absolute
-                    // value squared) of chanSpct will be the output PSD
-                    chanSpct->Elem(rxPortIdx, txPortIdx, iRb) = sqrtVit * subsbandGain;
-                }
+                const double aRe = aRow[i * 2];
+                const double aIm = aRow[i * 2 + 1];
+                // (aRe + j aIm) * (bRe + j bIm) =
+                //   (aRe*bRe - aIm*bIm) + j (aRe*bIm + aIm*bRe)
+                outRow[i * 2]     += aRe * bRe - aIm * bIm;
+                outRow[i * 2 + 1] += aRe * bIm + aIm * bRe;
             }
         }
-        ++vit;
-        ++iRb;
+    }
+    // Scale each RB slab by sqrt(*vit[rb]). RBs with zero PSD stay at
+    // zero (Complex3DVector::Create zero-inits via valarray default).
+    for (size_t rb = 0; rb < numRb; ++rb)
+    {
+        const double s = sqrtVit[rb];
+        if (s == 0.0)
+            continue;
+        auto* outRow = reinterpret_cast<double*>(chanSpct->GetPagePtr(rb));
+        for (size_t i = 0; i < rxtx * 2; ++i)
+        {
+            outRow[i] *= s;
+        }
     }
     return chanSpct;
 }

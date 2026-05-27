@@ -47,6 +47,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <string>
 
 // Allow the bench to switch on phase-timing instrumentation in the
 // channel/PRX models. The macros are defined below this include block
@@ -64,10 +66,22 @@ struct Args
 {
     uint32_t nUes = 100;
     uint32_t nTicks = 10;
-    uint32_t txElems = 4;
-    uint32_t rxElems = 1;
+    uint32_t txRows = 2;
+    uint32_t txCols = 8;
+    uint32_t rxRows = 2;
+    uint32_t rxCols = 8;
+    uint32_t txVPorts = 2;
+    uint32_t txHPorts = 8;
+    uint32_t rxVPorts = 2;
+    uint32_t rxHPorts = 8;
+    bool txDualPol = true;
+    bool rxDualPol = true;
+    uint32_t nPrb = 273; // 100 MHz @ 30 kHz SCS
     bool useGpu = false;
     bool runPrx = true;
+    bool dumpPsd = false;
+    uint32_t dumpLinks = 8;
+    std::string dumpPath = "psd_dump.txt";
 };
 
 Args
@@ -84,13 +98,42 @@ ParseArgs(int argc, char** argv)
         else if (std::strncmp(arg, "--ticks=", 8) == 0)
             a.nTicks = static_cast<uint32_t>(std::atoi(val));
         else if (std::strncmp(arg, "--tx-elems=", 11) == 0)
-            a.txElems = static_cast<uint32_t>(std::atoi(val));
+        {
+            // Square shorthand: --tx-elems=N means N rows, N cols.
+            uint32_t n = static_cast<uint32_t>(std::atoi(val));
+            a.txRows = n;
+            a.txCols = n;
+        }
         else if (std::strncmp(arg, "--rx-elems=", 11) == 0)
-            a.rxElems = static_cast<uint32_t>(std::atoi(val));
+        {
+            uint32_t n = static_cast<uint32_t>(std::atoi(val));
+            a.rxRows = n;
+            a.rxCols = n;
+        }
+        else if (std::strncmp(arg, "--tx-rows=", 10) == 0)
+            a.txRows = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--tx-cols=", 10) == 0)
+            a.txCols = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--rx-rows=", 10) == 0)
+            a.rxRows = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--rx-cols=", 10) == 0)
+            a.rxCols = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strcmp(arg, "--tx-single-pol") == 0)
+            a.txDualPol = false;
+        else if (std::strcmp(arg, "--rx-single-pol") == 0)
+            a.rxDualPol = false;
+        else if (std::strncmp(arg, "--prb=", 6) == 0)
+            a.nPrb = static_cast<uint32_t>(std::atoi(val));
         else if (std::strcmp(arg, "--use-gpu") == 0)
             a.useGpu = true;
         else if (std::strcmp(arg, "--no-prx") == 0)
             a.runPrx = false;
+        else if (std::strcmp(arg, "--dump-psd") == 0)
+            a.dumpPsd = true;
+        else if (std::strncmp(arg, "--dump-links=", 13) == 0)
+            a.dumpLinks = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--dump-path=", 12) == 0)
+            a.dumpPath = val;
     }
     return a;
 }
@@ -102,14 +145,23 @@ main(int argc, char** argv)
 {
     Args args = ParseArgs(argc, argv);
 
-    std::printf("spectrum_profile_bench: %u UEs, %u ticks, %ux%u BS antenna, "
-                "%ux%u UE antenna, UseGpu=%d, RunPrx=%d\n",
+    std::printf("spectrum_profile_bench: %u UEs, %u ticks, BS %ux%u elem (%ux%u port%s%s), "
+                "UE %ux%u elem (%ux%u port%s%s), %u PRB, UseGpu=%d, RunPrx=%d\n",
                 args.nUes,
                 args.nTicks,
-                args.txElems,
-                args.txElems,
-                args.rxElems,
-                args.rxElems,
+                args.txRows,
+                args.txCols,
+                args.txVPorts,
+                args.txHPorts,
+                args.txDualPol ? ", dual-pol" : "",
+                args.txDualPol ? " x2" : "",
+                args.rxRows,
+                args.rxCols,
+                args.rxVPorts,
+                args.rxHPorts,
+                args.rxDualPol ? ", dual-pol" : "",
+                args.rxDualPol ? " x2" : "",
+                args.nPrb,
                 args.useGpu,
                 args.runPrx);
 
@@ -171,24 +223,32 @@ main(int argc, char** argv)
                              rng->GetValue(-3, 3)));
     }
 
-    auto mkAnt = [](uint32_t n) {
+    auto mkAnt = [](uint32_t rows,
+                    uint32_t cols,
+                    uint32_t vPorts,
+                    uint32_t hPorts,
+                    bool dualPol) {
         return CreateObjectWithAttributes<UniformPlanarArray>(
             "NumColumns",
-            UintegerValue(n),
+            UintegerValue(cols),
             "NumRows",
-            UintegerValue(n),
+            UintegerValue(rows),
             "AntennaElement",
             PointerValue(CreateObject<IsotropicAntennaModel>()),
             "NumVerticalPorts",
-            UintegerValue(1),
+            UintegerValue(vPorts),
             "NumHorizontalPorts",
-            UintegerValue(1));
+            UintegerValue(hPorts),
+            "IsDualPolarized",
+            BooleanValue(dualPol));
     };
     std::vector<Ptr<PhasedArrayModel>> ants;
     for (uint32_t i = 0; i < kNumSites; ++i)
-        ants.push_back(mkAnt(args.txElems));
+        ants.push_back(
+            mkAnt(args.txRows, args.txCols, args.txVPorts, args.txHPorts, args.txDualPol));
     for (uint32_t i = 0; i < args.nUes; ++i)
-        ants.push_back(mkAnt(args.rxElems));
+        ants.push_back(
+            mkAnt(args.rxRows, args.rxCols, args.rxVPorts, args.rxHPorts, args.rxDualPol));
     // ThreeGppSpectrumPropagationLossModel requires a beamforming
     // vector to be set; without it, GetLongTerm asserts. We set a
     // simple isotropic (all-equal-phase) vector on each antenna.
@@ -205,17 +265,37 @@ main(int argc, char** argv)
         nodes.Get(i)->AggregateObject(mobs[i]);
 
     // For PRX evaluation we need a SpectrumValue. Use the LTE helper
-    // to construct a wideband (100 RB) PSD; bw/freq are illustrative
-    // only — the channel model only consumes the spectrum-model size.
+    // to construct a wideband PSD; bw/freq are illustrative only —
+    // the channel model only consumes the spectrum-model size.
+    // 273 PRBs = 100 MHz at 30 kHz SCS (NR FR1 default carrier).
     std::vector<int> activeRbs;
-    activeRbs.reserve(100);
-    for (int i = 0; i < 100; ++i)
-        activeRbs.push_back(i);
+    activeRbs.reserve(args.nPrb);
+    for (uint32_t i = 0; i < args.nPrb; ++i)
+        activeRbs.push_back(static_cast<int>(i));
     Ptr<SpectrumValue> txPsd =
         LteSpectrumValueHelper::CreateTxPowerSpectralDensity(/*earfcn=*/3050,
-                                                             /*bandwidthRb=*/100,
+                                                             static_cast<uint16_t>(args.nPrb),
                                                              /*powerTxDbm=*/46.0,
                                                              activeRbs);
+
+    // Open dump file if requested. Writes one row per link evaluation:
+    //   <tick> <site> <ue> <psd0> <psd1> ... <psdN-1>
+    // so two runs (e.g. baseline vs optimized) can be diff'd
+    // element-wise to verify numerical equivalence within FP tolerance.
+    std::ofstream dump;
+    if (args.dumpPsd)
+    {
+        dump.open(args.dumpPath);
+        if (!dump)
+        {
+            std::fprintf(stderr, "Failed to open %s for dump\n", args.dumpPath.c_str());
+            return 1;
+        }
+        dump.precision(17);
+        std::printf("PSD dump enabled -> %s (first %u links/tick)\n",
+                    args.dumpPath.c_str(),
+                    args.dumpLinks);
+    }
 
     using clock = std::chrono::steady_clock;
     auto tStart = clock::now();
@@ -246,7 +326,22 @@ main(int argc, char** argv)
                             Create<SpectrumSignalParameters>();
                         sig->psd = Create<SpectrumValue>(*txPsd);
                         sig->duration = MilliSeconds(1);
-                        prxModel->CalcRxPowerSpectralDensity(sig, txMob, rxMob, txAnt, rxAnt);
+                        auto rxSig = prxModel->CalcRxPowerSpectralDensity(
+                            sig, txMob, rxMob, txAnt, rxAnt);
+                        // Dump first dumpLinks links per tick (always
+                        // the same links across runs since site/ue
+                        // order is fixed).
+                        if (args.dumpPsd && (s * args.nUes + u) < args.dumpLinks)
+                        {
+                            dump << t << ' ' << s << ' ' << u;
+                            for (auto it = rxSig->psd->ValuesBegin();
+                                 it != rxSig->psd->ValuesEnd();
+                                 ++it)
+                            {
+                                dump << ' ' << *it;
+                            }
+                            dump << '\n';
+                        }
                     }
                     else
                     {

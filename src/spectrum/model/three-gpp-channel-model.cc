@@ -4693,11 +4693,17 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
                 const Vector& sLoc = sLocs[sIndex];
                 const uint8_t polS = sPols[sIndex];
                 const std::vector<std::complex<double>>& preCompRx = precompRxPhase[polS];
+                // Treat the precomp array as a [re, im] double pair so
+                // the hot inner loop avoids std::complex<double>
+                // operator* / operator+= overhead under -O0. Release
+                // builds end up with the same code path.
+                const auto* preCompRxD =
+                    reinterpret_cast<const double*>(preCompRx.data());
 
                 if (!isStrongest)
                 {
                     // (7.5-22) — N-2 weakest clusters
-                    std::complex<double> rays(0, 0);
+                    double raysRe = 0.0, raysIm = 0.0;
                     for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
                     {
                         const size_t idx = nmBase + mIndex;
@@ -4705,18 +4711,24 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
                             2.0 * M_PI *
                             (sinCosD[idx] * sLoc.x + sinSinD[idx] * sLoc.y +
                              cosZoD[idx] * sLoc.z);
-                        // NOTE Doppler is computed in CalcBeamformingGain and is
-                        // simplified to only account for the cluster centre angle.
-                        rays += preCompRx[mIndex] * std::polar(1.0, txArg);
+                        // NOTE Doppler is computed in CalcBeamformingGain.
+                        const double tCos = std::cos(txArg);
+                        const double tSin = std::sin(txArg);
+                        const double pRe = preCompRxD[mIndex * 2];
+                        const double pIm = preCompRxD[mIndex * 2 + 1];
+                        // (pRe + j pIm) * (tCos + j tSin)
+                        raysRe += pRe * tCos - pIm * tSin;
+                        raysIm += pRe * tSin + pIm * tCos;
                     }
-                    hUsn(uIndex, sIndex, nIndex) = rays * clusScale;
+                    hUsn(uIndex, sIndex, nIndex) =
+                        std::complex<double>(raysRe * clusScale, raysIm * clusScale);
                 }
                 else
                 {
-                    // (7.5-28) — strongest clusters get split into 3 subclusters
-                    std::complex<double> raysSub1(0, 0);
-                    std::complex<double> raysSub2(0, 0);
-                    std::complex<double> raysSub3(0, 0);
+                    // (7.5-28) — strongest clusters split into 3 subclusters
+                    double r1Re = 0, r1Im = 0;
+                    double r2Re = 0, r2Im = 0;
+                    double r3Re = 0, r3Im = 0;
                     for (uint8_t mIndex = 0; mIndex < nRays; mIndex++)
                     {
                         const size_t idx = nmBase + mIndex;
@@ -4724,29 +4736,29 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
                             2.0 * M_PI *
                             (sinCosD[idx] * sLoc.x + sinSinD[idx] * sLoc.y +
                              cosZoD[idx] * sLoc.z);
-                        const std::complex<double> raySub =
-                            preCompRx[mIndex] * std::polar(1.0, txArg);
+                        const double tCos = std::cos(txArg);
+                        const double tSin = std::sin(txArg);
+                        const double pRe = preCompRxD[mIndex * 2];
+                        const double pIm = preCompRxD[mIndex * 2 + 1];
+                        const double rRe = pRe * tCos - pIm * tSin;
+                        const double rIm = pRe * tSin + pIm * tCos;
 
                         switch (mIndex)
                         {
                         case 9: case 10: case 11: case 12: case 17: case 18:
-                            raysSub2 += raySub;
-                            break;
+                            r2Re += rRe; r2Im += rIm; break;
                         case 13: case 14: case 15: case 16:
-                            raysSub3 += raySub;
-                            break;
+                            r3Re += rRe; r3Im += rIm; break;
                         default: // 1..8, 19, 20
-                            raysSub1 += raySub;
-                            break;
+                            r1Re += rRe; r1Im += rIm; break;
                         }
                     }
-                    hUsn(uIndex, sIndex, nIndex) = raysSub1 * clusScale;
-                    hUsn(uIndex,
-                         sIndex,
-                         nClusters + numSubClustersAdded) = raysSub2 * clusScale;
-                    hUsn(uIndex,
-                         sIndex,
-                         nClusters + numSubClustersAdded + 1) = raysSub3 * clusScale;
+                    hUsn(uIndex, sIndex, nIndex) =
+                        std::complex<double>(r1Re * clusScale, r1Im * clusScale);
+                    hUsn(uIndex, sIndex, nClusters + numSubClustersAdded) =
+                        std::complex<double>(r2Re * clusScale, r2Im * clusScale);
+                    hUsn(uIndex, sIndex, nClusters + numSubClustersAdded + 1) =
+                        std::complex<double>(r3Re * clusScale, r3Im * clusScale);
                 }
             }
         }
