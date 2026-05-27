@@ -329,12 +329,16 @@ SlsChanWgpu::uploadCellParams(const std::vector<CellParam>& cells, uint32_t nSec
     // back-end) should pass `nSectorPerSite=1`.
     assert(nSectorPerSite > 0 && "nSectorPerSite must be > 0");
     nSite_ = static_cast<uint32_t>(cells.size() / nSectorPerSite);
+    cellsCache_ = cells;
+    nSectorPerSiteCache_ = nSectorPerSite;
 }
 
 void
 SlsChanWgpu::uploadUtParams(const std::vector<UtParam>& uts)
 {
     utParamsBuf_ = makeBuffer(uts.size() * sizeof(UtParam), WGPUBufferUsage_Storage, uts.data());
+    utsCache_ = uts;
+    nUTCache_ = static_cast<uint32_t>(uts.size());
 }
 
 void
@@ -360,12 +364,23 @@ SlsChanWgpu::setSystemLevelConfig(uint32_t scenario,
                                &slc);
 }
 
+void
+SlsChanWgpu::setCenterFrequencyHz(float centerFreqHz)
+{
+    centerFreqHzCache_ = centerFreqHz;
+    SimConfigGPU sc{centerFreqHz, 0.0f, 0.0f, 0.0f};
+    simConfigBuf_ = makeBuffer(sizeof(SimConfigGPU),
+                               WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+                               &sc);
+}
+
 // ── Small-scale topology uploads ─────────────────────────────────────────────
 void
 SlsChanWgpu::uploadCellParamsSS(const std::vector<CellParamSS>& cells)
 {
     ssCellParamsBuf_ =
         makeBuffer(cells.size() * sizeof(CellParamSS), WGPUBufferUsage_Storage, cells.data());
+    cellsSSCache_ = cells;
 }
 
 void
@@ -373,6 +388,7 @@ SlsChanWgpu::uploadUtParamsSS(const std::vector<UtParamSS>& uts)
 {
     ssUtParamsBuf_ =
         makeBuffer(uts.size() * sizeof(UtParamSS), WGPUBufferUsage_Storage, uts.data());
+    utsSSCache_ = uts;
 }
 
 // ── Antenna panel configs ─────────────────────────────────────────────────────
@@ -392,6 +408,7 @@ SlsChanWgpu::uploadAntPanelConfigs(const std::vector<AntPanelConfigGPU>& configs
     // validation uses configs[0] = BS panel, configs[1] = UE panel
     ssNBsAnt_ = configs[0].nAnt;
     ssNUeAnt_ = configs[1].nAnt;
+    antCfgsCache_ = configs;
 }
 
 // ── mapAsync readback helper ──────────────────────────────────────────────────
@@ -1355,6 +1372,10 @@ SlsChanWgpu::uploadSmallScaleConfig(float scSpacingHz,
     ssSimConfigBuf_ =
         makeBuffer(sizeof(sc), WGPUBufferUsage_Uniform | WGPUBufferUsage_CopySrc, &sc);
     ssNPrbg_ = nPrbg;
+    scSpacingHzCache_ = scSpacingHz;
+    fftSizeCache_ = fftSize;
+    nPrbCache_ = nPrb;
+    nSnapshotPerSlotCache_ = nSnapshotPerSlot;
 
     // binding 21 — uni_sys
     SmallScaleSysConfig sys{};
@@ -1370,6 +1391,8 @@ void
 SlsChanWgpu::uploadCmnLinkParamsSmallScale(const SsCmnParams& cmn)
 {
     ssCmnLinkBuf_ = makeBuffer(sizeof(cmn), WGPUBufferUsage_Storage, &cmn);
+    ssCmnCache_ = cmn;
+    ssCmnCacheValid_ = true;
 }
 
 // ── calClusterRay ─────────────────────────────────────────────────────────────
@@ -1480,6 +1503,8 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
                          uint32_t nSnapshots,
                          float refTime)
 {
+    activeLinksCache_ = activeLinks;
+    nSnapshotsCache_ = nSnapshots;
     assert(ssSimConfigBuf_ && "call uploadSmallScaleConfig before generateCIR");
     assert(ssSysConfigBuf_ && "call uploadSmallScaleConfig before generateCIR");
     assert(ssCellParamsBuf_ && "call uploadCellParamsSS before generateCIR");
@@ -2064,43 +2089,349 @@ writeDatasetUint32(hid_t loc, const char* name, const uint32_t* data, hsize_t co
     H5Tclose(dset);
 }
 
+static void
+writeSlsChanHdf5File(const std::string& filename,
+                     const std::vector<LinkParams>& links,
+                     uint32_t nSite,
+                     uint32_t nUT,
+                     const std::vector<ClusterParamsGpu>& clusterParams,
+                     const std::vector<ActiveLink>& activeLinks,
+                     const std::vector<std::complex<float>>& cirCoe,
+                     const std::vector<uint32_t>& cirNormDelay,
+                     const std::vector<uint32_t>& cirNtaps,
+                     const std::vector<std::complex<float>>& cfrPrbg,
+                     uint32_t nPrbg,
+                     const std::vector<float>& xpr,
+                     const std::vector<float>& phiNmAoA,
+                     const std::vector<float>& phiNmAoD,
+                     const std::vector<float>& thetaNmZOA,
+                     const std::vector<float>& thetaNmZOD,
+                     float scSpacingHz,
+                     uint32_t fftSize,
+                     uint32_t nPrb,
+                     uint32_t nSnapshotPerSlot,
+                     float centerFreqHz,
+                     float bandwidthHz,
+                     uint32_t nUeAnt,
+                     uint32_t nBsAnt,
+                     const SsCmnParams& ssCmn,
+                     const std::vector<CellParam>& cells,
+                     const std::vector<CellParamSS>& cellsSS,
+                     const std::vector<UtParam>& uts,
+                     float isd,
+                     float bsHeight,
+                     float minBsUeDist2d,
+                     float maxBsUeDist2dIndoor,
+                     float indoorUtPercent,
+                     uint32_t nSectorPerSite);
+
+} // namespace
+
+// Minimal HDF5 writer for the ns-3 LSP-only batch path. Emits just the
+// datasets `minimal_analyzer.py` / `analysis_channel_stats.py` need for
+// outdoor coupling-loss / SIR / SINR calibration: `linkParams`,
+// `activeLinkParams`, and `topology/{nSite,nUT,nSector}`. Used when
+// the small-scale GPU buffers (clusters, rays, CIR, CFR) weren't
+// populated.
+namespace
+{
+
+static void
+writeLspOnlyHdf5(const std::string& filename,
+                 const std::vector<LinkParams>& links,
+                 uint32_t nSite,
+                 uint32_t nUT,
+                 uint32_t nSectorPerSite)
+{
+    if (std::filesystem::exists(filename))
+    {
+        SLS_CERR << "writeLspOnlyHdf5: " << filename << " already exists" << std::endl;
+        return;
+    }
+    hid_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    if (file < 0)
+    {
+        SLS_CERR << "writeLspOnlyHdf5: failed to create " << filename << std::endl;
+        return;
+    }
+    const uint32_t nLinks = nSite * nUT;
+
+    // linkParams compound: pathloss, SF, K, DS, ASD, ASA, ZSD, ZSA,
+    // losInd. Minimal_analyzer only needs pathloss + SF, but we emit
+    // the full LSP set so analysis_channel_stats can also consume it.
+    {
+        hid_t compoundType = H5Tcreate(H5T_COMPOUND, sizeof(LinkParamsHdf5));
+        H5Tinsert(compoundType, "cid", offsetof(LinkParamsHdf5, cid), H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "pathloss", offsetof(LinkParamsHdf5, pathloss), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "SF", offsetof(LinkParamsHdf5, SF), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "K", offsetof(LinkParamsHdf5, K), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "DS", offsetof(LinkParamsHdf5, DS), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "ASD", offsetof(LinkParamsHdf5, ASD), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "ASA", offsetof(LinkParamsHdf5, ASA), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "ZSD", offsetof(LinkParamsHdf5, ZSD), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "ZSA", offsetof(LinkParamsHdf5, ZSA), H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "losInd", offsetof(LinkParamsHdf5, losInd), H5T_NATIVE_UINT32);
+
+        std::vector<LinkParamsHdf5> h5(nLinks);
+        for (uint32_t i = 0; i < nLinks && i < links.size(); ++i)
+        {
+            h5[i].cid = (nUT > 0) ? i / nUT : 0u;
+            h5[i].pathloss = links[i].pathloss;
+            h5[i].SF = links[i].SF;
+            h5[i].K = links[i].K;
+            h5[i].DS = links[i].DS;
+            h5[i].ASD = links[i].ASD;
+            h5[i].ASA = links[i].ASA;
+            h5[i].ZSD = links[i].ZSD;
+            h5[i].ZSA = links[i].ZSA;
+            h5[i].losInd = links[i].losInd;
+        }
+        hsize_t dims = nLinks;
+        hid_t space = H5Screate_simple(1, &dims, nullptr);
+        hid_t dset = H5Dcreate2(file,
+                                "linkParams",
+                                compoundType,
+                                space,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT);
+        H5Dwrite(dset, compoundType, H5S_ALL, H5S_ALL, H5P_DEFAULT, h5.data());
+        H5Dclose(dset);
+        H5Sclose(space);
+        H5Tclose(compoundType);
+    }
+
+    // activeLinkParams compound — synthesised from site-major flat
+    // layout. minimal_analyzer.py reads this just to obtain the link
+    // count.
+    {
+        struct ActiveRec
+        {
+            uint32_t cid, uid, linkIdx, lspReadIdx;
+        };
+        hid_t compoundType = H5Tcreate(H5T_COMPOUND, sizeof(ActiveRec));
+        H5Tinsert(compoundType, "cid", offsetof(ActiveRec, cid), H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "uid", offsetof(ActiveRec, uid), H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "linkIdx", offsetof(ActiveRec, linkIdx), H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType,
+                  "lspReadIdx",
+                  offsetof(ActiveRec, lspReadIdx),
+                  H5T_NATIVE_UINT32);
+
+        std::vector<ActiveRec> rec(nLinks);
+        for (uint32_t i = 0; i < nLinks; ++i)
+        {
+            rec[i].cid = (nUT > 0) ? i / nUT : 0u;
+            rec[i].uid = (nUT > 0) ? i % nUT : 0u;
+            rec[i].linkIdx = i;
+            rec[i].lspReadIdx = i;
+        }
+        hsize_t dims = nLinks;
+        hid_t space = H5Screate_simple(1, &dims, nullptr);
+        hid_t dset = H5Dcreate2(file,
+                                "activeLinkParams",
+                                compoundType,
+                                space,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT,
+                                H5P_DEFAULT);
+        H5Dwrite(dset, compoundType, H5S_ALL, H5S_ALL, H5P_DEFAULT, rec.data());
+        H5Dclose(dset);
+        H5Sclose(space);
+        H5Tclose(compoundType);
+    }
+
+    // topology group with nSite / nUT / nSector scalars.
+    {
+        hid_t topo = H5Gcreate2(file, "topology", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        auto writeU32 = [&](const char* name, uint32_t val) {
+            hsize_t one = 1;
+            hid_t space = H5Screate_simple(1, &one, nullptr);
+            hid_t dset = H5Dcreate2(topo,
+                                    name,
+                                    H5T_NATIVE_UINT32,
+                                    space,
+                                    H5P_DEFAULT,
+                                    H5P_DEFAULT,
+                                    H5P_DEFAULT);
+            H5Dwrite(dset, H5T_NATIVE_UINT32, H5S_ALL, H5S_ALL, H5P_DEFAULT, &val);
+            H5Dclose(dset);
+            H5Sclose(space);
+        };
+        writeU32("nSite", nSite);
+        writeU32("nUT", nUT);
+        writeU32("nSector", nSectorPerSite);
+        H5Gclose(topo);
+    }
+
+    H5Fclose(file);
+    SLS_COUT << "Wrote LSP-only HDF5: " << filename << " (" << nLinks << " links)" << std::endl;
+}
+
 } // namespace
 
 void
-saveSlsChanToHdf5(const std::string& filename,
-                  const std::vector<LinkParams>& links,
-                  uint32_t nSite,
-                  uint32_t nUT,
-                  const std::vector<ClusterParamsGpu>& clusterParams,
-                  const std::vector<ActiveLink>& activeLinks,
-                  const std::vector<std::complex<float>>& cirCoe,
-                  const std::vector<uint32_t>& cirNormDelay,
-                  const std::vector<uint32_t>& cirNtaps,
-                  const std::vector<std::complex<float>>& cfrPrbg,
-                  uint32_t nPrbg,
-                  const std::vector<float>& xpr,
-                  const std::vector<float>& phiNmAoA,
-                  const std::vector<float>& phiNmAoD,
-                  const std::vector<float>& thetaNmZOA,
-                  const std::vector<float>& thetaNmZOD,
-                  float scSpacingHz,
-                  uint32_t fftSize,
-                  uint32_t nPrb,
-                  uint32_t nSnapshotPerSlot,
-                  float centerFreqHz,
-                  float bandwidthHz,
-                  uint32_t nUeAnt,
-                  uint32_t nBsAnt,
-                  const SsCmnParams& ssCmn,
-                  const std::vector<CellParam>& cells,
-                  const std::vector<CellParamSS>& cellsSS,
-                  const std::vector<UtParam>& uts,
-                  float isd,
-                  float bsHeight,
-                  float minBsUeDist2d,
-                  float maxBsUeDist2dIndoor,
-                  float indoorUtPercent,
-                  uint32_t nSectorPerSite)
+SlsChanWgpu::saveSlsChanToHdf5(const std::string& filename, const SceneMeta& meta)
+{
+    // Pull outputs from the GPU buffers. Each readback method returns
+    // an empty vector if its source buffer wasn't populated (e.g. the
+    // ns-3 LSP-only path never runs calClusterRay / generateCIR).
+    std::vector<LinkParams> links;
+    if (linkParamsBuf_)
+    {
+        links = readLinkParams(nSite_, nUTCache_);
+    }
+
+    // If the small-scale path didn't run, drop down to the lightweight
+    // writer: it just emits linkParams + activeLinkParams (synthesised)
+    // + topology, which is everything `minimal_analyzer.py` /
+    // `analysis_channel_stats.py` need to compute the outdoor
+    // coupling-loss / SIR / SINR calibration.
+    if (activeLinksCache_.empty() || ssNUeAnt_ == 0 || ssNBsAnt_ == 0)
+    {
+        writeLspOnlyHdf5(filename, links, nSite_, nUTCache_, nSectorPerSiteCache_);
+        (void)meta; // scene metadata is unused in the LSP-only file
+        return;
+    }
+
+    std::vector<ClusterParamsGpu> clusterParams;
+    if (clusterParamsBuf_)
+    {
+        clusterParams = readClusterParams(nSite_, nUTCache_);
+    }
+
+    std::vector<uint32_t> cirNtaps;
+    if (cirNtapsBuf_)
+    {
+        cirNtaps = readCirNtaps();
+    }
+
+    std::vector<float> xprVec, phiNmAoAVec, phiNmAoDVec, thetaNmZOAVec, thetaNmZODVec;
+    if (xpr_Buf_)
+    {
+        xprVec = readXpr();
+    }
+    if (phi_nm_AoA_Buf_)
+    {
+        phiNmAoAVec = readPhiNmAoA();
+    }
+    if (phi_nm_AoD_Buf_)
+    {
+        phiNmAoDVec = readPhiNmAoD();
+    }
+    if (theta_nm_ZOA_Buf_)
+    {
+        thetaNmZOAVec = readThetaNmZOA();
+    }
+    if (theta_nm_ZOD_Buf_)
+    {
+        thetaNmZODVec = readThetaNmZOD();
+    }
+
+    // CIR coefficients and CFR are typically the largest payloads. We
+    // skip the readback when the buffers aren't there (LSP-only path)
+    // or when the caller hasn't built activeLinks. The caller is
+    // expected to call generateCIR / generateCFR first if they want
+    // these populated.
+    std::vector<std::complex<float>> cirCoe;
+    std::vector<std::complex<float>> cfrPrbg;
+    const std::vector<ActiveLink>& activeLinks = activeLinksCache_;
+    if (cirCoeBuf_ && !activeLinks.empty() && ssNUeAnt_ > 0 && ssNBsAnt_ > 0)
+    {
+        cirCoe = readCirCoe(static_cast<uint32_t>(activeLinks.size()),
+                            nSnapshotsCache_,
+                            ssNUeAnt_,
+                            ssNBsAnt_);
+    }
+    if (!m_cfrBatchedResult_.empty())
+    {
+        cfrPrbg = m_cfrBatchedResult_;
+    }
+
+    // 24-tap normalised-delay scratch vector. The kernel produces a
+    // monotonically-increasing 0..NMAXTAPS-1 ramp, so we recreate it
+    // host-side rather than reading back.
+    constexpr uint32_t kNmaxTaps = 24;
+    std::vector<uint32_t> cirNormDelay(kNmaxTaps);
+    for (uint32_t i = 0; i < kNmaxTaps; ++i)
+    {
+        cirNormDelay[i] = i;
+    }
+
+    writeSlsChanHdf5File(filename,
+                         links,
+                         nSite_,
+                         nUTCache_,
+                         clusterParams,
+                         activeLinks,
+                         cirCoe,
+                         cirNormDelay,
+                         cirNtaps,
+                         cfrPrbg,
+                         ssNPrbg_,
+                         xprVec,
+                         phiNmAoAVec,
+                         phiNmAoDVec,
+                         thetaNmZOAVec,
+                         thetaNmZODVec,
+                         scSpacingHzCache_,
+                         fftSizeCache_,
+                         nPrbCache_,
+                         nSnapshotPerSlotCache_,
+                         centerFreqHzCache_,
+                         meta.bandwidthHz,
+                         ssNUeAnt_,
+                         ssNBsAnt_,
+                         ssCmnCache_,
+                         cellsCache_,
+                         cellsSSCache_,
+                         utsCache_,
+                         meta.isd,
+                         meta.bsHeight,
+                         meta.minBsUeDist2d,
+                         meta.maxBsUeDist2dIndoor,
+                         meta.indoorUtPercent,
+                         nSectorPerSiteCache_);
+}
+
+namespace
+{
+
+static void
+writeSlsChanHdf5File(const std::string& filename,
+                     const std::vector<LinkParams>& links,
+                     uint32_t nSite,
+                     uint32_t nUT,
+                     const std::vector<ClusterParamsGpu>& clusterParams,
+                     const std::vector<ActiveLink>& activeLinks,
+                     const std::vector<std::complex<float>>& cirCoe,
+                     const std::vector<uint32_t>& cirNormDelay,
+                     const std::vector<uint32_t>& cirNtaps,
+                     const std::vector<std::complex<float>>& cfrPrbg,
+                     uint32_t nPrbg,
+                     const std::vector<float>& xpr,
+                     const std::vector<float>& phiNmAoA,
+                     const std::vector<float>& phiNmAoD,
+                     const std::vector<float>& thetaNmZOA,
+                     const std::vector<float>& thetaNmZOD,
+                     float scSpacingHz,
+                     uint32_t fftSize,
+                     uint32_t nPrb,
+                     uint32_t nSnapshotPerSlot,
+                     float centerFreqHz,
+                     float bandwidthHz,
+                     uint32_t nUeAnt,
+                     uint32_t nBsAnt,
+                     const SsCmnParams& ssCmn,
+                     const std::vector<CellParam>& cells,
+                     const std::vector<CellParamSS>& cellsSS,
+                     const std::vector<UtParam>& uts,
+                     float isd,
+                     float bsHeight,
+                     float minBsUeDist2d,
+                     float maxBsUeDist2dIndoor,
+                     float indoorUtPercent,
+                     uint32_t nSectorPerSite)
 {
     const uint32_t nLinks = nSite * nUT;
     const uint32_t nCells = nSite * nSectorPerSite;
@@ -2330,10 +2661,16 @@ saveSlsChanToHdf5(const std::string& filename,
 
         // Cast from LinkParams -> LinkParamsHdf5
         std::vector<LinkParamsHdf5> hdf5Links(nLinks);
+        const bool haveActiveLinks = activeLinks.size() >= nLinks;
         for (uint32_t i = 0; i < nLinks; ++i)
         {
             const LinkParams& lk = links[i];
-            hdf5Links[i].cid = activeLinks[i].cid; // Serving cell (sector) ID
+            // LSP-only callers (e.g. the ns-3 batch path) don't populate
+            // activeLinks. Fall back to deriving the serving cell ID
+            // from the link's site-major index: cid = i / nUT.
+            hdf5Links[i].cid = haveActiveLinks
+                                   ? activeLinks[i].cid
+                                   : (nUT > 0 ? i / nUT : 0u);
             hdf5Links[i].d2d = lk.d2d;
             hdf5Links[i].d2d_in = lk.d2d_in;
             hdf5Links[i].d2d_out = lk.d2d_out;
@@ -2498,12 +2835,25 @@ saveSlsChanToHdf5(const std::string& filename,
         };
 
         std::vector<ActiveLinkRecord> activeLinkRecords(nLinks);
+        const bool haveActiveLinks2 = activeLinks.size() >= nLinks;
         for (uint32_t i = 0; i < nLinks; ++i)
         {
-            activeLinkRecords[i].cid = activeLinks[i].cid;
-            activeLinkRecords[i].uid = activeLinks[i].uid;
-            activeLinkRecords[i].linkIdx = activeLinks[i].linkIdx;
-            activeLinkRecords[i].lspReadIdx = activeLinks[i].lspReadIdx;
+            if (haveActiveLinks2)
+            {
+                activeLinkRecords[i].cid = activeLinks[i].cid;
+                activeLinkRecords[i].uid = activeLinks[i].uid;
+                activeLinkRecords[i].linkIdx = activeLinks[i].linkIdx;
+                activeLinkRecords[i].lspReadIdx = activeLinks[i].lspReadIdx;
+            }
+            else
+            {
+                // Synthesise records from the site-major flat layout
+                // when no GPU CIR pipeline was run.
+                activeLinkRecords[i].cid = (nUT > 0) ? i / nUT : 0u;
+                activeLinkRecords[i].uid = (nUT > 0) ? i % nUT : 0u;
+                activeLinkRecords[i].linkIdx = i;
+                activeLinkRecords[i].lspReadIdx = i;
+            }
         }
 
         hsize_t dims = nLinks;
@@ -2863,4 +3213,6 @@ saveSlsChanToHdf5(const std::string& filename,
     SLS_COUT << "Wrote HDF5: " << filename << " (" << nLinks << " links, " << nLinks
              << " active)\n";
 }
+
+} // namespace
 #endif // SLS_CHAN_HDF5

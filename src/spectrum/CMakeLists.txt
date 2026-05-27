@@ -170,6 +170,16 @@ if(NS3_ENABLE_3GPP_GPU)
     # Make sure the wgpu_native runtime ends up next to the spectrum library
     # so executables that link against it can find it at run-time.
     target_copy_webgpu_binaries(${libspectrum})
+
+    # When HDF5 is available, compile the SLS-channel GPU back-end with
+    # SLS_CHAN_HDF5 so its saveSlsChanToHdf5() member is available to
+    # ns-3 callers (e.g. for re-running the outdoor calibration on a
+    # batch produced by ThreeGppChannelModel). Without this define the
+    # member compiles down to an undefined symbol.
+    if(${HDF5_FOUND})
+        target_compile_definitions(${libspectrum} PRIVATE SLS_CHAN_HDF5)
+        target_link_libraries(${libspectrum} PRIVATE HDF5::HDF5)
+    endif()
 endif()
 
 # ── Standalone SLS-channel test / validation binaries ──────────────────────

@@ -191,6 +191,23 @@ RunScenario(const char* label, bool useGpu, bool nlos = false)
 
     Simulator::Stop(MilliSeconds(200));
     Simulator::Run();
+
+    // Dump the GPU batch state for the GPU-enabled scenarios. The
+    // resulting file can be fed to analysis_channel_stats.py /
+    // minimal_analyzer.py to confirm coupling-loss / SIR / SINR still
+    // sit inside the 3GPP Phase-1 envelope when driven via ns-3.
+    if (useGpu)
+    {
+        const std::string h5name = std::string("gpu_batch_smoke_") + (nlos ? "nlos" : "los") +
+                                   ".h5";
+        std::remove(h5name.c_str());
+        model->DumpGpuChannelsToHdf5(h5name,
+                                     /*isd=*/150.0,
+                                     /*bsHeight=*/25.0,
+                                     /*bandwidthHz=*/20e6);
+        std::printf("  HDF5 dump written: %s\n", h5name.c_str());
+    }
+
     Simulator::Destroy();
 }
 

@@ -144,6 +144,30 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     void EnsureBatchFresh() override;
 
     /**
+     * @brief Dump the most recent GPU batch's channel state to an HDF5
+     * file in the NVIDIA-compatible layout used by
+     * `analysis_channel_stats.py`.
+     *
+     * The pipeline currently only runs the large-scale step from ns-3,
+     * so the dump contains valid LinkParams (pathloss, LSPs, LOS state)
+     * but empty cluster / CIR / CFR datasets. Useful for re-running the
+     * Phase-1 outdoor coupling-loss / SIR / SINR calibration on the
+     * ns-3-driven batch.
+     *
+     * No-op unless `UseGpu` is true and at least one GPU batch has run.
+     *
+     * @param filename Path to the HDF5 file to write. Will not
+     *                 overwrite an existing file.
+     * @param isd Inter-site distance in metres (informational only).
+     * @param bsHeight BS height in metres (informational only).
+     * @param bandwidthHz Carrier bandwidth (informational only).
+     */
+    void DumpGpuChannelsToHdf5(const std::string& filename,
+                               double isd = 0.0,
+                               double bsHeight = 0.0,
+                               double bandwidthHz = 0.0);
+
+    /**
      * @brief Assign a fixed random variable stream number to the random variables
      * used by this model.
      *

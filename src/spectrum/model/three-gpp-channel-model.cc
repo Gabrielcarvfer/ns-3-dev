@@ -2918,6 +2918,7 @@ ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
                                 /*o2iCar=*/0,
                                 /*forceLosIndoor=*/forceLosOutdoor,
                                 forceLosOutdoor);
+    m_gpu->setCenterFrequencyHz(static_cast<float>(m_frequency));
 
     // Step 3 — upload topology + dispatch the large-scale pipeline.
     // Pass nSectorPerSite=1 so SlsChanWgpu's nSite_ tracking lines up
@@ -3016,6 +3017,39 @@ ThreeGppChannelModel::RunGpuLspBatch(const std::vector<uint64_t>& dirty)
                                         << paramsUpdated << " existing param block(s)");
 }
 #endif // NS3_ENABLE_3GPP_GPU
+
+void
+ThreeGppChannelModel::DumpGpuChannelsToHdf5(const std::string& filename,
+                                            double isd,
+                                            double bsHeight,
+                                            double bandwidthHz)
+{
+    NS_LOG_FUNCTION(this << filename);
+#ifdef NS3_ENABLE_3GPP_GPU
+#ifdef SLS_CHAN_HDF5
+    if (!m_useGpu || !m_gpu)
+    {
+        NS_LOG_WARN("DumpGpuChannelsToHdf5: no GPU batch has run yet "
+                    "(UseGpu="
+                    << (m_useGpu ? "true" : "false")
+                    << "); nothing to dump. Make sure at least one EnsureBatchFresh() with "
+                       "dirty links has fired before calling this.");
+        return;
+    }
+    ::SlsChanWgpu::SceneMeta meta;
+    meta.isd = static_cast<float>(isd);
+    meta.bsHeight = static_cast<float>(bsHeight);
+    meta.bandwidthHz = static_cast<float>(bandwidthHz);
+    m_gpu->saveSlsChanToHdf5(filename, meta);
+#else
+    NS_LOG_WARN("DumpGpuChannelsToHdf5: spectrum library built without HDF5 support; "
+                "rebuild with HDF5_FOUND=ON. Filename=" << filename);
+#endif
+#else
+    NS_LOG_WARN("DumpGpuChannelsToHdf5: spectrum library built without NS3_ENABLE_3GPP_GPU; "
+                "filename=" << filename);
+#endif
+}
 
 ThreeGppChannelModel::LargeScaleParameters
 ThreeGppChannelModel::GenerateLSPs(const ChannelCondition::LosConditionValue losCondition,

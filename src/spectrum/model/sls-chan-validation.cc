@@ -947,51 +947,20 @@ main()
 
 #ifdef SLS_CHAN_HDF5
     // ── Write all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
-    float centerFreqHz = fc_ghz * 1e9f;
-    float bandwidthHz = 20e6f;
-
-    // CIR normalised delay (same as NVIDIA: 0..NMAXTAPS-1 scaled to [0,1))
-    const uint32_t NMAXTAPS = 24;
-    std::vector<uint32_t> cirNormDelay(NMAXTAPS);
-    for (uint32_t i = 0; i < NMAXTAPS; ++i)
-    {
-        cirNormDelay[i] = i;
-    }
-
-    saveSlsChanToHdf5("channel_output.h5",
-                      links,
-                      nSite,
-                      nUT,
-                      clusterParams,
-                      activeLinks,
-                      cirCoe,
-                      cirNormDelay,
-                      cirNtaps,
-                      freqChanPrbg,
-                      nPrbg,
-                      xpr,
-                      phiNmAoA,
-                      phiNmAoD,
-                      thetaNmZOA,
-                      thetaNmZOD,
-                      15000.0f,
-                      2048u,
-                      106u,
-                      nSnapshots,
-                      centerFreqHz,
-                      bandwidthHz,
-                      nUeAnt,
-                      nBsAnt,
-                      ssCmn,
-                      cells,
-                      cellsSS,
-                      uts,
-                      isd,
-                      h_bs,
-                      10.0f,
-                      2000.0f,
-                      0.0f,
-                      nSector);
+    // The pipeline already cached the topology / config inputs on its
+    // upload* methods; saveSlsChanToHdf5 reads those caches plus the
+    // GPU output buffers directly. We only need to supply the
+    // scenario metadata the GPU doesn't know about (deployment radius
+    // etc).
+    sls.setCenterFrequencyHz(fc_ghz * 1e9f);
+    SlsChanWgpu::SceneMeta meta;
+    meta.isd = isd;
+    meta.bsHeight = h_bs;
+    meta.minBsUeDist2d = 10.0f;
+    meta.maxBsUeDist2dIndoor = 2000.0f;
+    meta.indoorUtPercent = 0.0f;
+    meta.bandwidthHz = 20e6f;
+    sls.saveSlsChanToHdf5("channel_output.h5", meta);
     SLS_CERR << "HDF5 output saved" << std::endl;
 #endif
 

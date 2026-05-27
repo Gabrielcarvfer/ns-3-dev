@@ -404,6 +404,13 @@ class SlsChanWgpu
                               float forceLosIndoor,
                               float forceLosOutdoor);
 
+    // Override the GPU's sim-level center frequency. calLinkParam will
+    // otherwise lazily initialise this to 3.5 GHz. Call BEFORE
+    // calLinkParam if you want path-loss to use a different fc.
+    // The value is also cached and emitted into the HDF5 file by
+    // `saveSlsChanToHdf5`.
+    void setCenterFrequencyHz(float centerFreqHz);
+
     // Check if running in GPU mode (always true now)
     bool isCpuOnlyMode() const
     {
@@ -519,7 +526,40 @@ class SlsChanWgpu
     // 16 f32 per link, populated by generate_cir_kernel. Layout described in
     // sls-chan.wgsl near the `cir_dbg` binding.
     std::vector<float> readCirDebug(uint32_t nActiveLinks);
-    void saveSlsChanToHdf5(const std::string& filename);
+
+    /**
+     * Scene-level metadata to write alongside the channel state. The
+     * pipeline doesn't actually use any of these — they're recorded so
+     * downstream analyzers (e.g. analysis_channel_stats.py) can see
+     * how the deployment was constructed.
+     */
+    struct SceneMeta
+    {
+        float isd = 0.0f;
+        float bsHeight = 0.0f;
+        float minBsUeDist2d = 0.0f;
+        float maxBsUeDist2dIndoor = 0.0f;
+        float indoorUtPercent = 0.0f;
+        float bandwidthHz = 0.0f;
+    };
+
+#ifdef SLS_CHAN_HDF5
+    /**
+     * Write the full GPU channel state to `filename` in the
+     * NVIDIA-compatible HDF5 layout. Reads back every output buffer
+     * via the existing read*() methods and pulls topology / config
+     * inputs from the host-side caches populated by `upload*` and
+     * `uploadSmallScaleConfig`. Small-scale buffers that haven't been
+     * computed yet (e.g. when the caller only ran `calLinkParam`)
+     * are written as empty datasets rather than skipped, so the
+     * resulting file's schema is always the same.
+     *
+     * Only compiled when the spectrum library is built with HDF5
+     * (controlled by the `HDF5_FOUND` branch in
+     * `src/spectrum/CMakeLists.txt`).
+     */
+    void saveSlsChanToHdf5(const std::string& filename, const SceneMeta& meta);
+#endif
 
   private:
     wgpu::Device device_;
@@ -600,53 +640,29 @@ class SlsChanWgpu
     uint32_t ssNUeAnt_ = 0;
     uint32_t ssNBsAnt_ = 0;
     uint32_t ssNPrbg_ = 0;
+
+    // ── Cached host-side copies of the most recent upload* inputs ──
+    // Used by saveSlsChanToHdf5() to write topology metadata back to
+    // the HDF5 file without forcing every caller to thread these
+    // values through a 30-arg function. Populated automatically by
+    // the corresponding upload* / config methods; missing entries
+    // (e.g. small-scale buffers when the caller only ran the LSP
+    // pipeline) are written to the HDF5 as empty datasets.
+    std::vector<CellParam> cellsCache_;
+    std::vector<UtParam> utsCache_;
+    std::vector<CellParamSS> cellsSSCache_;
+    std::vector<UtParamSS> utsSSCache_;
+    std::vector<AntPanelConfigGPU> antCfgsCache_;
+    SsCmnParams ssCmnCache_{};
+    bool ssCmnCacheValid_ = false;
+    uint32_t nSectorPerSiteCache_ = 1;
+    uint32_t nUTCache_ = 0;
+    float scSpacingHzCache_ = 0.0f;
+    uint32_t fftSizeCache_ = 0;
+    uint32_t nPrbCache_ = 0;
+    uint32_t nSnapshotPerSlotCache_ = 0;
+    float centerFreqHzCache_ = 0.0f;
+    std::vector<ActiveLink> activeLinksCache_;
+    uint32_t nSnapshotsCache_ = 0;
 };
 #endif // SLS_CHAN_WGPU_H
-
-#ifdef SLS_CHAN_HDF5
-// Free function to save all SLS channel metrics to an HDF5 file
-// Matches the NVIDIA slsChan::saveSlsChanToH5File structure
-void saveSlsChanToHdf5(const std::string& filename,
-                       // Large-scale link parameters
-                       const std::vector<LinkParams>& links,
-                       uint32_t nSite,
-                       uint32_t nUT,
-                       // Cluster parameters
-                       const std::vector<ClusterParamsGpu>& clusterParams,
-                       // Active link params
-                       const std::vector<ActiveLink>& activeLinks,
-                       // CIR data
-                       const std::vector<std::complex<float>>& cirCoe,
-                       const std::vector<uint32_t>& cirNormDelay,
-                       const std::vector<uint32_t>& cirNtaps,
-                       // CFR data
-                       const std::vector<std::complex<float>>& cfrPrbg,
-                       uint32_t nPrbg,
-                       // Small-scale parameters
-                       const std::vector<float>& xpr,
-                       const std::vector<float>& phiNmAoA,
-                       const std::vector<float>& phiNmAoD,
-                       const std::vector<float>& thetaNmZOA,
-                       const std::vector<float>& thetaNmZOD,
-                       // Configuration
-                       float scSpacingHz,
-                       uint32_t fftSize,
-                       uint32_t nPrb,
-                       uint32_t nSnapshotPerSlot,
-                       float centerFreqHz,
-                       float bandwidthHz,
-                       uint32_t nUeAnt,
-                       uint32_t nBsAnt,
-                       // Common link params
-                       const SsCmnParams& ssCmn,
-                       // Topology
-                       const std::vector<CellParam>& cells,
-                       const std::vector<CellParamSS>& cellsSS,
-                       const std::vector<UtParam>& uts,
-                       float isd,
-                       float bsHeight,
-                       float minBsUeDist2d,
-                       float maxBsUeDist2dIndoor,
-                       float indoorUtPercent,
-                       uint32_t nSectorPerSite);
-#endif
