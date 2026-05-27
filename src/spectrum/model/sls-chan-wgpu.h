@@ -577,6 +577,14 @@ class SlsChanWgpu
     wgpu::Buffer makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data = nullptr);
     void waitIdle();
 
+    // Compile a single compute kernel into a ComputePipeline. Used both
+    // eagerly (large-scale kernels in the constructor) and lazily
+    // (small-scale kernels only when their owning method is called) so
+    // backends that can't compile the small-scale kernels (Vulkan /
+    // OpenGL with some drivers and the current wgpu-native v24) can
+    // still be used for the LSP-only ns-3 batch path.
+    wgpu::ComputePipeline makePipeline(const char* entryPoint);
+
     ///////////////////////////////
     //// Large-scale buffers & pipelines
     ///////////////////////////////

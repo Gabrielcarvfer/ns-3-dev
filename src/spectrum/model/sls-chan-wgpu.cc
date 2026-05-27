@@ -27,19 +27,34 @@ readFile(const char* path)
     return {std::istreambuf_iterator<char>(f), {}};
 }
 
-static std::pair<wgpu::Device, uint64_t>
-createDevice()
+// Map a backend enum value to its short textual name (also used as the
+// `SLS_BACKEND` env-var keyword).
+static const char*
+backendName(WGPUBackendType b)
 {
-    WGPUInstanceDescriptor idesc{};
-    WGPUInstance instance = wgpuCreateInstance(&idesc);
-    assert(instance);
+    switch (b)
+    {
+    case WGPUBackendType_D3D12: return "D3D12";
+    case WGPUBackendType_D3D11: return "D3D11";
+    case WGPUBackendType_Vulkan: return "Vulkan";
+    case WGPUBackendType_Metal: return "Metal";
+    case WGPUBackendType_OpenGL: return "OpenGL";
+    case WGPUBackendType_OpenGLES: return "OpenGLES";
+    case WGPUBackendType_Undefined: return "Auto";
+    case WGPUBackendType_WebGPU: return "WebGPU";
+    case WGPUBackendType_Null: return "Null";
+    default: return "Unknown";
+    }
+}
 
+// Request an adapter for the given backend; returns nullptr on failure.
+static WGPUAdapter
+tryAdapter(WGPUInstance instance, WGPUBackendType backend)
+{
     WGPUAdapter adapter = nullptr;
     WGPURequestAdapterOptions aopts{};
-
-    // Try D3D12 backend first (best on Windows)
-    aopts.backendType = WGPUBackendType_D3D12;
-    SLS_LOG("[DEBUG] Trying D3D12 backend...\n");
+    aopts.backendType = backend;
+    SLS_LOG("[DEBUG] Trying %s backend...\n", backendName(backend));
     wgpuInstanceRequestAdapter(
         instance,
         &aopts,
@@ -53,82 +68,103 @@ createDevice()
                    void*) {
                     if (status == WGPURequestAdapterStatus_Success)
                     {
-                        SLS_LOG("[DEBUG] D3D12 adapter acquired\n");
                         *static_cast<WGPUAdapter*>(ud1) = a;
-                    }
-                    else
-                    {
-                        SLS_LOG("[DEBUG] D3D12 adapter failed (status=%d), trying Vulkan...\n",
-                                status);
                     }
                 },
             .userdata1 = &adapter});
-    wgpuInstanceProcessEvents(instance); // process async callback
-    if (!adapter)
+    wgpuInstanceProcessEvents(instance);
+    if (adapter)
     {
-        // Try Vulkan backend as fallback
-        aopts.backendType = WGPUBackendType_Vulkan;
-        SLS_LOG("[DEBUG] Trying Vulkan backend...\n");
-        wgpuInstanceRequestAdapter(
-            instance,
-            &aopts,
-            WGPURequestAdapterCallbackInfo{
-                .mode = WGPUCallbackMode_AllowSpontaneous,
-                .callback =
-                    [](WGPURequestAdapterStatus status,
-                       WGPUAdapter a,
-                       WGPUStringView,
-                       void* ud1,
-                       void*) {
-                        if (status == WGPURequestAdapterStatus_Success)
-                        {
-                            SLS_LOG("[DEBUG] Vulkan adapter acquired\n");
-                            *static_cast<WGPUAdapter*>(ud1) = a;
-                        }
-                        else
-                        {
-                            SLS_LOG("[DEBUG] Vulkan adapter failed (status=%d), trying auto...\n",
-                                    status);
-                        }
-                    },
-                .userdata1 = &adapter});
-        wgpuInstanceProcessEvents(instance); // process async callback
+        SLS_LOG("[DEBUG] %s adapter acquired\n", backendName(backend));
+    }
+    else
+    {
+        SLS_LOG("[DEBUG] %s adapter unavailable\n", backendName(backend));
+    }
+    return adapter;
+}
+
+// Resolve the desired backend order:
+//   - If SLS_BACKEND is set to D3D12 / D3D11 / Vulkan / Metal / OpenGL /
+//     OpenGLES / Auto (case-insensitive), try ONLY that backend, hard-fail
+//     if it isn't available.
+//   - Otherwise fall through to the default Windows-friendly chain:
+//     D3D12 -> Vulkan -> Auto.
+// Result is a small vector of backends to try in order; the first one
+// that returns a usable adapter wins.
+static std::vector<WGPUBackendType>
+resolveBackendOrder()
+{
+    const char* env = std::getenv("SLS_BACKEND");
+    if (env && *env)
+    {
+        std::string sel(env);
+        for (auto& c : sel)
+        {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        if (sel == "d3d12")
+        {
+            return {WGPUBackendType_D3D12};
+        }
+        if (sel == "d3d11")
+        {
+            return {WGPUBackendType_D3D11};
+        }
+        if (sel == "vulkan" || sel == "vk")
+        {
+            return {WGPUBackendType_Vulkan};
+        }
+        if (sel == "metal" || sel == "mtl")
+        {
+            return {WGPUBackendType_Metal};
+        }
+        if (sel == "opengl" || sel == "gl")
+        {
+            return {WGPUBackendType_OpenGL};
+        }
+        if (sel == "opengles" || sel == "gles")
+        {
+            return {WGPUBackendType_OpenGLES};
+        }
+        if (sel == "auto" || sel == "undefined")
+        {
+            return {WGPUBackendType_Undefined};
+        }
+        SLS_LOG("[WARN] SLS_BACKEND=%s not recognised; falling through to default chain\n",
+                env);
+    }
+    // Default chain — best on Windows, falls back for headless / non-D3D12 systems.
+    return {WGPUBackendType_D3D12, WGPUBackendType_Vulkan, WGPUBackendType_Undefined};
+}
+
+static std::pair<wgpu::Device, uint64_t>
+createDevice()
+{
+    WGPUInstanceDescriptor idesc{};
+    WGPUInstance instance = wgpuCreateInstance(&idesc);
+    assert(instance);
+
+    WGPUAdapter adapter = nullptr;
+    WGPUBackendType chosen = WGPUBackendType_Undefined;
+    for (WGPUBackendType b : resolveBackendOrder())
+    {
+        adapter = tryAdapter(instance, b);
+        if (adapter)
+        {
+            chosen = b;
+            break;
+        }
     }
     if (!adapter)
     {
-        // Try auto-select
-        aopts.backendType = WGPUBackendType_Undefined;
-        SLS_LOG("[DEBUG] Trying auto-select backend...\n");
-        wgpuInstanceRequestAdapter(
-            instance,
-            &aopts,
-            WGPURequestAdapterCallbackInfo{
-                .mode = WGPUCallbackMode_AllowSpontaneous,
-                .callback =
-                    [](WGPURequestAdapterStatus status,
-                       WGPUAdapter a,
-                       WGPUStringView,
-                       void* ud1,
-                       void*) {
-                        if (status == WGPURequestAdapterStatus_Success)
-                        {
-                            SLS_LOG("[DEBUG] Auto-selected adapter acquired\n");
-                            *static_cast<WGPUAdapter*>(ud1) = a;
-                        }
-                        else
-                        {
-                            SLS_LOG("[DEBUG] Auto-select adapter failed (status=%d)\n", status);
-                        }
-                    },
-                .userdata1 = &adapter});
-        wgpuInstanceProcessEvents(instance); // process async callback
-    }
-    if (!adapter)
-    {
-        SLS_LOG("[FATAL] No GPU adapter available!\n");
+        SLS_LOG("[FATAL] No GPU adapter available for any requested backend!\n");
         wgpuInstanceRelease(instance);
         exit(1);
     }
+    // Log the winning backend even when SLS_DEBUG is off — useful for
+    // quick "which backend am I on?" diagnostics during testing.
+    std::fprintf(stderr, "[SlsChanWgpu] using %s backend\n", backendName(chosen));
 
     // Query what the adapter actually supports first
     WGPULimits supported{};
@@ -245,39 +281,36 @@ SlsChanWgpu::SlsChanWgpu()
     }
     SLS_LOG("[DEBUG] WGSL shader module created successfully\n");
 
-    auto makePipeline = [&](const char* ep) -> wgpu::ComputePipeline {
-        wgpu::ComputePipelineDescriptor desc{};
-        desc.compute.module = shader_;
-        desc.compute.entryPoint = sv(ep);
-        SLS_LOG("[DEBUG] Creating pipeline '%s'...\n", ep);
-        fflush(stderr);
-        auto pipe = device_.createComputePipeline(desc);
-        SLS_LOG("[DEBUG] Pipeline '%s': %s\n", ep, pipe ? "OK" : "FAILED");
-        fflush(stderr);
-        return pipe;
-    };
-
+    // Large-scale pipelines compile eagerly — every caller (LSP-only
+    // ns-3 batch + full validation harness) needs them.
     linkParamPipeline_ = makePipeline("cal_link_param_kernel");
-    SLS_LOG("[DEBUG] After cal_link_param_kernel\n");
     assert(linkParamPipeline_ && "missing cal_link_param_kernel in WGSL");
     crnFillPipeline_ = makePipeline("fill_crn_kernel");
-    SLS_LOG("[DEBUG] After fill_crn_kernel\n");
     assert(crnFillPipeline_ && "missing fill_crn_kernel in WGSL");
     crnConvPipeline_ = makePipeline("convolve_crn_kernel");
-    SLS_LOG("[DEBUG] After convolve_crn_kernel\n");
     assert(crnConvPipeline_ && "missing convolve_crn_kernel in WGSL");
     crnNormPipeline_ = makePipeline("normalize_crn_kernel");
-    SLS_LOG("[DEBUG] After normalize_crn_kernel\n");
     assert(crnNormPipeline_ && "missing normalize_crn_kernel in WGSL");
-    clusterRayPipeline_ = makePipeline("cal_cluster_ray_kernel");
-    SLS_LOG("[DEBUG] After cal_cluster_ray_kernel\n");
-    assert(clusterRayPipeline_ && "missing cal_cluster_ray_kernel in WGSL");
-    generateCIRPipeline_ = makePipeline("generate_cir_kernel");
-    SLS_LOG("[DEBUG] After generate_cir_kernel\n");
-    assert(generateCIRPipeline_ && "missing generate_cir_kernel in WGSL");
-    generateCFRPipeline_ = makePipeline("generate_cfr_kernel_mode1");
-    SLS_LOG("[DEBUG] After generate_cfr_kernel_mode1\n");
-    assert(generateCFRPipeline_ && "missing generate_cfr_kernel_mode1 in WGSL");
+    // Small-scale pipelines (cluster-ray / CIR / CFR) compile lazily
+    // in their owning methods. Some wgpu-native backends (notably the
+    // bundled v24 Vulkan / OpenGL on certain drivers) crash inside
+    // createComputePipeline when handed cal_cluster_ray_kernel; the
+    // LSP-only ns-3 path never reaches that method, so deferring lets
+    // those backends still produce LinkParams.
+}
+
+wgpu::ComputePipeline
+SlsChanWgpu::makePipeline(const char* entryPoint)
+{
+    wgpu::ComputePipelineDescriptor desc{};
+    desc.compute.module = shader_;
+    desc.compute.entryPoint = sv(entryPoint);
+    SLS_LOG("[DEBUG] Creating pipeline '%s'...\n", entryPoint);
+    std::fflush(stderr);
+    auto pipe = device_.createComputePipeline(desc);
+    SLS_LOG("[DEBUG] Pipeline '%s': %s\n", entryPoint, pipe ? "OK" : "FAILED");
+    std::fflush(stderr);
+    return pipe;
 }
 
 // ── Buffer helper ─────────────────────────────────────────────────────────────
@@ -1404,6 +1437,12 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     assert(ssUtParamsBuf_ && "call uploadUtParamsSS before calClusterRay");
     assert(ssCmnLinkBuf_ && "call uploadCmnLinkParamsSmallScale before calClusterRay");
     assert(!isDead());
+    if (!clusterRayPipeline_)
+    {
+        clusterRayPipeline_ = makePipeline("cal_cluster_ray_kernel");
+        assert(clusterRayPipeline_ && "missing cal_cluster_ray_kernel in WGSL "
+                                      "(or backend can't compile it)");
+    }
 
     const uint64_t clusterSz = uint64_t(nSite) * nUT * sizeof(ClusterParamsGpu);
     if (!clusterParamsBuf_)
@@ -1505,6 +1544,12 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
 {
     activeLinksCache_ = activeLinks;
     nSnapshotsCache_ = nSnapshots;
+    if (!generateCIRPipeline_)
+    {
+        generateCIRPipeline_ = makePipeline("generate_cir_kernel");
+        assert(generateCIRPipeline_ && "missing generate_cir_kernel in WGSL "
+                                       "(or backend can't compile it)");
+    }
     assert(ssSimConfigBuf_ && "call uploadSmallScaleConfig before generateCIR");
     assert(ssSysConfigBuf_ && "call uploadSmallScaleConfig before generateCIR");
     assert(ssCellParamsBuf_ && "call uploadCellParamsSS before generateCIR");
@@ -1612,6 +1657,12 @@ SlsChanWgpu::generateCFR(const std::vector<ActiveLink>& activeLinks,
                          uint32_t nActiveLinks,
                          uint32_t nSnapshots)
 {
+    if (!generateCFRPipeline_)
+    {
+        generateCFRPipeline_ = makePipeline("generate_cfr_kernel_mode1");
+        assert(generateCFRPipeline_ && "missing generate_cfr_kernel_mode1 in WGSL "
+                                       "(or backend can't compile it)");
+    }
     assert(ssSimConfigBuf_ && "call uploadSmallScaleConfig before generateCFR");
     assert(ssCellParamsBuf_ && "call uploadCellParamsSS before generateCFR");
     assert(ssUtParamsBuf_ && "call uploadUtParamsSS before generateCFR");
@@ -1700,6 +1751,12 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
                                 uint32_t nActiveLinks,
                                 uint32_t nSnapshots)
 {
+    if (!generateCFRPipeline_)
+    {
+        generateCFRPipeline_ = makePipeline("generate_cfr_kernel_mode1");
+        assert(generateCFRPipeline_ && "missing generate_cfr_kernel_mode1 in WGSL "
+                                       "(or backend can't compile it)");
+    }
     assert(ssSimConfigBuf_ && "call uploadSmallScaleConfig before generateCFR");
     assert(ssCellParamsBuf_ && "call uploadCellParamsSS before generateCFR");
     assert(ssUtParamsBuf_ && "call uploadUtParamsSS before generateCFR");

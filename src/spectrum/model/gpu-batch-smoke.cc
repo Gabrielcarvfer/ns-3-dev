@@ -70,7 +70,10 @@ DriveOnce(Ptr<ThreeGppChannelModel> model, const LinkPair& lp)
     // be finite.
     const double ds = p3->m_DS;
     const double k = p3->m_K_factor;
-    const bool dsOk = std::isfinite(ds) && ds > 1e-9 && ds < 1e-5;
+    // 1e-10 s (0.1 ns) accommodates very-close LOS UEs where the
+    // delay spread can legitimately collapse below 1 ns. 1e-5 s (10 us)
+    // covers the worst-case NLOS upper end.
+    const bool dsOk = std::isfinite(ds) && ds > 1e-10 && ds < 1e-5;
     const bool kOk = std::isfinite(k) && k > -20.0 && k < 40.0;
     if (!dsOk || !kOk)
     {
