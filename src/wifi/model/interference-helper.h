@@ -15,7 +15,11 @@
 
 #include "ns3/object.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <map>
+#include <utility>
+#include <vector>
 
 namespace ns3
 {
@@ -395,9 +399,105 @@ class InterferenceHelper : public Object
     };
 
     /**
-     * typedef for a multimap of NiChange
+     * Sorted-by-time list of NI changes for a single band.
+     *
+     * Replaces what was previously a std::multimap<Time, NiChange>. heaptrack on
+     * wifi-primary-channels showed multimap node allocations from
+     * AddNiChangeEvent dominated the post-fix allocation profile (~8M calls).
+     * A sorted vector preserves the same logical structure -- elements are kept
+     * in non-decreasing time order, duplicate times are allowed -- but amortises
+     * allocations across vector growth, which collapses the per-insert
+     * allocation into a per-doubling allocation. The downside is that
+     * insert/erase shift the tail, which is acceptable because the steady-state
+     * size is small (a handful of in-flight events per band).
+     *
+     * The public API intentionally mirrors the subset of multimap used by
+     * InterferenceHelper: begin/end/cbegin/cend, size/empty/clear,
+     * lower_bound/upper_bound on Time keys, insert with hint (used when the
+     * caller has already located the position), erase by iterator and range.
      */
-    using NiChanges = std::multimap<Time, NiChange>;
+    class NiChanges
+    {
+      public:
+        using value_type = std::pair<Time, NiChange>;
+        using iterator = std::vector<value_type>::iterator;
+        using const_iterator = std::vector<value_type>::const_iterator;
+        using size_type = std::size_t;
+
+        iterator begin() { return m_data.begin(); }
+        iterator end() { return m_data.end(); }
+        const_iterator begin() const { return m_data.begin(); }
+        const_iterator end() const { return m_data.end(); }
+        const_iterator cbegin() const { return m_data.cbegin(); }
+        const_iterator cend() const { return m_data.cend(); }
+
+        size_type size() const { return m_data.size(); }
+        bool empty() const { return m_data.empty(); }
+        void clear() { m_data.clear(); }
+        void reserve(size_type n) { m_data.reserve(n); }
+
+        value_type& operator[](size_type i) { return m_data[i]; }
+        const value_type& operator[](size_type i) const { return m_data[i]; }
+
+        /// First entry with time strictly greater than @p t.
+        iterator upper_bound(Time t)
+        {
+            return std::upper_bound(m_data.begin(), m_data.end(), t, TimeLess{});
+        }
+        const_iterator upper_bound(Time t) const
+        {
+            return std::upper_bound(m_data.cbegin(), m_data.cend(), t, TimeLess{});
+        }
+
+        /// First entry with time >= @p t.
+        iterator lower_bound(Time t)
+        {
+            return std::lower_bound(m_data.begin(), m_data.end(), t, TimeLess{});
+        }
+        const_iterator lower_bound(Time t) const
+        {
+            return std::lower_bound(m_data.cbegin(), m_data.cend(), t, TimeLess{});
+        }
+
+        /// Insert at a caller-provided position (typically the result of
+        /// upper_bound(t)). May invalidate other iterators if the vector reallocates.
+        iterator insert(const_iterator hint, value_type value)
+        {
+            return m_data.insert(hint, std::move(value));
+        }
+
+        /// Multimap-style sorted insert: locate the position via upper_bound and
+        /// insert there, keeping the time ordering with later duplicates after
+        /// earlier ones.
+        iterator insert(const value_type& v)
+        {
+            return m_data.insert(upper_bound(v.first), v);
+        }
+
+        /// Multimap-style emplace: construct value_type in-place from @p args
+        /// then insert at the sorted position.
+        template <typename... Args>
+        iterator emplace(Args&&... args)
+        {
+            value_type v(std::forward<Args>(args)...);
+            return m_data.insert(upper_bound(v.first), std::move(v));
+        }
+
+        iterator erase(const_iterator first, const_iterator last)
+        {
+            return m_data.erase(first, last);
+        }
+        iterator erase(const_iterator pos) { return m_data.erase(pos); }
+
+      private:
+        struct TimeLess
+        {
+            bool operator()(const value_type& a, Time b) const { return a.first < b; }
+            bool operator()(Time a, const value_type& b) const { return a < b.first; }
+        };
+
+        std::vector<value_type> m_data; //!< storage, kept in non-decreasing time order
+    };
 
     /**
      * Per-band interference state: the NI changes timeline together with the noise+interference
