@@ -295,8 +295,20 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         p.nAnt = ant->GetNumElems();
         p.antSize = {1, 1, 1, static_cast<uint32_t>(p.nAnt), 1};
         p.antSpacing = {0.f, 0.f, 0.5f, 0.5f};
-        p.polarAnglesDeg =
-            isBsSide ? std::array<float, 2>{45.f, -45.f} : std::array<float, 2>{0.f, 0.f};
+        // Polarisation slant angles. CPU UPA stores ONE PolSlantAngle
+        // attribute in radians; the dual-polarised second pol is taken
+        // to be perpendicular (slant + pi/2). The mezanine previously
+        // hardcoded {45, -45} degrees for BS, which mismatched the
+        // CPU side for any antenna whose PolSlantAngle wasn't 45 deg
+        // and broke beam coherency on dual-pol BS arrays.
+        const double polSlantRad = ant->GetPolSlant();
+        const double polSlantDeg = polSlantRad * 180.0 / M_PI;
+        p.polarAnglesDeg = ant->IsDualPol()
+                               ? std::array<float, 2>{
+                                     static_cast<float>(polSlantDeg),
+                                     static_cast<float>(polSlantDeg + 90.0)}
+                               : std::array<float, 2>{
+                                     static_cast<float>(polSlantDeg), 0.f};
         p.panelOrientation = {static_cast<float>(ant->GetAlpha()),
                               static_cast<float>(ant->GetBeta()),
                               0.f};

@@ -2282,6 +2282,16 @@ fn gen_channel_matrix_kernel(
         let t210 = vec2f(cos(ph2)/sqrt_kappa, sin(ph2)/sqrt_kappa);
         let t211 = cexp_j(ph3);
 
+        // mat_field_components returns vec2f(F_theta, F_phi) (see
+        // its comment). 3GPP TR 38.901 Eq 7.5-22 pairs ph0..ph3
+        // with (Theta*Theta, Theta*Phi, Phi*Theta, Phi*Phi):
+        //   ray = ph0 * F_rxTheta * F_txTheta
+        //       + ph1 * F_rxTheta * F_txPhi    [sqrt(1/k) in ph1]
+        //       + ph2 * F_rxPhi   * F_txTheta  [sqrt(1/k) in ph2]
+        //       + ph3 * F_rxPhi   * F_txPhi
+        // Since Frx.x = F_theta and Frx.y = F_phi, t1_0 is F_theta
+        // and t1_1 is F_phi -- pairings (i, j) -> (theta, phi)
+        // basis come out as in calc_ray_coeff.
         let t1_0 = vec2f(Frx.x, 0.0);
         let t1_1 = vec2f(Frx.y, 0.0);
         let t3_0 = vec2f(Ftx.x, 0.0);
