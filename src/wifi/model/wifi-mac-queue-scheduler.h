@@ -253,6 +253,29 @@ class WifiMacQueueScheduler : public Object
                                                  uint8_t linkId) = 0;
 
     /**
+     * If a container queue having the given ID exists, reset the information that indicates which
+     * links can be used to transmit the packets stored in the container queue and for which reason
+     * (if any) transmission on each such links is blocked. Otherwise, do nothing.
+     *
+     * @param ac the Access Category
+     * @param queueId the container queue ID
+     */
+    virtual void ResetQueueInfo(AcIndex ac, const WifiContainerQueueId& queueId) = 0;
+
+    /**
+     * Change the addresses that are part of the given queue ID with the given addresses.
+     *
+     * @param ac the Access Category
+     * @param queueId the given queue ID
+     * @param addr1 the address to write in the Address 1 field (if given)
+     * @param addr2 the address to write in the Address 2 field (if given)
+     */
+    virtual void ChangeQueueIdAddress(AcIndex ac,
+                                      const WifiContainerQueueId& queueId,
+                                      std::optional<Mac48Address> addr1,
+                                      std::optional<Mac48Address> addr2) = 0;
+
+    /**
      * Check whether an MPDU has to be dropped before enqueuing the given MPDU.
      *
      * @param ac the Access Category of the MPDU being enqueued

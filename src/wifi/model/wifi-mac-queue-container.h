@@ -179,6 +179,56 @@ MakeWifiGroupcastQueueId(WifiContainerQueueType type,
     return WifiContainerQueueId(type, WifiRcvAddr::GROUPCAST, addr1, addr2, tid);
 }
 
+/**
+ * Return the queue ID obtained after replacing the addresses carried by frames in the
+ * queue identified by the given queue ID. Address fields that are not part of a queue ID
+ * for the given receiver address type are kept unset.
+ *
+ * @param queueId the original queue ID
+ * @param addr1 the new Address 1, if it has to be replaced
+ * @param addr2 the new Address 2, if it has to be replaced
+ * @return the updated queue ID
+ */
+inline WifiContainerQueueId
+GetQueueIdWithReplacedAddresses(const WifiContainerQueueId& queueId,
+                                std::optional<Mac48Address> addr1,
+                                std::optional<Mac48Address> addr2)
+{
+    auto newQueueId = queueId;
+
+    switch (queueId.addrType)
+    {
+    case WifiRcvAddr::UNICAST:
+        if (addr1)
+        {
+            newQueueId.addr1 = *addr1;
+        }
+        newQueueId.addr2 = std::nullopt;
+        break;
+    case WifiRcvAddr::BROADCAST:
+        newQueueId.addr1 = std::nullopt;
+        if (addr2)
+        {
+            newQueueId.addr2 = *addr2;
+        }
+        break;
+    case WifiRcvAddr::GROUPCAST:
+        if (addr1)
+        {
+            newQueueId.addr1 = *addr1;
+        }
+        if (addr2)
+        {
+            newQueueId.addr2 = *addr2;
+        }
+        break;
+    case WifiRcvAddr::COUNT:
+        NS_ABORT_MSG("Invalid receiver address type");
+    }
+
+    return newQueueId;
+}
+
 } // namespace ns3
 
 /****************************************************
@@ -278,6 +328,19 @@ class WifiMacQueueContainer
      *         false otherwise
      */
     uint32_t GetNBytes(const WifiContainerQueueId& queueId) const;
+
+    /**
+     * Replace the addresses in the Address fields of all the MPDUs in the given container queue
+     * with the given addresses. Also, update the address in the ID of the given container queue
+     * if needed.
+     *
+     * @param queueId the ID of the given container queue
+     * @param addr1 the address to write in the Address 1 field (if given)
+     * @param addr2 the address to write in the Address 2 field (if given)
+     */
+    void ReplaceAddresses(const WifiContainerQueueId& queueId,
+                          std::optional<Mac48Address> addr1,
+                          std::optional<Mac48Address> addr2) const;
 
     /**
      * Transfer non-inflight MPDUs with expired lifetime in the container queue identified by
