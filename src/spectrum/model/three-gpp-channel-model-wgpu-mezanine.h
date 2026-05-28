@@ -67,6 +67,7 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         Ptr<const ChannelMatrix> channelMatrix,
         Ptr<const ChannelParams> channelParams,
         Ptr<const Complex3DVector> longTerm,
+        Ptr<const SpectrumValue> inPsd,
         const std::vector<std::complex<double>>& delayT,
         const std::vector<double>& sqrtVit,
         uint32_t numRb,
@@ -120,6 +121,34 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     mutable std::unordered_map<uint64_t, GpuLongTermEntry> m_gpuLongTermMap;
 
     static uint64_t HashComplexVector(const PhasedArrayModel::ComplexVector& v);
+
+    // Captured RB band layout for the batched GenSpec path. The first
+    // PRX eval ever runs through the per-eval hook with inPsd in hand;
+    // we snapshot the subband centre frequencies into m_batchRbFreqs
+    // there, return nullptr (so PRX uses CPU GenSpec for that one
+    // eval), and the NEXT UpdateChannel uses the snapshot to dispatch
+    // gen_spec_batch_kernel once for all active links. Subsequent
+    // evals look up their pre-built chanSpct_unscaled, multiply by
+    // sqrt(PSD[rb]), and return. RB freqs are checked for drift on
+    // every cache lookup -- mismatch -> fall back to CPU.
+    mutable std::vector<float> m_batchRbFreqs;
+    mutable uint64_t m_batchRbFreqsHash{0};
+    // Per-link chanSpct_unscaled buffers indexed by matrixKey. The
+    // value pair is (linkSlab f32, generatedTime + rbFreqsHash + dims
+    // snapshot). Same matrixKey policy as m_gpuLongTermMap so
+    // invalidation rules line up.
+    struct GpuChanSpctEntry
+    {
+        std::vector<std::complex<float>> chanSpctUnscaled;
+        uint32_t numRxPorts{0};
+        uint32_t numTxPorts{0};
+        uint32_t numRb{0};
+        Time generatedTime;
+        uint64_t rbFreqsHash{0};
+    };
+    mutable std::unordered_map<uint64_t, GpuChanSpctEntry> m_gpuChanSpctMap;
+
+    static uint64_t HashFloatVector(const std::vector<float>& v);
 };
 
 } // namespace ns3

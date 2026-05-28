@@ -12,6 +12,8 @@
 #include "sls-chan-wgpu.h"
 #include "sls-phase-timer.h"
 
+#include "ns3/spectrum-value.h"
+
 #include "ns3/abort.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
@@ -1409,6 +1411,123 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         }
     }
 
+    // Batched GenSpec dispatch: when rb_freqs has been captured by a
+    // prior eval (mezanine starts with the cache empty -- the very
+    // first eval ever goes through the CPU GenSpec path and stashes
+    // the band layout in m_batchRbFreqs), run gen_spec_batch_kernel
+    // once for all active links and stash per-link
+    // chanSpct_unscaled into m_gpuChanSpctMap. Subsequent eval-time
+    // calls to TryGenSpectrumChannelMatrix find the matrix waiting
+    // and just multiply by sqrt(PSD[rb]).
+    if (!m_batchRbFreqs.empty() && ltCanDispatch && !runtimeLinks.empty())
+    {
+        SLS_PHASE_SCOPE("Mez::GenSpecBatch");
+        const uint32_t numClusters = SlsChanWgpu::kMatMaxPages;
+        const uint32_t numRb = static_cast<uint32_t>(m_batchRbFreqs.size());
+        // Mezanine's matrix is built BS -> UE so for downlink evals
+        // (a=BS=tx, b=UE=rx) the longTerm has shape (UE, BS, c) =
+        // (rxPorts, txPorts, c).
+        const uint32_t numRxPorts = ltUPorts;
+        const uint32_t numTxPorts = ltSPorts;
+        const uint64_t rbFreqsHash = HashFloatVector(m_batchRbFreqs);
+
+        // Pack per-link delays + doppler. Doppler mirrors
+        // CalcBeamformingGain's formula at the current Simulator::Now()
+        // -- bench evals all happen at the same time within a tick, so
+        // pre-computing here matches what PRX would re-derive per call.
+        std::vector<float> delays(size_t(nActiveLinks) * numClusters, 0.0f);
+        std::vector<std::complex<float>> doppler(
+            size_t(nActiveLinks) * numClusters, std::complex<float>(1.0f, 0.0f));
+        const double slotTime = Simulator::Now().GetSeconds();
+        const double dopplerScale = 2.0 * M_PI * slotTime * m_frequency / 3e8;
+
+        for (const auto& ctx : runtimeLinks)
+        {
+            const size_t linkIdx = ctx.lspReadIdx;
+            auto pit = m_channelParamsMap.find(ctx.paramsKey);
+            if (pit == m_channelParamsMap.end())
+            {
+                continue;
+            }
+            const auto p = DynamicCast<const ThreeGppChannelParams>(pit->second);
+            if (!p)
+            {
+                continue;
+            }
+            const size_t nc = std::min(size_t(numClusters), p->m_delay.size());
+            const size_t baseIdx = linkIdx * numClusters;
+            for (size_t c = 0; c < nc; ++c)
+            {
+                delays[baseIdx + c] = static_cast<float>(p->m_delay[c]);
+            }
+            const Vector sSpeed = ctx.sMob ? ctx.sMob->GetVelocity() : Vector(0, 0, 0);
+            const Vector uSpeed = ctx.uMob ? ctx.uMob->GetVelocity() : Vector(0, 0, 0);
+            const size_t ncDop = std::min(
+                {nc, p->m_alpha.size(), p->m_D.size(),
+                 size_t(p->m_cachedAngleSincos.size() > ZOA_INDEX
+                            ? p->m_cachedAngleSincos[ZOA_INDEX].size()
+                            : 0)});
+            if (p->m_cachedAngleSincos.size() <= ZOD_INDEX)
+            {
+                continue;
+            }
+            const auto& zoa = p->m_cachedAngleSincos[ZOA_INDEX];
+            const auto& zod = p->m_cachedAngleSincos[ZOD_INDEX];
+            const auto& aoa = p->m_cachedAngleSincos[AOA_INDEX];
+            const auto& aod = p->m_cachedAngleSincos[AOD_INDEX];
+            for (size_t c = 0; c < ncDop; ++c)
+            {
+                const double tempDoppler = dopplerScale *
+                    (zoa[c].first * aoa[c].second * uSpeed.x +
+                     zoa[c].first * aoa[c].first * uSpeed.y +
+                     zoa[c].second * uSpeed.z +
+                     (zod[c].first * aod[c].second * sSpeed.x +
+                      zod[c].first * aod[c].first * sSpeed.y +
+                      zod[c].second * sSpeed.z) +
+                     2.0 * p->m_alpha[c] * p->m_D[c]);
+                doppler[baseIdx + c] = std::complex<float>(
+                    static_cast<float>(std::cos(tempDoppler)),
+                    static_cast<float>(std::sin(tempDoppler)));
+            }
+        }
+
+        gpu->genSpecBatch(nActiveLinks,
+                          numClusters,
+                          numRb,
+                          numRxPorts,
+                          numTxPorts,
+                          ltUPorts,
+                          ltSPorts,
+                          delays,
+                          doppler,
+                          m_batchRbFreqs);
+        std::vector<std::complex<float>> batchFlat;
+        {
+            SLS_PHASE_SCOPE("Mez::ReadSpecBatch");
+            batchFlat = gpu->readSpecBatch(nActiveLinks, numRb, numRxPorts, numTxPorts);
+        }
+
+        const size_t perLink = size_t(numRxPorts) * numTxPorts * numRb;
+        const Time generatedTime = Simulator::Now();
+        for (const auto& ctx : runtimeLinks)
+        {
+            const size_t linkBase = size_t(ctx.lspReadIdx) * perLink;
+            if (linkBase + perLink > batchFlat.size())
+            {
+                continue;
+            }
+            GpuChanSpctEntry e;
+            e.chanSpctUnscaled.assign(batchFlat.begin() + linkBase,
+                                      batchFlat.begin() + linkBase + perLink);
+            e.numRxPorts = numRxPorts;
+            e.numTxPorts = numTxPorts;
+            e.numRb = numRb;
+            e.generatedTime = generatedTime;
+            e.rbFreqsHash = rbFreqsHash;
+            m_gpuChanSpctMap.insert_or_assign(ctx.matrixKey, std::move(e));
+        }
+    }
+
     NS_LOG_DEBUG("Updated GPU-backed channel params + matrix caches.");
 }
 
@@ -1529,6 +1648,7 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
     Ptr<const ChannelMatrix> channelMatrix,
     Ptr<const ChannelParams> channelParams,
     [[maybe_unused]] Ptr<const Complex3DVector> longTerm,
+    Ptr<const SpectrumValue> inPsd,
     const std::vector<std::complex<double>>& delayT,
     const std::vector<double>& sqrtVit,
     uint32_t numRb,
@@ -1536,6 +1656,68 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
     uint8_t numTxPorts,
     bool isReverse) const
 {
+    // Batched per-tick path: if UpdateChannel has already run
+    // gen_spec_batch_kernel for this link with the current rb_freqs,
+    // the chanSpct_unscaled is cached in m_gpuChanSpctMap and the
+    // per-eval cost collapses to a hash lookup + per-PRB
+    // sqrt(PSD[rb]) scale. Otherwise we either capture rb_freqs from
+    // inPsd for the NEXT tick to pre-compute, or fall back to CPU /
+    // the per-eval GPU dispatch below.
+    if (!isReverse && channelMatrix)
+    {
+        const uint64_t key = MatrixBasedChannelModel::GetKey(
+            channelMatrix->m_antennaPair.first, channelMatrix->m_antennaPair.second);
+        auto it = m_gpuChanSpctMap.find(key);
+        if (it != m_gpuChanSpctMap.end())
+        {
+            const GpuChanSpctEntry& e = it->second;
+            if (e.generatedTime == channelMatrix->m_generatedTime &&
+                e.numRxPorts == numRxPorts && e.numTxPorts == numTxPorts &&
+                e.numRb == numRb && e.rbFreqsHash == HashFloatVector(m_batchRbFreqs))
+            {
+                // Lookup hit: alloc chanSpct, copy + scale by sqrt(PSD).
+                Ptr<Complex3DVector> chanSpct = Create<Complex3DVector>(
+                    static_cast<uint16_t>(numRxPorts),
+                    static_cast<uint16_t>(numTxPorts),
+                    static_cast<uint16_t>(numRb));
+                auto* dst = reinterpret_cast<double*>(chanSpct->GetPagePtr(0));
+                const size_t perPage = size_t(numRxPorts) * numTxPorts;
+                for (size_t rb = 0; rb < numRb; ++rb)
+                {
+                    const double s = sqrtVit[rb];
+                    const size_t off = rb * perPage;
+                    for (size_t i = 0; i < perPage; ++i)
+                    {
+                        const auto& sc = e.chanSpctUnscaled[off + i];
+                        dst[(off + i) * 2] = static_cast<double>(sc.real()) * s;
+                        dst[(off + i) * 2 + 1] = static_cast<double>(sc.imag()) * s;
+                    }
+                }
+                return chanSpct;
+            }
+        }
+    }
+
+    // First-ever eval (or rb_freqs invalidated): capture rb_freqs from
+    // inPsd's subband layout. Next tick's UpdateChannel will see the
+    // captured array and dispatch gen_spec_batch_kernel; this eval
+    // still falls through to CPU GenSpec.
+    if (m_batchRbFreqs.empty() && inPsd)
+    {
+        const auto bandsEnd = inPsd->ConstBandsEnd();
+        std::vector<float> freqs;
+        freqs.reserve(numRb);
+        for (auto it = inPsd->ConstBandsBegin(); it != bandsEnd && freqs.size() < numRb; ++it)
+        {
+            freqs.push_back(static_cast<float>(it->fc));
+        }
+        if (freqs.size() == numRb)
+        {
+            m_batchRbFreqs = std::move(freqs);
+            m_batchRbFreqsHash = HashFloatVector(m_batchRbFreqs);
+        }
+    }
+
     // Disabled by default. Per-eval GPU dispatch overhead (~600 us
     // observed via Dawn on D3D12 for the small chanSpct kernel) is
     // ~3x the CPU contraction cost (~190 us in Debug) at
@@ -1633,6 +1815,21 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
         dst[k * 2 + 1] = static_cast<double>(sr[1]);
     }
     return chanSpct;
+}
+
+uint64_t
+ThreeGppChannelModelWgpuMezanine::HashFloatVector(const std::vector<float>& v)
+{
+    uint64_t h = 1469598103934665603ull;
+    constexpr uint64_t kPrime = 1099511628211ull;
+    for (float f : v)
+    {
+        uint32_t bits;
+        std::memcpy(&bits, &f, sizeof(bits));
+        h ^= bits;
+        h *= kPrime;
+    }
+    return h;
 }
 
 uint64_t

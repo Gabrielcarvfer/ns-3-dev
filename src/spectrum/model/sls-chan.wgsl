@@ -2543,3 +2543,101 @@ fn gen_spec_chan_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
     let out_idx = rb * per_page + tx * spec_disp.n_rx_ports + rx;
     spec_chan_out[out_idx] = acc;
 }
+
+// ---------------------------------------------------------------------------
+// gen_spec_batch_kernel
+//
+// Per-tick batched version of gen_spec_chan_kernel. Processes ALL active
+// links in a single dispatch and writes the *unscaled* per-link chanSpct
+// (i.e. without the sqrt(PSD[rb]) factor). The per-eval hook then just
+// does a hash-keyed lookup + the cheap per-PRB sqrt scale on CPU --
+// amortising the GPU dispatch + readback over hundreds of evals.
+//
+// Inputs in addition to gen_spec_chan_kernel:
+//   - sb_delays   [n_links * n_clusters] f32 cluster delays
+//   - sb_doppler  [n_links * n_clusters] vec2f doppler factor (CPU-computed
+//                 from snapshotted angles + speeds + Simulator::Now())
+//   - sb_rb_freqs [n_rb] f32 subband centre frequencies (captured from
+//                 inPsd on the first eval, then re-uploaded each tick)
+// Outputs:
+//   - sb_chan_out [n_links * (n_rx*n_tx*n_rb)] vec2f
+//                 chanSpct_unscaled (rx, tx, rb) column-major per link
+//
+// delaySincos is computed inside the kernel as exp(-j*2*pi*fc*tau)
+// rather than uploaded from CPU. f32 precision over the typical 3GPP
+// delay range (~ns to ~us) at mid-band frequencies stays well under
+// the few-percent margin that PSD aggregate equivalence requires.
+//
+// Bindings @group(0) at 70..75 to stay clear of the per-eval GenSpec
+// kernel (60..64) and the long-term kernel (50..56).
+// ---------------------------------------------------------------------------
+
+struct SpecBatchDispatch {
+    n_links            : u32,
+    n_clusters         : u32,
+    n_rb               : u32,
+    n_rx_ports         : u32,
+    n_tx_ports         : u32,
+    lt_u_ports         : u32,
+    lt_s_ports         : u32,
+    lt_n_pages         : u32,
+}
+
+@group(0) @binding(70) var<uniform>             sb_disp      : SpecBatchDispatch;
+@group(0) @binding(71) var<storage, read>       sb_long_term : array<vec2f>;
+@group(0) @binding(72) var<storage, read>       sb_doppler   : array<vec2f>;
+@group(0) @binding(73) var<storage, read>       sb_delays    : array<f32>;
+@group(0) @binding(74) var<storage, read>       sb_rb_freqs  : array<f32>;
+@group(0) @binding(75) var<storage, read_write> sb_chan_out  : array<vec2f>;
+
+const SB_NEG_TWO_PI: f32 = -6.28318530717958647692;
+
+@compute @workgroup_size(64)
+fn gen_spec_batch_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let tid = gid.x;
+    let per_page = sb_disp.n_rx_ports * sb_disp.n_tx_ports;
+    let per_link_out = per_page * sb_disp.n_rb;
+    let total = sb_disp.n_links * per_link_out;
+    if (tid >= total) { return; }
+
+    let link_idx = tid / per_link_out;
+    let in_link  = tid % per_link_out;
+    let rb = in_link / per_page;
+    let pp = in_link % per_page;
+    let rx = pp % sb_disp.n_rx_ports;
+    let tx = pp / sb_disp.n_rx_ports;
+
+    let lt_per_page = sb_disp.lt_u_ports * sb_disp.lt_s_ports;
+    let per_link_lt = lt_per_page * sb_disp.lt_n_pages;
+    let lt_base = link_idx * per_link_lt;
+
+    let dop_base = link_idx * sb_disp.n_clusters;
+    let del_base = link_idx * sb_disp.n_clusters;
+
+    let fc = sb_rb_freqs[rb];
+
+    // Non-reverse direction only -- the mezanine path always generates
+    // channelMatrix in the BS->UE direction so for downlink evals
+    // (a=BS, b=UE) isReverse=false and (u, s) maps to (rx, tx). Uplink
+    // (isReverse=true) currently isn't covered by this batched path
+    // and the caller falls back to CPU GenSpec.
+    var acc = vec2f(0.0, 0.0);
+    for (var c: u32 = 0u; c < sb_disp.n_clusters; c = c + 1u) {
+        // delaySincos[c, rb] = exp(-j * 2*pi * fc * delay[c])
+        let theta = SB_NEG_TWO_PI * fc * sb_delays[del_base + c];
+        let ds = vec2f(cos(theta), sin(theta));
+        let dop = sb_doppler[dop_base + c];
+        // delayT = doppler * delaySincos
+        let dt = vec2f(dop.x * ds.x - dop.y * ds.y,
+                       dop.x * ds.y + dop.y * ds.x);
+        // longTerm[u=rx, s=tx, c]
+        let lt_idx = lt_base + c * lt_per_page + tx * sb_disp.lt_u_ports + rx;
+        let lt = sb_long_term[lt_idx];
+        acc = acc + vec2f(lt.x * dt.x - lt.y * dt.y,
+                          lt.x * dt.y + lt.y * dt.x);
+    }
+    // NOTE: NOT scaled by sqrt(PSD[rb]) -- that happens per eval on CPU.
+    let out_idx = link_idx * per_link_out + rb * per_page
+                + tx * sb_disp.n_rx_ports + rx;
+    sb_chan_out[out_idx] = acc;
+}

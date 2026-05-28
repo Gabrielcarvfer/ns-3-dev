@@ -23,6 +23,7 @@ namespace ns3
 {
 
 class MobilityModel;
+class SpectrumValue;
 
 /**
  * @ingroup spectrum
@@ -274,6 +275,7 @@ class MatrixBasedChannelModel : public Object
         [[maybe_unused]] Ptr<const ChannelMatrix> channelMatrix,
         [[maybe_unused]] Ptr<const ChannelParams> channelParams,
         [[maybe_unused]] Ptr<const Complex3DVector> longTerm,
+        [[maybe_unused]] Ptr<const SpectrumValue> inPsd,
         [[maybe_unused]] const std::vector<std::complex<double>>& delayT,
         [[maybe_unused]] const std::vector<double>& sqrtVit,
         [[maybe_unused]] uint32_t numRb,

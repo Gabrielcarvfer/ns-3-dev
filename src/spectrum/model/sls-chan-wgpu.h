@@ -610,6 +610,30 @@ class SlsChanWgpu
                                                  const std::vector<std::complex<float>>& delayT,
                                                  const std::vector<float>& sqrtVit);
 
+    // Per-tick batched version of genSpecChan. One dispatch builds the
+    // *unscaled* chanSpct (no sqrt(PSD) factor) for ALL active links
+    // and the caller reads them back in a single mapAsync. The
+    // per-link slab layout in the returned vector is column-major:
+    //   (rx, tx, rb) at rx + numRxPorts*tx + numRxPorts*numTxPorts*rb
+    // delays / doppler are flat per-link arrays of size numClusters
+    // each. rbFreqs is a single shared [numRb] f32 vector. delaySincos
+    // is computed inside the kernel from delays + rbFreqs (avoids the
+    // ~9 MB upload a CPU-side pre-pack would cost per tick).
+    void genSpecBatch(uint32_t nLinks,
+                      uint32_t numClusters,
+                      uint32_t numRb,
+                      uint32_t numRxPorts,
+                      uint32_t numTxPorts,
+                      uint32_t ltUPorts,
+                      uint32_t ltSPorts,
+                      const std::vector<float>& delays,
+                      const std::vector<std::complex<float>>& doppler,
+                      const std::vector<float>& rbFreqs);
+    std::vector<std::complex<float>> readSpecBatch(uint32_t nLinks,
+                                                   uint32_t numRb,
+                                                   uint32_t numRxPorts,
+                                                   uint32_t numTxPorts);
+
   private:
     // Gather one of the per-link sub-views out of the packed
     // clusterOutputsBuf_. linkOffF32 is the f32 offset into each
@@ -802,6 +826,19 @@ class SlsChanWgpu
     uint32_t specChanCfgNumRxPorts_{0};
     uint32_t specChanCfgNumTxPorts_{0};
     uint32_t specChanCfgNumRb_{0};
+
+    // gen_spec_batch_kernel scratch. Bindings @group(0) at 70..75.
+    wgpu::ComputePipeline specBatchPipeline_;
+    wgpu::Buffer specBatchDispatchBuf_;
+    wgpu::Buffer specBatchDopplerBuf_;
+    wgpu::Buffer specBatchDelaysBuf_;
+    wgpu::Buffer specBatchRbFreqsBuf_;
+    wgpu::Buffer specBatchOutBuf_;
+    wgpu::Buffer specBatchStagingBuf_;
+    uint32_t specBatchCfgNLinks_{0};
+    uint32_t specBatchCfgNumRxPorts_{0};
+    uint32_t specBatchCfgNumTxPorts_{0};
+    uint32_t specBatchCfgNumRb_{0};
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24

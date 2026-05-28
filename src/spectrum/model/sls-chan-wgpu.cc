@@ -2685,6 +2685,143 @@ SlsChanWgpu::genSpecChan(uint32_t linkIdx,
     return mapReadBuffer<std::complex<float>>(specChanStagingBuf_, outBytes);
 }
 
+// ── gen_spec_batch_kernel (per-tick batched dispatch) ────────────────────
+void
+SlsChanWgpu::genSpecBatch(uint32_t nLinks,
+                          uint32_t numClusters,
+                          uint32_t numRb,
+                          uint32_t numRxPorts,
+                          uint32_t numTxPorts,
+                          uint32_t ltUPorts,
+                          uint32_t ltSPorts,
+                          const std::vector<float>& delays,
+                          const std::vector<std::complex<float>>& doppler,
+                          const std::vector<float>& rbFreqs)
+{
+    assert(longTermOutBuf_ && "genSpecBatch requires genLongTerm to have run first");
+    assert(delays.size() == size_t(nLinks) * numClusters);
+    assert(doppler.size() == size_t(nLinks) * numClusters);
+    assert(rbFreqs.size() == numRb);
+
+    if (!specBatchPipeline_)
+    {
+        specBatchPipeline_ = makePipeline("gen_spec_batch_kernel");
+        assert(specBatchPipeline_ &&
+               "missing gen_spec_batch_kernel in WGSL (or backend can't compile it)");
+    }
+
+    // (Re)alloc output + staging buffers if the per-link slab shape changed.
+    const uint64_t outBytes =
+        uint64_t(nLinks) * numRxPorts * numTxPorts * numRb * sizeof(float) * 2;
+    if (!specBatchOutBuf_ || specBatchCfgNLinks_ != nLinks ||
+        specBatchCfgNumRxPorts_ != numRxPorts || specBatchCfgNumTxPorts_ != numTxPorts ||
+        specBatchCfgNumRb_ != numRb)
+    {
+        specBatchOutBuf_ =
+            makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        specBatchStagingBuf_ =
+            makeBuffer(outBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+        specBatchCfgNLinks_ = nLinks;
+        specBatchCfgNumRxPorts_ = numRxPorts;
+        specBatchCfgNumTxPorts_ = numTxPorts;
+        specBatchCfgNumRb_ = numRb;
+    }
+
+    // Per-tick inputs vary every dispatch -- realloc on size grow,
+    // re-upload via queue.writeBuffer otherwise.
+    const uint64_t dopplerBytes = doppler.size() * sizeof(float) * 2;
+    const uint64_t delaysBytes = delays.size() * sizeof(float);
+    const uint64_t rbFreqsBytes = rbFreqs.size() * sizeof(float);
+    if (!specBatchDopplerBuf_ || specBatchDopplerBuf_.getSize() < dopplerBytes)
+    {
+        specBatchDopplerBuf_ =
+            makeBuffer(dopplerBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(specBatchDopplerBuf_, 0, doppler.data(), dopplerBytes);
+    if (!specBatchDelaysBuf_ || specBatchDelaysBuf_.getSize() < delaysBytes)
+    {
+        specBatchDelaysBuf_ =
+            makeBuffer(delaysBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(specBatchDelaysBuf_, 0, delays.data(), delaysBytes);
+    if (!specBatchRbFreqsBuf_ || specBatchRbFreqsBuf_.getSize() < rbFreqsBytes)
+    {
+        specBatchRbFreqsBuf_ =
+            makeBuffer(rbFreqsBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(specBatchRbFreqsBuf_, 0, rbFreqs.data(), rbFreqsBytes);
+
+    struct SpecBatchDispUni
+    {
+        uint32_t nLinks;
+        uint32_t nClusters;
+        uint32_t nRb;
+        uint32_t nRxPorts;
+        uint32_t nTxPorts;
+        uint32_t ltUPorts;
+        uint32_t ltSPorts;
+        uint32_t ltNPages;
+    } du{nLinks, numClusters, numRb, numRxPorts, numTxPorts, ltUPorts, ltSPorts, kMatMaxPages};
+    if (!specBatchDispatchBuf_)
+    {
+        specBatchDispatchBuf_ = makeBuffer(
+            sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(specBatchDispatchBuf_, 0, &du, sizeof(du));
+
+    auto layout0 = specBatchPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> entries(6, wgpu::Default);
+    auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+        entries[i].binding = b;
+        entries[i].buffer = buf;
+        entries[i].offset = 0;
+        entries[i].size = sz;
+    };
+    E(0, 70, specBatchDispatchBuf_, sizeof(du));
+    E(1, 71, longTermOutBuf_);
+    E(2, 72, specBatchDopplerBuf_);
+    E(3, 73, specBatchDelaysBuf_);
+    E(4, 74, specBatchRbFreqsBuf_);
+    E(5, 75, specBatchOutBuf_);
+
+    wgpu::BindGroupDescriptor bgd = wgpu::Default;
+    bgd.layout = layout0;
+    bgd.entryCount = static_cast<uint32_t>(entries.size());
+    bgd.entries = entries.data();
+    wgpu::BindGroup bg0 = device_.createBindGroup(bgd);
+
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    auto pass = enc.beginComputePass(wgpu::Default);
+    pass.setPipeline(specBatchPipeline_);
+    pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
+    const uint64_t total = uint64_t(nLinks) * numRxPorts * numTxPorts * numRb;
+    const uint32_t groups = static_cast<uint32_t>((total + 63u) / 64u);
+    pass.dispatchWorkgroups(groups, 1u, 1u);
+    pass.end();
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+}
+
+std::vector<std::complex<float>>
+SlsChanWgpu::readSpecBatch(uint32_t nLinks,
+                           uint32_t numRb,
+                           uint32_t numRxPorts,
+                           uint32_t numTxPorts)
+{
+    if (!specBatchOutBuf_)
+    {
+        return {};
+    }
+    const uint64_t totalBytes =
+        uint64_t(nLinks) * numRxPorts * numTxPorts * numRb * sizeof(std::complex<float>);
+    assert(specBatchOutBuf_.getSize() >= totalBytes);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(specBatchOutBuf_, 0, specBatchStagingBuf_, 0, totalBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    return mapReadBuffer<std::complex<float>>(specBatchStagingBuf_, totalBytes);
+}
+
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
 #ifdef SLS_CHAN_HDF5
 namespace

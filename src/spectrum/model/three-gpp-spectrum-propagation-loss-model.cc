@@ -660,7 +660,7 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     if (channelModel)
     {
         if (auto gpuChanSpct = channelModel->TryGenSpectrumChannelMatrix(
-                channelMatrix, channelParams, longTerm,
+                channelMatrix, channelParams, longTerm, inPsd,
                 delayT, sqrtVit, numRb, numRxPorts, numTxPorts, isReverse))
         {
             return gpuChanSpct;
