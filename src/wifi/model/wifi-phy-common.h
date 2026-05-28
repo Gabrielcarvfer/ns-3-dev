@@ -234,9 +234,6 @@ struct WifiSpectrumBandInfo
 /// vector of spectrum bands
 using WifiSpectrumBands = std::vector<WifiSpectrumBandInfo>;
 
-/// A map of the received power for each band
-using RxPowerWattPerChannelBand = std::map<WifiSpectrumBandInfo, Watt_u>;
-
 /**
  * @ingroup wifi
  * Compare two bands.
@@ -274,6 +271,138 @@ operator<(const WifiSpectrumBandInfo& lhs, const WifiSpectrumBandInfo& rhs)
     }
     return lhs.m_sortKey < rhs.m_sortKey;
 }
+
+/**
+ * @ingroup wifi
+ * Received power per spectrum band.
+ *
+ * Conceptually a map from WifiSpectrumBandInfo to Watt_u. Backed by a sorted
+ * std::vector instead of std::map: heaptrack on wifi-primary-channels showed
+ * std::map node allocation in SpectrumWifiPhy::StartRx dominated the post-fix
+ * allocation profile (~4M calls per QUICK run), one per band per received
+ * PPDU. A sorted vector amortises allocations across vector growth and is
+ * more cache-friendly for the find/iterate access patterns used downstream.
+ *
+ * The map-like subset actually used by callers is preserved: insert with
+ * pair value, find by band, iteration, size/empty, and move semantics for
+ * Event::m_rxPowerW transfer.
+ */
+class RxPowerWattPerChannelBand
+{
+  public:
+    using value_type = std::pair<WifiSpectrumBandInfo, Watt_u>;
+    using container_type = std::vector<value_type>;
+    using iterator = container_type::iterator;
+    using const_iterator = container_type::const_iterator;
+    using size_type = std::size_t;
+
+    iterator begin()
+    {
+        return m_data.begin();
+    }
+
+    iterator end()
+    {
+        return m_data.end();
+    }
+
+    const_iterator begin() const
+    {
+        return m_data.begin();
+    }
+
+    const_iterator end() const
+    {
+        return m_data.end();
+    }
+
+    const_iterator cbegin() const
+    {
+        return m_data.cbegin();
+    }
+
+    const_iterator cend() const
+    {
+        return m_data.cend();
+    }
+
+    size_type size() const
+    {
+        return m_data.size();
+    }
+
+    bool empty() const
+    {
+        return m_data.empty();
+    }
+
+    void clear()
+    {
+        m_data.clear();
+    }
+
+    void reserve(size_type n)
+    {
+        m_data.reserve(n);
+    }
+
+    /**
+     * Map-like find by band.
+     * @param band the band to look up
+     * @return iterator to the entry, or end() if not found
+     */
+    iterator find(const WifiSpectrumBandInfo& band)
+    {
+        auto it = std::lower_bound(m_data.begin(), m_data.end(), band, BandLess{});
+        if (it != m_data.end() && !(band < it->first))
+        {
+            return it;
+        }
+        return m_data.end();
+    }
+
+    /// const overload of find()
+    const_iterator find(const WifiSpectrumBandInfo& band) const
+    {
+        auto it = std::lower_bound(m_data.cbegin(), m_data.cend(), band, BandLess{});
+        if (it != m_data.cend() && !(band < it->first))
+        {
+            return it;
+        }
+        return m_data.cend();
+    }
+
+    /**
+     * Map-like sorted insert. No-op if a value with the same key is already present.
+     * @param v the (band, power) pair to insert
+     * @return pair of iterator to the entry and bool indicating whether the insertion happened
+     */
+    std::pair<iterator, bool> insert(value_type v)
+    {
+        auto it = std::lower_bound(m_data.begin(), m_data.end(), v.first, BandLess{});
+        if (it != m_data.end() && !(v.first < it->first))
+        {
+            return {it, false};
+        }
+        return {m_data.insert(it, std::move(v)), true};
+    }
+
+  private:
+    struct BandLess
+    {
+        bool operator()(const value_type& a, const WifiSpectrumBandInfo& b) const
+        {
+            return a.first < b;
+        }
+
+        bool operator()(const WifiSpectrumBandInfo& a, const value_type& b) const
+        {
+            return a < b.first;
+        }
+    };
+
+    container_type m_data; //!< storage, kept in sorted-by-band order
+};
 
 /**
  * @brief Stream insertion operator.
