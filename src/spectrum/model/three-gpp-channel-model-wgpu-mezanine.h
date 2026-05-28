@@ -39,6 +39,20 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // per-link GetNewChannel that follows skips the CPU small-scale
     // draw entirely.
     void EnsureBatchFresh() override;
+    // Override GetChannel so we control both the matrix AND the
+    // channelParams lookup as a unit. The base class's GetChannel
+    // calls GenerateChannelParameters mid-call (with UpdatePeriod=0
+    // it fires on every eval), which can leave the cached matrix
+    // out of sync with the freshly-written m_alpha / m_D / m_angle
+    // vectors -- PRX::CalcBeamformingGain then asserts
+    // numCluster <= m_alpha.size(). We short-circuit when the
+    // mezanine has populated both maps with a matching (params,
+    // matrix) pair this tick.
+    Ptr<const ChannelMatrix> GetChannel(
+        Ptr<const MobilityModel> aMob,
+        Ptr<const MobilityModel> bMob,
+        Ptr<const PhasedArrayModel> aAntenna,
+        Ptr<const PhasedArrayModel> bAntenna) override;
     Ptr<MatrixBasedChannelModel::ChannelMatrix> GetNewChannel(
         Ptr<const ThreeGppChannelParams> channelParams,
         Ptr<const ParamsTable> table3gpp,

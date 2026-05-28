@@ -1724,6 +1724,56 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
     }
 }
 
+Ptr<const MatrixBasedChannelModel::ChannelMatrix>
+ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
+                                             Ptr<const MobilityModel> bMob,
+                                             Ptr<const PhasedArrayModel> aAntenna,
+                                             Ptr<const PhasedArrayModel> bAntenna)
+{
+    NS_LOG_FUNCTION(this);
+    // Short-circuit when the mezanine has already populated a matching
+    // (params, matrix) pair for this link in the current tick. This
+    // bypasses the base class's GenerateChannelParameters call --
+    // critical with UpdatePeriod=0 (NR calibration default), where
+    // the base would otherwise regenerate channel params on every
+    // eval and break the cached matrix's cluster-count alignment.
+    const uint64_t paramsKey =
+        MatrixBasedChannelModel::GetKey(aMob->GetObject<Node>()->GetId(),
+                                        bMob->GetObject<Node>()->GetId());
+    const uint64_t matrixKey =
+        MatrixBasedChannelModel::GetKey(aAntenna->GetId(), bAntenna->GetId());
+    m_linkEndpoints[paramsKey] = {aMob, bMob, aAntenna, bAntenna};
+
+    auto matIt = m_channelMatrixMap.find(matrixKey);
+    auto parIt = m_channelParamsMap.find(paramsKey);
+    if (matIt != m_channelMatrixMap.end() && parIt != m_channelParamsMap.end())
+    {
+        const Ptr<const ChannelMatrix> cachedMatrix = matIt->second;
+        const Ptr<const ChannelParams> cachedParams = parIt->second;
+        const size_t pages = cachedMatrix->m_channel.GetNumPages();
+        const size_t alphaSize = cachedParams->m_alpha.size();
+        // Matrix + params must be from the same tick and have matching
+        // cluster counts. AntennaSetupChanged check guards against
+        // antennas being swapped between calls (NR can reassign during
+        // initial association).
+        const bool aligned = pages == alphaSize && pages > 0;
+        const bool sameTime = cachedMatrix->m_generatedTime == cachedParams->m_generatedTime;
+        const bool antennaOk =
+            !AntennaSetupChanged(aAntenna, bAntenna, cachedMatrix);
+        if (aligned && sameTime && antennaOk)
+        {
+            return cachedMatrix;
+        }
+    }
+
+    // Cache miss / shape mismatch / antenna change -- fall through to
+    // the base class which will GenerateChannelParameters and
+    // GetNewChannel as needed. Our GetNewChannel override below also
+    // short-circuits to the cached matrix when the params it's handed
+    // happen to be the ones we wrote.
+    return ThreeGppChannelModel::GetChannel(aMob, bMob, aAntenna, bAntenna);
+}
+
 Ptr<MatrixBasedChannelModel::ChannelMatrix>
 ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams> channelParams,
                                                 Ptr<const ParamsTable> table3gpp,
