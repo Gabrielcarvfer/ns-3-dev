@@ -620,6 +620,32 @@ class SlsChanWgpu
     // deployments. Default matches the CUDA reference (10 m).
     float crnStep_ = 10.0f;
 
+    // generateCRN cache: every per-tick call to generateCRN spends most of
+    // its time inside the convolve_crn_kernel on a grid that, for any
+    // single sim, is a function of (deployment bounds, site count, the
+    // correlation-distance constants, crnStep_). For a stationary
+    // deployment those don't change across consecutive UpdateChannel
+    // ticks, so the kernel is producing the same field every tick. When
+    // UEs move slightly the new bounds usually fit inside the
+    // previously-generated grid, so cache validity is "current_bounds is
+    // a subset of cached_bounds AND other inputs unchanged" rather than
+    // exact equality. On a miss we re-generate with extra padding so the
+    // next few ticks' motion still hits the cache.
+    //
+    // Per 3GPP TR 38.901, large-scale parameters are spatially-correlated
+    // random fields that are constant within a channel consistency window
+    // (~100 ms), so re-using the field across ticks within that window is
+    // statistically equivalent to drawing fresh shadowing each tick (and
+    // the previous code's per-tick draws were already wasting statistical
+    // information by ignoring within-window correlation).
+    float crnCacheMaxX_ = 0.f;
+    float crnCacheMinX_ = 0.f;
+    float crnCacheMaxY_ = 0.f;
+    float crnCacheMinY_ = 0.f;
+    uint32_t crnCacheNSite_ = 0;
+    uint64_t crnCacheCorrKey_ = 0;
+    bool crnCacheValid_ = false;
+
     wgpu::Buffer makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data = nullptr);
     void waitIdle();
 #ifdef WEBGPU_BACKEND_DAWN

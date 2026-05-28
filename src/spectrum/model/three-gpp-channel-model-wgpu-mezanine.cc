@@ -615,24 +615,29 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     const float corrNlos[7] = {50.f, 40.f, 50.f, 50.f, 50.f, 50.f, 25.f};
     const float corrO2i[7] = {10.f, 10.f, 11.f, 17.f, 25.f, 25.f, 20.f};
 
-    gpu->generateCRN(maxXf, minXf, maxYf, minYf, corrLos, corrNlos, corrO2i);
-
-    // The four bool args used to be tracked locally as updatePL etc.;
-    // since the mezanine path is a full LSP regen on every UpdateChannel
-    // tick, we just request all updates.
-    gpu->calLinkParam(nSite,
-                      nUt,
-                      1,
-                      maxXf,
-                      minXf,
-                      maxYf,
-                      minYf,
-                      /*updatePL=*/true,
-                      /*updateAllLSPs=*/true,
-                      /*updateLos=*/true,
-                      /*updateOptionalPL=*/false,
-                      gpu->nX(),
-                      gpu->nY());
+    {
+        SLS_PHASE_SCOPE("Mez::GenerateCRN");
+        gpu->generateCRN(maxXf, minXf, maxYf, minYf, corrLos, corrNlos, corrO2i);
+    }
+    {
+        SLS_PHASE_SCOPE("Mez::CalLinkParam");
+        // The four bool args used to be tracked locally as updatePL etc.;
+        // since the mezanine path is a full LSP regen on every UpdateChannel
+        // tick, we just request all updates.
+        gpu->calLinkParam(nSite,
+                          nUt,
+                          1,
+                          maxXf,
+                          minXf,
+                          maxYf,
+                          minYf,
+                          /*updatePL=*/true,
+                          /*updateAllLSPs=*/true,
+                          /*updateLos=*/true,
+                          /*updateOptionalPL=*/false,
+                          gpu->nX(),
+                          gpu->nY());
+    }
 
     gpu->uploadSmallScaleConfig(15000.0f,
                                 4096,

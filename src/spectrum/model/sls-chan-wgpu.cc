@@ -604,6 +604,50 @@ SlsChanWgpu::generateCRN(float maxX,
             maxY,
             minY);
     fflush(stderr);
+
+    // Short-circuit when the cached CRN field still covers the current
+    // bounds and the deployment-level inputs (site count, correlation
+    // distances, step) are unchanged. CRN buffers stay resident on the
+    // GPU between calls.
+    uint64_t corrKey = 0;
+    {
+        const auto qf = [](float x) {
+            return static_cast<int32_t>(std::round(x * 10.0f));
+        };
+        corrKey = 1469598103934665603ull;
+        auto mix = [&](uint64_t v) {
+            corrKey ^= v;
+            corrKey *= 1099511628211ull;
+        };
+        mix(static_cast<uint32_t>(qf(crnStep_)));
+        for (int i = 0; i < 8; ++i) mix(static_cast<uint32_t>(qf(corrLos[i])));
+        for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrNlos[i])));
+        for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrO2i[i])));
+    }
+    if (crnCacheValid_ && nSite_ == crnCacheNSite_ && corrKey == crnCacheCorrKey_ &&
+        maxX <= crnCacheMaxX_ && minX >= crnCacheMinX_ && maxY <= crnCacheMaxY_ &&
+        minY >= crnCacheMinY_)
+    {
+        SLS_LOG("[DEBUG] generateCRN: cache hit; skipping GPU dispatch\n");
+        return;
+    }
+
+    // Cache miss: pad the bounds by a generous margin so the next few
+    // ticks' small per-UE motion (~m to tens of m within a 100 ms
+    // consistency window) stays inside the regenerated grid.
+    constexpr float kCachePaddingM = 500.f;
+    maxX += kCachePaddingM;
+    minX -= kCachePaddingM;
+    maxY += kCachePaddingM;
+    minY -= kCachePaddingM;
+    crnCacheMaxX_ = maxX;
+    crnCacheMinX_ = minX;
+    crnCacheMaxY_ = maxY;
+    crnCacheMinY_ = minY;
+    crnCacheNSite_ = nSite_;
+    crnCacheCorrKey_ = corrKey;
+    crnCacheValid_ = true;
+
     // Calculate grid dimensions matching WGSL shader: round(bound + 1 + 2*D) where D=3*corrDist
     float maxCorrDist = 0.0f;
     for (int i = 0; i < 8; i++)
