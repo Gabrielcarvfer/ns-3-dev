@@ -10,6 +10,7 @@
 #include "three-gpp-channel-model-wgpu-mezanine.h"
 
 #include "sls-chan-wgpu.h"
+#include "sls-phase-timer.h"
 
 #include "ns3/abort.h"
 #include "ns3/double.h"
@@ -156,6 +157,7 @@ SameDims(const MatrixBasedChannelModel::Double3DVector& v, uint32_t nCluster, ui
 void
 ThreeGppChannelModelWgpuMezanine::UpdateChannel()
 {
+    SLS_PHASE_SCOPE("Mez::UpdateChannel");
     NS_LOG_FUNCTION(this);
 
     // EnsureBatchFresh drives this synchronously at the start of every
@@ -993,25 +995,31 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     gpu->uploadCellParamsSS(cellsSS);
     gpu->uploadUtParamsSS(utsSS);
 
-    gpu->calClusterRay(nSite, nUt);
-    gpu->generateCIR(activeLinks, nActiveLinks, nSnapshots, 0.0f);
+    {
+        SLS_PHASE_SCOPE("Mez::SmallScaleKernels");
+        gpu->calClusterRay(nSite, nUt);
+        gpu->generateCIR(activeLinks, nActiveLinks, nSnapshots, 0.0f);
 
-    // After cluster delays + ray angles + xpr + random phases are on
-    // the GPU, dispatch the channel-matrix kernel and read back the
-    // per-link Complex3DVector blocks. Pass kMatMaxPages as the
-    // upper bound -- the kernel writes zeros for pages past the
-    // per-link numOverallCluster.
-    gpu->genChannelMatrix(activeLinks,
-                          nActiveLinks,
-                          /*uSize=*/globalUeAnt,
-                          /*sSize=*/globalBsAnt,
-                          /*numOverallCluster=*/SlsChanWgpu::kMatMaxPages,
-                          /*numReducedCluster=*/0u,
-                          /*nRays=*/20u,
-                          /*cluster1st=*/0u,
-                          /*cluster2nd=*/0u);
-    const std::vector<std::complex<float>> matFlat =
-        gpu->readChannelMatrix(nActiveLinks, globalUeAnt, globalBsAnt);
+        // After cluster delays + ray angles + xpr + random phases are on
+        // the GPU, dispatch the channel-matrix kernel and read back the
+        // per-link Complex3DVector blocks. Pass kMatMaxPages as the
+        // upper bound -- the kernel writes zeros for pages past the
+        // per-link numOverallCluster.
+        gpu->genChannelMatrix(activeLinks,
+                              nActiveLinks,
+                              /*uSize=*/globalUeAnt,
+                              /*sSize=*/globalBsAnt,
+                              /*numOverallCluster=*/SlsChanWgpu::kMatMaxPages,
+                              /*numReducedCluster=*/0u,
+                              /*nRays=*/20u,
+                              /*cluster1st=*/0u,
+                              /*cluster2nd=*/0u);
+    }
+    std::vector<std::complex<float>> matFlat;
+    {
+        SLS_PHASE_SCOPE("Mez::ReadMatrix");
+        matFlat = gpu->readChannelMatrix(nActiveLinks, globalUeAnt, globalBsAnt);
+    }
     const size_t perLinkMatLen =
         size_t(globalUeAnt) * globalBsAnt * SlsChanWgpu::kMatMaxPages;
 
@@ -1019,13 +1027,24 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                                            << antCfgs.size() << " antenna panels, " << nActiveLinks
                                            << " active links");
 
-    const std::vector<LinkParams> linkParams = gpu->readLinkParams(nSite, nUt);
-    const std::vector<ClusterParamsGpu> clusterParams = gpu->readClusterParams(nSite, nUt);
-    const std::vector<float> xprFlat = gpu->readXpr();
-    const std::vector<float> phiNmAoaFlat = gpu->readPhiNmAoA();
-    const std::vector<float> phiNmAodFlat = gpu->readPhiNmAoD();
-    const std::vector<float> thetaNmZoaFlat = gpu->readThetaNmZOA();
-    const std::vector<float> thetaNmZodFlat = gpu->readThetaNmZOD();
+    std::vector<LinkParams> linkParams;
+    std::vector<ClusterParamsGpu> clusterParams;
+    std::vector<float> xprFlat;
+    std::vector<float> phiNmAoaFlat;
+    std::vector<float> phiNmAodFlat;
+    std::vector<float> thetaNmZoaFlat;
+    std::vector<float> thetaNmZodFlat;
+    {
+        SLS_PHASE_SCOPE("Mez::ReadParams");
+        linkParams = gpu->readLinkParams(nSite, nUt);
+        clusterParams = gpu->readClusterParams(nSite, nUt);
+        xprFlat = gpu->readXpr();
+        phiNmAoaFlat = gpu->readPhiNmAoA();
+        phiNmAodFlat = gpu->readPhiNmAoD();
+        thetaNmZoaFlat = gpu->readThetaNmZOA();
+        thetaNmZodFlat = gpu->readThetaNmZOD();
+    }
+    SLS_PHASE_SCOPE("Mez::Populate");
 
     for (const auto& ctx : runtimeLinks)
     {
@@ -1188,7 +1207,13 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         //   within a uSize*sSize*kMatMaxPages f32-complex slab.
         // ns3::MatrixArray<T> stores column-major:
         //   (r=u, c=s, p=n) at u + uSize*s + uSize*sSize*n
-        // So a per-page memcpy from GPU to MatrixArray pages is correct.
+        // Both layouts are contiguous in the same order, so the
+        // entire per-link block (numOverallCluster pages worth)
+        // is one flat f32->f64 conversion pass -- a single tight
+        // loop the compiler can vectorise (CVTPS2PD on x86 turns
+        // 2 floats into 2 doubles per instruction; AVX widens to
+        // 4). This collapses the prior nested page/cell loop and
+        // its repeated GetPagePtr() vtable hops.
         const uint8_t numOverallCluster =
             params->m_cluster1st != params->m_cluster2nd
                 ? static_cast<uint8_t>(params->m_reducedClusterNumber + 4)
@@ -1203,15 +1228,19 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             globalUeAnt, globalBsAnt, numOverallCluster);
         const size_t perPage = size_t(globalUeAnt) * globalBsAnt;
         const size_t linkBase = size_t(ctx.lspReadIdx) * perLinkMatLen;
-        for (uint8_t n = 0; n < numOverallCluster; ++n)
+        const size_t linkCells = perPage * size_t(numOverallCluster);
+        const std::complex<float>* __restrict__ src = matFlat.data() + linkBase;
+        std::complex<double>* __restrict__ dst = matrix->m_channel.GetPagePtr(0);
+        for (size_t k = 0; k < linkCells; ++k)
         {
-            const size_t pageOff = linkBase + size_t(n) * perPage;
-            auto* dst = matrix->m_channel.GetPagePtr(n);
-            for (size_t k = 0; k < perPage; ++k)
-            {
-                const std::complex<float>& src = matFlat[pageOff + k];
-                dst[k] = std::complex<double>(src.real(), src.imag());
-            }
+            // std::complex<T> is required to be layout-compatible
+            // with T[2]; reinterpret to a real-pair so the compiler
+            // sees a plain f32 -> f64 widening pair and emits
+            // CVTPS2PD on the contiguous stream.
+            const auto* sr = reinterpret_cast<const float*>(src + k);
+            auto* dr = reinterpret_cast<double*>(dst + k);
+            dr[0] = static_cast<double>(sr[0]);
+            dr[1] = static_cast<double>(sr[1]);
         }
         m_channelMatrixMap.insert_or_assign(ctx.matrixKey, matrix);
     }
