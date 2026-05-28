@@ -464,10 +464,9 @@ template <class T>
 inline ValArray<T>
 ValArray<T>::operator*(const T& rhs) const
 {
-    return ValArray<T>(m_numRows,
-                       m_numCols,
-                       m_numPages,
-                       m_values * std::valarray<T>(rhs, m_numRows * m_numCols * m_numPages));
+    // valarray supports scalar multiply directly; avoid building a
+    // throwaway valarray<T>(rhs, N) just to multiply against it.
+    return ValArray<T>(m_numRows, m_numCols, m_numPages, m_values * rhs);
 }
 
 template <class T>
