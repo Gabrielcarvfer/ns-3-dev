@@ -637,9 +637,9 @@ WifiSpectrumValueHelper::CreateHeMuOfdmTxPowerSpectralDensity(
     MHz_u channelWidth,
     Watt_u txPower,
     MHz_u guardBandwidth,
-    const std::vector<WifiSpectrumBandIndices>& ru)
+    std::span<const WifiSpectrumBandIndices> ru)
 {
-    auto printRuIndices = [](const std::vector<WifiSpectrumBandIndices>& v) {
+    auto printRuIndices = [](std::span<const WifiSpectrumBandIndices> v) {
         std::stringstream ss;
         for (const auto& [start, stop] : v)
         {
@@ -1088,7 +1088,7 @@ WifiSpectrumValueHelper::NormalizeSpectrumMask(Ptr<SpectrumValue> c, Watt_u txPo
 
 Watt_u
 WifiSpectrumValueHelper::GetBandPowerW(Ptr<SpectrumValue> psd,
-                                       const std::vector<WifiSpectrumBandIndices>& segments)
+                                       std::span<const WifiSpectrumBandIndices> segments)
 {
     auto powerWattPerHertz{0.0};
     auto bandIt = psd->ConstBandsBegin() + segments.front().first; // all bands have same width
