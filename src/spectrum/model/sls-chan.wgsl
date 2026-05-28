@@ -2064,17 +2064,85 @@ struct ChanMatDispatch {
     u_size             : u32,
     s_size             : u32,
     n_rays             : u32,
-    n_reduced_cluster  : u32, // numOverallCluster - 4 (or -2 if cluster1st == cluster2nd)
-    cluster1st         : u32,
-    cluster2nd         : u32,
+    _pad0              : u32,
+    _pad1              : u32,
+    _pad2              : u32,
 }
 
-@group(0) @binding(0) var<uniform>             mat_disp        : ChanMatDispatch;
-@group(0) @binding(1) var<storage, read>       mat_buf_link    : array<LinkParams>;
-@group(0) @binding(2) var<storage, read>       mat_buf_cluster : array<ClusterParams>;
-@group(0) @binding(3) var<storage, read>       mat_packed_in   : array<f32>;
-@group(0) @binding(4) var<storage, read>       mat_buf_active  : array<ActiveLink>;
-@group(0) @binding(5) var<storage, read_write> mat_buf_out     : array<vec2f>;
+// Matrix-kernel bindings live in group(0) at numbers 30+ to avoid
+// clashing with the LSP kernels' bindings (0..15).
+@group(0) @binding(30) var<uniform>             mat_disp        : ChanMatDispatch;
+@group(0) @binding(31) var<storage, read>       mat_buf_link    : array<LinkParams>;
+@group(0) @binding(32) var<storage, read>       mat_buf_cluster : array<ClusterParams>;
+@group(0) @binding(33) var<storage, read>       mat_packed_in   : array<f32>;
+@group(0) @binding(34) var<storage, read>       mat_buf_active  : array<ActiveLink>;
+@group(0) @binding(35) var<storage, read>       mat_buf_cell    : array<SspCellParam>;
+@group(0) @binding(36) var<storage, read>       mat_buf_ut      : array<SspUtParam>;
+@group(0) @binding(37) var<storage, read>       mat_buf_antCfg  : array<AntPanelConfig>;
+@group(0) @binding(38) var<storage, read>       mat_buf_antTheta: array<f32>;
+@group(0) @binding(39) var<storage, read>       mat_buf_antPhi  : array<f32>;
+@group(0) @binding(40) var<storage, read_write> mat_buf_out     : array<vec2f>;
+
+// Chunk (e): field-pattern eval. Reads mat_buf_antTheta/Phi.
+fn mat_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) -> vec2f {
+    var ti = i32(round(theta));
+    var pi_ = i32(round(phi));
+    if ti < 0 || ti >= 360 {
+        ti = ti % 360;
+        if ti < 0 { ti += 360; }
+    }
+    if ti > 180 { ti = 360 - ti; }
+    if pi_ < 0 || pi_ > 359 {
+        pi_ = pi_ % 360;
+        if pi_ < 0 { pi_ += 360; }
+    }
+    let A_db = mat_buf_antTheta[cfg.thetaOffset + u32(ti)]
+             + mat_buf_antPhi  [cfg.phiOffset   + u32(pi_)]
+             + select(0.0, GMAX, cfg.antModel == 1u);
+    let A_sqrt = pow(10.0, A_db / 20.0);
+    let z_rad  = zeta * DEG2RAD;
+    return vec2f(A_sqrt * cos(z_rad), A_sqrt * sin(z_rad));
+}
+
+fn mat_elem_pos(cfg: AntPanelConfig, elem_idx: u32) -> vec2f {
+    let M = cfg.antSize[2];
+    let N = cfg.antSize[3];
+    let P = cfg.antSize[4];
+    return vec2f(
+        f32((elem_idx / (N * P)) % M) * cfg.antSpacing[2],
+        f32((elem_idx / P)       % N) * cfg.antSpacing[3]
+    );
+}
+
+fn mat_pol_idx(cfg: AntPanelConfig, elem_idx: u32) -> u32 {
+    let P = cfg.antSize[4];
+    return elem_idx % P;
+}
+
+// 3GPP TR 38.901 Table 7.5-5 subcluster ray groupings (0-indexed).
+// CPU GenerateChannelCoefficients switch-case at three-gpp-channel-model.cc:
+//   case 9,10,11,12,17,18  -> subcluster 2
+//   case 13,14,15,16       -> subcluster 3
+//   default (0..8, 19)     -> subcluster 1
+// flt: 0=all, 1=sub1, 2=sub2, 3=sub3.
+// NB: parameter is `flt` not `filter` -- WGSL reserves `filter` for
+// texture sampling and even an unused parameter named `filter` taints
+// the surrounding module, breaking unrelated pipelines silently.
+fn mat_ray_passes_filter(m: u32, flt: u32) -> bool {
+    if flt == 0u { return true; }
+    if flt == 2u {
+        let a = m >= 9u && m <= 12u;
+        let b = m == 17u || m == 18u;
+        return a || b;
+    }
+    if flt == 3u {
+        return m >= 13u && m <= 16u;
+    }
+    if m >= 9u && m <= 18u {
+        return false;
+    }
+    return true;
+}
 
 // Max #overall-cluster pages we'll ever write. The CPU mezanine sizes the
 // readback to use the per-link actual count from

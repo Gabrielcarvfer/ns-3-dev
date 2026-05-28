@@ -2320,19 +2320,27 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
 
     auto layout0 = channelMatrixPipeline_.getBindGroupLayout(0);
-    std::vector<wgpu::BindGroupEntry> entries(6, wgpu::Default);
+    std::vector<wgpu::BindGroupEntry> entries(11, wgpu::Default);
     auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
         entries[i].binding = b;
         entries[i].buffer = buf;
         entries[i].offset = 0;
         entries[i].size = sz;
     };
-    E(0, 0, matrixDispatchBuf_, sizeof(du));
-    E(1, 1, linkParamsBuf_);
-    E(2, 2, clusterParamsBuf_);
-    E(3, 3, clusterOutputsBuf_);
-    E(4, 4, activeLinkBuf_);
-    E(5, 5, channelMatrixBuf_);
+    // Bindings 30-40 chosen to avoid clashing with the LSP kernels'
+    // group(0) bindings (0..15). See sls-chan.wgsl for the matching
+    // declarations.
+    E(0, 30, matrixDispatchBuf_, sizeof(du));
+    E(1, 31, linkParamsBuf_);
+    E(2, 32, clusterParamsBuf_);
+    E(3, 33, clusterOutputsBuf_);
+    E(4, 34, activeLinkBuf_);
+    E(5, 35, ssCellParamsBuf_);
+    E(6, 36, ssUtParamsBuf_);
+    E(7, 37, antPanelConfigBuf_);
+    E(8, 38, antThetaBuf_);
+    E(9, 39, antPhiBuf_);
+    E(10, 40, channelMatrixBuf_);
 
     wgpu::BindGroupDescriptor bgd = wgpu::Default;
     bgd.layout = layout0;
