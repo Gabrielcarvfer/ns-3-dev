@@ -175,9 +175,31 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
         sWcopy[k] = sW[k];
     }
 
+    // Split complex weights into (re, im) primitive pairs so the inner
+    // loops use plain double arithmetic instead of std::complex
+    // operator*/+ chains. In Debug builds the std::complex calls don't
+    // inline and each MAC pays a ~10x overhead in vtable + temp-object
+    // setup. The PSD reduction loop already did this; CalcLongTerm gets
+    // the same treatment. Math is identical -- pure refactor.
+    std::vector<double> conjURe(uPortElems);
+    std::vector<double> conjUIm(uPortElems);
+    for (size_t k = 0; k < uPortElems; ++k)
+    {
+        conjURe[k] = conjU[k].real();
+        conjUIm[k] = conjU[k].imag();
+    }
+    std::vector<double> sWcopyRe(sPortElems);
+    std::vector<double> sWcopyIm(sPortElems);
+    for (size_t k = 0; k < sPortElems; ++k)
+    {
+        sWcopyRe[k] = sWcopy[k].real();
+        sWcopyIm[k] = sWcopy[k].imag();
+    }
+
     const bool uTrivial = (uPortElems == 1);
     const bool uNeedHop = (uElemsPerPort > 0);
     const bool sNeedHop = (sElemsPerPort > 0);
+    auto* longTermD = reinterpret_cast<double*>(longTerm->GetPagePtr(0));
     for (uint16_t sPortIdx = 0; sPortIdx < sPorts; ++sPortIdx)
     {
         const auto startS = sAnt->ArrayIndexFromPortIndex(sPortIdx, 0);
@@ -186,19 +208,33 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
             const auto startU = uAnt->ArrayIndexFromPortIndex(uPortIdx, 0);
             for (size_t cIndex = 0; cIndex < numClusters; ++cIndex)
             {
-                const auto* pagePtr = channelMatrix->m_channel.GetPagePtr(cIndex);
-                std::complex<double> txSum(0, 0);
+                // pageD: real/imag pairs for the cluster slab, indexed
+                // as (rxElem + numRows*txElem) * 2 (re), +1 (im).
+                const auto* pageD =
+                    reinterpret_cast<const double*>(channelMatrix->m_channel.GetPagePtr(cIndex));
+                double txSumRe = 0.0;
+                double txSumIm = 0.0;
                 auto sIndex = startS;
                 if (uTrivial)
                 {
-                    // One UE element per port -- the conj(uW) factor
-                    // is conjU[0] for every rIndex iteration, and the
-                    // uIndex hop on rIndex==0 is replaced by a no-op
-                    // (the loop body executes once per tIndex).
-                    const auto conjU0 = conjU[0];
+                    // One UE element per port: conjU[0] is the only rx
+                    // contribution. Inline (a+bi)*(c+di) and
+                    // (e+fi)*(re+im) by hand.
+                    const double cu0Re = conjURe[0];
+                    const double cu0Im = conjUIm[0];
                     for (size_t tIndex = 0; tIndex < sPortElems; ++tIndex, ++sIndex)
                     {
-                        txSum += sWcopy[tIndex] * (conjU0 * pagePtr[startU + numRows * sIndex]);
+                        const size_t cell = (startU + numRows * sIndex) * 2;
+                        const double pR = pageD[cell];
+                        const double pI = pageD[cell + 1];
+                        // rxSum = conjU0 * pagePtr[cell]
+                        const double rxR = cu0Re * pR - cu0Im * pI;
+                        const double rxI = cu0Re * pI + cu0Im * pR;
+                        // txSum += sWcopy[tIndex] * rxSum
+                        const double sR = sWcopyRe[tIndex];
+                        const double sI = sWcopyIm[tIndex];
+                        txSumRe += sR * rxR - sI * rxI;
+                        txSumIm += sR * rxI + sI * rxR;
                         if (sNeedHop && tIndex % sElemsPerPort == sElemsPerPort - 1)
                         {
                             sIndex += sIncVal;
@@ -209,24 +245,39 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
                 {
                     for (size_t tIndex = 0; tIndex < sPortElems; ++tIndex, ++sIndex)
                     {
-                        std::complex<double> rxSum(0, 0);
+                        double rxSumRe = 0.0;
+                        double rxSumIm = 0.0;
                         auto uIndex = startU;
                         for (size_t rIndex = 0; rIndex < uPortElems; ++rIndex, ++uIndex)
                         {
-                            rxSum += conjU[rIndex] * pagePtr[uIndex + numRows * sIndex];
+                            const size_t cell = (uIndex + numRows * sIndex) * 2;
+                            const double pR = pageD[cell];
+                            const double pI = pageD[cell + 1];
+                            const double cuR = conjURe[rIndex];
+                            const double cuI = conjUIm[rIndex];
+                            rxSumRe += cuR * pR - cuI * pI;
+                            rxSumIm += cuR * pI + cuI * pR;
                             if (uNeedHop && rIndex % uElemsPerPort == uElemsPerPort - 1)
                             {
                                 uIndex += uIncVal;
                             }
                         }
-                        txSum += sWcopy[tIndex] * rxSum;
+                        const double sR = sWcopyRe[tIndex];
+                        const double sI = sWcopyIm[tIndex];
+                        txSumRe += sR * rxSumRe - sI * rxSumIm;
+                        txSumIm += sR * rxSumIm + sI * rxSumRe;
                         if (sNeedHop && tIndex % sElemsPerPort == sElemsPerPort - 1)
                         {
                             sIndex += sIncVal;
                         }
                     }
                 }
-                longTerm->Elem(uPortIdx, sPortIdx, cIndex) = txSum;
+                // longTerm column-major layout: (uPortIdx, sPortIdx,
+                // cIndex) at uPortIdx + uPorts*sPortIdx + uPorts*sPorts*cIndex.
+                const size_t outIdx =
+                    (uPortIdx + size_t(uPorts) * sPortIdx + size_t(uPorts) * sPorts * cIndex) * 2;
+                longTermD[outIdx] = txSumRe;
+                longTermD[outIdx + 1] = txSumIm;
             }
         }
     }
