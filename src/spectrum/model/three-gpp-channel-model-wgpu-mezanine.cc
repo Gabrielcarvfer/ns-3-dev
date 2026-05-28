@@ -971,6 +971,25 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     gpu->calClusterRay(nSite, nUt);
     gpu->generateCIR(activeLinks, nActiveLinks, nSnapshots, 0.0f);
 
+    // After cluster delays + ray angles + xpr + random phases are on
+    // the GPU, dispatch the channel-matrix kernel and read back the
+    // per-link Complex3DVector blocks. Pass kMatMaxPages as the
+    // upper bound -- the kernel writes zeros for pages past the
+    // per-link numOverallCluster.
+    gpu->genChannelMatrix(activeLinks,
+                          nActiveLinks,
+                          /*uSize=*/globalUeAnt,
+                          /*sSize=*/globalBsAnt,
+                          /*numOverallCluster=*/SlsChanWgpu::kMatMaxPages,
+                          /*numReducedCluster=*/0u,
+                          /*nRays=*/20u,
+                          /*cluster1st=*/0u,
+                          /*cluster2nd=*/0u);
+    const std::vector<std::complex<float>> matFlat =
+        gpu->readChannelMatrix(nActiveLinks, globalUeAnt, globalBsAnt);
+    const size_t perLinkMatLen =
+        size_t(globalUeAnt) * globalBsAnt * SlsChanWgpu::kMatMaxPages;
+
     NS_LOG_DEBUG("UpdateChannel uploaded " << nSite << " cells, " << nUt << " UEs, "
                                            << antCfgs.size() << " antenna panels, " << nActiveLinks
                                            << " active links");
@@ -1137,25 +1156,42 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         PrecomputeAnglesSinCos(params, &params->m_cachedAngleSincos);
 
         m_channelParamsMap.insert_or_assign(ctx.paramsKey, params);
+
+        // Build the per-link ChannelMatrix straight from the GPU's
+        // matrix kernel output. Layout per link (per kernel):
+        //   element (u, s, n) at offset n*uSize*sSize + s*uSize + u
+        //   within a uSize*sSize*kMatMaxPages f32-complex slab.
+        // ns3::MatrixArray<T> stores column-major:
+        //   (r=u, c=s, p=n) at u + uSize*s + uSize*sSize*n
+        // So a per-page memcpy from GPU to MatrixArray pages is correct.
+        const uint8_t numOverallCluster =
+            params->m_cluster1st != params->m_cluster2nd
+                ? static_cast<uint8_t>(params->m_reducedClusterNumber + 4)
+                : static_cast<uint8_t>(params->m_reducedClusterNumber + 2);
+        Ptr<ChannelMatrix> matrix = Create<ChannelMatrix>();
+        matrix->m_generatedTime = Simulator::Now();
+        matrix->m_nodeIds = std::make_pair(
+            ctx.sMob->GetObject<Node>()->GetId(),
+            ctx.uMob->GetObject<Node>()->GetId());
+        matrix->m_antennaPair = std::make_pair(ctx.sAntId, ctx.uAntId);
+        matrix->m_channel = MatrixBasedChannelModel::Complex3DVector(
+            globalUeAnt, globalBsAnt, numOverallCluster);
+        const size_t perPage = size_t(globalUeAnt) * globalBsAnt;
+        const size_t linkBase = size_t(ctx.lspReadIdx) * perLinkMatLen;
+        for (uint8_t n = 0; n < numOverallCluster; ++n)
+        {
+            const size_t pageOff = linkBase + size_t(n) * perPage;
+            auto* dst = matrix->m_channel.GetPagePtr(n);
+            for (size_t k = 0; k < perPage; ++k)
+            {
+                const std::complex<float>& src = matFlat[pageOff + k];
+                dst[k] = std::complex<double>(src.real(), src.imag());
+            }
+        }
+        m_channelMatrixMap.insert_or_assign(ctx.matrixKey, matrix);
     }
 
-    // The previous version of this loop also called GetNewChannel()
-    // here to refresh every matrix in m_channelMatrixMap on the spot.
-    // That's the SAME CPU matrix-build work that GetChannel would do
-    // later anyway, so doing it here just moved the cost without
-    // saving anything -- in fact it added the GPU work on top of the
-    // CPU work. Skip it: GetChannel will lazy-build any matrix whose
-    // params have moved past matrixT, and only for the links that
-    // actually get queried this tick.
-    //
-    // Side-effect: matrices stored from a previous tick may be
-    // returned this tick if their cached generatedTime is still
-    // newer-or-equal to params'. That's fine in our case because the
-    // GPU pipeline produced fresh params this tick *with a newer
-    // m_generatedTime*, so NewChannelMatrixNeeded() returns true and
-    // the matrix gets rebuilt on demand.
-    NS_LOG_DEBUG("Updated GPU-backed channel params cache; "
-                 "matrices will be lazy-rebuilt by GetChannel.");
+    NS_LOG_DEBUG("Updated GPU-backed channel params + matrix caches.");
 }
 
 void
@@ -1206,6 +1242,27 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
 {
     m_antennaIdToObjectMap[sAntenna->GetId()] = sAntenna;
     m_antennaIdToObjectMap[uAntenna->GetId()] = uAntenna;
+
+    // GPU-fast path: UpdateChannel populated m_channelMatrixMap[key]
+    // with the GPU-built matrix this tick. If it's there and recent
+    // (params haven't moved past it), short-circuit. The cache lookup
+    // collapses the CPU GetNewChannel cost (~5 ms/eval = 84% of the
+    // per-eval budget at DenseAmimoIntel scale) to a hash hit.
+    const uint64_t matrixKey =
+        MatrixBasedChannelModel::GetKey(sAntenna->GetId(), uAntenna->GetId());
+    if (auto it = m_channelMatrixMap.find(matrixKey); it != m_channelMatrixMap.end())
+    {
+        const Time matrixT = it->second->m_generatedTime;
+        const Time paramsT = channelParams ? channelParams->m_generatedTime : Time(0);
+        if (matrixT >= paramsT)
+        {
+            return DynamicCast<ChannelMatrix>(
+                ConstCast<MatrixBasedChannelModel::ChannelMatrix>(it->second));
+        }
+    }
+
+    // Fallback: CPU build (first tick before UpdateChannel has run,
+    // or any link the GPU pipeline didn't see).
     return ThreeGppChannelModel::GetNewChannel(channelParams,
                                                table3gpp,
                                                sMob,
