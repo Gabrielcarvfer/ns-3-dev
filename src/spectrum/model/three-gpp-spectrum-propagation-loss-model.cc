@@ -146,6 +146,38 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
         (uElemsPerPort > 0) ? uAnt->GetNumColumns() - uElemsPerPort : 0;
     const auto sIncVal =
         (sElemsPerPort > 0) ? sAnt->GetNumColumns() - sElemsPerPort : 0;
+
+    // Hot-path optimizations beyond the prior call-inlining pass:
+    //  1. Precompute conj(uW) and copy sW into raw arrays so the inner
+    //     loops do plain indexed loads instead of repeated std::conj
+    //     calls on every (sPort, uPort, cluster, tIndex, rIndex) tuple.
+    //     For a 16x4 port / 8x1 element-per-port / 20-cluster shape
+    //     that drops roughly 100k std::conj invocations per CalcLongTerm
+    //     call to ~16 (one pass over uW).
+    //  2. Cache the channel matrix's column-major page pointer once per
+    //     cluster (`pagePtr = channel.GetPagePtr(cIndex)`). The matrix
+    //     element at (row=uIndex, col=sIndex) is then pagePtr[uIndex +
+    //     numRows * sIndex], which bypasses the operator()(r,c,p) +
+    //     bounds-check chain that doesn't always inline in Debug.
+    //  3. Specialise on uPortElems == 1 (DenseAmimoIntel: 1 element per
+    //     UE port). The inner loop collapses to a single multiply, the
+    //     %uElemsPerPort branch is statically dead, and we lift the
+    //     conj-uW load out of the cluster loop too.
+    const size_t numRows = channelMatrix->m_channel.GetNumRows();
+    std::vector<std::complex<double>> conjU(uPortElems);
+    for (size_t k = 0; k < uPortElems; ++k)
+    {
+        conjU[k] = std::conj(uW[k]);
+    }
+    std::vector<std::complex<double>> sWcopy(sPortElems);
+    for (size_t k = 0; k < sPortElems; ++k)
+    {
+        sWcopy[k] = sW[k];
+    }
+
+    const bool uTrivial = (uPortElems == 1);
+    const bool uNeedHop = (uElemsPerPort > 0);
+    const bool sNeedHop = (sElemsPerPort > 0);
     for (uint16_t sPortIdx = 0; sPortIdx < sPorts; ++sPortIdx)
     {
         const auto startS = sAnt->ArrayIndexFromPortIndex(sPortIdx, 0);
@@ -154,25 +186,44 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
             const auto startU = uAnt->ArrayIndexFromPortIndex(uPortIdx, 0);
             for (size_t cIndex = 0; cIndex < numClusters; ++cIndex)
             {
+                const auto* pagePtr = channelMatrix->m_channel.GetPagePtr(cIndex);
                 std::complex<double> txSum(0, 0);
                 auto sIndex = startS;
-                for (size_t tIndex = 0; tIndex < sPortElems; ++tIndex, ++sIndex)
+                if (uTrivial)
                 {
-                    std::complex<double> rxSum(0, 0);
-                    auto uIndex = startU;
-                    for (size_t rIndex = 0; rIndex < uPortElems; ++rIndex, ++uIndex)
+                    // One UE element per port -- the conj(uW) factor
+                    // is conjU[0] for every rIndex iteration, and the
+                    // uIndex hop on rIndex==0 is replaced by a no-op
+                    // (the loop body executes once per tIndex).
+                    const auto conjU0 = conjU[0];
+                    for (size_t tIndex = 0; tIndex < sPortElems; ++tIndex, ++sIndex)
                     {
-                        rxSum += std::conj(uW[uIndex - startU]) *
-                                 channelMatrix->m_channel(uIndex, sIndex, cIndex);
-                        if (uElemsPerPort > 0 && rIndex % uElemsPerPort == uElemsPerPort - 1)
+                        txSum += sWcopy[tIndex] * (conjU0 * pagePtr[startU + numRows * sIndex]);
+                        if (sNeedHop && tIndex % sElemsPerPort == sElemsPerPort - 1)
                         {
-                            uIndex += uIncVal;
+                            sIndex += sIncVal;
                         }
                     }
-                    txSum += sW[sIndex - startS] * rxSum;
-                    if (sElemsPerPort > 0 && tIndex % sElemsPerPort == sElemsPerPort - 1)
+                }
+                else
+                {
+                    for (size_t tIndex = 0; tIndex < sPortElems; ++tIndex, ++sIndex)
                     {
-                        sIndex += sIncVal;
+                        std::complex<double> rxSum(0, 0);
+                        auto uIndex = startU;
+                        for (size_t rIndex = 0; rIndex < uPortElems; ++rIndex, ++uIndex)
+                        {
+                            rxSum += conjU[rIndex] * pagePtr[uIndex + numRows * sIndex];
+                            if (uNeedHop && rIndex % uElemsPerPort == uElemsPerPort - 1)
+                            {
+                                uIndex += uIncVal;
+                            }
+                        }
+                        txSum += sWcopy[tIndex] * rxSum;
+                        if (sNeedHop && tIndex % sElemsPerPort == sElemsPerPort - 1)
+                        {
+                            sIndex += sIncVal;
+                        }
                     }
                 }
                 longTerm->Elem(uPortIdx, sPortIdx, cIndex) = txSum;

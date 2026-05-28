@@ -118,6 +118,14 @@ ParseArgs(int argc, char** argv)
             a.rxRows = static_cast<uint32_t>(std::atoi(val));
         else if (std::strncmp(arg, "--rx-cols=", 10) == 0)
             a.rxCols = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--tx-port-rows=", 15) == 0)
+            a.txVPorts = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--tx-port-cols=", 15) == 0)
+            a.txHPorts = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--rx-port-rows=", 15) == 0)
+            a.rxVPorts = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--rx-port-cols=", 15) == 0)
+            a.rxHPorts = static_cast<uint32_t>(std::atoi(val));
         else if (std::strcmp(arg, "--tx-single-pol") == 0)
             a.txDualPol = false;
         else if (std::strcmp(arg, "--rx-single-pol") == 0)
