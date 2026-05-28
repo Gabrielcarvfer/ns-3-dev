@@ -163,7 +163,10 @@ class Scope
 
 } // namespace sls
 
-#define SLS_PHASE_SCOPE(name) ::sls::Scope _sls_phase_scope_##__LINE__(name)
+#define SLS_PHASE_SCOPE_CAT_INNER(a, b) a##b
+#define SLS_PHASE_SCOPE_CAT(a, b) SLS_PHASE_SCOPE_CAT_INNER(a, b)
+#define SLS_PHASE_SCOPE(name) \
+    ::sls::Scope SLS_PHASE_SCOPE_CAT(_sls_phase_scope_, __LINE__)(name)
 
 #else // !SLS_PROFILE_INSTRUMENT
 

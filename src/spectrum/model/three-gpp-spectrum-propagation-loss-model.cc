@@ -299,7 +299,11 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
 {
     SLS_PHASE_SCOPE("PRX::CalcBeamformingGain");
     NS_LOG_FUNCTION(this);
-    Ptr<SpectrumSignalParameters> rxParams = params->Copy();
+    Ptr<SpectrumSignalParameters> rxParams;
+    {
+        SLS_PHASE_SCOPE("PRX::CalcBeamformingGain::ParamsCopy");
+        rxParams = params->Copy();
+    }
     const size_t numCluster = channelMatrix->m_channel.GetNumPages();
     // compute the doppler term
     // NOTE the update of Doppler is simplified by only taking the center angle of
@@ -342,6 +346,8 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     NS_ASSERT(numCluster <= aoa.size());
     NS_ASSERT(numCluster <= aod.size());
 
+    {
+    SLS_PHASE_SCOPE("PRX::CBG::DopplerLoop");
     for (size_t cIndex = 0; cIndex < numCluster; cIndex++)
     {
         // Compute alpha and D as described in 3GPP TR 37.885 v15.3.0, Sec. 6.2.3
@@ -369,6 +375,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
         // std::polar folds cos+sin into one sincos on modern libstdc++.
         doppler[cIndex] = std::polar(1.0, tempDoppler);
     }
+    } // PRX::CBG::DopplerLoop
 
     NS_ASSERT(numCluster <= doppler.GetSize());
 
@@ -405,6 +412,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     const size_t hRxPorts = specMat->GetNumRows();
     const size_t hTxPorts = specMat->GetNumCols();
     const uint32_t psdN = rxParams->psd->GetValuesN();
+    SLS_PHASE_SCOPE("PRX::CBG::PsdReduction");
     if (!rxParams->precodingMatrix)
     {
         // Default isotropic precoding: P[tx, 0, rb] = 1/sqrt(numTx).
@@ -743,12 +751,18 @@ ThreeGppSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(
     // the per-link `GetChannel` calls start. Default base-class impl is a
     // no-op, so existing back-ends (Friis, two-ray, ...) keep working
     // unchanged.
-    m_channelModel->EnsureBatchFresh();
+    {
+        SLS_PHASE_SCOPE("PRX::EnsureBatchFresh");
+        m_channelModel->EnsureBatchFresh();
+    }
 
     Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix =
         m_channelModel->GetChannel(a, b, aPhasedArrayModel, bPhasedArrayModel);
-    const Ptr<const MatrixBasedChannelModel::ChannelParams> channelParams =
-        m_channelModel->GetParams(a, b);
+    Ptr<const MatrixBasedChannelModel::ChannelParams> channelParams;
+    {
+        SLS_PHASE_SCOPE("PRX::GetParams");
+        channelParams = m_channelModel->GetParams(a, b);
+    }
     NS_ASSERT_MSG(channelMatrix != nullptr, "Channel matrix is null");
     NS_ASSERT_MSG(channelParams != nullptr, "Channel params are null");
 
