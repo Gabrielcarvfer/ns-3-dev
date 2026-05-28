@@ -2112,21 +2112,26 @@ fn mat_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) ->
 // first half of element indices (0..M*N-1) carry polarisation 0,
 // the second half (M*N..2*M*N-1) carry polarisation 1. Within each
 // half, elements walk columns then rows: elem k -> row=k/N, col=k%N.
-// mat_elem_pos / mat_pol_idx mirror that exactly so the GPU matrix
-// produces cells in the same (u, s, n) ordering ns-3 downstream
-// consumers expect.
-fn mat_elem_pos(cfg: AntPanelConfig, elem_idx: u32) -> vec2f {
+// CPU::GetElementLocation returns a 3D position: x=0, y=col*d_h,
+// z=row*d_v (for default panel orientation). The downstream array-
+// steering phase = 2*pi*(sin*cos*x + sin*sin*y + cos*z), so the
+// row direction picks up cos(ZOA) and the col direction picks up
+// sin(ZOA)*sin(AOA). Returning a 3D vec3f preserves that -- an
+// earlier draft used a vec2f and silently dropped the z component,
+// which made the row*d_v contribution use the wrong projection
+// angle and collapsed beam coherency on any vertically-extended
+// array (8x8 BS at DenseAmimoIntel scale).
+fn mat_elem_pos(cfg: AntPanelConfig, elem_idx: u32) -> vec3f {
     let M = cfg.antSize[2];
     let N = cfg.antSize[3];
     let MN = M * N;
     let local = select(elem_idx, elem_idx - MN, elem_idx >= MN);
     let row = local / N;
     let col = local % N;
-    // d_disH = horizontal spacing (lambda), d_disV = vertical spacing
-    // (lambda). antSpacing layout: [unused, unused, d_h, d_v].
-    return vec2f(
-        f32(row) * cfg.antSpacing[3], // V along x in elem-loc convention
-        f32(col) * cfg.antSpacing[2]  // H along y
+    return vec3f(
+        0.0,
+        f32(col) * cfg.antSpacing[2], // y = d_h * col
+        f32(row) * cfg.antSpacing[3]  // z = d_v * row
     );
 }
 
@@ -2262,8 +2267,8 @@ fn gen_channel_matrix_kernel(
         let pAOD_r = pAOD * DEG2RAD;
         let rRx = vec3f(sin(tZOA_r)*cos(pAOA_r), sin(tZOA_r)*sin(pAOA_r), cos(tZOA_r));
         let rTx = vec3f(sin(tZOD_r)*cos(pAOD_r), sin(tZOD_r)*sin(pAOD_r), cos(tZOD_r));
-        let dot_rx = rRx.x*d_rx.x + rRx.y*d_rx.y;
-        let dot_tx = rTx.x*d_tx.x + rTx.y*d_tx.y;
+        let dot_rx = dot(rRx, d_rx);
+        let dot_tx = dot(rTx, d_tx);
         let term4 = cexp_j(TWO_PI * dot_rx);
         let term5 = cexp_j(TWO_PI * dot_tx);
 
@@ -2316,8 +2321,8 @@ fn gen_channel_matrix_kernel(
             let pAOD_r = pAOD * DEG2RAD;
             let rRx = vec3f(sin(tZOA_r)*cos(pAOA_r), sin(tZOA_r)*sin(pAOA_r), cos(tZOA_r));
             let rTx = vec3f(sin(tZOD_r)*cos(pAOD_r), sin(tZOD_r)*sin(pAOD_r), cos(tZOD_r));
-            let dot_rx = rRx.x*d_rx.x + rRx.y*d_rx.y;
-            let dot_tx = rTx.x*d_tx.x + rTx.y*d_tx.y;
+            let dot_rx = dot(rRx, d_rx);
+            let dot_tx = dot(rTx, d_tx);
             let term4 = cexp_j(TWO_PI * dot_rx);
             let term5 = cexp_j(TWO_PI * dot_tx);
             // [1 0; 0 -1] polarisation matrix (3GPP Eq 7.5-29) collapses
