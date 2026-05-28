@@ -2432,6 +2432,137 @@ SlsChanWgpu::readChannelMatrix(uint32_t nLinks, uint32_t uSize, uint32_t sSize)
     return mapReadBuffer<std::complex<float>>(staging, totalBytes);
 }
 
+// ── gen_long_term_kernel ─────────────────────────────────────────────────
+void
+SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
+                         uint32_t uSize,
+                         uint32_t sSize,
+                         uint32_t sPorts,
+                         uint32_t uPorts,
+                         uint32_t sPortElems,
+                         uint32_t uPortElems,
+                         uint32_t sElemsPerPort,
+                         uint32_t uElemsPerPort,
+                         uint32_t sIncVal,
+                         uint32_t uIncVal,
+                         const std::vector<std::complex<float>>& sWFlat,
+                         const std::vector<std::complex<float>>& uWFlat,
+                         const std::vector<uint32_t>& startS,
+                         const std::vector<uint32_t>& startU)
+{
+    assert(channelMatrixBuf_ && "genLongTerm requires genChannelMatrix to have run first");
+    assert(sWFlat.size() == size_t(nActiveLinks) * sPortElems);
+    assert(uWFlat.size() == size_t(nActiveLinks) * uPortElems);
+    assert(startS.size() == sPorts);
+    assert(startU.size() == uPorts);
+
+    if (!longTermPipeline_)
+    {
+        longTermPipeline_ = makePipeline("gen_long_term_kernel");
+        assert(longTermPipeline_ &&
+               "missing gen_long_term_kernel in WGSL (or backend can't compile it)");
+    }
+
+    // (Re)alloc output buffer if shape changed.
+    const uint64_t outBytes =
+        uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages * sizeof(float) * 2;
+    if (!longTermOutBuf_ || longTermCfgNLinks_ != nActiveLinks ||
+        longTermCfgSPorts_ != sPorts || longTermCfgUPorts_ != uPorts)
+    {
+        longTermOutBuf_ =
+            makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        longTermCfgNLinks_ = nActiveLinks;
+        longTermCfgSPorts_ = sPorts;
+        longTermCfgUPorts_ = uPorts;
+    }
+    // sW / uW buffers vary every dispatch (caller may have new beam weights).
+    const uint64_t sWBytes = sWFlat.size() * sizeof(float) * 2;
+    const uint64_t uWBytes = uWFlat.size() * sizeof(float) * 2;
+    longTermSWBuf_ = makeBuffer(sWBytes, WGPUBufferUsage_Storage, sWFlat.data());
+    longTermUWBuf_ = makeBuffer(uWBytes, WGPUBufferUsage_Storage, uWFlat.data());
+    longTermStartSBuf_ =
+        makeBuffer(startS.size() * sizeof(uint32_t), WGPUBufferUsage_Storage, startS.data());
+    longTermStartUBuf_ =
+        makeBuffer(startU.size() * sizeof(uint32_t), WGPUBufferUsage_Storage, startU.data());
+
+    struct LongTermDispUni
+    {
+        uint32_t nActiveLinks;
+        uint32_t uSize;
+        uint32_t sSize;
+        uint32_t nPages;
+        uint32_t sPorts;
+        uint32_t uPorts;
+        uint32_t sPortElems;
+        uint32_t uPortElems;
+        uint32_t sElemsPerPort;
+        uint32_t uElemsPerPort;
+        uint32_t sIncVal;
+        uint32_t uIncVal;
+    } du{nActiveLinks, uSize,    sSize,         kMatMaxPages,    sPorts,  uPorts,
+         sPortElems,   uPortElems, sElemsPerPort, uElemsPerPort, sIncVal, uIncVal};
+    longTermDispatchBuf_ =
+        makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
+
+    auto layout0 = longTermPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> entries(7, wgpu::Default);
+    auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+        entries[i].binding = b;
+        entries[i].buffer = buf;
+        entries[i].offset = 0;
+        entries[i].size = sz;
+    };
+    E(0, 50, longTermDispatchBuf_, sizeof(du));
+    E(1, 51, channelMatrixBuf_);
+    E(2, 52, longTermSWBuf_);
+    E(3, 53, longTermUWBuf_);
+    E(4, 54, longTermStartSBuf_);
+    E(5, 55, longTermStartUBuf_);
+    E(6, 56, longTermOutBuf_);
+
+    wgpu::BindGroupDescriptor bgd = wgpu::Default;
+    bgd.layout = layout0;
+    bgd.entryCount = static_cast<uint32_t>(entries.size());
+    bgd.entries = entries.data();
+    wgpu::BindGroup bg0 = device_.createBindGroup(bgd);
+
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    auto pass = enc.beginComputePass(wgpu::Default);
+    pass.setPipeline(longTermPipeline_);
+    pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
+    // workgroup_size = (64, 1, 1)
+    // total threads = nActiveLinks * uPorts * sPorts * kMatMaxPages
+    const uint64_t total =
+        uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages;
+    const uint32_t groups = static_cast<uint32_t>((total + 63u) / 64u);
+    pass.dispatchWorkgroups(groups, 1u, 1u);
+    pass.end();
+    assert(!isDead());
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    longTermCfgSPortElems_ = sPortElems;
+    longTermCfgUPortElems_ = uPortElems;
+}
+
+std::vector<std::complex<float>>
+SlsChanWgpu::readLongTerm(uint32_t nLinks, uint32_t sPorts, uint32_t uPorts)
+{
+    if (!longTermOutBuf_)
+    {
+        return {};
+    }
+    const uint64_t totalBytes =
+        uint64_t(nLinks) * sPorts * uPorts * kMatMaxPages * sizeof(std::complex<float>);
+    assert(longTermOutBuf_.getSize() >= totalBytes);
+    wgpu::Buffer staging =
+        makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(longTermOutBuf_, 0, staging, 0, totalBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    return mapReadBuffer<std::complex<float>>(staging, totalBytes);
+}
+
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
 #ifdef SLS_CHAN_HDF5
 namespace

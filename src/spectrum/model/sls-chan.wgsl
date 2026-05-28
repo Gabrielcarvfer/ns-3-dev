@@ -2353,3 +2353,106 @@ fn gen_channel_matrix_kernel(
                  + u_idx;
     mat_buf_out[out_idx] = cell_val;
 }
+
+// ---------------------------------------------------------------------------
+// gen_long_term_kernel
+//
+// Replaces the CPU CalcLongTerm matrix-multiply that PRX::GetLongTerm runs
+// every per-link DoCalcRxPowerSpectralDensity call. For each (link, sPort,
+// uPort, cluster), reduce the channel matrix along the per-port element
+// block by the (sW, conj(uW)) beam weights:
+//
+//   longTerm[u, s, c] = sum_t sW[t] * sum_r conj(uW[r]) * H[startU+r, startS+t, c]
+//
+// where (startU, startS) come from ArrayIndexFromPortIndex(uPort, 0) and
+// the inner indices walk with the sub-array partition stride (sIncVal /
+// uIncVal hop at every elemsPerPort-th step, mirroring the CPU loop).
+//
+// Bindings live at 50+ to stay clear of the LSP kernels (0..15) and the
+// matrix kernel (30..40).
+// ---------------------------------------------------------------------------
+
+struct LongTermDispatch {
+    n_active_links     : u32,
+    u_size             : u32,  // numRows of channel matrix (= total UE elements)
+    s_size             : u32,  // numCols of channel matrix (= total BS elements)
+    n_pages            : u32,  // = MAT_MAX_PAGES
+    s_ports            : u32,
+    u_ports            : u32,
+    s_port_elems       : u32,  // sAnt->GetNumElemsPerPort()
+    u_port_elems       : u32,  // uAnt->GetNumElemsPerPort()
+    s_elems_per_port   : u32,  // sAnt->GetHElemsPerPort() (0 -> no hop)
+    u_elems_per_port   : u32,  // uAnt->GetHElemsPerPort()
+    s_inc_val          : u32,  // sAnt->GetNumColumns() - sElemsPerPort
+    u_inc_val          : u32,  // uAnt->GetNumColumns() - uElemsPerPort
+}
+
+@group(0) @binding(50) var<uniform>             lt_disp     : LongTermDispatch;
+// lt_chan_in is the same backing buffer as mat_buf_out — the channel
+// matrix that gen_channel_matrix_kernel just produced.
+@group(0) @binding(51) var<storage, read>       lt_chan_in  : array<vec2f>;
+@group(0) @binding(52) var<storage, read>       lt_s_w      : array<vec2f>;  // per-link [s_port_elems]
+@group(0) @binding(53) var<storage, read>       lt_u_w      : array<vec2f>;  // per-link [u_port_elems]
+@group(0) @binding(54) var<storage, read>       lt_start_s  : array<u32>;    // [s_ports]
+@group(0) @binding(55) var<storage, read>       lt_start_u  : array<u32>;    // [u_ports]
+@group(0) @binding(56) var<storage, read_write> lt_out      : array<vec2f>;  // per-link [u_ports*s_ports*n_pages]
+
+@compute @workgroup_size(64)
+fn gen_long_term_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let tid = gid.x;
+    let per_link_lt = lt_disp.u_ports * lt_disp.s_ports * lt_disp.n_pages;
+    let total = lt_disp.n_active_links * per_link_lt;
+    if (tid >= total) { return; }
+
+    let link_idx = tid / per_link_lt;
+    let in_link  = tid % per_link_lt;
+    let ports_per_page = lt_disp.u_ports * lt_disp.s_ports;
+    let c_index = in_link / ports_per_page;
+    let pp      = in_link % ports_per_page;
+    // Output column-major (u, s, c) -> u + uPorts*s + uPorts*sPorts*c
+    let u_port = pp % lt_disp.u_ports;
+    let s_port = pp / lt_disp.u_ports;
+
+    let per_link_mat = lt_disp.u_size * lt_disp.s_size * lt_disp.n_pages;
+    let page_base = link_idx * per_link_mat + c_index * lt_disp.u_size * lt_disp.s_size;
+    let s_w_base = link_idx * lt_disp.s_port_elems;
+    let u_w_base = link_idx * lt_disp.u_port_elems;
+    let start_s = lt_start_s[s_port];
+    let start_u = lt_start_u[u_port];
+
+    let s_need_hop = lt_disp.s_elems_per_port > 0u;
+    let u_need_hop = lt_disp.u_elems_per_port > 0u;
+
+    var tx_sum = vec2f(0.0, 0.0);
+    var s_index = start_s;
+    for (var t_index: u32 = 0u; t_index < lt_disp.s_port_elems; t_index = t_index + 1u) {
+        var rx_sum = vec2f(0.0, 0.0);
+        var u_index = start_u;
+        for (var r_index: u32 = 0u; r_index < lt_disp.u_port_elems; r_index = r_index + 1u) {
+            let cell = page_base + u_index + lt_disp.u_size * s_index;
+            let h = lt_chan_in[cell];
+            let uw = lt_u_w[u_w_base + r_index];
+            // conj(uw) = (uw.x, -uw.y); cmul((a,-b), (c,d)) = (ac + bd, ad - bc)
+            rx_sum = rx_sum + vec2f(uw.x * h.x + uw.y * h.y,
+                                    uw.x * h.y - uw.y * h.x);
+            u_index = u_index + 1u;
+            if (u_need_hop && (r_index % lt_disp.u_elems_per_port == lt_disp.u_elems_per_port - 1u)) {
+                u_index = u_index + lt_disp.u_inc_val;
+            }
+        }
+        let sw = lt_s_w[s_w_base + t_index];
+        // sw * rx_sum
+        tx_sum = tx_sum + vec2f(sw.x * rx_sum.x - sw.y * rx_sum.y,
+                                sw.x * rx_sum.y + sw.y * rx_sum.x);
+        s_index = s_index + 1u;
+        if (s_need_hop && (t_index % lt_disp.s_elems_per_port == lt_disp.s_elems_per_port - 1u)) {
+            s_index = s_index + lt_disp.s_inc_val;
+        }
+    }
+
+    let out_idx = link_idx * per_link_lt
+                + c_index * ports_per_page
+                + s_port * lt_disp.u_ports
+                + u_port;
+    lt_out[out_idx] = tx_sum;
+}

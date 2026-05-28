@@ -217,6 +217,36 @@ class MatrixBasedChannelModel : public Object
     }
 
     /**
+     * Optional opt-in hook for back-ends that want to provide a
+     * pre-computed PRX-style long-term beamforming vector instead of
+     * forcing PRX::GetLongTerm to run CalcLongTerm on the CPU. The
+     * `ThreeGppSpectrumPropagationLossModel::GetLongTerm` checks this
+     * before computing; on a non-null return that matches the current
+     * (channelMatrix.m_generatedTime, sW, uW), PRX populates its
+     * m_longTermMap with the cached value and skips the CPU compute.
+     *
+     * Back-ends that don't implement this return nullptr (the default)
+     * and PRX falls through to its existing path. The Wgpu-mezanine
+     * subclass overrides this to surface the result of its on-GPU
+     * gen_long_term_kernel.
+     *
+     * Returns nullptr when the back-end has nothing cached for this
+     * (sAnt, uAnt) pair, or when its snapshot's beam weights no longer
+     * match the caller's. The (sW, uW) arguments are passed by
+     * `Ptr<>` so callers don't pay a vector copy when the channel
+     * model can't accept the hook anyway.
+     */
+    virtual Ptr<const Complex3DVector> GetCachedLongTerm(
+        [[maybe_unused]] Ptr<const ChannelMatrix> channelMatrix,
+        [[maybe_unused]] Ptr<const PhasedArrayModel> sAnt,
+        [[maybe_unused]] Ptr<const PhasedArrayModel> uAnt,
+        [[maybe_unused]] const PhasedArrayModel::ComplexVector& sW,
+        [[maybe_unused]] const PhasedArrayModel::ComplexVector& uW) const
+    {
+        return nullptr;
+    }
+
+    /**
      * Generate a unique value for the pair of unsigned integer of 32 bits,
      * where the order does not matter, i.e., the same value will be returned for (a,b) and (b,a).
      * @param a the first value

@@ -555,6 +555,41 @@ class SlsChanWgpu
                                                        uint32_t uSize,
                                                        uint32_t sSize);
 
+    // Dispatch gen_long_term_kernel. Consumes the channel matrix that
+    // genChannelMatrix wrote into channelMatrixBuf_ and produces a
+    // per-link uPorts x sPorts x kMatMaxPages vec2<f32> reduced by the
+    // (sW, conj(uW)) beam weights -- exactly what PRX::CalcLongTerm
+    // builds on CPU. sWFlat / uWFlat are per-link concatenations of
+    // size sPortElems / uPortElems each (the first sPortElems / uPortElems
+    // entries of GetBeamformingVectorRef, matching the CPU loop). The
+    // startS / startU vectors are the global ArrayIndexFromPortIndex(*,
+    // 0) values for each port; they're shared across all links because
+    // the mezanine path currently assumes one BS antenna geometry +
+    // one UE antenna geometry per batch.
+    void genLongTerm(uint32_t nActiveLinks,
+                     uint32_t uSize,
+                     uint32_t sSize,
+                     uint32_t sPorts,
+                     uint32_t uPorts,
+                     uint32_t sPortElems,
+                     uint32_t uPortElems,
+                     uint32_t sElemsPerPort,
+                     uint32_t uElemsPerPort,
+                     uint32_t sIncVal,
+                     uint32_t uIncVal,
+                     const std::vector<std::complex<float>>& sWFlat,
+                     const std::vector<std::complex<float>>& uWFlat,
+                     const std::vector<uint32_t>& startS,
+                     const std::vector<uint32_t>& startU);
+
+    // Read back the longTerm buffer. Layout per link:
+    //   (u, s, c) at u + uPorts*s + uPorts*sPorts*c
+    // for c in [0, kMatMaxPages). Caller slices into per-link
+    // Complex3DVector(uPorts, sPorts, numOverallCluster).
+    std::vector<std::complex<float>> readLongTerm(uint32_t nLinks,
+                                                  uint32_t sPorts,
+                                                  uint32_t uPorts);
+
   private:
     // Gather one of the per-link sub-views out of the packed
     // clusterOutputsBuf_. linkOffF32 is the f32 offset into each
@@ -722,6 +757,20 @@ class SlsChanWgpu
     uint32_t channelMatrixCfgUSize_{0};
     uint32_t channelMatrixCfgSSize_{0};
     uint32_t channelMatrixCfgNLinks_{0};
+
+    // gen_long_term_kernel scratch. Bindings live in @group(0) at 50..56.
+    wgpu::ComputePipeline longTermPipeline_;
+    wgpu::Buffer longTermDispatchBuf_;
+    wgpu::Buffer longTermSWBuf_;     // per-link [sPortElems] vec2f
+    wgpu::Buffer longTermUWBuf_;     // per-link [uPortElems] vec2f
+    wgpu::Buffer longTermStartSBuf_; // [sPorts] u32
+    wgpu::Buffer longTermStartUBuf_; // [uPorts] u32
+    wgpu::Buffer longTermOutBuf_;    // per-link [uPorts*sPorts*kMatMaxPages] vec2f
+    uint32_t longTermCfgNLinks_{0};
+    uint32_t longTermCfgSPorts_{0};
+    uint32_t longTermCfgUPorts_{0};
+    uint32_t longTermCfgSPortElems_{0};
+    uint32_t longTermCfgUPortElems_{0};
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24

@@ -47,6 +47,18 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         Ptr<const PhasedArrayModel> sAntenna,
         Ptr<const PhasedArrayModel> uAntenna) const override;
 
+    // Surfaces longTerm computed by gen_long_term_kernel during the
+    // most recent UpdateChannel. PRX::GetLongTerm calls this before
+    // falling through to CalcLongTerm; on a match (channelMatrix is
+    // the cached one, beam weights identical to the snapshot) we
+    // bypass the CPU compute entirely.
+    Ptr<const Complex3DVector> GetCachedLongTerm(
+        Ptr<const ChannelMatrix> channelMatrix,
+        Ptr<const PhasedArrayModel> sAnt,
+        Ptr<const PhasedArrayModel> uAnt,
+        const PhasedArrayModel::ComplexVector& sW,
+        const PhasedArrayModel::ComplexVector& uW) const override;
+
   private:
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
     mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
@@ -55,6 +67,34 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // tick instead of once per link. std::optional so the very first
     // tick still triggers a refresh (Time::Zero() is a valid tick).
     std::optional<Time> m_lastMezBatchTime;
+
+    // GPU-built longTerm cache. Keyed by (sAntId, uAntId) the same way
+    // m_channelMatrixMap is. Each entry holds the longTerm matrix the
+    // GPU kernel produced this tick + the snapshot of (sW, uW) that
+    // went into it -- GetCachedLongTerm only returns a hit when both
+    // the channelMatrix m_generatedTime matches AND the caller's beam
+    // weights still equal the snapshot.
+    struct GpuLongTermEntry
+    {
+        Ptr<const Complex3DVector> longTerm;
+        // Hash the beam-weight snapshot rather than copying the
+        // ComplexVector. The CPU PRX::GetLongTerm cache stores the
+        // full vector (it needs operator!= for the equality check),
+        // but in this back-end we control both ends -- we hash the
+        // current sW/uW at insertion and re-hash at lookup time. A
+        // 64-bit collision on two distinct beam vectors yielding a
+        // false-positive cache hit is ~1 in 1.8e19 and not a concern
+        // for any realistic sim. Avoids the 1900 x (sW+uW copy) per
+        // tick the populate loop was paying in Debug.
+        uint64_t sWHash{0};
+        uint64_t uWHash{0};
+        size_t sWSize{0};
+        size_t uWSize{0};
+        Time generatedTime;
+    };
+    mutable std::unordered_map<uint64_t, GpuLongTermEntry> m_gpuLongTermMap;
+
+    static uint64_t HashComplexVector(const PhasedArrayModel::ComplexVector& v);
 };
 
 } // namespace ns3

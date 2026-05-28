@@ -1020,6 +1020,125 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                               /*cluster1st=*/0u,
                               /*cluster2nd=*/0u);
     }
+
+    // The channel matrix is now on GPU. Before reading it back, push
+    // the beam weights for each link and dispatch gen_long_term_kernel
+    // so PRX::GetLongTerm finds a pre-computed result waiting in
+    // m_gpuLongTermMap and skips its CPU CalcLongTerm path entirely.
+    //
+    // Port-mapping info (sPorts, sPortElems, ...) is shared across
+    // every link in this batch because the mezanine already enforces
+    // one BS antenna geometry + one UE antenna geometry per batch.
+    // Beam weights vary per link in the general case so the upload
+    // is per-link.
+    uint32_t ltSPorts = 0;
+    uint32_t ltUPorts = 0;
+    uint32_t ltSPortElems = 0;
+    uint32_t ltUPortElems = 0;
+    uint32_t ltSElemsPerPort = 0;
+    uint32_t ltUElemsPerPort = 0;
+    uint32_t ltSIncVal = 0;
+    uint32_t ltUIncVal = 0;
+    std::vector<uint32_t> ltStartS;
+    std::vector<uint32_t> ltStartU;
+    std::vector<std::complex<float>> ltSWFlat;
+    std::vector<std::complex<float>> ltUWFlat;
+    bool ltCanDispatch = false;
+    static const bool ltEnabled = []() {
+        const char* e = std::getenv("MEZ_GPU_LT");
+        // Default ON. Set MEZ_GPU_LT=0 to disable and compare against
+        // CPU CalcLongTerm.
+        return !(e && e[0] == '0' && e[1] == '\0');
+    }();
+    if (ltEnabled && !runtimeLinks.empty())
+    {
+        const auto& referenceAnt = runtimeLinks.front();
+        if (referenceAnt.sAnt && referenceAnt.uAnt)
+        {
+            ltSPorts = static_cast<uint32_t>(referenceAnt.sAnt->GetNumPorts());
+            ltUPorts = static_cast<uint32_t>(referenceAnt.uAnt->GetNumPorts());
+            ltSPortElems = static_cast<uint32_t>(referenceAnt.sAnt->GetNumElemsPerPort());
+            ltUPortElems = static_cast<uint32_t>(referenceAnt.uAnt->GetNumElemsPerPort());
+            ltSElemsPerPort = static_cast<uint32_t>(referenceAnt.sAnt->GetHElemsPerPort());
+            ltUElemsPerPort = static_cast<uint32_t>(referenceAnt.uAnt->GetHElemsPerPort());
+            ltSIncVal = (ltSElemsPerPort > 0)
+                            ? static_cast<uint32_t>(referenceAnt.sAnt->GetNumColumns()) -
+                                  ltSElemsPerPort
+                            : 0u;
+            ltUIncVal = (ltUElemsPerPort > 0)
+                            ? static_cast<uint32_t>(referenceAnt.uAnt->GetNumColumns()) -
+                                  ltUElemsPerPort
+                            : 0u;
+            ltStartS.resize(ltSPorts);
+            for (uint32_t p = 0; p < ltSPorts; ++p)
+            {
+                ltStartS[p] = static_cast<uint32_t>(
+                    referenceAnt.sAnt->ArrayIndexFromPortIndex(p, 0));
+            }
+            ltStartU.resize(ltUPorts);
+            for (uint32_t p = 0; p < ltUPorts; ++p)
+            {
+                ltStartU[p] = static_cast<uint32_t>(
+                    referenceAnt.uAnt->ArrayIndexFromPortIndex(p, 0));
+            }
+            ltSWFlat.resize(size_t(nActiveLinks) * ltSPortElems);
+            ltUWFlat.resize(size_t(nActiveLinks) * ltUPortElems);
+            for (size_t i = 0; i < runtimeLinks.size(); ++i)
+            {
+                const auto& ctx = runtimeLinks[i];
+                if (!ctx.sAnt || !ctx.uAnt)
+                {
+                    ltCanDispatch = false;
+                    break;
+                }
+                const auto& sBV = ctx.sAnt->GetBeamformingVectorRef();
+                const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
+                const size_t sBase = i * ltSPortElems;
+                const size_t uBase = i * ltUPortElems;
+                // CalcLongTerm only ever reads sW[0..sPortElems-1] and
+                // uW[0..uPortElems-1] -- the first port's slice -- so
+                // that's all we upload.
+                for (uint32_t k = 0; k < ltSPortElems; ++k)
+                {
+                    const auto v = sBV[k];
+                    ltSWFlat[sBase + k] = std::complex<float>(
+                        static_cast<float>(v.real()),
+                        static_cast<float>(v.imag()));
+                }
+                for (uint32_t k = 0; k < ltUPortElems; ++k)
+                {
+                    const auto v = uBV[k];
+                    ltUWFlat[uBase + k] = std::complex<float>(
+                        static_cast<float>(v.real()),
+                        static_cast<float>(v.imag()));
+                }
+            }
+            ltCanDispatch = ltSPortElems > 0 && ltUPortElems > 0 && ltSPorts > 0 && ltUPorts > 0;
+        }
+    }
+    std::vector<std::complex<float>> longTermFlat;
+    if (ltCanDispatch)
+    {
+        SLS_PHASE_SCOPE("Mez::GenLongTerm");
+        gpu->genLongTerm(nActiveLinks,
+                         /*uSize=*/globalUeAnt,
+                         /*sSize=*/globalBsAnt,
+                         ltSPorts,
+                         ltUPorts,
+                         ltSPortElems,
+                         ltUPortElems,
+                         ltSElemsPerPort,
+                         ltUElemsPerPort,
+                         ltSIncVal,
+                         ltUIncVal,
+                         ltSWFlat,
+                         ltUWFlat,
+                         ltStartS,
+                         ltStartU);
+        SLS_PHASE_SCOPE("Mez::ReadLongTerm");
+        longTermFlat = gpu->readLongTerm(nActiveLinks, ltSPorts, ltUPorts);
+    }
+
     std::vector<std::complex<float>> matFlat;
     {
         SLS_PHASE_SCOPE("Mez::ReadMatrix");
@@ -1248,6 +1367,43 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             dr[1] = static_cast<double>(sr[1]);
         }
         m_channelMatrixMap.insert_or_assign(ctx.matrixKey, matrix);
+
+        // Build per-link longTerm from the GPU kernel's output (when
+        // available) and stash it in m_gpuLongTermMap together with
+        // the beam-weight snapshot. GetCachedLongTerm checks both the
+        // generatedTime AND beam-weight equality before returning a
+        // hit, so any per-eval precoder change between now and the
+        // PRX call invalidates the cache and the CPU path runs.
+        if (!longTermFlat.empty() && ctx.sAnt && ctx.uAnt)
+        {
+            const size_t ltPerPage = size_t(ltUPorts) * ltSPorts;
+            const size_t ltPerLink = ltPerPage * SlsChanWgpu::kMatMaxPages;
+            const size_t ltLinkBase = size_t(ctx.lspReadIdx) * ltPerLink;
+            Ptr<Complex3DVector> longTerm = Create<Complex3DVector>(
+                static_cast<uint16_t>(ltUPorts),
+                static_cast<uint16_t>(ltSPorts),
+                numOverallCluster);
+            const std::complex<float>* ltSrc = longTermFlat.data() + ltLinkBase;
+            std::complex<double>* ltDst = longTerm->GetPagePtr(0);
+            const size_t ltCells = ltPerPage * size_t(numOverallCluster);
+            for (size_t k = 0; k < ltCells; ++k)
+            {
+                const auto* sr = reinterpret_cast<const float*>(ltSrc + k);
+                auto* dr = reinterpret_cast<double*>(ltDst + k);
+                dr[0] = static_cast<double>(sr[0]);
+                dr[1] = static_cast<double>(sr[1]);
+            }
+            const auto& sBV = ctx.sAnt->GetBeamformingVectorRef();
+            const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
+            GpuLongTermEntry entry;
+            entry.longTerm = longTerm;
+            entry.sWHash = HashComplexVector(sBV);
+            entry.uWHash = HashComplexVector(uBV);
+            entry.sWSize = sBV.GetSize();
+            entry.uWSize = uBV.GetSize();
+            entry.generatedTime = matrix->m_generatedTime;
+            m_gpuLongTermMap.insert_or_assign(ctx.matrixKey, std::move(entry));
+        }
     }
 
     NS_LOG_DEBUG("Updated GPU-backed channel params + matrix caches.");
@@ -1328,6 +1484,62 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
                                                uMob,
                                                sAntenna,
                                                uAntenna);
+}
+
+Ptr<const MatrixBasedChannelModel::Complex3DVector>
+ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
+    Ptr<const ChannelMatrix> channelMatrix,
+    Ptr<const PhasedArrayModel> sAnt,
+    Ptr<const PhasedArrayModel> uAnt,
+    const PhasedArrayModel::ComplexVector& sW,
+    const PhasedArrayModel::ComplexVector& uW) const
+{
+    const uint64_t key = MatrixBasedChannelModel::GetKey(sAnt->GetId(), uAnt->GetId());
+    auto it = m_gpuLongTermMap.find(key);
+    if (it == m_gpuLongTermMap.end())
+    {
+        return nullptr;
+    }
+    const GpuLongTermEntry& entry = it->second;
+    // Validity: the cached longTerm was computed from THIS
+    // channelMatrix (matching generatedTime) AND from beam weights
+    // whose 64-bit hash + size matches the caller's now. A
+    // collision on two distinct beam vectors yielding a false hit
+    // is ~1 in 1.8e19 -- fine for any realistic sim.
+    if (!channelMatrix || entry.generatedTime != channelMatrix->m_generatedTime)
+    {
+        return nullptr;
+    }
+    if (entry.sWSize != sW.GetSize() || entry.uWSize != uW.GetSize())
+    {
+        return nullptr;
+    }
+    if (entry.sWHash != HashComplexVector(sW) || entry.uWHash != HashComplexVector(uW))
+    {
+        return nullptr;
+    }
+    return entry.longTerm;
+}
+
+uint64_t
+ThreeGppChannelModelWgpuMezanine::HashComplexVector(const PhasedArrayModel::ComplexVector& v)
+{
+    // FNV-1a 64-bit over the raw double pairs (re, im) of each
+    // complex element. The PhasedArrayModel::ComplexVector is
+    // backed by a contiguous valarray<complex<double>>, so we walk
+    // GetValues() as a uint64_t* stream.
+    uint64_t h = 1469598103934665603ull; // offset basis
+    constexpr uint64_t kPrime = 1099511628211ull;
+    const size_t n = v.GetSize();
+    const auto& values = v.GetValues();
+    const auto* raw = reinterpret_cast<const uint64_t*>(&values[0]);
+    const size_t words = n * 2; // 2 doubles per complex<double>
+    for (size_t i = 0; i < words; ++i)
+    {
+        h ^= raw[i];
+        h *= kPrime;
+    }
+    return h;
 }
 
 } // namespace ns3

@@ -761,8 +761,26 @@ ThreeGppSpectrumPropagationLossModel::GetLongTerm(
     if (update || notFound)
     {
         NS_LOG_DEBUG("compute the long term");
-        // compute the long term component
-        longTerm = CalcLongTerm(channelMatrix, sAntenna, uAntenna);
+        // Give the channel model a chance to provide a pre-computed
+        // longTerm (e.g. ThreeGppChannelModelWgpuMezanine running
+        // gen_long_term_kernel during UpdateChannel). On a match we
+        // skip the CPU CalcLongTerm entirely; on a miss the back-end
+        // returns nullptr and we fall through.
+        Ptr<const MatrixBasedChannelModel::Complex3DVector> gpuLongTerm;
+        if (m_channelModel)
+        {
+            gpuLongTerm =
+                m_channelModel->GetCachedLongTerm(channelMatrix, sAntenna, uAntenna, sW, uW);
+        }
+        if (gpuLongTerm)
+        {
+            longTerm = gpuLongTerm;
+        }
+        else
+        {
+            // compute the long term component
+            longTerm = CalcLongTerm(channelMatrix, sAntenna, uAntenna);
+        }
         Ptr<LongTerm> longTermItem = Create<LongTerm>();
         longTermItem->m_longTerm = longTerm;
         longTermItem->m_channel = channelMatrix;
