@@ -773,9 +773,21 @@ class SlsChanWgpu
 
     wgpu::Buffer clusterParamsBuf_;
     wgpu::Buffer activeLinkBuf_;
-    wgpu::Buffer cirCoeBuf_;
-    wgpu::Buffer cirNormDelayBuf_;
-    wgpu::Buffer cirNtapsBuf_;
+    wgpu::Buffer cirCoeBuf_;          // (legacy, unused after pack refactor)
+    wgpu::Buffer cirNormDelayBuf_;    // (legacy)
+    wgpu::Buffer cirNtapsBuf_;        // (legacy)
+    // Packed CIR output buffer holding cirCoe + cirNormDelay + cirNtaps
+    // per link in one storage allocation (Dawn caps storage bindings
+    // per stage at 10, so the three separate output buffers had to
+    // merge). Per-link u32 stride is cirPackedStrideU32_; cirCoe
+    // occupies the first nSnap*nUeAnt*nBsAnt*24*2 u32, then 24 u32
+    // cirNormDelay, then 1 u32 cirNtaps.
+    wgpu::Buffer cirOutputsPackedBuf_;
+    uint32_t cirPackedNLinks_{0};
+    uint32_t cirPackedStrideU32_{0};
+    // Small uniform-layout buffer holding only the SsCmnParams fields
+    // generate_cir_kernel reads. Frees one storage SSBO slot.
+    wgpu::Buffer cirCmnUniformBuf_;
     wgpu::Buffer freqChanPrbgBuf_;
     static constexpr uint32_t CFR_BATCH_SIZE = 1024u;
     wgpu::Buffer antPanelConfigBuf_;

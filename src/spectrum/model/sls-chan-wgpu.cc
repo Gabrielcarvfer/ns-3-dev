@@ -1729,45 +1729,79 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
                                 WGPUBufferUsage_Storage,
                                 activeLinks.data());
 
-    if (!cirCoeBuf_)
+    // Packed output buffer. Per link u32-stride:
+    //   cirCoe (nSnap * nUeAnt * nBsAnt * 24 vec2f, 2 u32 each)
+    //   cirNormDelay (24 u32)
+    //   cirNtaps (1 u32)
+    const uint32_t cirCoeU32PerLink =
+        nSnapshots * ssNBsAnt_ * ssNUeAnt_ * 24u * 2u;
+    cirPackedStrideU32_ = cirCoeU32PerLink + 24u + 1u;
+    if (!cirOutputsPackedBuf_ || cirPackedNLinks_ != nActiveLinks)
     {
-        const uint64_t cirCoeElems =
-            uint64_t(nActiveLinks) * nSnapshots * ssNBsAnt_ * ssNUeAnt_ * 24u;
-        cirCoeBuf_ = makeBuffer(cirCoeElems * sizeof(float) * 2,
-                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    }
-    if (!cirNormDelayBuf_)
-    {
-        cirNormDelayBuf_ = makeBuffer(uint64_t(nActiveLinks) * 24u * sizeof(uint32_t),
-                                      WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    }
-    if (!cirNtapsBuf_)
-    {
-        cirNtapsBuf_ = makeBuffer(uint64_t(nActiveLinks) * sizeof(uint32_t),
-                                  WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        cirOutputsPackedBuf_ = makeBuffer(
+            uint64_t(nActiveLinks) * cirPackedStrideU32_ * sizeof(uint32_t),
+            WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        cirPackedNLinks_ = nActiveLinks;
     }
 
     struct DispUni
     {
         uint32_t nSite, nUT, nActiveLinks;
         float refTime, cfr_norm;
-        uint32_t _p0, _p1, _p2;
+        uint32_t cirNormDelayRegionBase;
+        uint32_t cirNtapsRegionBase;
+        uint32_t _p0;
     };
 
-    DispUni du{0u, 0u, nActiveLinks, refTime, 1.0f, 0, 0, 0};
+    // Region bases inside cirOutputsPackedBuf_ (u32 units):
+    //   cirCoe region:        offset 0
+    //   cirNormDelay region:  offset nLinks * cirCoeU32PerLink
+    //   cirNtaps region:      offset prev + nLinks * 24
+    const uint32_t cirNormDelayRegionBase = nActiveLinks * cirCoeU32PerLink;
+    const uint32_t cirNtapsRegionBase     = cirNormDelayRegionBase + nActiveLinks * 24u;
+    DispUni du{0u, 0u, nActiveLinks, refTime, 1.0f,
+               cirNormDelayRegionBase, cirNtapsRegionBase, 0u};
     ssDispatchBuf_ = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
 
-    if (!cirDbgBuf_)
+    // Build the small CIR uniform from the cached SsCmnParams data.
+    // Layout matches the WGSL CirCmn struct exactly (vec4-padded arrays).
     {
-        cirDbgBuf_ = makeBuffer(uint64_t(nActiveLinks) * 16ULL * sizeof(float),
-                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        struct alignas(16) CirCmnUni
+        {
+            float lambda_0;
+            uint32_t nSubCluster;
+            uint32_t _pad0;
+            uint32_t _pad1;
+            float C_DS[4];                     // .xyz used
+            uint32_t raysInSubClusterSizes[4]; // .xyz used
+            uint32_t raysInSubCluster[3][3][4]; // [subcluster][vec4_idx][lane] -- 12 lanes hold 10 values
+        };
+        static_assert(sizeof(CirCmnUni) == 192, "CirCmnUni size must match WGSL CirCmn");
+        CirCmnUni cu{};
+        cu.lambda_0 = ssCmnCache_.lambda_0;
+        cu.nSubCluster = ssCmnCache_.nSubCluster;
+        for (int i = 0; i < 3; ++i) cu.C_DS[i] = ssCmnCache_.C_DS[i];
+        for (int i = 0; i < 3; ++i)
+            cu.raysInSubClusterSizes[i] = ssCmnCache_.raysInSubClusterSizes[i];
+        for (int sc = 0; sc < 3; ++sc)
+        {
+            const uint32_t* src = (sc == 0)   ? ssCmnCache_.raysInSubCluster0
+                                : (sc == 1) ? ssCmnCache_.raysInSubCluster1
+                                            : ssCmnCache_.raysInSubCluster2;
+            for (int ri = 0; ri < 10; ++ri)
+            {
+                cu.raysInSubCluster[sc][ri / 4][ri % 4] = src[ri];
+            }
+        }
+        cirCmnUniformBuf_ = makeBuffer(sizeof(cu), WGPUBufferUsage_Uniform, &cu);
     }
 
     auto layout2 = generateCIRPipeline_.getBindGroupLayout(2);
-    // Was 22 (bindings 0..21 with 6 separate cluster-output arrays at
-    // 15..20). Now 17 -- the 6 outputs collapsed into one packed view
-    // at binding 15 and cir_dbg moved to binding 16.
-    std::vector<wgpu::BindGroupEntry> e0(17, wgpu::Default);
+    // 14 entries after the Dawn SSBO-pack refactor:
+    //   3 outputs (cirCoe + cirNormDelay + cirNtaps) -> one packed at 11
+    //   cir_dbg removed (was at 16)
+    //   cir_buf_cmn changed from storage SsCmnParams to uniform CirCmn
+    std::vector<wgpu::BindGroupEntry> e0(14, wgpu::Default);
     auto E = [](std::vector<wgpu::BindGroupEntry>& v,
                 int i,
                 uint32_t b,
@@ -1777,23 +1811,20 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
         v[i].buffer = buf;
         v[i].size = sz;
     };
-    E(e0, 0, 0, ssSimConfigBuf_);     // cir_uni_sim
-    E(e0, 1, 1, ssSysConfigBuf_);     // cir_uni_sys
-    E(e0, 2, 2, ssCmnLinkBuf_);       // cir_buf_cmn
-    E(e0, 3, 3, ssCellParamsBuf_);    // cir_buf_cell
-    E(e0, 4, 4, ssUtParamsBuf_);      // cir_buf_ut
-    E(e0, 5, 5, linkParamsBuf_);      // cir_buf_link
-    E(e0, 6, 6, clusterParamsBuf_);   // cir_buf_cluster
-    E(e0, 7, 7, antPanelConfigBuf_);  // cir_buf_antCfg
-    E(e0, 8, 8, antThetaBuf_);        // cir_buf_antTheta
-    E(e0, 9, 9, antPhiBuf_);          // cir_buf_antPhi
-    E(e0, 10, 10, activeLinkBuf_);    // cir_buf_activeLink
-    E(e0, 11, 11, cirCoeBuf_);        // cir_buf_cirCoe
-    E(e0, 12, 12, cirNormDelayBuf_);  // cir_buf_cirNormDelay
-    E(e0, 13, 13, cirNtapsBuf_);      // cir_buf_cirNtaps
-    E(e0, 14, 14, ssDispatchBuf_);    // cir_disp
-    E(e0, 15, 15, clusterOutputsBuf_); // cir_packed_in
-    E(e0, 16, 16, cirDbgBuf_);         // cir_dbg (was binding 21)
+    E(e0, 0, 0, ssSimConfigBuf_);        // cir_uni_sim
+    E(e0, 1, 1, ssSysConfigBuf_);        // cir_uni_sys
+    E(e0, 2, 2, cirCmnUniformBuf_);      // cir_buf_cmn (uniform CirCmn)
+    E(e0, 3, 3, ssCellParamsBuf_);       // cir_buf_cell
+    E(e0, 4, 4, ssUtParamsBuf_);         // cir_buf_ut
+    E(e0, 5, 5, linkParamsBuf_);         // cir_buf_link
+    E(e0, 6, 6, clusterParamsBuf_);      // cir_buf_cluster
+    E(e0, 7, 7, antPanelConfigBuf_);     // cir_buf_antCfg
+    E(e0, 8, 8, antThetaBuf_);           // cir_buf_antTheta
+    E(e0, 9, 9, antPhiBuf_);             // cir_buf_antPhi
+    E(e0, 10, 10, activeLinkBuf_);       // cir_buf_activeLink
+    E(e0, 11, 11, cirOutputsPackedBuf_); // cir_buf_packed_out
+    E(e0, 12, 14, ssDispatchBuf_);       // cir_disp
+    E(e0, 13, 15, clusterOutputsBuf_);   // cir_packed_in
 
     wgpu::BindGroupDescriptor bgd2 = wgpu::Default;
     bgd2.layout = layout2;
@@ -1834,9 +1865,7 @@ SlsChanWgpu::generateCFR(const std::vector<ActiveLink>& activeLinks,
     assert(ssUtParamsBuf_ && "call uploadUtParamsSS before generateCFR");
     assert(antPanelConfigBuf_ && "call uploadAntPanelConfigs before generateCFR");
     assert(activeLinkBuf_ && "call generateCIR before generateCFR (missing activeLinkBuf_)");
-    assert(cirCoeBuf_ && "call generateCIR before generateCFR (missing cirCoeBuf_)");
-    assert(cirNormDelayBuf_ && "call generateCIR before generateCFR (missing cirNormDelayBuf_)");
-    assert(cirNtapsBuf_ && "call generateCIR before generateCFR (missing cirNtapsBuf_)");
+    assert(cirOutputsPackedBuf_ && "call generateCIR before generateCFR (missing packed output)");
     assert(!isDead());
 
     // Probe device health before doing anything
@@ -1880,14 +1909,29 @@ SlsChanWgpu::generateCFR(const std::vector<ActiveLink>& activeLinks,
         v[i].buffer = buf;
         v[i].size = sz;
     };
+    // Sub-range bindings into cirOutputsPackedBuf_:
+    //   cirCoe region:        offset 0,                            size = nLinks * cirCoeU32 * 4
+    //   cirNormDelay region:  offset cirNormDelayRegionBase * 4,   size = nLinks * 24 * 4
+    //   cirNtaps region:      offset cirNtapsRegionBase     * 4,   size = nLinks * 4
+    const uint32_t cirCoeU32 =
+        nSnapshots * ssNBsAnt_ * ssNUeAnt_ * 24u * 2u;
+    const uint64_t cirCoeRegionBytes  = uint64_t(nActiveLinks) * cirCoeU32 * 4u;
+    const uint64_t cirNormDelayBytes  = uint64_t(nActiveLinks) * 24u * 4u;
+    const uint64_t cirNtapsBytes      = uint64_t(nActiveLinks) * 4u;
     E(e0, 0, 0, ssSimConfigBuf_);            // cfr_uni_sim
     E(e0, 1, 1, ssCellParamsBuf_);           // cfr_buf_cell
     E(e0, 2, 2, ssUtParamsBuf_);             // cfr_buf_ut
     E(e0, 3, 3, antPanelConfigBuf_);         // cfr_buf_antCfg
     E(e0, 4, 4, activeLinkBuf_);             // cfr_buf_activeLink
-    E(e0, 5, 5, cirCoeBuf_);                 // cfr_buf_cirCoe
-    E(e0, 6, 6, cirNormDelayBuf_);           // cfr_buf_cirNormDelay
-    E(e0, 7, 7, cirNtapsBuf_);               // cfr_buf_cirNtaps
+    e0[5].binding = 5; e0[5].buffer = cirOutputsPackedBuf_;
+    e0[5].offset = 0;
+    e0[5].size   = cirCoeRegionBytes;        // cfr_buf_cirCoe
+    e0[6].binding = 6; e0[6].buffer = cirOutputsPackedBuf_;
+    e0[6].offset = cirCoeRegionBytes;
+    e0[6].size   = cirNormDelayBytes;        // cfr_buf_cirNormDelay
+    e0[7].binding = 7; e0[7].buffer = cirOutputsPackedBuf_;
+    e0[7].offset = cirCoeRegionBytes + cirNormDelayBytes;
+    e0[7].size   = cirNtapsBytes;            // cfr_buf_cirNtaps
     E(e0, 8, 8, freqChanPrbgBuf_);           // cfr_buf_freqChanPrbg
     E(e0, 9, 9, ssDispatchBuf_, sizeof(du)); // cfr_disp
 
@@ -1932,9 +1976,7 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
     assert(ssUtParamsBuf_ && "call uploadUtParamsSS before generateCFR");
     assert(antPanelConfigBuf_ && "call uploadAntPanelConfigs before generateCFR");
     assert(activeLinkBuf_ && "call generateCIR before generateCFR (missing activeLinkBuf_)");
-    assert(cirCoeBuf_ && "call generateCIR before generateCFR (missing cirCoeBuf_)");
-    assert(cirNormDelayBuf_ && "call generateCIR before generateCFR (missing cirNormDelayBuf_)");
-    assert(cirNtapsBuf_ && "call generateCIR before generateCFR (missing cirNtapsBuf_)");
+    assert(cirOutputsPackedBuf_ && "call generateCIR before generateCFR (missing packed output)");
     assert(!isDead());
 
     // Precompute per-link element counts
@@ -2105,13 +2147,14 @@ SlsChanWgpu::readCirCoe(uint32_t nActiveLinks,
                         uint32_t nUtAnt,
                         uint32_t nBsAnt)
 {
+    // cirCoe is the first region of cirOutputsPackedBuf_ (offset 0).
     const uint64_t sz = uint64_t(nActiveLinks) * nSnapshots * nUtAnt * nBsAnt * 24 * 8;
     if (!cirStagingBuf_)
     {
         cirStagingBuf_ = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     }
     auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(cirCoeBuf_, 0, cirStagingBuf_, 0, sz);
+    enc.copyBufferToBuffer(cirOutputsPackedBuf_, 0, cirStagingBuf_, 0, sz);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
     return mapReadBuffer<std::complex<float>>(cirStagingBuf_, sz);
@@ -2196,29 +2239,31 @@ SlsChanWgpu::readClusterParams(uint32_t nSite, uint32_t nUT)
 std::vector<uint32_t>
 SlsChanWgpu::readCirNtaps()
 {
-    const uint64_t sz = cirNtapsBuf_.getSize();
+    assert(cirOutputsPackedBuf_ && "call generateCIR before readCirNtaps");
+    // cirNtaps region starts at (cirCoe + cirNormDelay) bytes; size is
+    // nActiveLinks * 4 (one u32 per link). cirPackedNLinks_ snapshots
+    // the active-link count from the last generateCIR call.
+    const uint64_t cirCoeU32PerLink =
+        cirPackedStrideU32_ > 25u ? (cirPackedStrideU32_ - 25u) : 0u;
+    const uint64_t cirCoeBytes  = uint64_t(cirPackedNLinks_) * cirCoeU32PerLink * 4u;
+    const uint64_t normDelayBytes = uint64_t(cirPackedNLinks_) * 24u * 4u;
+    const uint64_t sz = uint64_t(cirPackedNLinks_) * 4u;
     wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(cirNtapsBuf_, 0, staging, 0, sz);
+    enc.copyBufferToBuffer(cirOutputsPackedBuf_, cirCoeBytes + normDelayBytes,
+                           staging, 0, sz);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
     return mapReadBuffer<uint32_t>(staging, sz);
 }
 
 std::vector<float>
-SlsChanWgpu::readCirDebug(uint32_t nActiveLinks)
+SlsChanWgpu::readCirDebug(uint32_t /*nActiveLinks*/)
 {
-    if (!cirDbgBuf_)
-    {
-        return {};
-    }
-    const uint64_t sz = uint64_t(nActiveLinks) * 16ULL * sizeof(float);
-    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-    auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(cirDbgBuf_, 0, staging, 0, sz);
-    queue_.submit(enc.finish(wgpu::Default));
-    waitIdle();
-    return mapReadBuffer<float>(staging, sz);
+    // cir_dbg was removed in the SSBO-pack refactor (Dawn 10/stage
+    // limit). Return empty so existing callers' `if (!dbg.empty())`
+    // guards skip the diagnostic block cleanly.
+    return {};
 }
 
 namespace
@@ -3448,7 +3493,7 @@ SlsChanWgpu::saveSlsChanToHdf5(const std::string& filename, const SceneMeta& met
     }
 
     std::vector<uint32_t> cirNtaps;
-    if (cirNtapsBuf_)
+    if (cirOutputsPackedBuf_)
     {
         cirNtaps = readCirNtaps();
     }
@@ -3471,7 +3516,7 @@ SlsChanWgpu::saveSlsChanToHdf5(const std::string& filename, const SceneMeta& met
     std::vector<std::complex<float>> cirCoe;
     std::vector<std::complex<float>> cfrPrbg;
     const std::vector<ActiveLink>& activeLinks = activeLinksCache_;
-    if (cirCoeBuf_ && !activeLinks.empty() && ssNUeAnt_ > 0 && ssNBsAnt_ > 0)
+    if (cirOutputsPackedBuf_ && !activeLinks.empty() && ssNUeAnt_ > 0 && ssNBsAnt_ > 0)
     {
         cirCoe = readCirCoe(static_cast<uint32_t>(activeLinks.size()),
                             nSnapshotsCache_,

@@ -1025,9 +1025,13 @@ struct DispatchUniforms {
     nActiveLinks : u32,
     refTime      : f32,
     cfr_norm     : f32,
+    // u32 offsets to the cirNormDelay / cirNtaps regions of the
+    // packed CIR output buffer. The CIR kernel uses them to compute
+    // absolute write positions; CFR sees the regions as bound
+    // sub-ranges and never reads these fields.
+    cirNormDelayRegionBase : u32,
+    cirNtapsRegionBase     : u32,
     _pad0        : u32,
-    _pad1        : u32,
-    _pad2        : u32,
 }
 
 // ── group 1: cal_cluster_ray_kernel ──────────────────────────────────────
@@ -1056,9 +1060,29 @@ const PACKED_OFF_ZOA     : u32 = 2800u;
 const PACKED_OFF_ZOD     : u32 = 3200u;
 
 // ── group 2: generate_cir_kernel ─────────────────────────────────────────
+// Small uniform-layout struct holding ONLY the SsCmnParams fields the
+// CIR kernel actually reads. Moving cir_buf_cmn from a full storage
+// SsCmnParams binding (binding 2) to this tiny uniform frees one
+// storage slot toward Dawn's 10-per-stage limit. All array fields
+// are sized as vec4<T> chunks because uniform-buffer arrays need
+// 16-byte element strides; CirCmn fields use the .x/.y/.z lanes
+// for the 3-element NLOS/LOS/O2I sets and the first 10 of the 12
+// available lanes for the 10-element raysInSubCluster arrays.
+struct CirCmn {
+    lambda_0:                 f32,
+    nSubCluster:              u32,
+    _pad0:                    u32,
+    _pad1:                    u32,
+    C_DS:                     vec4<f32>,                // .xyz used (NLOS/LOS/O2I)
+    raysInSubClusterSizes:    vec4<u32>,                // .xyz used (sub0/sub1/sub2 sizes)
+    raysInSubCluster0:        array<vec4<u32>, 3>,      // 10 used of 12 slots
+    raysInSubCluster1:        array<vec4<u32>, 3>,
+    raysInSubCluster2:        array<vec4<u32>, 3>,
+}
+
 @group(2) @binding(0)  var<uniform>             cir_uni_sim          : SmallScaleSimConfig;
 @group(2) @binding(1)  var<uniform>             cir_uni_sys          : SmallScaleSysConfig;
-@group(2) @binding(2)  var<storage, read>       cir_buf_cmn          : SsCmnParams;
+@group(2) @binding(2)  var<uniform>             cir_buf_cmn          : CirCmn;
 @group(2) @binding(3)  var<storage, read>       cir_buf_cell         : array<SspCellParam>;
 @group(2) @binding(4)  var<storage, read>       cir_buf_ut           : array<SspUtParam>;
 @group(2) @binding(5)  var<storage, read>       cir_buf_link         : array<LinkParams>;
@@ -1067,35 +1091,18 @@ const PACKED_OFF_ZOD     : u32 = 3200u;
 @group(2) @binding(8)  var<storage, read>       cir_buf_antTheta     : array<f32>;
 @group(2) @binding(9)  var<storage, read>       cir_buf_antPhi       : array<f32>;
 @group(2) @binding(10) var<storage, read>       cir_buf_activeLink   : array<ActiveLink>;
-@group(2) @binding(11) var<storage, read_write> cir_buf_cirCoe       : array<vec2f>;
-@group(2) @binding(12) var<storage, read_write> cir_buf_cirNormDelay : array<u32>;
-@group(2) @binding(13) var<storage, read_write> cir_buf_cirNtaps     : array<u32>;
+// Packed output buffer: per-link [cirCoe (nSnap * nUeAnt * nBsAnt * 24
+// vec2f = 2 u32 each) | cirNormDelay (24 u32) | cirNtaps (1 u32)],
+// flat array<u32>. cirCoe writes go through bitcast<u32>(f32) so the
+// layout matches what readCirCoe/readCirNormDelay/readCirNtaps slice
+// back on the host side.
+@group(2) @binding(11) var<storage, read_write> cir_buf_packed_out   : array<u32>;
 @group(2) @binding(14) var<uniform>             cir_disp             : DispatchUniforms;
 // Read-only view of the cluster-ray packed output buffer. Same layout
 // as cray_packed_out (see PACKED_LINK_STRIDE + PACKED_OFF_* constants).
 @group(2) @binding(15) var<storage, read>      cir_packed_in        : array<f32>;
-// Debug buffer — 16 f32 slots per link. Thread 0 writes intermediate values
-// so the host can diagnose which stage of generate_cir_kernel is collapsing
-// the output for the ~5 % of links that emit zero CIR. Slot layout:
-//   [0]  n_cl                                (cluster count)
-//   [1]  losInd ? 1 : 0
-//   [2]  los_power                           (K/(K+1) for LOS, 0 otherwise)
-//   [3]  los_scale                           (sqrt(K/(K+1)))
-//   [4]  KR                                  (raw K_lin from cal_link_param)
-//   [5]  tap_count after cluster loop
-//   [6]  sum |wg_Hlink[tap]|² BEFORE PL+LOS  (last BS antenna; pre-LOS)
-//   [7]  |H_los|²                            (last BS antenna)
-//   [8]  sum |wg_Hlink[tap]|² AFTER LOS add  (last BS antenna)
-//   [9]  ps²                                 (= 10^(-(PL-SF)/10))
-//   [10] sum |wg_Hlink[tap]|² AFTER PL scale (last BS antenna)
-//   [11] count of zero-power clusters after LOS sub
-//   [12] strongest2[0]
-//   [13] strongest2[1]
-//   [14] sum cluster_power (over all clusters, post-LOS-sub)
-//   [15] reserved
-// cir_dbg moved from 21 to 16 when bindings 16..20 were freed by
-// packing 6 cluster outputs into the single cir_packed_in at 15.
-@group(2) @binding(16) var<storage, read_write> cir_dbg : array<f32>;
+// cir_dbg removed to fit Dawn's 10 SSBO/stage limit -- was a
+// diagnostic-only read_write storage buffer.
 
 // ── group 3: generate_cfr_kernel_mode1 ───────────────────────────────────
 @group(3) @binding(0) var<uniform>             cfr_uni_sim          : SmallScaleSimConfig;
@@ -1593,6 +1600,18 @@ var<workgroup> wg_Hlink  : array<vec2f, 192>;   // NMAXTAPS(24) * MAX_UE_ANT(8)
 var<workgroup> wg_tapIdx : array<u32,   24>;
 var<workgroup> wg_tapCnt : atomic<u32>;
 
+// Packed-buffer helpers for cir_buf_packed_out. The buffer is a flat
+// array<u32>; cirCoe entries (vec2f = 2 floats) are stored as 2 u32
+// via bitcast. cirNormDelay and cirNtaps entries are u32 directly.
+fn pack_write_vec2f(idx_u32: u32, v: vec2f) {
+    cir_buf_packed_out[idx_u32]      = bitcast<u32>(v.x);
+    cir_buf_packed_out[idx_u32 + 1u] = bitcast<u32>(v.y);
+}
+fn pack_read_vec2f(idx_u32: u32) -> vec2f {
+    return vec2f(bitcast<f32>(cir_buf_packed_out[idx_u32]),
+                 bitcast<f32>(cir_buf_packed_out[idx_u32 + 1u]));
+}
+
 @compute @workgroup_size(24, 1, 1)      // NMAXTAPS threads
 fn generate_cir_kernel(
     @builtin(workgroup_id)       wg : vec3<u32>,
@@ -1600,6 +1619,7 @@ fn generate_cir_kernel(
 ) {
     let active_link_idx = wg.x;
     let snapshot_idx    = wg.y;
+
     if active_link_idx >= cir_disp.nActiveLinks { return; }
 
     let al  = cir_buf_activeLink[active_link_idx];
@@ -1625,9 +1645,15 @@ fn generate_cir_kernel(
         snap_time += lk.d3d / 3.0e8;
     }
 
-    // CIR snapshot offset in output buffer
-    let snap_off = al.cirCoeOffset
-                 + snapshot_idx * nUtAnt * nCellAnt * NMAXTAPS;
+    // CIR snapshot offset in the packed output buffer. al.cirCoeOffset
+    // is kept in vec2f-units (= linkIdx * nSnap*nUe*nBs*NMAXTAPS) so
+    // CFR can use it unchanged via its sub-range view of the packed
+    // buffer. The packed buffer's u32 layout starts with the entire
+    // cirCoe region at offset 0, so the kernel multiplies the
+    // vec2f-units offset by 2 to get u32-units.
+    let snap_off_vec2f = al.cirCoeOffset
+                       + snapshot_idx * nUtAnt * nCellAnt * NMAXTAPS;
+    let snap_off_u32 = snap_off_vec2f * 2u;
 
     // ---- disabled fading path ----
     if cir_uni_sys.disable_small_scale_fading == 1u {
@@ -1647,13 +1673,13 @@ fn generate_cir_kernel(
                         bsCfg, ba, tZOD, pAOD, zetaBs,
                         snap_time, vel, cir_buf_cmn.lambda_0, lk.d3d
                     );
-                    let dst = snap_off + (ua * nCellAnt + ba) * NMAXTAPS;
-                    cir_buf_cirCoe[dst] = coeff * ps;
+                    let dst_u32 = snap_off_u32 + ((ua * nCellAnt + ba) * NMAXTAPS) * 2u;
+                    pack_write_vec2f(dst_u32, coeff * ps);
                 }
             }
             if snapshot_idx == 0u {
-                cir_buf_cirNormDelay[al.cirNormDelayOffset] = 0u;
-                cir_buf_cirNtaps[al.cirNtapsOffset]         = 1u;
+                cir_buf_packed_out[cir_disp.cirNormDelayRegionBase + al.cirNormDelayOffset] = 0u;
+                cir_buf_packed_out[cir_disp.cirNtapsRegionBase     + al.cirNtapsOffset]     = 1u;
             }
         }
         return;
@@ -1671,30 +1697,9 @@ fn generate_cir_kernel(
         los_power = KR / (KR + 1.0);
     }
 
-    // Debug: record link-level scalars (thread 0 only).
-    let dbg_base = active_link_idx * 16u;
-    if li.x == 0u && snapshot_idx == 0u {
-        cir_dbg[dbg_base + 0u] = f32(n_cl);
-        cir_dbg[dbg_base + 1u] = select(0.0, 1.0, lk.losInd != 0u);
-        cir_dbg[dbg_base + 2u] = los_power;
-        cir_dbg[dbg_base + 3u] = sqrt(max(KR / (KR + 1.0), 0.0));
-        cir_dbg[dbg_base + 4u] = KR;
-        cir_dbg[dbg_base + 12u] = f32(cp.strongest2[0]);
-        cir_dbg[dbg_base + 13u] = f32(cp.strongest2[1]);
-        // Sum effective cluster power after LOS subtraction.
-        var cl_sum: f32 = 0.0;
-        var zero_cnt: u32 = 0u;
-        for (var cc = 0u; cc < n_cl; cc++) {
-            var pp = cp.powers[cc];
-            if lk.losInd != 0u && is_o2i == 0u && cc == 0u {
-                pp = max(pp - los_power, 0.0);
-            }
-            cl_sum += pp;
-            if pp <= 0.0 { zero_cnt = zero_cnt + 1u; }
-        }
-        cir_dbg[dbg_base + 11u] = f32(zero_cnt);
-        cir_dbg[dbg_base + 14u] = cl_sum;
-    }
+    // (Diagnostic cir_dbg block removed in the SSBO-pack refactor --
+    // generate_cir_kernel needed to lose 4 storage buffers to fit
+    // Dawn's 10/stage limit; cir_dbg was diagnostic-only.)
 
     let zetaBs = cell.antPanelOrientation[2];
     let zetaUt = ut.antPanelOrientation[2];
@@ -1752,10 +1757,14 @@ fn generate_cir_kernel(
                             // sub-divided into XPR / RNDP / AOA / AOD /
                             // ZOA / ZOD regions (PACKED_OFF_*).
                             let link_packed_base = al.lspReadIdx * PACKED_LINK_STRIDE;
+                            // raysInSubClusterN became array<vec4<u32>, 3> for
+                            // uniform layout; map ri in [0,10) to (vec4_idx, lane).
+                            let ri_vec  = ri / 4u;
+                            let ri_lane = ri % 4u;
                             var ray_local_idx = 0u;
-                            if sc == 0u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster0[ri]; }
-                            else if sc == 1u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster1[ri]; }
-                            else             { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster2[ri]; }
+                            if sc == 0u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster0[ri_vec][ri_lane]; }
+                            else if sc == 1u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster1[ri_vec][ri_lane]; }
+                            else             { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster2[ri_vec][ri_lane]; }
 
                             let tZOA = cir_packed_in[link_packed_base + PACKED_OFF_ZOA + ray_local_idx]
                                        - ut.antPanelOrientation[0];
@@ -1832,18 +1841,6 @@ fn generate_cir_kernel(
 
         workgroupBarrier();
 
-        // DEBUG: capture pre-LOS wg_Hlink power for the LAST BS antenna only
-        // (so the value is whatever the loop wrote on its final iteration).
-        if li.x == 0u && snapshot_idx == 0u && ba == nCellAnt - 1u {
-            var pre_los: f32 = 0.0;
-            for (var ti = 0u; ti < NMAXTAPS; ti++) {
-                let v = wg_Hlink[ti];
-                pre_los += v.x * v.x + v.y * v.y;
-            }
-            cir_dbg[dbg_base + 5u] = f32(tap_count);
-            cir_dbg[dbg_base + 6u] = pre_los;
-        }
-
         // LOS component (added at tap 0)
         if lk.losInd != 0u && is_o2i == 0u && li.x == 0u {
             let los_scale = sqrt(KR / (KR + 1.0));
@@ -1860,21 +1857,7 @@ fn generate_cir_kernel(
                 );
                 let hi = ua * NMAXTAPS; // tap 0
                 wg_Hlink[hi] = cadd(H_los * los_scale, wg_Hlink[hi]);
-                // DEBUG: |H_los|² for the LAST BS antenna.
-                if snapshot_idx == 0u && ba == nCellAnt - 1u && ua == 0u {
-                    cir_dbg[dbg_base + 7u] = H_los.x * H_los.x + H_los.y * H_los.y;
-                }
             }
-        }
-
-        // DEBUG: capture post-LOS / pre-PL power for the LAST BS antenna.
-        if li.x == 0u && snapshot_idx == 0u && ba == nCellAnt - 1u {
-            var post_los: f32 = 0.0;
-            for (var ti = 0u; ti < NMAXTAPS; ti++) {
-                let v = wg_Hlink[ti];
-                post_los += v.x * v.x + v.y * v.y;
-            }
-            cir_dbg[dbg_base + 8u] = post_los;
         }
 
         // Path loss scaling
@@ -1886,29 +1869,21 @@ fn generate_cir_kernel(
                     wg_Hlink[ua * NMAXTAPS + t2] = wg_Hlink[ua * NMAXTAPS + t2] * ps;
                 }
             }
-            // DEBUG: ps² and final |wg_Hlink|² for LAST BS antenna.
-            if snapshot_idx == 0u && ba == nCellAnt - 1u {
-                cir_dbg[dbg_base + 9u] = ps * ps;
-                var post_pl: f32 = 0.0;
-                for (var ti = 0u; ti < NMAXTAPS; ti++) {
-                    let v = wg_Hlink[ti];
-                    post_pl += v.x * v.x + v.y * v.y;
-                }
-                cir_dbg[dbg_base + 10u] = post_pl;
-            }
         }
 
         workgroupBarrier();
 
-        let buf_len = arrayLength(&cir_buf_cirCoe);
+        let buf_len_u32 = arrayLength(&cir_buf_packed_out);
 
-        // Write H_link -> cirCoe for this BS antenna
+        // Write H_link -> cirCoe for this BS antenna (into packed_out)
         if li.x == 0u {
             for (var ti = 0u; ti < tap_count; ti++) {
                 for (var ua = 0u; ua < nUtAnt; ua++) {
-                    let dst = snap_off + (ua * nCellAnt + ba) * NMAXTAPS + ti;
-                    if dst < buf_len {
-                    cir_buf_cirCoe[dst] = cadd(cir_buf_cirCoe[dst], wg_Hlink[ua * NMAXTAPS + ti]);
+                    let dst_u32 = snap_off_u32
+                                + ((ua * nCellAnt + ba) * NMAXTAPS + ti) * 2u;
+                    if dst_u32 + 1u < buf_len_u32 {
+                        let cur = pack_read_vec2f(dst_u32);
+                        pack_write_vec2f(dst_u32, cadd(cur, wg_Hlink[ua * NMAXTAPS + ti]));
                     }
                 }
             }
@@ -1942,19 +1917,19 @@ fn generate_cir_kernel(
             }
         }
 
-        // Deduplicate
+        // Deduplicate (into packed_out, cirNormDelay region)
         var n_unique = 0u;
         if tc > 0u {
-            cir_buf_cirNormDelay[al.cirNormDelayOffset] = wg_tapIdx[0];
+            cir_buf_packed_out[cir_disp.cirNormDelayRegionBase + al.cirNormDelayOffset] = wg_tapIdx[0];
             n_unique = 1u;
             for (var i = 1u; i < tc; i++) {
                 if wg_tapIdx[i] != wg_tapIdx[n_unique - 1u] {
-                    cir_buf_cirNormDelay[al.cirNormDelayOffset + n_unique] = wg_tapIdx[i];
+                    cir_buf_packed_out[cir_disp.cirNormDelayRegionBase + al.cirNormDelayOffset + n_unique] = wg_tapIdx[i];
                     n_unique++;
                 }
             }
         }
-        cir_buf_cirNtaps[al.cirNtapsOffset] = n_unique;
+        cir_buf_packed_out[cir_disp.cirNtapsRegionBase + al.cirNtapsOffset] = n_unique;
     }
 }
 
