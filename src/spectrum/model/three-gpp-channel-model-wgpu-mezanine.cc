@@ -333,6 +333,18 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         p.thetaDeg.assign(181, 0.f);
         p.phiDeg.assign(360, 0.f);
 
+        // Bucket-by-dominant-geometry: the GPU pipeline dispatches the
+        // matrix / longTerm / spec kernels with a single (uSize, sSize)
+        // per call. NR mixes antenna geometries across bands (a 32-
+        // element NR panel + a 1-element LENA calibration antenna on
+        // the same gNB), so we can't just abort on the first mismatch.
+        // Instead: defer the decision -- record every panel's nAnt
+        // here, then after the link sweep keep only the bucket whose
+        // (sNAnt, uNAnt) pair has the most links. Links in other
+        // buckets are dropped from runtimeLinks and PRX falls through
+        // to CPU for them. A future refactor can loop the pipeline
+        // per-bucket; this single-bucket short-cut is enough to
+        // unblock the calibration runs.
         if (isBsSide)
         {
             if (!haveBsReference)
@@ -342,33 +354,37 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                 globalBsAnt = p.nAnt;
                 haveBsReference = true;
             }
+            else if (p.nAnt == globalBsAnt)
+            {
+                p.panelIdx = bsReferencePanelIdx;
+            }
             else
             {
-                NS_ABORT_MSG_IF(p.nAnt != globalBsAnt,
-                                "Current SlsChanWgpu path assumes one global BS antenna count; got "
-                                    << p.nAnt << " expected " << globalBsAnt);
-                p.panelIdx = bsReferencePanelIdx;
+                // Different geometry from the reference -- give it
+                // its own panel slot so we still know what to drop
+                // later. The dominant-bucket filter below decides
+                // whether this link survives.
+                appendPanelConfig(p);
             }
         }
         else
         {
             if (!haveUtReference)
             {
-                if (!haveBsReference)
-                {
-                    NS_ABORT_MSG("BS reference panel must be created before UE reference panel");
-                }
+                NS_ABORT_MSG_IF(!haveBsReference,
+                                "BS reference panel must be created before UE reference panel");
                 appendPanelConfig(p);
                 utReferencePanelIdx = p.panelIdx;
                 globalUeAnt = p.nAnt;
                 haveUtReference = true;
             }
+            else if (p.nAnt == globalUeAnt)
+            {
+                p.panelIdx = utReferencePanelIdx;
+            }
             else
             {
-                NS_ABORT_MSG_IF(p.nAnt != globalUeAnt,
-                                "Current SlsChanWgpu path assumes one global UE antenna count; got "
-                                    << p.nAnt << " expected " << globalUeAnt);
-                p.panelIdx = utReferencePanelIdx;
+                appendPanelConfig(p);
             }
         }
 
@@ -523,8 +539,73 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     NS_ABORT_MSG_IF(!haveBsReference || !haveUtReference,
                     "SlsChanWgpu requires antCfgs[0]=BS and antCfgs[1]=UE reference configs");
     NS_ABORT_MSG_IF(antCfgs.size() < 2, "Need at least two antenna configs: [0]=BS, [1]=UE");
-    NS_ABORT_MSG_IF(bsReferencePanelIdx != 0, "Expected BS reference panel at antCfgs[0]");
-    NS_ABORT_MSG_IF(utReferencePanelIdx != 1, "Expected UE reference panel at antCfgs[1]");
+
+    // Dominant-bucket filter: count runtimeLinks per (sNAnt, uNAnt),
+    // pick the most populous bucket, and drop the rest. Re-set
+    // globalBsAnt / globalUeAnt to the dominant geometry so the rest
+    // of the pipeline runs as if it had been homogeneous all along.
+    if (!runtimeLinks.empty())
+    {
+        std::map<std::pair<uint32_t, uint32_t>, uint32_t> bucketCount;
+        for (const auto& ctx : runtimeLinks)
+        {
+            if (!ctx.sAnt || !ctx.uAnt)
+                continue;
+            const auto sN = static_cast<uint32_t>(ctx.sAnt->GetNumElems());
+            const auto uN = static_cast<uint32_t>(ctx.uAnt->GetNumElems());
+            ++bucketCount[{sN, uN}];
+        }
+        std::pair<uint32_t, uint32_t> dominant{globalBsAnt, globalUeAnt};
+        uint32_t dominantCount = 0;
+        for (const auto& [key, count] : bucketCount)
+        {
+            if (count > dominantCount)
+            {
+                dominant = key;
+                dominantCount = count;
+            }
+        }
+        const uint32_t totalLinks = static_cast<uint32_t>(runtimeLinks.size());
+        if (dominantCount < totalLinks)
+        {
+            NS_LOG_INFO("Mez: heterogeneous antennas detected -- dropping "
+                        << (totalLinks - dominantCount) << " of " << totalLinks
+                        << " links from the GPU bucket (sNAnt=" << dominant.first
+                        << " uNAnt=" << dominant.second << ")");
+        }
+        const uint32_t domSN = dominant.first;
+        const uint32_t domUN = dominant.second;
+        runtimeLinks.erase(
+            std::remove_if(runtimeLinks.begin(), runtimeLinks.end(),
+                [&](const RuntimeLinkCtx& ctx) {
+                    if (!ctx.sAnt || !ctx.uAnt)
+                        return true;
+                    return ctx.sAnt->GetNumElems() != domSN ||
+                           ctx.uAnt->GetNumElems() != domUN;
+                }),
+            runtimeLinks.end());
+        globalBsAnt = domSN;
+        globalUeAnt = domUN;
+        // Reset the BS/UE reference panel indices to point at the
+        // dominant geometry's panel inside antCfgs.
+        for (size_t pi = 0; pi < antCfgs.size(); ++pi)
+        {
+            if (antCfgs[pi].nAnt == domSN && bsReferencePanelIdx >= antCfgs.size())
+                bsReferencePanelIdx = static_cast<uint32_t>(pi);
+            if (antCfgs[pi].nAnt == domUN && utReferencePanelIdx >= antCfgs.size())
+                utReferencePanelIdx = static_cast<uint32_t>(pi);
+        }
+    }
+    if (runtimeLinks.empty())
+    {
+        // All links got dropped (all heterogeneous, or empty input).
+        // Skip the GPU dispatch; PRX falls through to CPU for them.
+        return;
+    }
+    // bsReferencePanelIdx / utReferencePanelIdx can be > 1 now that the
+    // dominant-bucket filter may pick a panel other than antCfgs[0]/[1].
+    // The kernel only ever reads panels by cell.antPanelIdx / ut.antPanelIdx
+    // so the position-in-array doesn't matter.
     NS_ABORT_MSG_IF(globalBsAnt == 0 || globalUeAnt == 0,
                     "Global BS/UE antenna counts must be non-zero");
 
@@ -1665,11 +1746,31 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
     {
         const Time matrixT = it->second->m_generatedTime;
         const Time paramsT = channelParams ? channelParams->m_generatedTime : Time(0);
-        if (matrixT >= paramsT)
+        const size_t cachedPages = it->second->m_channel.GetNumPages();
+        const size_t paramsAlpha = channelParams ? channelParams->m_alpha.size() : 0;
+        // Strict cache validity: matrix must be at least as fresh as
+        // params AND the cached pages must match the current params'
+        // cluster count (otherwise CalcBeamformingGain asserts
+        // numCluster <= m_alpha.size()). When CPU
+        // GenerateChannelParameters runs alongside the GPU pipeline
+        // it can shrink alpha/D/angle without touching the matrix
+        // cache; falling through here lets the base class regenerate
+        // an aligned pair.
+        if (matrixT >= paramsT && cachedPages == paramsAlpha && cachedPages > 0)
         {
             return DynamicCast<ChannelMatrix>(
                 ConstCast<MatrixBasedChannelModel::ChannelMatrix>(it->second));
         }
+        // Stale or shape-mismatched -- erase by key so the base class
+        // doesn't re-encounter a misleading hit on its own
+        // m_channelMatrixMap lookup later in this tick. The base
+        // class declares m_channelMatrixMap non-mutable but the
+        // virtual is const-qualified; const_cast is the only way
+        // to invalidate without an intrusive base-class change.
+        const_cast<ThreeGppChannelModelWgpuMezanine*>(this)
+            ->m_channelMatrixMap.erase(matrixKey);
+        m_gpuLongTermMap.erase(matrixKey);
+        m_gpuChanSpctMap.erase(matrixKey);
     }
 
     // Fallback: CPU build (first tick before UpdateChannel has run,
