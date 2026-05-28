@@ -1177,6 +1177,20 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         const LinkParams& lk = linkParams.at(ctx.lspReadIdx);
         const ClusterParamsGpu& cp = clusterParams.at(ctx.lspReadIdx);
 
+        // The GPU cluster kernel filters clusters by power threshold;
+        // for heavily-attenuated links (high path loss / large
+        // shadowing / O2I) every cluster can fall below the threshold
+        // and the kernel writes nCluster=0. The CPU baseline path
+        // never produces a 0-cluster link, and downstream
+        // FindStrongestClusters asserts on reducedClusterNumber == 0.
+        // Skip the per-link populate for these so the PRX cache miss
+        // falls through to the CPU baseline GetNewChannel, which
+        // emits its own (usually equally-weak) cluster set.
+        if (cp.nCluster == 0)
+        {
+            continue;
+        }
+
         NS_ABORT_MSG_IF(cp.nCluster > MAX_CLUSTERS, "GPU cluster count out of range.");
         NS_ABORT_MSG_IF(cp.nRayPerCluster > MAX_RAYS, "GPU ray count out of range.");
 
