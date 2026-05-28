@@ -676,9 +676,14 @@ fn cal_link_param_kernel(
 
         var ucv: array<f32, 8>;  // uncorrelated vars [SF,K,DS,ASD,ASA,ZSD,ZSA,DT]
         if is_indoor {
-            // O2I grid: nSite * 7 cols (stride-7 contiguous) — cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA
+            // O2I grid: nSite * 7 cols (stride-7 contiguous) — cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA.
+            // The O2I LSP set in TR 38.901 covers SF/DS/ASD/ASA/ZSD/ZSA (no K), so we draw those
+            // from the O2I grid. The K-factor on indoor-LOS links comes from the OUTDOOR LOS path
+            // that penetrates the building -- draw cv[K_IDX] from the LOS grid when is_los, and
+            // leave it 0 otherwise. The Cholesky pass below uses O2I_MATRIX_SIZE = 7 and doesn't
+            // touch K_IDX, so the raw LOS draw flows through unchanged.
             ucv[SF_IDX]  = lsp_at_loc_o2i(s7+0u, ux, uy, nx, ny);
-            ucv[K_IDX]   = 0.0;
+            ucv[K_IDX]   = select(0.0, lsp_at_loc_los(s8+1u, ux, uy, nx, ny), is_los);
             ucv[DS_IDX]  = lsp_at_loc_o2i(s7+1u, ux, uy, nx, ny);
             ucv[ASD_IDX] = lsp_at_loc_o2i(s7+2u, ux, uy, nx, ny);
             ucv[ASA_IDX] = lsp_at_loc_o2i(s7+3u, ux, uy, nx, ny);
@@ -717,6 +722,13 @@ fn cal_link_param_kernel(
                     cv[si] += cl.sqrtCorrMatO2i[i*O2I_MATRIX_SIZE + j] * ucv[sj];
                 }
             }
+            // K-factor isn't part of the O2I correlation matrix (only
+            // SF/DS/ASD/ASA/ZSD/ZSA), so the loop above skips K_IDX and
+            // leaves cv[K_IDX] = 0 even when ucv[K_IDX] holds the LOS
+            // draw we filled in for is_los. Pass it through so the
+            // K-factor lookup downstream sees a randomised value
+            // instead of the constant pow(10, mu_K/10) every link gets.
+            cv[K_IDX] = ucv[K_IDX];
         } else if is_los {
             for (var i = 0u; i < LOS_MATRIX_SIZE; i++) {
                 for (var j = 0u; j <= i; j++) {
@@ -743,13 +755,19 @@ fn cal_link_param_kernel(
             cal_sf_std(sc.scenario, is_los, is_indoor, fc, d2d, h_bs, h_ut, link_uni.updateOptionalPl);
 
         if uni.updateAllLSPs != 0u {
-            // K-factor (Rician). LOS only; lsp_idx convention: LOS=0, NLOS=1, O2I=2.
-            // mu_K / sigma_K are stored in dB (per CmnLinkParams init); the
-            // downstream cluster/CIR kernels expect K in *linear* units, so
-            // convert once here and never again. (NLOS / O2I leave K = 0.)
-            if lsp_idx == 0u {
+            // K-factor (Rician). Drawn whenever the link is LOS, using
+            // the LOS LSP slot (mu_K[0] / sigma_K[0]). Earlier code
+            // gated on `lsp_idx == 0u`, but lsp_idx is 2 (O2I) for ANY
+            // indoor UE -- so all 291 indoor-LOS links in Phase-1 UMa
+            // were forced to K=0, which made the NVIDIA analyser
+            // produce empty SINR tables (K=0 -> no Rician term ->
+            // CIR-derived RX signal NaN). Outdoor LOS links (lsp_idx==0)
+            // were unaffected, masking this on simple PL/CL plots.
+            // mu_K / sigma_K are stored in dB; convert once to linear
+            // here for downstream cluster/CIR kernels. NLOS gets K=0.
+            if is_los {
                 let K_lin = pow(10.0,
-                    (cl.mu_K[lsp_idx] + cv[K_IDX] * cl.sigma_K[lsp_idx]) / 10.0);
+                    (cl.mu_K[0] + cv[K_IDX] * cl.sigma_K[0]) / 10.0);
                 link_params[link_idx].K = K_lin;
             } else {
                 link_params[link_idx].K = 0.0;
