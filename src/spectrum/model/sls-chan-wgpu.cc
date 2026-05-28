@@ -233,6 +233,9 @@ createDevice()
 #else
     requiredLimits.maxStorageBuffersPerShaderStage = 30;
 #endif
+    std::fprintf(stderr,
+                 "[SlsChanWgpu] adapter limits: maxStorageBuffersPerShaderStage=%u\n",
+                 (unsigned)supported.maxStorageBuffersPerShaderStage);
     requiredLimits.maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
