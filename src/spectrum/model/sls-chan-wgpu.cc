@@ -624,22 +624,32 @@ SlsChanWgpu::generateCRN(float maxX,
         for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrNlos[i])));
         for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrO2i[i])));
     }
+    // Exact-bounds cache. Previously the cache padded the bounds by
+    // 500 m on every miss to give "future tick" slack -- but the
+    // padding silently changed the grid size, and the caller's
+    // subsequent calLinkParam used the ORIGINAL (un-padded) bounds
+    // for its normalisation. Result: norm_x = (x - minX_caller) /
+    // (maxX_caller - minX_caller) maps to the wrong grid cell
+    // because the grid was sized for a 1000 m wider region. LSPs
+    // (including K-factor) were drawn from neighbouring cells,
+    // producing K=0 dB for every UE and breaking SIR/SINR on the
+    // NVIDIA analyser. Calibration on the minimal coupling-loss
+    // analyser still looked OK because PL has a strong distance
+    // signal that swamped the small per-cell shadow noise, but K
+    // doesn't have that escape hatch.
+    //
+    // Fix: cache exact bounds only. The bench then misses the cache
+    // on any sub-meter UE motion, but the win on stationary
+    // deployments is preserved AND the grid-vs-lookup mapping stays
+    // consistent.
     if (crnCacheValid_ && nSite_ == crnCacheNSite_ && corrKey == crnCacheCorrKey_ &&
-        maxX <= crnCacheMaxX_ && minX >= crnCacheMinX_ && maxY <= crnCacheMaxY_ &&
-        minY >= crnCacheMinY_)
+        maxX == crnCacheMaxX_ && minX == crnCacheMinX_ && maxY == crnCacheMaxY_ &&
+        minY == crnCacheMinY_)
     {
         SLS_LOG("[DEBUG] generateCRN: cache hit; skipping GPU dispatch\n");
         return;
     }
 
-    // Cache miss: pad the bounds by a generous margin so the next few
-    // ticks' small per-UE motion (~m to tens of m within a 100 ms
-    // consistency window) stays inside the regenerated grid.
-    constexpr float kCachePaddingM = 500.f;
-    maxX += kCachePaddingM;
-    minX -= kCachePaddingM;
-    maxY += kCachePaddingM;
-    minY -= kCachePaddingM;
     crnCacheMaxX_ = maxX;
     crnCacheMinX_ = minX;
     crnCacheMaxY_ = maxY;
