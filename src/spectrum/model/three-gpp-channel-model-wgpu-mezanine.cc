@@ -1097,6 +1097,26 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                 const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
                 const size_t sBase = i * ltSPortElems;
                 const size_t uBase = i * ltUPortElems;
+                // The reference link picked ltSPortElems / ltUPortElems
+                // from the FIRST runtime link's antennas; later links in
+                // the same batch might (in NR) have shorter beam vectors
+                // -- accessing sBV[k] / uBV[k] would walk past the end.
+                NS_ASSERT_MSG(sBV.GetSize() >= ltSPortElems,
+                              "Mez::genLongTerm: sBV[" << ctx.sAntId << "].size()="
+                              << sBV.GetSize() << " < ltSPortElems=" << ltSPortElems
+                              << " (reference antenna had more elements)");
+                NS_ASSERT_MSG(uBV.GetSize() >= ltUPortElems,
+                              "Mez::genLongTerm: uBV[" << ctx.uAntId << "].size()="
+                              << uBV.GetSize() << " < ltUPortElems=" << ltUPortElems);
+                NS_ASSERT_MSG(sBase + ltSPortElems <= ltSWFlat.size(),
+                              "Mez::genLongTerm: ltSWFlat OOB: "
+                              "sBase=" << sBase << " ltSPortElems=" << ltSPortElems
+                              << " ltSWFlat.size()=" << ltSWFlat.size()
+                              << " (i=" << i << " nActiveLinks=" << nActiveLinks << ")");
+                NS_ASSERT_MSG(uBase + ltUPortElems <= ltUWFlat.size(),
+                              "Mez::genLongTerm: ltUWFlat OOB: "
+                              "uBase=" << uBase << " ltUPortElems=" << ltUPortElems
+                              << " ltUWFlat.size()=" << ltUWFlat.size());
                 // CalcLongTerm only ever reads sW[0..sPortElems-1] and
                 // uW[0..uPortElems-1] -- the first port's slice -- so
                 // that's all we upload.
@@ -1172,8 +1192,9 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     }
     SLS_PHASE_SCOPE("Mez::Populate");
 
-    for (const auto& ctx : runtimeLinks)
+    for (size_t activeLinkIdx = 0; activeLinkIdx < runtimeLinks.size(); ++activeLinkIdx)
     {
+        const auto& ctx = runtimeLinks[activeLinkIdx];
         const LinkParams& lk = linkParams.at(ctx.lspReadIdx);
         const ClusterParamsGpu& cp = clusterParams.at(ctx.lspReadIdx);
 
@@ -1367,8 +1388,19 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         matrix->m_channel = MatrixBasedChannelModel::Complex3DVector(
             globalUeAnt, globalBsAnt, numOverallCluster);
         const size_t perPage = size_t(globalUeAnt) * globalBsAnt;
-        const size_t linkBase = size_t(ctx.lspReadIdx) * perLinkMatLen;
+        // genChannelMatrix kernel dispatched with sequential workgroup
+        // ids 0..nActiveLinks-1, so matFlat is packed by sequential
+        // active-link index. ctx.lspReadIdx is the LSP grid index
+        // (sparse under NR distance filtering) and would walk off
+        // the end of matFlat when lspReadIdx >= nActiveLinks.
+        const size_t linkBase = activeLinkIdx * perLinkMatLen;
         const size_t linkCells = perPage * size_t(numOverallCluster);
+        NS_ASSERT_MSG(linkBase + linkCells <= matFlat.size(),
+                      "Mez::Populate: matFlat OOB: linkBase=" << linkBase
+                      << " linkCells=" << linkCells
+                      << " matFlat.size()=" << matFlat.size()
+                      << " (lspReadIdx=" << ctx.lspReadIdx
+                      << " perLinkMatLen=" << perLinkMatLen << ")");
         const std::complex<float>* __restrict__ src = matFlat.data() + linkBase;
         std::complex<double>* __restrict__ dst = matrix->m_channel.GetPagePtr(0);
         for (size_t k = 0; k < linkCells; ++k)
@@ -1394,14 +1426,21 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         {
             const size_t ltPerPage = size_t(ltUPorts) * ltSPorts;
             const size_t ltPerLink = ltPerPage * SlsChanWgpu::kMatMaxPages;
-            const size_t ltLinkBase = size_t(ctx.lspReadIdx) * ltPerLink;
+            // genLongTerm kernel also packs by sequential link idx.
+            const size_t ltLinkBase = activeLinkIdx * ltPerLink;
+            const size_t ltCells = ltPerPage * size_t(numOverallCluster);
+            NS_ASSERT_MSG(ltLinkBase + ltCells <= longTermFlat.size(),
+                          "Mez::Populate: longTermFlat OOB: ltLinkBase=" << ltLinkBase
+                          << " ltCells=" << ltCells
+                          << " longTermFlat.size()=" << longTermFlat.size()
+                          << " (lspReadIdx=" << ctx.lspReadIdx
+                          << " ltPerLink=" << ltPerLink << ")");
             Ptr<Complex3DVector> longTerm = Create<Complex3DVector>(
                 static_cast<uint16_t>(ltUPorts),
                 static_cast<uint16_t>(ltSPorts),
                 numOverallCluster);
             const std::complex<float>* ltSrc = longTermFlat.data() + ltLinkBase;
             std::complex<double>* ltDst = longTerm->GetPagePtr(0);
-            const size_t ltCells = ltPerPage * size_t(numOverallCluster);
             for (size_t k = 0; k < ltCells; ++k)
             {
                 const auto* sr = reinterpret_cast<const float*>(ltSrc + k);
@@ -1455,9 +1494,20 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         const double slotTime = Simulator::Now().GetSeconds();
         const double dopplerScale = 2.0 * M_PI * slotTime * m_frequency / 3e8;
 
-        for (const auto& ctx : runtimeLinks)
+        for (size_t i = 0; i < runtimeLinks.size(); ++i)
         {
-            const size_t linkIdx = ctx.lspReadIdx;
+            const auto& ctx = runtimeLinks[i];
+            // delays / doppler are sized nActiveLinks * numClusters and
+            // the genSpecBatch kernel was dispatched with sequential
+            // workgroup ids 0..nActiveLinks-1, so per-link rows here
+            // must be indexed by the SEQUENTIAL active-link index `i`
+            // and NOT by ctx.lspReadIdx (= cid*nUt + uid, which is the
+            // LSP grid index and is sparse under NR's distance
+            // filtering -- can exceed nActiveLinks).
+            const size_t linkIdx = i;
+            NS_ASSERT_MSG(linkIdx < nActiveLinks,
+                          "Mez::GenSpecBatch: i=" << linkIdx
+                          << " >= nActiveLinks=" << nActiveLinks);
             auto pit = m_channelParamsMap.find(ctx.paramsKey);
             if (pit == m_channelParamsMap.end())
             {
@@ -1470,6 +1520,10 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             }
             const size_t nc = std::min(size_t(numClusters), p->m_delay.size());
             const size_t baseIdx = linkIdx * numClusters;
+            NS_ASSERT_MSG(baseIdx + nc <= delays.size(),
+                          "Mez::GenSpecBatch: delays write OOB: "
+                          "baseIdx=" << baseIdx << " nc=" << nc
+                          << " delays.size()=" << delays.size());
             for (size_t c = 0; c < nc; ++c)
             {
                 delays[baseIdx + c] = static_cast<float>(p->m_delay[c]);
@@ -1489,6 +1543,10 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             const auto& zod = p->m_cachedAngleSincos[ZOD_INDEX];
             const auto& aoa = p->m_cachedAngleSincos[AOA_INDEX];
             const auto& aod = p->m_cachedAngleSincos[AOD_INDEX];
+            NS_ASSERT_MSG(baseIdx + ncDop <= doppler.size(),
+                          "Mez::GenSpecBatch: doppler write OOB: "
+                          "baseIdx=" << baseIdx << " ncDop=" << ncDop
+                          << " doppler.size()=" << doppler.size());
             for (size_t c = 0; c < ncDop; ++c)
             {
                 const double tempDoppler = dopplerScale *
@@ -1523,9 +1581,11 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
 
         const size_t perLink = size_t(numRxPorts) * numTxPorts * numRb;
         const Time generatedTime = Simulator::Now();
-        for (const auto& ctx : runtimeLinks)
+        for (size_t activeLinkIdx2 = 0; activeLinkIdx2 < runtimeLinks.size(); ++activeLinkIdx2)
         {
-            const size_t linkBase = size_t(ctx.lspReadIdx) * perLink;
+            const auto& ctx = runtimeLinks[activeLinkIdx2];
+            // genSpecBatch kernel packs by sequential active-link idx.
+            const size_t linkBase = activeLinkIdx2 * perLink;
             if (linkBase + perLink > batchFlat.size())
             {
                 continue;
