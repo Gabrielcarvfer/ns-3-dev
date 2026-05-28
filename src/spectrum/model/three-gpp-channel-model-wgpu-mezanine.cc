@@ -293,7 +293,20 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         p.antenna = ant;
         p.isBsSide = isBsSide;
         p.nAnt = ant->GetNumElems();
-        p.antSize = {1, 1, 1, static_cast<uint32_t>(p.nAnt), 1};
+        // antSize layout per AntPanelConfig comment: [Mg, Ng, M, N, P]
+        //   Mg, Ng = number of panels (= 1 for a single panel)
+        //   M, N   = rows, columns within a panel
+        //   P      = polarisations (1 or 2)
+        // The previous version flattened the whole array into a 1xN
+        // column with P=1, which made mat_elem_pos / mat_pol_idx put
+        // every element at row=0 along a single line and assign all
+        // of them to polarisation 0 -- coherent gain on the 8x8 BS
+        // collapsed because the row*d_v dimension vanished and the
+        // two physical polarisations were not separated.
+        const uint32_t M = static_cast<uint32_t>(ant->GetNumRows());
+        const uint32_t N = static_cast<uint32_t>(ant->GetNumColumns());
+        const uint32_t P = static_cast<uint32_t>(ant->GetNumPols());
+        p.antSize = {1, 1, M, N, P};
         p.antSpacing = {0.f, 0.f, 0.5f, 0.5f};
         // Polarisation slant angles. CPU UPA stores ONE PolSlantAngle
         // attribute in radians; the dual-polarised second pol is taken
