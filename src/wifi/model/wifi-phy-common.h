@@ -18,6 +18,9 @@
 #include "ns3/fatal-error.h"
 #include "ns3/ptr.h"
 
+#include <array>
+#include <cmath>
+#include <limits>
 #include <ostream>
 #include <set>
 #include <vector>
@@ -52,6 +55,12 @@ struct WifiSpectrumBandInfo
         indices; //!< the start and stop indices for each segment of the band
     std::vector<WifiSpectrumBandFrequencies>
         frequencies; //!< the start and stop frequencies for each segment of the band
+
+    /// Cached lexicographic sort key built from (frequencies.front().first, .second,
+    /// frequencies.back().first, .second). Populated lazily on the first comparison
+    /// via operator<. Sentinel: the first element is NaN until the cache is filled
+    /// (real frequencies are always finite and non-negative).
+    mutable std::array<Hz_u, 4> m_sortKey{std::numeric_limits<Hz_u>::quiet_NaN(), 0, 0, 0};
 };
 
 /// vector of spectrum bands
@@ -64,6 +73,12 @@ using RxPowerWattPerChannelBand = std::map<WifiSpectrumBandInfo, Watt_u>;
  * @ingroup wifi
  * Compare two bands.
  *
+ * Comparison is performed lexicographically on the start and stop frequencies of the
+ * first and last segments of the band. A small inline cache is maintained per band so
+ * that repeated comparisons (the common case, as bands are used as keys in std::map
+ * containers throughout the WiFi PHY) avoid the cost of dereferencing the underlying
+ * vector storage.
+ *
  * @param lhs the band on the left of operator<
  * @param rhs the band on the right of operator<
  * @return true if the start/stop frequencies of the first segment of left are lower than the
@@ -75,11 +90,21 @@ using RxPowerWattPerChannelBand = std::map<WifiSpectrumBandInfo, Watt_u>;
 inline bool
 operator<(const WifiSpectrumBandInfo& lhs, const WifiSpectrumBandInfo& rhs)
 {
-    if (lhs.frequencies.front() == rhs.frequencies.front())
+    if (std::isnan(lhs.m_sortKey[0]))
     {
-        return lhs.frequencies.back() < rhs.frequencies.back();
+        lhs.m_sortKey = {lhs.frequencies.front().first,
+                         lhs.frequencies.front().second,
+                         lhs.frequencies.back().first,
+                         lhs.frequencies.back().second};
     }
-    return lhs.frequencies.front() < rhs.frequencies.front();
+    if (std::isnan(rhs.m_sortKey[0]))
+    {
+        rhs.m_sortKey = {rhs.frequencies.front().first,
+                         rhs.frequencies.front().second,
+                         rhs.frequencies.back().first,
+                         rhs.frequencies.back().second};
+    }
+    return lhs.m_sortKey < rhs.m_sortKey;
 }
 
 /**

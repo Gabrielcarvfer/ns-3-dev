@@ -400,16 +400,23 @@ class InterferenceHelper : public Object
     using NiChanges = std::multimap<Time, NiChange>;
 
     /**
-     * Map of NiChanges per band
+     * Per-band interference state: the NI changes timeline together with the noise+interference
+     * power captured at the start of the last reception (used by the frame-capture logic).
+     * Co-locating these two pieces of state halves the number of map nodes (and the heavy
+     * WifiSpectrumBandInfo key copies) compared to maintaining two separate band-keyed maps.
      */
-    using NiChangesPerBand = std::map<WifiSpectrumBandInfo, NiChanges>;
+    struct BandState
+    {
+        NiChanges niChanges; //!< NI changes timeline for this band
+        Watt_u firstPower{0.0}; //!< noise+interference power at the start of the last RX
+    };
 
     /**
-     * Map of first power per band
+     * Map of per-band state, keyed by band info.
      */
-    using FirstPowerPerBand = std::map<WifiSpectrumBandInfo, Watt_u>;
+    using BandStateMap = std::map<WifiSpectrumBandInfo, BandState>;
 
-    NiChangesPerBand m_niChanges; //!< NI Changes for each band
+    BandStateMap m_bandStates; //!< Per-band interference state
 
   private:
     /**
@@ -450,7 +457,7 @@ class InterferenceHelper : public Object
      * @return noise and interference power
      */
     Watt_u CalculateNoiseInterferenceW(Ptr<Event> event,
-                                       NiChangesPerBand& nis,
+                                       NiChanges& ni,
                                        const WifiSpectrumBandInfo& band) const;
 
     /**
@@ -481,7 +488,7 @@ class InterferenceHelper : public Object
      */
     double CalculatePayloadPer(Ptr<const Event> event,
                                MHz_u channelWidth,
-                               NiChangesPerBand* nis,
+                               const NiChanges& ni,
                                const WifiSpectrumBandInfo& band,
                                uint16_t staId,
                                std::pair<Time, Time> window) const;
@@ -498,7 +505,7 @@ class InterferenceHelper : public Object
      * @return the error rate of the HT PHY header
      */
     double CalculatePhyHeaderPer(Ptr<const Event> event,
-                                 NiChangesPerBand* nis,
+                                 const NiChanges& ni,
                                  MHz_u channelWidth,
                                  const WifiSpectrumBandInfo& band,
                                  WifiPpduField header) const;
@@ -514,7 +521,7 @@ class InterferenceHelper : public Object
      * @return the success rate of the PHY header sections
      */
     double CalculatePhyHeaderSectionPsr(Ptr<const Event> event,
-                                        NiChangesPerBand* nis,
+                                        const NiChanges& ni,
                                         MHz_u channelWidth,
                                         const WifiSpectrumBandInfo& band,
                                         PhyHeaderSections phyHeaderSections) const;
@@ -522,24 +529,23 @@ class InterferenceHelper : public Object
     double m_noiseFigure;                 //!< noise figure (linear)
     Ptr<ErrorRateModel> m_errorRateModel; //!< error rate model
     uint8_t m_numRxAntennas;         //!< the number of RX antennas in the corresponding receiver
-    FirstPowerPerBand m_firstPowers; //!< first power of each band
 
     /**
      * Returns an iterator to the first NiChange that is later than moment
      *
      * @param moment time to check from
-     * @param niIt iterator of the band to check
+     * @param bandIt iterator of the band to check
      * @returns an iterator to the list of NiChanges
      */
-    NiChanges::iterator GetNextPosition(Time moment, NiChangesPerBand::iterator niIt) const;
+    NiChanges::iterator GetNextPosition(Time moment, BandStateMap::iterator bandIt) const;
     /**
      * Returns an iterator to the last NiChange that is before than moment
      *
      * @param moment time to check from
-     * @param niIt iterator of the band to check
+     * @param bandIt iterator of the band to check
      * @returns an iterator to the list of NiChanges
      */
-    NiChanges::iterator GetPreviousPosition(Time moment, NiChangesPerBand::iterator niIt) const;
+    NiChanges::iterator GetPreviousPosition(Time moment, BandStateMap::iterator bandIt) const;
 
     /**
      * Add NiChange to the list at the appropriate position and
@@ -547,12 +553,12 @@ class InterferenceHelper : public Object
      *
      * @param moment time to check from
      * @param change the NiChange to add
-     * @param niIt iterator of the band to check
+     * @param bandIt iterator of the band to check
      * @returns the iterator of the new event
      */
     NiChanges::iterator AddNiChangeEvent(Time moment,
                                          NiChange change,
-                                         NiChangesPerBand::iterator niIt);
+                                         BandStateMap::iterator bandIt);
 
     /**
      * Return whether another event is a MU-MIMO event that belongs to the same transmission and to
