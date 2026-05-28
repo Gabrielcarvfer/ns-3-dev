@@ -279,11 +279,13 @@ Time::SetResolution(Unit unit, Resolution* resolution, const bool convert /* = t
     resolution->unit = unit;
 }
 
+#ifdef _WIN32
 bool
 Time::MarkingTimes()
 {
     return (g_markingTimes != nullptr);
 }
+#endif
 
 // static
 void
