@@ -2029,3 +2029,93 @@ fn generate_cfr_kernel_mode1(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// gen_channel_matrix_kernel
+//
+// Produces the per-link Complex3DVector(uElem, sElem, numOverallCluster) that
+// ThreeGppChannelModel::GetNewChannel returns on CPU. The CPU
+// GenerateChannelCoefficients (3GPP TR 38.901 Eq 7.5-22 & 7.5-28) does:
+//
+//   hUsn(u, s, n) = sqrt(P_n / M) * sum over rays m of:
+//       polarisation-weighted field response F_uPolU(rayAoa, rayZoa) * conj-Hermitian-style
+//                                        x F_sPolS(rayAod, rayZod)
+//       * array-steering rxPhase(u, ray)
+//       * array-steering txPhase(s, ray)
+//
+// where for each ray the polarisation-weighted response uses Phi_thetaTheta /
+// Phi_thetaPhi / Phi_phiTheta / Phi_phiPhi (4 random phases + xpr factor).
+//
+// For the two strongest clusters (cluster1st, cluster2nd) the rays split into
+// three subclusters that become three output pages. For LOS links cluster 0
+// gets an additional Rician term scaled by sqrt(K/(K+1)).
+//
+// SCAFFOLD STATUS (this commit): kernel is in place with the correct dispatch
+// shape and output layout, but the per-cell math is a placeholder. The next
+// commit will replace `compute_cell` with the full ray sum, antenna field
+// pattern evaluation, and subcluster / LOS handling. Once the math is in,
+// the mezanine override of GetNewChannel will return the cached matrix and
+// the CPU GetNewChannel cost (~5 ms/eval, the 84% bottleneck) collapses.
+// ---------------------------------------------------------------------------
+
+struct ChanMatDispatch {
+    n_active_links     : u32,
+    n_overall_cluster  : u32,
+    u_size             : u32,
+    s_size             : u32,
+    n_rays             : u32,
+    n_reduced_cluster  : u32, // numOverallCluster - 4 (or -2 if cluster1st == cluster2nd)
+    cluster1st         : u32,
+    cluster2nd         : u32,
+}
+
+@group(0) @binding(0) var<uniform>             mat_disp        : ChanMatDispatch;
+@group(0) @binding(1) var<storage, read>       mat_buf_link    : array<LinkParams>;
+@group(0) @binding(2) var<storage, read>       mat_buf_cluster : array<ClusterParams>;
+@group(0) @binding(3) var<storage, read>       mat_packed_in   : array<f32>;
+@group(0) @binding(4) var<storage, read>       mat_buf_active  : array<ActiveLink>;
+@group(0) @binding(5) var<storage, read_write> mat_buf_out     : array<vec2f>;
+
+// Max #overall-cluster pages we'll ever write. The CPU mezanine sizes the
+// readback to use the per-link actual count from
+// channelParams->m_reducedClusterNumber so unused pages just stay zeroed.
+const MAT_MAX_PAGES : u32 = 24u;
+
+@compute @workgroup_size(64, 1, 1)
+fn gen_channel_matrix_kernel(
+    @builtin(workgroup_id)       wg : vec3<u32>,
+    @builtin(local_invocation_id) li : vec3<u32>
+) {
+    let link_idx = wg.x;
+    let page_idx = wg.y;
+    let us_idx   = wg.z * 64u + li.x;
+
+    if link_idx >= mat_disp.n_active_links { return; }
+    if page_idx >= mat_disp.n_overall_cluster { return; }
+    if us_idx   >= mat_disp.u_size * mat_disp.s_size { return; }
+
+    let u_idx = us_idx / mat_disp.s_size;
+    let s_idx = us_idx % mat_disp.s_size;
+
+    let al = mat_buf_active[link_idx];
+    let lk = mat_buf_link[al.lspReadIdx];
+    let cp = mat_buf_cluster[al.lspReadIdx];
+
+    // ── Placeholder: fill the matrix with zeros. The CPU mezanine layer
+    // detects an all-zero matrix and falls back to ThreeGppChannelModel::
+    // GetNewChannel for now, so the bench remains numerically correct
+    // while this kernel is being filled in.
+    let val = vec2f(0.0, 0.0);
+
+    // Column-major layout matching ns3::MatrixArray<T>::GetPagePtr():
+    //   element (u, s, n) lives at offset (u + uSize*s) inside page n,
+    //   and pages are stored back-to-back; per-link blocks sit at stride
+    //   uSize*sSize*MAT_MAX_PAGES.
+    let per_page = mat_disp.u_size * mat_disp.s_size;
+    let per_link = per_page * MAT_MAX_PAGES;
+    let out_idx  = link_idx * per_link
+                 + page_idx * per_page
+                 + s_idx    * mat_disp.u_size
+                 + u_idx;
+    mat_buf_out[out_idx] = val;
+}

@@ -2252,6 +2252,129 @@ SlsChanWgpu::readThetaNmZOD()
     return sliceClusterOutput(kPackedOffZoD, kMaxCr);
 }
 
+// ── genChannelMatrix ───────────────────────────────────────────────────────────
+// Dispatch gen_channel_matrix_kernel. The kernel currently emits a placeholder
+// (zeros) into the per-link output; the mezanine reads the matrix back and
+// detects all-zero entries to decide whether to fall back to the CPU
+// GetNewChannel. The actual ray-sum / antenna-pattern math will replace the
+// placeholder cell once the kernel body is written.
+void
+SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
+                              uint32_t nActiveLinks,
+                              uint32_t uSize,
+                              uint32_t sSize,
+                              uint32_t numOverallCluster,
+                              uint32_t numReducedCluster,
+                              uint32_t nRays,
+                              uint8_t cluster1st,
+                              uint8_t cluster2nd)
+{
+    assert(linkParamsBuf_ && "call calLinkParam before genChannelMatrix");
+    assert(clusterParamsBuf_ && "call calClusterRay before genChannelMatrix");
+    assert(clusterOutputsBuf_ && "call calClusterRay before genChannelMatrix");
+    assert(activeLinkBuf_ && "call generateCIR (or set activeLinkBuf_) before genChannelMatrix");
+
+    if (!channelMatrixPipeline_)
+    {
+        channelMatrixPipeline_ = makePipeline("gen_channel_matrix_kernel");
+        assert(channelMatrixPipeline_ &&
+               "missing gen_channel_matrix_kernel in WGSL (or backend can't compile it)");
+    }
+
+    // (Re)alloc output buffer if shape changed. Sized for the maximum page
+    // count (kMatMaxPages) so the kernel doesn't have to special-case the
+    // strongest-2 subcluster split.
+    const uint64_t perLink =
+        uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
+    const uint64_t totalBytes = perLink * nActiveLinks;
+    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize ||
+        channelMatrixCfgSSize_ != sSize || channelMatrixCfgNLinks_ != nActiveLinks)
+    {
+        channelMatrixBuf_ =
+            makeBuffer(totalBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        channelMatrixCfgUSize_ = uSize;
+        channelMatrixCfgSSize_ = sSize;
+        channelMatrixCfgNLinks_ = nActiveLinks;
+    }
+
+    struct MatDispUni
+    {
+        uint32_t nActiveLinks;
+        uint32_t nOverallCluster;
+        uint32_t uSize;
+        uint32_t sSize;
+        uint32_t nRays;
+        uint32_t nReducedCluster;
+        uint32_t cluster1st;
+        uint32_t cluster2nd;
+    };
+    MatDispUni du{nActiveLinks,
+                  numOverallCluster,
+                  uSize,
+                  sSize,
+                  nRays,
+                  numReducedCluster,
+                  cluster1st,
+                  cluster2nd};
+    matrixDispatchBuf_ =
+        makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
+
+    auto layout0 = channelMatrixPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> entries(6, wgpu::Default);
+    auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+        entries[i].binding = b;
+        entries[i].buffer = buf;
+        entries[i].offset = 0;
+        entries[i].size = sz;
+    };
+    E(0, 0, matrixDispatchBuf_, sizeof(du));
+    E(1, 1, linkParamsBuf_);
+    E(2, 2, clusterParamsBuf_);
+    E(3, 3, clusterOutputsBuf_);
+    E(4, 4, activeLinkBuf_);
+    E(5, 5, channelMatrixBuf_);
+
+    wgpu::BindGroupDescriptor bgd = wgpu::Default;
+    bgd.layout = layout0;
+    bgd.entryCount = static_cast<uint32_t>(entries.size());
+    bgd.entries = entries.data();
+    wgpu::BindGroup bg0 = device_.createBindGroup(bgd);
+
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    auto pass = enc.beginComputePass(wgpu::Default);
+    pass.setPipeline(channelMatrixPipeline_);
+    pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
+    // workgroup_size = (64, 1, 1)
+    // dispatch z = ceil(uSize*sSize / 64)
+    const uint32_t usThreads = uSize * sSize;
+    const uint32_t usGroups = (usThreads + 63u) / 64u;
+    pass.dispatchWorkgroups(nActiveLinks, numOverallCluster, usGroups);
+    pass.end();
+    assert(!isDead());
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    (void)activeLinks; // bound via activeLinkBuf_ from generateCIR
+}
+
+std::vector<std::complex<float>>
+SlsChanWgpu::readChannelMatrix(uint32_t nLinks, uint32_t uSize, uint32_t sSize)
+{
+    if (!channelMatrixBuf_)
+    {
+        return {};
+    }
+    const uint64_t totalBytes =
+        uint64_t(nLinks) * uSize * sSize * kMatMaxPages * sizeof(std::complex<float>);
+    assert(channelMatrixBuf_.getSize() >= totalBytes);
+    wgpu::Buffer staging =
+        makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(channelMatrixBuf_, 0, staging, 0, totalBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    return mapReadBuffer<std::complex<float>>(staging, totalBytes);
+}
+
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
 #ifdef SLS_CHAN_HDF5
 namespace

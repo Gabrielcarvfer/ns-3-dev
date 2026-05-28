@@ -524,6 +524,37 @@ class SlsChanWgpu
     std::vector<float> readThetaNmZOA();
     std::vector<float> readThetaNmZOD();
 
+    // Dispatch gen_channel_matrix_kernel. Inputs already on the GPU
+    // (linkParamsBuf_, clusterParamsBuf_, activeLinkBuf_, the packed
+    // cluster outputs at clusterOutputsBuf_); output goes into a
+    // dedicated channelMatrixBuf_ sized for nActiveLinks * uSize *
+    // sSize * MAT_MAX_PAGES vec2<f32>. Caller passes per-link
+    // (cluster1st, cluster2nd, numReducedCluster); the kernel
+    // currently emits zeros into the matrix and the host falls back
+    // to the CPU build (math still in progress).
+    void genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
+                          uint32_t nActiveLinks,
+                          uint32_t uSize,
+                          uint32_t sSize,
+                          uint32_t numOverallCluster,
+                          uint32_t numReducedCluster,
+                          uint32_t nRays,
+                          uint8_t cluster1st,
+                          uint8_t cluster2nd);
+
+    // Maximum per-link page count the channel-matrix kernel
+    // writes -- mirrors MAT_MAX_PAGES in sls-chan.wgsl. Output
+    // buffer size is nLinks * uSize * sSize * MAX_OVERALL_CLUSTER
+    // vec2<f32>.
+    static constexpr uint32_t kMatMaxPages = 24u;
+
+    // Read back the per-link channel matrix block sized
+    // uSize * sSize * MAT_MAX_PAGES per link. Caller slices the
+    // result into per-link Complex3DVector(uSize, sSize, numPages).
+    std::vector<std::complex<float>> readChannelMatrix(uint32_t nLinks,
+                                                       uint32_t uSize,
+                                                       uint32_t sSize);
+
   private:
     // Gather one of the per-link sub-views out of the packed
     // clusterOutputsBuf_. linkOffF32 is the f32 offset into each
@@ -656,6 +687,15 @@ class SlsChanWgpu
     // readXpr / readPhiNmA*/ readThetaNmZ* helpers slice this back
     // into independent views on the host side.
     wgpu::Buffer clusterOutputsBuf_;
+    // Output of gen_channel_matrix_kernel: per-link block of
+    // uSize * sSize * MAT_MAX_PAGES vec2<f32>. Sized at the
+    // first genChannelMatrix() call.
+    wgpu::Buffer channelMatrixBuf_;
+    wgpu::ComputePipeline channelMatrixPipeline_;
+    wgpu::Buffer matrixDispatchBuf_;
+    uint32_t channelMatrixCfgUSize_{0};
+    uint32_t channelMatrixCfgSSize_{0};
+    uint32_t channelMatrixCfgNLinks_{0};
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24
