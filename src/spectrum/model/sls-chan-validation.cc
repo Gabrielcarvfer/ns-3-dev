@@ -9,7 +9,9 @@
 //
 
 #include "sls-chan-wgpu.h"
-#include "wgpu.h"
+// wgpu.h was a wgpu-native-only header; with the Dawn backend the
+// declarations we need are already pulled in transitively by
+// sls-chan-wgpu.h (webgpu/webgpu.hpp).
 
 #include <cassert>
 #include <chrono>

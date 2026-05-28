@@ -3108,7 +3108,8 @@ writeLspOnlyHdf5(const std::string& filename,
                 uint32_t antPanelIdx;
                 float antPanelOrientation[3];
             };
-            hid_t arr3 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, (const hsize_t[]){3});
+            const hsize_t arr3Dims[1] = {3};
+            hid_t arr3 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, arr3Dims);
             hid_t cellType = H5Tcreate(H5T_COMPOUND, sizeof(CellRec));
             H5Tinsert(cellType, "cid", offsetof(CellRec, cid), H5T_NATIVE_UINT32);
             H5Tinsert(cellType, "siteId", offsetof(CellRec, siteId), H5T_NATIVE_UINT32);
@@ -3235,8 +3236,10 @@ writeLspOnlyHdf5(const std::string& filename,
         rec.force_los_prob[1] = -1.0f;
         rec.enable_propagation_delay = 1u;
 
-        hid_t arr2 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, (const hsize_t[]){2});
-        hid_t arr3 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, (const hsize_t[]){3});
+        const hsize_t arr2Dims[1] = {2};
+        const hsize_t arr3SysDims[1] = {3};
+        hid_t arr2 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, arr2Dims);
+        hid_t arr3 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, arr3SysDims);
         hid_t sysType = H5Tcreate(H5T_COMPOUND, sizeof(SysRec));
         H5Tinsert(sysType, "scenario", offsetof(SysRec, scenario), H5T_NATIVE_UINT32);
         H5Tinsert(sysType, "isd", offsetof(SysRec, isd), H5T_NATIVE_FLOAT);
