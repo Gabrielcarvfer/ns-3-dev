@@ -1575,37 +1575,40 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     DispUni du{nSite, nUT, 0u, 0.0f, 1.0f, 0, 0, 0};
     ssDispatchBuf_ = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
 
-    constexpr uint32_t MAXCLUSTERS = 20;
-    constexpr uint32_t MAXRAYS = 20;
-    constexpr uint32_t MAXCR = MAXCLUSTERS * MAXRAYS;                       // 400
-    constexpr uint32_t MAXCR4 = MAXCLUSTERS * MAXRAYS * 4;                  // 1600
-    size_t szXpr = uint64_t(nSite) * nUT * MAXCR * sizeof(float);           // 400 f32/link
-    size_t szRandomPhases = uint64_t(nSite) * nUT * MAXCR4 * sizeof(float); // 1600 f32/link
-    size_t szPhinmAoA = uint64_t(nSite) * nUT * MAXCR * sizeof(float);      // 400 f32/link
-    size_t szPhinmAoD = uint64_t(nSite) * nUT * MAXCR * sizeof(float);
-    size_t szThetanmZOA = uint64_t(nSite) * nUT * MAXCR * sizeof(float);
-    size_t szThetanmZOD = uint64_t(nSite) * nUT * MAXCR * sizeof(float);
-    xpr_Buf_ =
-        makeBuffer(szXpr,
-                   WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    randomPhases_Buf_ =
-        makeBuffer(szRandomPhases,
-                   WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    phi_nm_AoA_Buf_ =
-        makeBuffer(szPhinmAoA,
-                   WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    phi_nm_AoD_Buf_ =
-        makeBuffer(szPhinmAoD,
-                   WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    theta_nm_ZOA_Buf_ =
-        makeBuffer(szThetanmZOA,
-                   WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    theta_nm_ZOD_Buf_ =
-        makeBuffer(szThetanmZOD,
+    // Pack 6 logically-separate per-link f32 arrays (xpr,
+    // randomPhases, phi_nm_AoA/AoD, theta_nm_ZOA/ZOD) into one
+    // storage buffer. Layout per link (PACKED_LINK_STRIDE = 3600 f32):
+    //   offset 0    .. 399  : xpr           (MAX_CR  = 400)
+    //   offset 400  .. 1999 : randomPhases  (MAX_CR4 = 1600)
+    //   offset 2000 .. 2399 : phi_nm_AoA    (MAX_CR  = 400)
+    //   offset 2400 .. 2799 : phi_nm_AoD    (MAX_CR  = 400)
+    //   offset 2800 .. 3199 : theta_nm_ZOA  (MAX_CR  = 400)
+    //   offset 3200 .. 3599 : theta_nm_ZOD  (MAX_CR  = 400)
+    // The PACKED_OFF_* / PACKED_LINK_STRIDE constants in
+    // sls-chan.wgsl must mirror these exactly.
+    constexpr uint32_t PACKED_OFF_XPR = 0u;
+    constexpr uint32_t PACKED_OFF_RNDP = 400u;
+    constexpr uint32_t PACKED_OFF_AOA = 2000u;
+    constexpr uint32_t PACKED_OFF_AOD = 2400u;
+    constexpr uint32_t PACKED_OFF_ZOA = 2800u;
+    constexpr uint32_t PACKED_OFF_ZOD = 3200u;
+    constexpr uint32_t PACKED_LINK_STRIDE = 3600u;
+    (void)PACKED_OFF_XPR;
+    (void)PACKED_OFF_RNDP;
+    (void)PACKED_OFF_AOA;
+    (void)PACKED_OFF_AOD;
+    (void)PACKED_OFF_ZOA;
+    (void)PACKED_OFF_ZOD;
+    const uint64_t clusterOutputsSz =
+        uint64_t(nSite) * nUT * PACKED_LINK_STRIDE * sizeof(float);
+    clusterOutputsBuf_ =
+        makeBuffer(clusterOutputsSz,
                    WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
 
     auto layout1 = clusterRayPipeline_.getBindGroupLayout(1);
-    std::vector<wgpu::BindGroupEntry> e0(12, wgpu::Default);
+    // Was 12 bindings (6 separate output arrays at bindings 6..11);
+    // packed into one at binding 6 -> 7 entries total now.
+    std::vector<wgpu::BindGroupEntry> e0(7, wgpu::Default);
     auto E = [](std::vector<wgpu::BindGroupEntry>& v,
                 int i,
                 uint32_t b,
@@ -1621,12 +1624,7 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     E(e0, 3, 3, clusterParamsBuf_);                  // cray_buf_cluster
     E(e0, 4, 4, rngStatesBuf_);                      // cray_buf_rng
     E(e0, 5, 5, ssDispatchBuf_);                     // cray_disp
-    E(e0, 6, 6, xpr_Buf_);                           // cray_buf_xpr
-    E(e0, 7, 7, randomPhases_Buf_);                  // cray_buf_randomPhases
-    E(e0, 8, 8, phi_nm_AoA_Buf_);                    // cray_buf_phi_nm_AoA
-    E(e0, 9, 9, phi_nm_AoD_Buf_);                    // cray_buf_phi_nm_AoD
-    E(e0, 10, 10, theta_nm_ZOA_Buf_);                //  cray_buf_theta_nm_ZOA
-    E(e0, 11, 11, theta_nm_ZOD_Buf_);                //  cray_buf_theta_nm_ZOD
+    E(e0, 6, 6, clusterOutputsBuf_);                 // cray_packed_out
 
     wgpu::BindGroupDescriptor bgd1 = wgpu::Default;
     bgd1.layout = layout1;
@@ -1709,7 +1707,10 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
     }
 
     auto layout2 = generateCIRPipeline_.getBindGroupLayout(2);
-    std::vector<wgpu::BindGroupEntry> e0(22, wgpu::Default);
+    // Was 22 (bindings 0..21 with 6 separate cluster-output arrays at
+    // 15..20). Now 17 -- the 6 outputs collapsed into one packed view
+    // at binding 15 and cir_dbg moved to binding 16.
+    std::vector<wgpu::BindGroupEntry> e0(17, wgpu::Default);
     auto E = [](std::vector<wgpu::BindGroupEntry>& v,
                 int i,
                 uint32_t b,
@@ -1734,13 +1735,8 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
     E(e0, 12, 12, cirNormDelayBuf_);  // cir_buf_cirNormDelay
     E(e0, 13, 13, cirNtapsBuf_);      // cir_buf_cirNtaps
     E(e0, 14, 14, ssDispatchBuf_);    // cir_disp
-    E(e0, 15, 15, xpr_Buf_);          // cir_buf_xpr
-    E(e0, 16, 16, randomPhases_Buf_); // cir_buf_randomPhases
-    E(e0, 17, 17, phi_nm_AoA_Buf_);   // cir_buf_phi_nm_AoA
-    E(e0, 18, 18, phi_nm_AoD_Buf_);   // cir_buf_phi_nm_AoD
-    E(e0, 19, 19, theta_nm_ZOA_Buf_); // cir_buf_theta_nm_ZOA
-    E(e0, 20, 20, theta_nm_ZOD_Buf_); // cir_buf_theta_nm_ZOD
-    E(e0, 21, 21, cirDbgBuf_);        // cir_dbg
+    E(e0, 15, 15, clusterOutputsBuf_); // cir_packed_in
+    E(e0, 16, 16, cirDbgBuf_);         // cir_dbg (was binding 21)
 
     wgpu::BindGroupDescriptor bgd2 = wgpu::Default;
     bgd2.layout = layout2;
@@ -2168,64 +2164,92 @@ SlsChanWgpu::readCirDebug(uint32_t nActiveLinks)
     return mapReadBuffer<float>(staging, sz);
 }
 
+namespace
+{
+// Mirrors PACKED_OFF_* / PACKED_LINK_STRIDE in calClusterRay() above
+// and in sls-chan.wgsl. These describe how the six per-link f32
+// arrays are laid out inside clusterOutputsBuf_ -- they must stay
+// in sync across the three places (calClusterRay alloc, WGSL
+// constants, here).
+constexpr uint32_t kPackedOffXpr = 0u;
+constexpr uint32_t kPackedOffRndp = 400u;
+constexpr uint32_t kPackedOffAoA = 2000u;
+constexpr uint32_t kPackedOffAoD = 2400u;
+constexpr uint32_t kPackedOffZoA = 2800u;
+constexpr uint32_t kPackedOffZoD = 3200u;
+constexpr uint32_t kPackedLinkStride = 3600u;
+constexpr uint32_t kMaxCr = 400u; // MAX_CLUSTERS * MAX_RAYS
+
+} // namespace
+
+// Slice one of the six per-link sub-views out of the packed
+// cluster-output buffer into a flat std::vector<float>. Each
+// sub-view is `perLinkLen` f32 per link (400 for the angle /
+// xpr arrays, 1600 for randomPhases), and lives at byte
+// offset `linkOff*sizeof(float)` inside each link's
+// kPackedLinkStride-f32 slab.
+std::vector<float>
+SlsChanWgpu::sliceClusterOutput(uint32_t linkOffF32, uint32_t perLinkLenF32)
+{
+    if (!clusterOutputsBuf_)
+    {
+        return {};
+    }
+    const uint64_t totalBytes = clusterOutputsBuf_.getSize();
+    const uint64_t totalF32 = totalBytes / sizeof(float);
+    assert(totalF32 % kPackedLinkStride == 0u
+           && "clusterOutputsBuf_ size is not a multiple of kPackedLinkStride");
+    const uint64_t nLinks = totalF32 / kPackedLinkStride;
+
+    // Copy the whole buffer to host (one mapAsync round-trip) and
+    // gather. Simpler than a per-link copyBufferToBuffer chain and
+    // dwarfed by the actual GPU work for any meaningful nLinks.
+    wgpu::Buffer staging =
+        makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(clusterOutputsBuf_, 0, staging, 0, totalBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    auto whole = mapReadBuffer<float>(staging, totalBytes);
+
+    std::vector<float> out(static_cast<size_t>(nLinks) * perLinkLenF32);
+    for (uint64_t l = 0; l < nLinks; ++l)
+    {
+        const float* src = whole.data() + l * kPackedLinkStride + linkOffF32;
+        float* dst = out.data() + l * perLinkLenF32;
+        std::memcpy(dst, src, perLinkLenF32 * sizeof(float));
+    }
+    return out;
+}
+
 std::vector<float>
 SlsChanWgpu::readXpr()
 {
-    const uint64_t sz = xpr_Buf_.getSize();
-    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-    auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(xpr_Buf_, 0, staging, 0, sz);
-    queue_.submit(enc.finish(wgpu::Default));
-    waitIdle();
-    return mapReadBuffer<float>(staging, sz);
+    return sliceClusterOutput(kPackedOffXpr, kMaxCr);
 }
 
 std::vector<float>
 SlsChanWgpu::readPhiNmAoA()
 {
-    const uint64_t sz = phi_nm_AoA_Buf_.getSize();
-    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-    auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(phi_nm_AoA_Buf_, 0, staging, 0, sz);
-    queue_.submit(enc.finish(wgpu::Default));
-    waitIdle();
-    return mapReadBuffer<float>(staging, sz);
+    return sliceClusterOutput(kPackedOffAoA, kMaxCr);
 }
 
 std::vector<float>
 SlsChanWgpu::readPhiNmAoD()
 {
-    const uint64_t sz = phi_nm_AoD_Buf_.getSize();
-    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-    auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(phi_nm_AoD_Buf_, 0, staging, 0, sz);
-    queue_.submit(enc.finish(wgpu::Default));
-    waitIdle();
-    return mapReadBuffer<float>(staging, sz);
+    return sliceClusterOutput(kPackedOffAoD, kMaxCr);
 }
 
 std::vector<float>
 SlsChanWgpu::readThetaNmZOA()
 {
-    const uint64_t sz = theta_nm_ZOA_Buf_.getSize();
-    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-    auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(theta_nm_ZOA_Buf_, 0, staging, 0, sz);
-    queue_.submit(enc.finish(wgpu::Default));
-    waitIdle();
-    return mapReadBuffer<float>(staging, sz);
+    return sliceClusterOutput(kPackedOffZoA, kMaxCr);
 }
 
 std::vector<float>
 SlsChanWgpu::readThetaNmZOD()
 {
-    const uint64_t sz = theta_nm_ZOD_Buf_.getSize();
-    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-    auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(theta_nm_ZOD_Buf_, 0, staging, 0, sz);
-    queue_.submit(enc.finish(wgpu::Default));
-    waitIdle();
-    return mapReadBuffer<float>(staging, sz);
+    return sliceClusterOutput(kPackedOffZoD, kMaxCr);
 }
 
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
@@ -2844,24 +2868,12 @@ SlsChanWgpu::saveSlsChanToHdf5(const std::string& filename, const SceneMeta& met
     }
 
     std::vector<float> xprVec, phiNmAoAVec, phiNmAoDVec, thetaNmZOAVec, thetaNmZODVec;
-    if (xpr_Buf_)
+    if (clusterOutputsBuf_)
     {
         xprVec = readXpr();
-    }
-    if (phi_nm_AoA_Buf_)
-    {
         phiNmAoAVec = readPhiNmAoA();
-    }
-    if (phi_nm_AoD_Buf_)
-    {
         phiNmAoDVec = readPhiNmAoD();
-    }
-    if (theta_nm_ZOA_Buf_)
-    {
         thetaNmZOAVec = readThetaNmZOA();
-    }
-    if (theta_nm_ZOD_Buf_)
-    {
         thetaNmZODVec = readThetaNmZOD();
     }
 

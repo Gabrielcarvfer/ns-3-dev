@@ -523,6 +523,15 @@ class SlsChanWgpu
     std::vector<float> readPhiNmAoD();
     std::vector<float> readThetaNmZOA();
     std::vector<float> readThetaNmZOD();
+
+  private:
+    // Gather one of the per-link sub-views out of the packed
+    // clusterOutputsBuf_. linkOffF32 is the f32 offset into each
+    // link's PACKED_LINK_STRIDE slab; perLinkLenF32 is how many
+    // f32 to copy per link. Public read* helpers delegate to this.
+    std::vector<float> sliceClusterOutput(uint32_t linkOffF32, uint32_t perLinkLenF32);
+
+  public:
     // 16 f32 per link, populated by generate_cir_kernel. Layout described in
     // sls-chan.wgsl near the `cir_dbg` binding.
     std::vector<float> readCirDebug(uint32_t nActiveLinks);
@@ -640,12 +649,13 @@ class SlsChanWgpu
     wgpu::Buffer ssCmnLinkBuf_;   // SsCmnParams — binding 2 in calClusterRay/generateCIR
     wgpu::Buffer ssSysConfigBuf_; // SmallScaleSysConfig  — binding 21
     wgpu::Buffer ssDispatchBuf_;  // DispatchUniforms     — binding 36
-    wgpu::Buffer xpr_Buf_;
-    wgpu::Buffer randomPhases_Buf_;
-    wgpu::Buffer phi_nm_AoA_Buf_;
-    wgpu::Buffer phi_nm_AoD_Buf_;
-    wgpu::Buffer theta_nm_ZOA_Buf_;
-    wgpu::Buffer theta_nm_ZOD_Buf_;
+    // Single buffer that packs six per-link f32 arrays (xpr,
+    // randomPhases, phi_nm_AoA/AoD, theta_nm_ZOA/ZOD) into one
+    // PACKED_LINK_STRIDE-sized slab per link. Lets the cluster-ray
+    // kernel fit Dawn-D3D12's 10 SSBO-per-stage hard cap. The
+    // readXpr / readPhiNmA*/ readThetaNmZ* helpers slice this back
+    // into independent views on the host side.
+    wgpu::Buffer clusterOutputsBuf_;
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24

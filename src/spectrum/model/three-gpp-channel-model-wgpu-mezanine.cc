@@ -1048,15 +1048,25 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         params->m_crossPolarizationPowerRatios.assign(cp.nCluster,
                                                       DoubleVector(cp.nRayPerCluster, 0.0));
 
+        // The cluster-ray kernel emits angles in degrees (wrap_azimuth
+        // returns [-180, 180]; wrap_zenith returns [0, 180]). ns-3's
+        // m_rayA*Radian / m_rayZ*Radian fields are documented in
+        // radians; downstream ns3::Angles construction asserts
+        // inclination in [0, pi] rad and will otherwise terminate
+        // with "m_inclination=NN.NN not valid". Convert at the
+        // boundary. (Cluster angles in m_angle stay in degrees per
+        // ns-3 convention -- GenerateRayAngles converts them right
+        // before consumption.)
+        constexpr double kDeg2Rad = M_PI / 180.0;
         for (uint32_t c = 0; c < cp.nCluster; ++c)
         {
             for (uint32_t r = 0; r < cp.nRayPerCluster; ++r)
             {
                 const uint32_t flat = FlatClusterRayIndex(ctx.lspReadIdx, c, r);
-                params->m_rayAoaRadian[c][r] = phiNmAoaFlat.at(flat);
-                params->m_rayAodRadian[c][r] = phiNmAodFlat.at(flat);
-                params->m_rayZoaRadian[c][r] = thetaNmZoaFlat.at(flat);
-                params->m_rayZodRadian[c][r] = thetaNmZodFlat.at(flat);
+                params->m_rayAoaRadian[c][r] = phiNmAoaFlat.at(flat) * kDeg2Rad;
+                params->m_rayAodRadian[c][r] = phiNmAodFlat.at(flat) * kDeg2Rad;
+                params->m_rayZoaRadian[c][r] = thetaNmZoaFlat.at(flat) * kDeg2Rad;
+                params->m_rayZodRadian[c][r] = thetaNmZodFlat.at(flat) * kDeg2Rad;
                 params->m_crossPolarizationPowerRatios[c][r] = xprFlat.at(flat);
             }
         }
@@ -1075,6 +1085,14 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         params->m_attenuation_dB.assign(cp.nCluster, 0.0);
         params->m_nonSelfBlocking.clear();
         params->m_norRvAngles.clear();
+        // V2V/V2X Doppler scaling terms. The bench doesn't model V2V,
+        // and the CPU's GenerateDopplerTerms initialises both to 0
+        // for cluster 0 then random ±1 / ±m_vScatt for the rest. For
+        // a stationary or low-vScatt config zero is the correct
+        // initialisation; otherwise downstream CalcBeamformingGain
+        // hits an assertion when m_alpha.size() < numCluster.
+        params->m_alpha.assign(cp.nCluster, 0.0);
+        params->m_D.assign(cp.nCluster, 0.0);
 
         if (prev && prev->m_clusterXnNlosSign.size() == cp.nCluster)
         {
@@ -1090,6 +1108,30 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         {
             d += params->m_dis3D / 3e8;
         }
+
+        // FindStrongestClusters appends 2 or 4 subcluster entries to
+        // every per-cluster vector (delay, angle, alpha, D,
+        // clusterPower) so that downstream GetNewChannel finds them
+        // sized to numOverallCluster = reducedClusterNumber + 2|4
+        // (depending on cluster1st == cluster2nd). The
+        // CalcBeamformingGain assertion at line 313 of
+        // three-gpp-spectrum-propagation-loss-model.cc expects
+        // m_alpha / m_D / m_angle[*] to all match the channel
+        // matrix's page count, which is the expanded size. The base
+        // class also overwrites cluster1st / cluster2nd here -- the
+        // GPU's strongest2 are advisory; ns-3 wants the CPU-side
+        // verdict.
+        Ptr<ParamsTable> dummyTable = Create<ParamsTable>();
+        dummyTable->m_cDS = 0.0; // subcluster delay spread; 0 == no offset
+        FindStrongestClusters(params,
+                              dummyTable,
+                              &params->m_cluster1st,
+                              &params->m_cluster2nd,
+                              &params->m_delay,
+                              &params->m_angle,
+                              &params->m_alpha,
+                              &params->m_D,
+                              &params->m_clusterPower);
 
         params->m_cachedAngleSincos.clear();
         PrecomputeAnglesSinCos(params, &params->m_cachedAngleSincos);

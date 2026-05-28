@@ -1019,12 +1019,23 @@ struct DispatchUniforms {
 @group(1) @binding(3) var<storage, read_write> cray_buf_cluster : array<ClusterParams>;
 @group(1) @binding(4) var<storage, read_write> cray_buf_rng     : array<RngState>;
 @group(1) @binding(5) var<uniform>             cray_disp        : DispatchUniforms;
-@group(1) @binding(6) var<storage, read_write> cray_buf_xpr:          array<f32>;
-@group(1) @binding(7) var<storage, read_write> cray_buf_randomPhases: array<f32>;
-@group(1) @binding(8) var<storage, read_write> cray_buf_phi_nm_AoA:     array<f32>;
-@group(1) @binding(9) var<storage, read_write> cray_buf_phi_nm_AoD:     array<f32>;
-@group(1) @binding(10) var<storage, read_write> cray_buf_theta_nm_ZOA:  array<f32>;
-@group(1) @binding(11) var<storage, read_write> cray_buf_theta_nm_ZOD:  array<f32>;
+// Combined cluster-ray output buffer. Packs 6 logically-separate
+// f32 arrays (xpr, randomPhases, phi_nm_AoA/AoD, theta_nm_ZOA/ZOD)
+// into a single binding so the cal_cluster_ray_kernel fits Dawn-D3D12's
+// hard limit of 10 storage buffers per shader stage (was 11). Per-link
+// stride and per-array sub-offsets are defined as constants below.
+@group(1) @binding(6) var<storage, read_write> cray_packed_out:       array<f32>;
+// PACKED_OFF_* are f32 offsets within each link's 3600-entry slab.
+// MAX_CR  = MAX_CLUSTERS * MAX_RAYS = 20 * 20 = 400 (xpr / angles)
+// MAX_CR4 = 4 * MAX_CR             = 1600         (randomPhases)
+// Sum = 400 + 1600 + 4 * 400 = 3600 f32 / link.
+const PACKED_LINK_STRIDE : u32 = 3600u;
+const PACKED_OFF_XPR     : u32 = 0u;
+const PACKED_OFF_RNDP    : u32 = 400u;
+const PACKED_OFF_AOA     : u32 = 2000u;
+const PACKED_OFF_AOD     : u32 = 2400u;
+const PACKED_OFF_ZOA     : u32 = 2800u;
+const PACKED_OFF_ZOD     : u32 = 3200u;
 
 // ── group 2: generate_cir_kernel ─────────────────────────────────────────
 @group(2) @binding(0)  var<uniform>             cir_uni_sim          : SmallScaleSimConfig;
@@ -1042,12 +1053,9 @@ struct DispatchUniforms {
 @group(2) @binding(12) var<storage, read_write> cir_buf_cirNormDelay : array<u32>;
 @group(2) @binding(13) var<storage, read_write> cir_buf_cirNtaps     : array<u32>;
 @group(2) @binding(14) var<uniform>             cir_disp             : DispatchUniforms;
-@group(2) @binding(15) var<storage, read> cir_buf_xpr          : array<f32>;
-@group(2) @binding(16) var<storage, read> cir_buf_randomPhases  : array<f32>;
-@group(2) @binding(17) var<storage, read> cir_buf_phi_nm_AoA    : array<f32>;
-@group(2) @binding(18) var<storage, read> cir_buf_phi_nm_AoD    : array<f32>;
-@group(2) @binding(19) var<storage, read> cir_buf_theta_nm_ZOA  : array<f32>;
-@group(2) @binding(20) var<storage, read> cir_buf_theta_nm_ZOD  : array<f32>;
+// Read-only view of the cluster-ray packed output buffer. Same layout
+// as cray_packed_out (see PACKED_LINK_STRIDE + PACKED_OFF_* constants).
+@group(2) @binding(15) var<storage, read>      cir_packed_in        : array<f32>;
 // Debug buffer — 16 f32 slots per link. Thread 0 writes intermediate values
 // so the host can diagnose which stage of generate_cir_kernel is collapsing
 // the output for the ~5 % of links that emit zero CIR. Slot layout:
@@ -1067,7 +1075,9 @@ struct DispatchUniforms {
 //   [13] strongest2[1]
 //   [14] sum cluster_power (over all clusters, post-LOS-sub)
 //   [15] reserved
-@group(2) @binding(21) var<storage, read_write> cir_dbg : array<f32>;
+// cir_dbg moved from 21 to 16 when bindings 16..20 were freed by
+// packing 6 cluster outputs into the single cir_packed_in at 15.
+@group(2) @binding(16) var<storage, read_write> cir_dbg : array<f32>;
 
 // ── group 3: generate_cfr_kernel_mode1 ───────────────────────────────────
 @group(3) @binding(0) var<uniform>             cfr_uni_sim          : SmallScaleSimConfig;
@@ -1213,10 +1223,12 @@ fn calc_ray_coeff(
 
     // --- polarisation matrix (NLOS) ---
     let sqrt_kappa = sqrt(max(xpr, 1e-10));
-    let ph0 = cir_buf_randomPhases[rph_off    ] * DEG2RAD;
-    let ph1 = cir_buf_randomPhases[rph_off + 1u] * DEG2RAD;
-    let ph2 = cir_buf_randomPhases[rph_off + 2u] * DEG2RAD;
-    let ph3 = cir_buf_randomPhases[rph_off + 3u] * DEG2RAD;
+    // rph_off is already a fully-resolved offset into cir_packed_in
+    // (caller computed it as link_base + PACKED_OFF_RNDP + ...).
+    let ph0 = cir_packed_in[rph_off    ] * DEG2RAD;
+    let ph1 = cir_packed_in[rph_off + 1u] * DEG2RAD;
+    let ph2 = cir_packed_in[rph_off + 2u] * DEG2RAD;
+    let ph3 = cir_packed_in[rph_off + 3u] * DEG2RAD;
 
     // term2[i][j]
     let t200 = cexp_j(ph0);
@@ -1502,13 +1514,17 @@ fn cal_cluster_ray_kernel(
             let s_zsa = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
             let s_zsd = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
 
-            let _b = link_idx * MAX_CR + idx;
-            cray_buf_phi_nm_AoA  [_b] = wrap_azimuth(phi_n_AoA[c]   + C_ASA * alpha_m[r] * s_asa);
-            cray_buf_phi_nm_AoD  [_b] = wrap_azimuth(phi_n_AoD[c]   + C_ASD * alpha_m[r] * s_asd);
-            cray_buf_theta_nm_ZOA[_b] = wrap_zenith (theta_n_ZOA[c] + C_ZSA * alpha_m[r] * s_zsa);
+            let link_base = link_idx * PACKED_LINK_STRIDE;
+            cray_packed_out[link_base + PACKED_OFF_AOA + idx] =
+                wrap_azimuth(phi_n_AoA[c]   + C_ASA * alpha_m[r] * s_asa);
+            cray_packed_out[link_base + PACKED_OFF_AOD + idx] =
+                wrap_azimuth(phi_n_AoD[c]   + C_ASD * alpha_m[r] * s_asd);
+            cray_packed_out[link_base + PACKED_OFF_ZOA + idx] =
+                wrap_zenith (theta_n_ZOA[c] + C_ZSA * alpha_m[r] * s_zsa);
             // ZOD: 3/8 * 10^mu_lgZSD offset (3GPP Eq 7.5-20)
             let zsd_offset = (3.0 / 8.0) * pow(10.0, lk.mu_lgZSD) * alpha_m[r] * s_zsd;
-            cray_buf_theta_nm_ZOD[_b] = wrap_zenith(theta_n_ZOD[c] + zsd_offset);
+            cray_packed_out[link_base + PACKED_OFF_ZOD + idx] =
+                wrap_zenith(theta_n_ZOD[c] + zsd_offset);
         }
     }
 
@@ -1517,11 +1533,12 @@ fn cal_cluster_ray_kernel(
     for (var c = 0u; c < n_cluster; c++) {
         for (var r = 0u; r < n_ray; r++) {
             let idx = c * n_ray + r;
-            cray_buf_xpr[link_idx * MAX_CR + idx] =
+            let link_base = link_idx * PACKED_LINK_STRIDE;
+            cray_packed_out[link_base + PACKED_OFF_XPR + idx] =
                 pow(10.0, (cray_buf_cmn.mu_XPR[lsp_idx]
                            + cray_buf_cmn.sigma_XPR[lsp_idx] * rng_normal(&rng)) / 10.0);
             for (var p = 0u; p < 4u; p++) {
-                cray_buf_randomPhases[link_idx * MAX_CR4 + idx * 4u + p] =
+                cray_packed_out[link_base + PACKED_OFF_RNDP + idx * 4u + p] =
                     (rng_uniform(&rng) - 0.5) * 360.0;
             }
         }
@@ -1712,24 +1729,27 @@ fn generate_cir_kernel(
 
                     if li.x == 0u {
                         for (var ri = 0u; ri < sc_size; ri++) {
-                            // cal_cluster_ray writes per-link at stride
-                            // MAX_CR (= MAX_CLUSTERS*MAX_RAYS = 400); the
-                            // reader must add the same per-link offset.
-                            let link_ray_base = al.lspReadIdx * MAX_CR;
+                            // Packed-buffer addressing: each link gets a
+                            // PACKED_LINK_STRIDE-f32 slab in cir_packed_in
+                            // sub-divided into XPR / RNDP / AOA / AOD /
+                            // ZOA / ZOD regions (PACKED_OFF_*).
+                            let link_packed_base = al.lspReadIdx * PACKED_LINK_STRIDE;
                             var ray_local_idx = 0u;
                             if sc == 0u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster0[ri]; }
                             else if sc == 1u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster1[ri]; }
                             else             { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster2[ri]; }
-                            let ray_global_idx = link_ray_base + ray_local_idx;
 
-                            let tZOA = cir_buf_theta_nm_ZOA[ray_global_idx] - ut.antPanelOrientation[0];
-                            let pAOA = cir_buf_phi_nm_AoA[ray_global_idx]   - ut.antPanelOrientation[1];
-                            let tZOD = cir_buf_theta_nm_ZOD[ray_global_idx] - cell.antPanelOrientation[0];
-                            let pAOD = cir_buf_phi_nm_AoD[ray_global_idx]   - cell.antPanelOrientation[1];
-                            let xpr  = cir_buf_xpr[ray_global_idx];
-                            // randomPhases buffer has 4 entries per ray at
-                            // stride MAX_CR4 = 4*MAX_CR per link.
-                            let rph_off = al.lspReadIdx * MAX_CR4 + ray_local_idx * 4u;
+                            let tZOA = cir_packed_in[link_packed_base + PACKED_OFF_ZOA + ray_local_idx]
+                                       - ut.antPanelOrientation[0];
+                            let pAOA = cir_packed_in[link_packed_base + PACKED_OFF_AOA + ray_local_idx]
+                                       - ut.antPanelOrientation[1];
+                            let tZOD = cir_packed_in[link_packed_base + PACKED_OFF_ZOD + ray_local_idx]
+                                       - cell.antPanelOrientation[0];
+                            let pAOD = cir_packed_in[link_packed_base + PACKED_OFF_AOD + ray_local_idx]
+                                       - cell.antPanelOrientation[1];
+                            let xpr  = cir_packed_in[link_packed_base + PACKED_OFF_XPR + ray_local_idx];
+                            // rph_off = fully-resolved offset to ray's 4 random phases.
+                            let rph_off = link_packed_base + PACKED_OFF_RNDP + ray_local_idx * 4u;
 
                             for (var ua = 0u; ua < nUtAnt; ua++) {
                                 let rc = calc_ray_coeff(
@@ -1761,15 +1781,20 @@ fn generate_cir_kernel(
                 let power = sqrt(cl_power / f32(n_ray));
                 if li.x == 0u {
                     for (var r = 0u; r < n_ray; r++) {
-                        // Same per-link offset as the strongest-cluster path.
+                        // Same packed-buffer addressing as the
+                        // strongest-cluster path above.
                         let ray_local_idx = c * n_ray + r;
-                        let ray_global_idx = al.lspReadIdx * MAX_CR + ray_local_idx;
-                        let tZOA = cir_buf_theta_nm_ZOA[ray_global_idx] - ut.antPanelOrientation[0];
-                        let pAOA = cir_buf_phi_nm_AoA[ray_global_idx]   - ut.antPanelOrientation[1];
-                        let tZOD = cir_buf_theta_nm_ZOD[ray_global_idx] - cell.antPanelOrientation[0];
-                        let pAOD = cir_buf_phi_nm_AoD[ray_global_idx]   - cell.antPanelOrientation[1];
-                        let xpr  = cir_buf_xpr[ray_global_idx];
-                        let rph_off = al.lspReadIdx * MAX_CR4 + ray_local_idx * 4u;
+                        let link_packed_base = al.lspReadIdx * PACKED_LINK_STRIDE;
+                        let tZOA = cir_packed_in[link_packed_base + PACKED_OFF_ZOA + ray_local_idx]
+                                   - ut.antPanelOrientation[0];
+                        let pAOA = cir_packed_in[link_packed_base + PACKED_OFF_AOA + ray_local_idx]
+                                   - ut.antPanelOrientation[1];
+                        let tZOD = cir_packed_in[link_packed_base + PACKED_OFF_ZOD + ray_local_idx]
+                                   - cell.antPanelOrientation[0];
+                        let pAOD = cir_packed_in[link_packed_base + PACKED_OFF_AOD + ray_local_idx]
+                                   - cell.antPanelOrientation[1];
+                        let xpr  = cir_packed_in[link_packed_base + PACKED_OFF_XPR + ray_local_idx];
+                        let rph_off = link_packed_base + PACKED_OFF_RNDP + ray_local_idx * 4u;
 
                         for (var ua = 0u; ua < nUtAnt; ua++) {
                             let rc = calc_ray_coeff(
