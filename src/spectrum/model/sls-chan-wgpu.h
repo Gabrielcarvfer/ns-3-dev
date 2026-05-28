@@ -590,6 +590,26 @@ class SlsChanWgpu
                                                   uint32_t sPorts,
                                                   uint32_t uPorts);
 
+    // Per-eval dispatch of gen_spec_chan_kernel. Consumes the
+    // longTerm slab for `linkIdx` already on the GPU and produces the
+    // (numRxPorts, numTxPorts, numRb) spectrum channel matrix the
+    // caller would have built on CPU via the per-cluster outer-product.
+    // delayT is doppler[c] * delaySincos[c, rb] packed CPU-side (small
+    // enough that uploading is cheaper than computing on GPU and the
+    // doppler/delaySincos factors vary per eval anyway). Returned
+    // vector is column-major: (rx, tx, rb) at rx + numRxPorts*tx +
+    // numRxPorts*numTxPorts*rb.
+    std::vector<std::complex<float>> genSpecChan(uint32_t linkIdx,
+                                                 uint32_t numClusters,
+                                                 uint32_t numRb,
+                                                 uint32_t numRxPorts,
+                                                 uint32_t numTxPorts,
+                                                 uint32_t ltUPorts,
+                                                 uint32_t ltSPorts,
+                                                 bool isReverse,
+                                                 const std::vector<std::complex<float>>& delayT,
+                                                 const std::vector<float>& sqrtVit);
+
   private:
     // Gather one of the per-link sub-views out of the packed
     // clusterOutputsBuf_. linkOffF32 is the f32 offset into each
@@ -771,6 +791,17 @@ class SlsChanWgpu
     uint32_t longTermCfgUPorts_{0};
     uint32_t longTermCfgSPortElems_{0};
     uint32_t longTermCfgUPortElems_{0};
+
+    // gen_spec_chan_kernel scratch. Bindings @group(0) at 60..64.
+    wgpu::ComputePipeline specChanPipeline_;
+    wgpu::Buffer specChanDispatchBuf_;
+    wgpu::Buffer specChanDelayTBuf_;
+    wgpu::Buffer specChanSqrtVitBuf_;
+    wgpu::Buffer specChanOutBuf_;
+    wgpu::Buffer specChanStagingBuf_;
+    uint32_t specChanCfgNumRxPorts_{0};
+    uint32_t specChanCfgNumTxPorts_{0};
+    uint32_t specChanCfgNumRb_{0};
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24

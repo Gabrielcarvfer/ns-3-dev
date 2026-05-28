@@ -59,6 +59,21 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         const PhasedArrayModel::ComplexVector& sW,
         const PhasedArrayModel::ComplexVector& uW) const override;
 
+    // Override the GenSpec hook to dispatch gen_spec_chan_kernel against
+    // the longTerm matrix this same back-end produced in the most
+    // recent UpdateChannel. Returns nullptr (and PRX falls back to CPU
+    // GenSpec) when this link has no GPU-built longTerm entry.
+    Ptr<Complex3DVector> TryGenSpectrumChannelMatrix(
+        Ptr<const ChannelMatrix> channelMatrix,
+        Ptr<const ChannelParams> channelParams,
+        Ptr<const Complex3DVector> longTerm,
+        const std::vector<std::complex<double>>& delayT,
+        const std::vector<double>& sqrtVit,
+        uint32_t numRb,
+        uint8_t numRxPorts,
+        uint8_t numTxPorts,
+        bool isReverse) const override;
+
   private:
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
     mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
@@ -91,6 +106,16 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         size_t sWSize{0};
         size_t uWSize{0};
         Time generatedTime;
+        // Index into SlsChanWgpu's longTermOutBuf_ for this link, so
+        // the GenSpec hook can address the per-link slab.
+        uint32_t gpuLinkIdx{0};
+        // longTerm shape -- the GenSpec kernel needs these to walk
+        // the longTerm buffer's column-major layout correctly. uPorts
+        // and sPorts come from the BS/UE antenna geometry at the
+        // moment of dispatch, so they're stable for the lifetime of
+        // the entry.
+        uint32_t ltUPorts{0};
+        uint32_t ltSPorts{0};
     };
     mutable std::unordered_map<uint64_t, GpuLongTermEntry> m_gpuLongTermMap;
 

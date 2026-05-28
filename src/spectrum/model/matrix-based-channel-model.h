@@ -247,6 +247,44 @@ class MatrixBasedChannelModel : public Object
     }
 
     /**
+     * Optional opt-in hook for back-ends that want to compute the
+     * per-RB spectrum channel matrix (PRX::GenSpectrumChannelMatrix
+     * output) on the GPU instead of forcing PRX to run the per-cluster
+     * outer-product on the CPU. The mezanine WebGPU subclass overrides
+     * this to dispatch gen_spec_chan_kernel against the longTerm
+     * matrix that's already resident on GPU from gen_long_term_kernel.
+     *
+     * Inputs:
+     *   - channelMatrix / channelParams: provide cluster count + delays
+     *   - longTerm: the (rxPorts, txPorts, nCluster) reduced matrix
+     *     PRX just got from GetLongTerm
+     *   - sAnt / uAnt: the (sAntenna, uAntenna) PRX::GetLongTerm
+     *     selected (i.e. already swapped for isReverse)
+     *   - delayT: [nCluster * numRb] vec2<f64> = doppler * delaySincos,
+     *     packed by the caller because it's the smallest thing varying
+     *     per eval
+     *   - sqrtVit: [numRb] f64 = sqrt(inPsd[rb])
+     *   - numRb / numRxPorts / numTxPorts / isReverse
+     *
+     * Returns nullptr when the back-end has nothing to offer (no
+     * cached longTerm for this link, no GPU pipeline, etc.) and PRX
+     * falls through to the CPU GenSpectrumChannelMatrix.
+     */
+    virtual Ptr<Complex3DVector> TryGenSpectrumChannelMatrix(
+        [[maybe_unused]] Ptr<const ChannelMatrix> channelMatrix,
+        [[maybe_unused]] Ptr<const ChannelParams> channelParams,
+        [[maybe_unused]] Ptr<const Complex3DVector> longTerm,
+        [[maybe_unused]] const std::vector<std::complex<double>>& delayT,
+        [[maybe_unused]] const std::vector<double>& sqrtVit,
+        [[maybe_unused]] uint32_t numRb,
+        [[maybe_unused]] uint8_t numRxPorts,
+        [[maybe_unused]] uint8_t numTxPorts,
+        [[maybe_unused]] bool isReverse) const
+    {
+        return nullptr;
+    }
+
+    /**
      * Generate a unique value for the pair of unsigned integer of 32 bits,
      * where the order does not matter, i.e., the same value will be returned for (a,b) and (b,a).
      * @param a the first value

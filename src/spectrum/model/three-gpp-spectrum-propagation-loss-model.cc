@@ -438,7 +438,8 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
                                                                doppler,
                                                                numTxPorts,
                                                                numRxPorts,
-                                                               isReverse);
+                                                               isReverse,
+                                                               m_channelModel);
 
     NS_ASSERT_MSG(rxParams->psd->GetValuesN() == rxParams->spectrumChannelMatrix->GetNumPages(),
                   "RX PSD and the spectrum channel matrix should have the same number of RBs ");
@@ -532,7 +533,8 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     PhasedArrayModel::ComplexVector doppler,
     uint8_t numTxPorts,
     uint8_t numRxPorts,
-    const bool isReverse)
+    const bool isReverse,
+    Ptr<MatrixBasedChannelModel> channelModel)
 {
     SLS_PHASE_SCOPE("PRX::GenSpectrumChannelMatrix");
     const size_t numCluster = channelMatrix->m_channel.GetNumPages();
@@ -647,6 +649,21 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
             const double v = *vit;
             if (v > 0.0)
                 sqrtVit[rb] = std::sqrt(v);
+        }
+    }
+
+    // Give the channel model a chance to run the per-cluster
+    // outer-product on the GPU. The mezanine WebGPU back-end
+    // overrides this and dispatches gen_spec_chan_kernel against
+    // the longTerm matrix that's already resident on its GPU buffer.
+    // On nullptr we fall through to the CPU contraction below.
+    if (channelModel)
+    {
+        if (auto gpuChanSpct = channelModel->TryGenSpectrumChannelMatrix(
+                channelMatrix, channelParams, longTerm,
+                delayT, sqrtVit, numRb, numRxPorts, numTxPorts, isReverse))
+        {
+            return gpuChanSpct;
         }
     }
 

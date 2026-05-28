@@ -156,7 +156,8 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
         PhasedArrayModel::ComplexVector doppler,
         const uint8_t numTxPorts,
         const uint8_t numRxPorts,
-        const bool isReverse);
+        const bool isReverse,
+        Ptr<MatrixBasedChannelModel> channelModel = nullptr);
 
     /**
      * Get the operating frequency

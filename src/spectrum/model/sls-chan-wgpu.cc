@@ -2563,6 +2563,128 @@ SlsChanWgpu::readLongTerm(uint32_t nLinks, uint32_t sPorts, uint32_t uPorts)
     return mapReadBuffer<std::complex<float>>(staging, totalBytes);
 }
 
+// ── gen_spec_chan_kernel (per-eval dispatch) ─────────────────────────────
+std::vector<std::complex<float>>
+SlsChanWgpu::genSpecChan(uint32_t linkIdx,
+                         uint32_t numClusters,
+                         uint32_t numRb,
+                         uint32_t numRxPorts,
+                         uint32_t numTxPorts,
+                         uint32_t ltUPorts,
+                         uint32_t ltSPorts,
+                         bool isReverse,
+                         const std::vector<std::complex<float>>& delayT,
+                         const std::vector<float>& sqrtVit)
+{
+    assert(longTermOutBuf_ && "genSpecChan requires genLongTerm to have run first");
+    assert(delayT.size() == size_t(numClusters) * numRb);
+    assert(sqrtVit.size() == numRb);
+
+    if (!specChanPipeline_)
+    {
+        specChanPipeline_ = makePipeline("gen_spec_chan_kernel");
+        assert(specChanPipeline_ &&
+               "missing gen_spec_chan_kernel in WGSL (or backend can't compile it)");
+    }
+
+    // (Re)alloc output buffer if shape changed. Sized for one eval --
+    // we readback per call so it doesn't need to fit a whole batch.
+    const uint64_t outBytes =
+        uint64_t(numRxPorts) * numTxPorts * numRb * sizeof(float) * 2;
+    if (!specChanOutBuf_ || specChanCfgNumRxPorts_ != numRxPorts ||
+        specChanCfgNumTxPorts_ != numTxPorts || specChanCfgNumRb_ != numRb)
+    {
+        specChanOutBuf_ =
+            makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        specChanStagingBuf_ =
+            makeBuffer(outBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+        specChanCfgNumRxPorts_ = numRxPorts;
+        specChanCfgNumTxPorts_ = numTxPorts;
+        specChanCfgNumRb_ = numRb;
+    }
+
+    const uint64_t delayBytes = delayT.size() * sizeof(float) * 2;
+    const uint64_t sqrtBytes = sqrtVit.size() * sizeof(float);
+    // Keep delayT / sqrtVit / dispatch-uniform buffers persistent across
+    // evals; only realloc on size growth. Re-upload via queue.writeBuffer
+    // (much cheaper than fresh GPU buffer creation).
+    if (!specChanDelayTBuf_ || specChanDelayTBuf_.getSize() < delayBytes)
+    {
+        specChanDelayTBuf_ =
+            makeBuffer(delayBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(specChanDelayTBuf_, 0, delayT.data(), delayBytes);
+
+    if (!specChanSqrtVitBuf_ || specChanSqrtVitBuf_.getSize() < sqrtBytes)
+    {
+        specChanSqrtVitBuf_ =
+            makeBuffer(sqrtBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(specChanSqrtVitBuf_, 0, sqrtVit.data(), sqrtBytes);
+
+    struct SpecChanDispUni
+    {
+        uint32_t nClusters;
+        uint32_t nRb;
+        uint32_t nRxPorts;
+        uint32_t nTxPorts;
+        uint32_t isReverse;
+        uint32_t linkIdx;
+        uint32_t ltUPorts;
+        uint32_t ltSPorts;
+        uint32_t ltNPages;
+        uint32_t _pad0;
+        uint32_t _pad1;
+        uint32_t _pad2;
+    } du{numClusters, numRb,    numRxPorts, numTxPorts, isReverse ? 1u : 0u, linkIdx,
+         ltUPorts,    ltSPorts, kMatMaxPages, 0u,         0u,                  0u};
+    if (!specChanDispatchBuf_)
+    {
+        specChanDispatchBuf_ = makeBuffer(
+            sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(specChanDispatchBuf_, 0, &du, sizeof(du));
+
+    // Note: we re-create the bind group every dispatch. Caching it
+    // across calls was measured to make things WORSE on Dawn/D3D12 --
+    // the bind group is part of Dawn's buffer-hazard tracking, so
+    // reusing it while we writeBuffer to its members confuses barrier
+    // insertion and causes the GPU to stall. Per-call createBindGroup
+    // is the right pattern when buffer contents change every dispatch.
+    auto layout0 = specChanPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> entries(5, wgpu::Default);
+    auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+        entries[i].binding = b;
+        entries[i].buffer = buf;
+        entries[i].offset = 0;
+        entries[i].size = sz;
+    };
+    E(0, 60, specChanDispatchBuf_, sizeof(du));
+    E(1, 61, longTermOutBuf_);
+    E(2, 62, specChanDelayTBuf_);
+    E(3, 63, specChanSqrtVitBuf_);
+    E(4, 64, specChanOutBuf_);
+
+    wgpu::BindGroupDescriptor bgd = wgpu::Default;
+    bgd.layout = layout0;
+    bgd.entryCount = static_cast<uint32_t>(entries.size());
+    bgd.entries = entries.data();
+    wgpu::BindGroup bg0 = device_.createBindGroup(bgd);
+
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    auto pass = enc.beginComputePass(wgpu::Default);
+    pass.setPipeline(specChanPipeline_);
+    pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
+    const uint64_t total = uint64_t(numRxPorts) * numTxPorts * numRb;
+    const uint32_t groups = static_cast<uint32_t>((total + 63u) / 64u);
+    pass.dispatchWorkgroups(groups, 1u, 1u);
+    pass.end();
+    enc.copyBufferToBuffer(specChanOutBuf_, 0, specChanStagingBuf_, 0, outBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    return mapReadBuffer<std::complex<float>>(specChanStagingBuf_, outBytes);
+}
+
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
 #ifdef SLS_CHAN_HDF5
 namespace

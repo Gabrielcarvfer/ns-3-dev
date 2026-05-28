@@ -1402,6 +1402,9 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             entry.sWSize = sBV.GetSize();
             entry.uWSize = uBV.GetSize();
             entry.generatedTime = matrix->m_generatedTime;
+            entry.gpuLinkIdx = static_cast<uint32_t>(ctx.lspReadIdx);
+            entry.ltUPorts = ltUPorts;
+            entry.ltSPorts = ltSPorts;
             m_gpuLongTermMap.insert_or_assign(ctx.matrixKey, std::move(entry));
         }
     }
@@ -1519,6 +1522,117 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
         return nullptr;
     }
     return entry.longTerm;
+}
+
+Ptr<MatrixBasedChannelModel::Complex3DVector>
+ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
+    Ptr<const ChannelMatrix> channelMatrix,
+    Ptr<const ChannelParams> channelParams,
+    [[maybe_unused]] Ptr<const Complex3DVector> longTerm,
+    const std::vector<std::complex<double>>& delayT,
+    const std::vector<double>& sqrtVit,
+    uint32_t numRb,
+    uint8_t numRxPorts,
+    uint8_t numTxPorts,
+    bool isReverse) const
+{
+    // Disabled by default. Per-eval GPU dispatch overhead (~600 us
+    // observed via Dawn on D3D12 for the small chanSpct kernel) is
+    // ~3x the CPU contraction cost (~190 us in Debug) at
+    // DenseAmimoIntel sizes, so enabling this path makes the bench
+    // noticeably slower (16 s -> 27 s in the A/B test). The kernel
+    // and host plumbing are kept as scaffolding for a future batched
+    // approach: do the per-cluster outer-product for ALL active
+    // links in one dispatch during UpdateChannel, cache per-link
+    // chanSpct, and have the eval-time hook just do a hash-keyed
+    // cache lookup. That requires capturing PSD + Simulator::Now()
+    // upstream of UpdateChannel which the current API doesn't expose
+    // -- left as follow-up work. Set MEZ_GPU_SPEC=1 to force-enable
+    // the per-eval path for measurement / future profiling.
+    static const bool gpuSpecEnabled = []() {
+        const char* e = std::getenv("MEZ_GPU_SPEC");
+        return (e && e[0] == '1' && e[1] == '\0');
+    }();
+    if (!gpuSpecEnabled)
+    {
+        return nullptr;
+    }
+    if (!channelMatrix || !channelParams)
+    {
+        return nullptr;
+    }
+    // channelMatrix->m_antennaPair = (sAntId, uAntId) -- the GetKey
+    // pair is symmetric (min/max) so the lookup works regardless of
+    // PRX's isReverse orientation.
+    const uint64_t key = MatrixBasedChannelModel::GetKey(
+        channelMatrix->m_antennaPair.first, channelMatrix->m_antennaPair.second);
+    auto it = m_gpuLongTermMap.find(key);
+    if (it == m_gpuLongTermMap.end())
+    {
+        return nullptr;
+    }
+    const GpuLongTermEntry& entry = it->second;
+    if (entry.generatedTime != channelMatrix->m_generatedTime)
+    {
+        return nullptr;
+    }
+    auto* gpu = m_wgpuChannel.get();
+    if (!gpu)
+    {
+        return nullptr;
+    }
+    const size_t numCluster = channelMatrix->m_channel.GetNumPages();
+    if (delayT.size() != numCluster * numRb || sqrtVit.size() != numRb)
+    {
+        return nullptr;
+    }
+    // Pack delayT + sqrtVit into f32 buffers for the kernel. delayT is
+    // 24*24=576 complex entries (~9 KB f64 -> ~4.6 KB f32) for the
+    // DenseAmimoIntel config -- small enough that the f32 quantisation
+    // contributes orders of magnitude less error than the f32 longTerm
+    // already does.
+    std::vector<std::complex<float>> delayTF(delayT.size());
+    for (size_t i = 0; i < delayT.size(); ++i)
+    {
+        delayTF[i] = std::complex<float>(static_cast<float>(delayT[i].real()),
+                                         static_cast<float>(delayT[i].imag()));
+    }
+    std::vector<float> sqrtVitF(sqrtVit.size());
+    for (size_t i = 0; i < sqrtVit.size(); ++i)
+    {
+        sqrtVitF[i] = static_cast<float>(sqrtVit[i]);
+    }
+    const std::vector<std::complex<float>> outFlat =
+        gpu->genSpecChan(entry.gpuLinkIdx,
+                         static_cast<uint32_t>(numCluster),
+                         numRb,
+                         numRxPorts,
+                         numTxPorts,
+                         entry.ltUPorts,
+                         entry.ltSPorts,
+                         isReverse,
+                         delayTF,
+                         sqrtVitF);
+    if (outFlat.empty())
+    {
+        return nullptr;
+    }
+    Ptr<Complex3DVector> chanSpct = Create<Complex3DVector>(
+        static_cast<uint16_t>(numRxPorts),
+        static_cast<uint16_t>(numTxPorts),
+        static_cast<uint16_t>(numRb));
+    // chanSpct column-major: (rx, tx, rb) at rx + numRxPorts*tx + per_page*rb,
+    // which matches the kernel's output layout. Single contiguous f32 -> f64
+    // conversion.
+    auto* dst = reinterpret_cast<double*>(chanSpct->GetPagePtr(0));
+    const size_t cells = size_t(numRxPorts) * numTxPorts * numRb;
+    for (size_t k = 0; k < cells; ++k)
+    {
+        const auto* sr = reinterpret_cast<const float*>(&outFlat[k]);
+        dst[k * 2] = static_cast<double>(sr[0]);
+        dst[k * 2 + 1] = static_cast<double>(sr[1]);
+    }
+    return chanSpct;
 }
 
 uint64_t

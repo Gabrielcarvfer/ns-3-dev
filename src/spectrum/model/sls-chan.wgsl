@@ -2456,3 +2456,90 @@ fn gen_long_term_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
                 + u_port;
     lt_out[out_idx] = tx_sum;
 }
+
+// ---------------------------------------------------------------------------
+// gen_spec_chan_kernel
+//
+// Replaces PRX::GenSpectrumChannelMatrix's per-cluster outer-product
+// contraction. For each output cell (rx, tx, rb), reduce the longTerm
+// (already on GPU, output of gen_long_term_kernel) by delayT[c, rb]
+// (doppler * delaySincos, packed on CPU because both factors vary per
+// eval), then scale by sqrt(inPsd[rb]).
+//
+//   chanSpct[rx, tx, rb] = sqrt(vit[rb]) * sum_c longTerm[rx, tx, c]
+//                                              * delayT[c, rb]
+//
+// longTerm in mezanine cache has shape (u_ports = UE_ports, s_ports =
+// BS_ports, n_pages). For !isReverse the mapping is (u=rx, s=tx); for
+// isReverse it's (u=tx, s=rx). The transpose is folded into the index
+// computation.
+//
+// Bindings live at 60+ to stay clear of the LSP kernels (0..15), the
+// matrix kernel (30..40), and the long-term kernel (50..56).
+// ---------------------------------------------------------------------------
+
+struct SpecChanDispatch {
+    n_clusters       : u32,
+    n_rb             : u32,
+    n_rx_ports       : u32,
+    n_tx_ports       : u32,
+    is_reverse       : u32,  // 0 or 1
+    link_idx         : u32,  // which per-link slab in spec_long_term
+    lt_u_ports       : u32,  // longTerm u-dim (UE ports in mezanine convention)
+    lt_s_ports       : u32,  // longTerm s-dim (BS ports)
+    lt_n_pages       : u32,  // longTerm per-link page count (kMatMaxPages)
+    _pad0            : u32,
+    _pad1            : u32,
+    _pad2            : u32,
+}
+
+@group(0) @binding(60) var<uniform>             spec_disp      : SpecChanDispatch;
+@group(0) @binding(61) var<storage, read>       spec_long_term : array<vec2f>;
+@group(0) @binding(62) var<storage, read>       spec_delay_t   : array<vec2f>;  // [n_clusters * n_rb]
+@group(0) @binding(63) var<storage, read>       spec_sqrt_vit  : array<f32>;     // [n_rb]
+@group(0) @binding(64) var<storage, read_write> spec_chan_out  : array<vec2f>;   // [n_rx_ports * n_tx_ports * n_rb]
+
+@compute @workgroup_size(64)
+fn gen_spec_chan_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let tid = gid.x;
+    let per_page = spec_disp.n_rx_ports * spec_disp.n_tx_ports;
+    let total = per_page * spec_disp.n_rb;
+    if (tid >= total) { return; }
+
+    // chanSpct column-major: (rx, tx, rb) at rx + n_rx_ports*tx + per_page*rb.
+    let rb = tid / per_page;
+    let pp = tid % per_page;
+    let rx = pp % spec_disp.n_rx_ports;
+    let tx = pp / spec_disp.n_rx_ports;
+
+    let lt_per_page = spec_disp.lt_u_ports * spec_disp.lt_s_ports;
+    let per_link_lt = lt_per_page * spec_disp.lt_n_pages;
+    let lt_base = spec_disp.link_idx * per_link_lt;
+
+    // For !isReverse: longTerm shape (rxPorts, txPorts, c) -> u=rx, s=tx.
+    // For isReverse: longTerm was generated in opposite direction; PRX::GenSpec
+    // transposes it so (u, s) maps to (tx, rx) at the read side.
+    var u_idx: u32;
+    var s_idx: u32;
+    if (spec_disp.is_reverse == 1u) {
+        u_idx = tx;
+        s_idx = rx;
+    } else {
+        u_idx = rx;
+        s_idx = tx;
+    }
+
+    var acc = vec2f(0.0, 0.0);
+    for (var c: u32 = 0u; c < spec_disp.n_clusters; c = c + 1u) {
+        let lt_idx = lt_base + c * lt_per_page + s_idx * spec_disp.lt_u_ports + u_idx;
+        let lt = spec_long_term[lt_idx];
+        let dt = spec_delay_t[c * spec_disp.n_rb + rb];
+        // chanSpct += longTerm[u,s,c] * delayT[c, rb]
+        acc = acc + vec2f(lt.x * dt.x - lt.y * dt.y,
+                          lt.x * dt.y + lt.y * dt.x);
+    }
+    let s = spec_sqrt_vit[rb];
+    acc = vec2f(acc.x * s, acc.y * s);
+    let out_idx = rb * per_page + tx * spec_disp.n_rx_ports + rx;
+    spec_chan_out[out_idx] = acc;
+}
