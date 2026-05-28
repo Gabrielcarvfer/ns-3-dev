@@ -1139,29 +1139,23 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         m_channelParamsMap.insert_or_assign(ctx.paramsKey, params);
     }
 
-    for (const auto& ctx : runtimeLinks)
-    {
-        auto pit = m_channelParamsMap.find(ctx.paramsKey);
-        NS_ABORT_MSG_IF(pit == m_channelParamsMap.end(), "Params cache writeback failed.");
-
-        Ptr<ThreeGppChannelParams> params = pit->second;
-
-        Ptr<MobilityModel> aMobOrdered = ctx.sMob;
-        Ptr<MobilityModel> bMobOrdered = ctx.uMob;
-        if (ctx.sNodeId > ctx.uNodeId)
-        {
-            std::swap(aMobOrdered, bMobOrdered);
-        }
-
-        Ptr<const ParamsTable> table3gpp =
-            GetThreeGppTable(aMobOrdered, bMobOrdered, ctx.condition);
-        Ptr<ChannelMatrix> matrix =
-            GetNewChannel(params, table3gpp, ctx.sMob, ctx.uMob, ctx.sAnt, ctx.uAnt);
-
-        m_channelMatrixMap.insert_or_assign(ctx.matrixKey, matrix);
-    }
-
-    NS_LOG_DEBUG("Updated GPU-backed channel params cache and refreshed channel matrices.");
+    // The previous version of this loop also called GetNewChannel()
+    // here to refresh every matrix in m_channelMatrixMap on the spot.
+    // That's the SAME CPU matrix-build work that GetChannel would do
+    // later anyway, so doing it here just moved the cost without
+    // saving anything -- in fact it added the GPU work on top of the
+    // CPU work. Skip it: GetChannel will lazy-build any matrix whose
+    // params have moved past matrixT, and only for the links that
+    // actually get queried this tick.
+    //
+    // Side-effect: matrices stored from a previous tick may be
+    // returned this tick if their cached generatedTime is still
+    // newer-or-equal to params'. That's fine in our case because the
+    // GPU pipeline produced fresh params this tick *with a newer
+    // m_generatedTime*, so NewChannelMatrixNeeded() returns true and
+    // the matrix gets rebuilt on demand.
+    NS_LOG_DEBUG("Updated GPU-backed channel params cache; "
+                 "matrices will be lazy-rebuilt by GetChannel.");
 }
 
 void
