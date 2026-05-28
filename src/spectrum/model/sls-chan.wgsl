@@ -2067,6 +2067,10 @@ struct ChanMatDispatch {
     _pad0              : u32,
     _pad1              : u32,
     _pad2              : u32,
+    lambda0            : f32, // c / frequency
+    _pad3              : f32,
+    _pad4              : f32,
+    _pad5              : f32,
 }
 
 // Matrix-kernel bindings live in group(0) at numbers 30+ to avoid
@@ -2169,21 +2173,155 @@ fn gen_channel_matrix_kernel(
     let lk = mat_buf_link[al.lspReadIdx];
     let cp = mat_buf_cluster[al.lspReadIdx];
 
-    // ── Placeholder: fill the matrix with zeros. The CPU mezanine layer
-    // detects an all-zero matrix and falls back to ThreeGppChannelModel::
-    // GetNewChannel for now, so the bench remains numerically correct
-    // while this kernel is being filled in.
-    let val = vec2f(0.0, 0.0);
+    // ── Per-link page bounds: skip work for output pages past the link's
+    // actual numOverallCluster (n_red + 2|4 depending on whether the two
+    // strongest cluster indices differ).
+    let n_red = cp.nCluster;
+    let n_overall = select(n_red + 2u, n_red + 4u,
+                            cp.strongest2[0] != cp.strongest2[1]);
+    if page_idx >= n_overall {
+        // Still need to write the unused slot so the CPU sees a
+        // deterministic value (column-major (u,s,n) within per-link slab).
+        let per_page = mat_disp.u_size * mat_disp.s_size;
+        let per_link = per_page * MAT_MAX_PAGES;
+        let out_idx = link_idx * per_link + page_idx * per_page
+                    + s_idx * mat_disp.u_size + u_idx;
+        mat_buf_out[out_idx] = vec2f(0.0, 0.0);
+        return;
+    }
 
-    // Column-major layout matching ns3::MatrixArray<T>::GetPagePtr():
-    //   element (u, s, n) lives at offset (u + uSize*s) inside page n,
-    //   and pages are stored back-to-back; per-link blocks sit at stride
-    //   uSize*sSize*MAT_MAX_PAGES.
+    let cell = mat_buf_cell[al.cid];
+    let ut   = mat_buf_ut[al.uid];
+    let bsCfg = mat_buf_antCfg[cell.antPanelIdx];
+    let utCfg = mat_buf_antCfg[ut.antPanelIdx];
+
+    // Map output page -> (input_cluster, ray_filter).
+    let c1 = cp.strongest2[0];
+    let c2 = cp.strongest2[1];
+    let minStr = min(c1, c2);
+    let maxStr = max(c1, c2);
+    var src_cluster: u32 = 0u;
+    var ray_flt: u32 = 0u;
+    if page_idx < n_red {
+        src_cluster = page_idx;
+        ray_flt = select(0u, 1u, page_idx == c1 || page_idx == c2);
+    } else if page_idx == n_red {
+        src_cluster = minStr; ray_flt = 2u;
+    } else if page_idx == n_red + 1u {
+        src_cluster = minStr; ray_flt = 3u;
+    } else if page_idx == n_red + 2u {
+        src_cluster = maxStr; ray_flt = 2u;
+    } else {
+        src_cluster = maxStr; ray_flt = 3u;
+    }
+
+    let d_rx = mat_elem_pos(utCfg, u_idx);
+    let d_tx = mat_elem_pos(bsCfg, s_idx);
+    let polU = mat_pol_idx(utCfg, u_idx);
+    let polS = mat_pol_idx(bsCfg, s_idx);
+    let zetaUt = 0.0;
+    let zetaBs = 0.0;
+
+    let n_rays = mat_disp.n_rays;
+    let cluster_scale = sqrt(cp.powers[src_cluster] / f32(n_rays));
+
+    let link_base = al.lspReadIdx * PACKED_LINK_STRIDE;
+    let ray_local_base = src_cluster * MAX_RAYS;
+
+    var rays_re = 0.0;
+    var rays_im = 0.0;
+    for (var m = 0u; m < n_rays; m++) {
+        if !mat_ray_passes_filter(m, ray_flt) { continue; }
+        let ray_local = ray_local_base + m;
+        let pAOA = mat_packed_in[link_base + PACKED_OFF_AOA + ray_local];
+        let pAOD = mat_packed_in[link_base + PACKED_OFF_AOD + ray_local];
+        let tZOA = mat_packed_in[link_base + PACKED_OFF_ZOA + ray_local];
+        let tZOD = mat_packed_in[link_base + PACKED_OFF_ZOD + ray_local];
+        let xpr  = mat_packed_in[link_base + PACKED_OFF_XPR + ray_local];
+        let rph_off = link_base + PACKED_OFF_RNDP + ray_local * 4u;
+
+        let Frx = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[polU] + zetaUt);
+        let Ftx = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[polS] + zetaBs);
+
+        let tZOA_r = tZOA * DEG2RAD;
+        let pAOA_r = pAOA * DEG2RAD;
+        let tZOD_r = tZOD * DEG2RAD;
+        let pAOD_r = pAOD * DEG2RAD;
+        let rRx = vec3f(sin(tZOA_r)*cos(pAOA_r), sin(tZOA_r)*sin(pAOA_r), cos(tZOA_r));
+        let rTx = vec3f(sin(tZOD_r)*cos(pAOD_r), sin(tZOD_r)*sin(pAOD_r), cos(tZOD_r));
+        let dot_rx = rRx.x*d_rx.x + rRx.y*d_rx.y;
+        let dot_tx = rTx.x*d_tx.x + rTx.y*d_tx.y;
+        let term4 = cexp_j(TWO_PI * dot_rx);
+        let term5 = cexp_j(TWO_PI * dot_tx);
+
+        let sqrt_kappa = sqrt(max(xpr, 1e-10));
+        let ph0 = mat_packed_in[rph_off    ] * DEG2RAD;
+        let ph1 = mat_packed_in[rph_off + 1u] * DEG2RAD;
+        let ph2 = mat_packed_in[rph_off + 2u] * DEG2RAD;
+        let ph3 = mat_packed_in[rph_off + 3u] * DEG2RAD;
+        let t200 = cexp_j(ph0);
+        let t201 = vec2f(cos(ph1)/sqrt_kappa, sin(ph1)/sqrt_kappa);
+        let t210 = vec2f(cos(ph2)/sqrt_kappa, sin(ph2)/sqrt_kappa);
+        let t211 = cexp_j(ph3);
+
+        let t1_0 = vec2f(Frx.x, 0.0);
+        let t1_1 = vec2f(Frx.y, 0.0);
+        let t3_0 = vec2f(Ftx.x, 0.0);
+        let t3_1 = vec2f(Ftx.y, 0.0);
+
+        var ray = vec2f(0.0);
+        ray = cadd(ray, cmul(cmul(cmul(cmul(t1_0, t200), t3_0), term4), term5));
+        ray = cadd(ray, cmul(cmul(cmul(cmul(t1_0, t201), t3_1), term4), term5));
+        ray = cadd(ray, cmul(cmul(cmul(cmul(t1_1, t210), t3_0), term4), term5));
+        ray = cadd(ray, cmul(cmul(cmul(cmul(t1_1, t211), t3_1), term4), term5));
+
+        rays_re += ray.x;
+        rays_im += ray.y;
+    }
+    var cell_val = vec2f(rays_re * cluster_scale, rays_im * cluster_scale);
+
+    // ── LOS Rician term (3GPP TR 38.901 Eq 7.5-29/30) ───────────────
+    // For LOS links every page is scaled by atten1 = sqrt(1/(K+1));
+    // page 0 additionally gets sqrt(K/(K+1)) * LOS_ray. lk.K is in
+    // linear units (cal_link_param_kernel converted from dB before
+    // writing LinkParams).
+    if lk.losInd != 0u {
+        let k_lin = max(lk.K, 1e-10);
+        let atten1 = sqrt(1.0 / (k_lin + 1.0));
+        let attenK = sqrt(k_lin / (k_lin + 1.0));
+        cell_val = cell_val * atten1;
+        if page_idx == 0u && mat_disp.lambda0 > 0.0 {
+            let tZOA = lk.theta_LOS_ZOA;
+            let pAOA = lk.phi_LOS_AOA;
+            let tZOD = lk.theta_LOS_ZOD;
+            let pAOD = lk.phi_LOS_AOD;
+            let Frx = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[polU] + zetaUt);
+            let Ftx = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[polS] + zetaBs);
+            let tZOA_r = tZOA * DEG2RAD;
+            let pAOA_r = pAOA * DEG2RAD;
+            let tZOD_r = tZOD * DEG2RAD;
+            let pAOD_r = pAOD * DEG2RAD;
+            let rRx = vec3f(sin(tZOA_r)*cos(pAOA_r), sin(tZOA_r)*sin(pAOA_r), cos(tZOA_r));
+            let rTx = vec3f(sin(tZOD_r)*cos(pAOD_r), sin(tZOD_r)*sin(pAOD_r), cos(tZOD_r));
+            let dot_rx = rRx.x*d_rx.x + rRx.y*d_rx.y;
+            let dot_tx = rTx.x*d_tx.x + rTx.y*d_tx.y;
+            let term4 = cexp_j(TWO_PI * dot_rx);
+            let term5 = cexp_j(TWO_PI * dot_tx);
+            // [1 0; 0 -1] polarisation matrix (3GPP Eq 7.5-29) collapses
+            // to F_uTheta * F_sTheta - F_uPhi * F_sPhi.
+            let pol_combo = vec2f(Frx.x * Ftx.x - Frx.y * Ftx.y, 0.0);
+            let term7 = cexp_j(-TWO_PI * lk.d3d / mat_disp.lambda0);
+            let los_ray = cmul(cmul(cmul(pol_combo, term7), term4), term5);
+            cell_val = cell_val + attenK * los_ray;
+        }
+    }
+
+    // Column-major (u, s, n) inside per-link block.
     let per_page = mat_disp.u_size * mat_disp.s_size;
     let per_link = per_page * MAT_MAX_PAGES;
     let out_idx  = link_idx * per_link
                  + page_idx * per_page
                  + s_idx    * mat_disp.u_size
                  + u_idx;
-    mat_buf_out[out_idx] = val;
+    mat_buf_out[out_idx] = cell_val;
 }

@@ -2304,18 +2304,23 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         uint32_t uSize;
         uint32_t sSize;
         uint32_t nRays;
-        uint32_t nReducedCluster;
-        uint32_t cluster1st;
-        uint32_t cluster2nd;
+        uint32_t _pad0;
+        uint32_t _pad1;
+        uint32_t _pad2;
+        float    lambda0;
+        float    _pad3;
+        float    _pad4;
+        float    _pad5;
     };
-    MatDispUni du{nActiveLinks,
-                  numOverallCluster,
-                  uSize,
-                  sSize,
-                  nRays,
-                  numReducedCluster,
-                  cluster1st,
-                  cluster2nd};
+    // cluster1st/cluster2nd/numReducedCluster are no longer carried in the
+    // uniform -- the kernel reads them per-link from ClusterParams.
+    (void)numReducedCluster;
+    (void)cluster1st;
+    (void)cluster2nd;
+    const float lambda0 =
+        centerFreqHzCache_ > 0.0f ? 299792458.0f / centerFreqHzCache_ : 0.0f;
+    MatDispUni du{nActiveLinks, numOverallCluster, uSize, sSize, nRays,
+                  0u, 0u, 0u, lambda0, 0.0f, 0.0f, 0.0f};
     matrixDispatchBuf_ =
         makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
 
