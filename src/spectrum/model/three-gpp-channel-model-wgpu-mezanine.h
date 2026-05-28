@@ -10,6 +10,7 @@
 #include "ns3/phased-array-model.h"
 
 #include <memory>
+#include <optional>
 
 class SlsChanWgpu; // forward declaration because we use an opaque pointer here
 
@@ -30,6 +31,14 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     ~ThreeGppChannelModelWgpuMezanine();
     static TypeId GetTypeId();
     void UpdateChannel();
+    // Override the base batch-fresh hook so the small-scale GPU
+    // pipeline runs at the start of each tick instead of waiting for
+    // an external 10 ms self-scheduled loop. Base does LSP draw; this
+    // override additionally calls UpdateChannel() to write GPU cluster
+    // delays / ray angles / XPR into m_channelParamsMap, so the
+    // per-link GetNewChannel that follows skips the CPU small-scale
+    // draw entirely.
+    void EnsureBatchFresh() override;
     Ptr<MatrixBasedChannelModel::ChannelMatrix> GetNewChannel(
         Ptr<const ThreeGppChannelParams> channelParams,
         Ptr<const ParamsTable> table3gpp,
@@ -41,6 +50,11 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
   private:
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
     mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
+    // Dedup the per-link EnsureBatchFresh calls within the same
+    // simulator tick so the small-scale GPU work runs at most once per
+    // tick instead of once per link. std::optional so the very first
+    // tick still triggers a refresh (Time::Zero() is a valid tick).
+    std::optional<Time> m_lastMezBatchTime;
 };
 
 } // namespace ns3

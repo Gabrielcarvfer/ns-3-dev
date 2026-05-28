@@ -158,8 +158,9 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
 {
     NS_LOG_FUNCTION(this);
 
-    Simulator::Schedule(MilliSeconds(10), [this]() { this->UpdateChannel(); });
-
+    // EnsureBatchFresh drives this synchronously at the start of every
+    // tick now (see the override above), so the historical 10 ms
+    // self-rescheduling loop is no longer needed.
     if (m_channelMatrixMap.empty())
     {
         NS_LOG_DEBUG("No cached channel matrices yet; nothing to upload to WGPU.");
@@ -269,7 +270,8 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         cfg.thetaOffset = static_cast<uint32_t>(antThetaFlat.size());
         cfg.phiOffset = static_cast<uint32_t>(antPhiFlat.size());
         cfg._pad0 = 0;
-        cfg._pad1 = 0;
+        // _pad1 was removed when AntPanelConfigGPU shrank from 68 B to
+        // the 64 B WGSL stride. _pad0 alone fills the trailing slot.
 
         p.panelIdx = static_cast<uint32_t>(antCfgs.size());
         antThetaFlat.insert(antThetaFlat.end(), p.thetaDeg.begin(), p.thetaDeg.end());
@@ -357,10 +359,11 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         const PanelInfo& pi = buildPanelInfo(antId, true);
 
         CellParam cell{};
-        cell.loc = Vec3f{static_cast<float>(ni.pos.x),
-                         static_cast<float>(ni.pos.y),
-                         static_cast<float>(ni.pos.z),
-                         0.f};
+        // CellParam.loc is now float[3] (was Vec3f) to match WGSL's
+        // vec3<f32> size-12-align-16 layout exactly.
+        cell.loc[0] = static_cast<float>(ni.pos.x);
+        cell.loc[1] = static_cast<float>(ni.pos.y);
+        cell.loc[2] = static_cast<float>(ni.pos.z);
 
         CellParamSS cellSs{};
         cellSs.antPanelIdx = pi.panelIdx;
@@ -538,8 +541,48 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     const float maxYf = std::isfinite(maxY) ? static_cast<float>(maxY + margin) : 1000.f;
     const float minYf = std::isfinite(minY) ? static_cast<float>(minY - margin) : -1000.f;
 
-    gpu->uploadCellParams(cells);
+    // uploadCellParams default nSectorPerSite=3 (for the Phase-1
+    // calibration deployment). The ns-3 batch path treats every cell
+    // as its own site, so we pass 1 explicitly. Without this nSite_
+    // would be set to cells.size()/3, dispatching the LSP kernel over
+    // a wrongly-sized grid and writing zeros into the LinkParams buffer.
+    gpu->uploadCellParams(cells, /*nSectorPerSite=*/1);
     gpu->uploadUtParams(uts);
+
+    // Force the GPU LOS state to agree with the CPU's ChannelCondition
+    // verdict. Without this the GPU samples its own LOS probability via
+    // cal_los_prob() and writes whatever it gets into LinkParams.losInd
+    // -- which then makes calClusterRay read LSPs from the wrong slot
+    // (NLOS instead of LOS) and the threshold filter at the end of the
+    // kernel zeros out the cluster set. Mirror the base class's
+    // gpuScenario + per-link agreement logic so we only force when the
+    // condition is unambiguous.
+    uint32_t gpuScenario = 0;
+    if (m_scenario == "UMi-StreetCanyon" || m_scenario == "UMi")
+        gpuScenario = 1;
+    else if (m_scenario == "RMa")
+        gpuScenario = 2;
+    int losAgreed = 0;
+    int nlosAgreed = 0;
+    for (const auto& ctx : runtimeLinks)
+    {
+        if (ctx.condition->GetLosCondition() == ChannelCondition::LOS)
+            ++losAgreed;
+        else if (ctx.condition->GetLosCondition() == ChannelCondition::NLOS)
+            ++nlosAgreed;
+    }
+    float forceLosOutdoor = -1.0f;
+    if (losAgreed == static_cast<int>(runtimeLinks.size()))
+        forceLosOutdoor = 1.0f;
+    else if (nlosAgreed == static_cast<int>(runtimeLinks.size()))
+        forceLosOutdoor = 0.0f;
+    gpu->setSystemLevelConfig(gpuScenario,
+                              /*enablePropagationDelay=*/1,
+                              /*o2iBldg=*/0,
+                              /*o2iCar=*/0,
+                              /*forceLosIndoor=*/forceLosOutdoor,
+                              forceLosOutdoor);
+    gpu->setCenterFrequencyHz(static_cast<float>(m_frequency));
 
     const float corrLos[8] = {37.f, 12.f, 30.f, 18.f, 15.f, 15.f, 15.f, 20.f};
     const float corrNlos[7] = {50.f, 40.f, 50.f, 50.f, 50.f, 50.f, 25.f};
@@ -547,6 +590,9 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
 
     gpu->generateCRN(maxXf, minXf, maxYf, minYf, corrLos, corrNlos, corrO2i);
 
+    // The four bool args used to be tracked locally as updatePL etc.;
+    // since the mezanine path is a full LSP regen on every UpdateChannel
+    // tick, we just request all updates.
     gpu->calLinkParam(nSite,
                       nUt,
                       1,
@@ -554,10 +600,10 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                       minXf,
                       maxYf,
                       minYf,
-                      updatePL,
-                      updateAllLSPs,
-                      updateLos,
-                      updateOptionalPL,
+                      /*updatePL=*/true,
+                      /*updateAllLSPs=*/true,
+                      /*updateLos=*/true,
+                      /*updateOptionalPL=*/false,
                       gpu->nX(),
                       gpu->nY());
 
@@ -578,8 +624,10 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     ss.lambda_0 = static_cast<float>(299792458.0 / m_frequency);
     ss.lgfc = static_cast<float>(std::log10(m_frequency / 1e9));
 
-    const bool isUmI = (m_scenario == ThreeGppChannelModel::SCENARIO_UMi);
-    const bool isRma = (m_scenario == ThreeGppChannelModel::SCENARIO_RMa);
+    // m_scenario is std::string now (was an enum). Compare against the
+    // 3GPP scenario string keys that ThreeGppChannelModel accepts.
+    const bool isUmI = (m_scenario == "UMi-StreetCanyon");
+    const bool isRma = (m_scenario == "RMa");
     const float lgfc_m = std::log10(std::max(m_frequency, 6e9) / 1e9); // UUmMa style
     const float lg1fc_m = std::log10(1.0f + m_frequency / 1e9);        // UMi-style
 
@@ -879,6 +927,43 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                                              -1.1481f, 1.5195f,  -1.5195f, 2.1551f,  -2.1551f};
     std::copy(std::begin(rayOffsets), std::end(rayOffsets), ss.RayOffsetAngles);
 
+    // The mezanine populates per-condition fields in [NLOS, LOS, O2I]
+    // order (see comment at line ~593 "[0]=NLOS, [1]=LOS, [2]=O2I").
+    // The WGSL kernel however indexes via
+    //   lsp_idx = select(select(1u, 0u, lk.losInd != 0u), 2u, isO2i)
+    // which maps LOS=0, NLOS=1, O2I=2 -- i.e. slot 0 and slot 1 are
+    // swapped relative to the mezanine's intent. Without this fix, LOS
+    // links read NLOS LSP parameters and vice versa; for the
+    // AlwaysLosChannelConditionModel bench that meant the kernel ran
+    // with totally wrong DS/K-factor priors and produced nCluster=0
+    // for every link, tripping a downstream vector[0] assertion in
+    // ThreeGppChannelModel.
+    // Swap slots [0]<->[1] for every per-condition array so the WGSL
+    // sees the right value for each lsp_idx.
+    auto swapLN = [](auto& arr) { std::swap(arr[0], arr[1]); };
+    swapLN(ss.mu_lgDS);
+    swapLN(ss.sigma_lgDS);
+    swapLN(ss.mu_lgASD);
+    swapLN(ss.sigma_lgASD);
+    swapLN(ss.mu_lgASA);
+    swapLN(ss.sigma_lgASA);
+    swapLN(ss.mu_lgZSA);
+    swapLN(ss.sigma_lgZSA);
+    swapLN(ss.mu_K);
+    swapLN(ss.sigma_K);
+    swapLN(ss.mu_XPR);
+    swapLN(ss.sigma_XPR);
+    swapLN(ss.mu_lgDT);
+    swapLN(ss.sigma_lgDT);
+    swapLN(ss.nCluster);
+    swapLN(ss.nRayPerCluster);
+    swapLN(ss.r_tao);
+    swapLN(ss.C_DS);
+    swapLN(ss.C_ASD);
+    swapLN(ss.C_ASA);
+    swapLN(ss.C_ZSA);
+    swapLN(ss.xi);
+
     gpu->uploadCmnLinkParamsSmallScale(ss);
     gpu->uploadCellParamsSS(cellsSS);
     gpu->uploadUtParamsSS(utsSS);
@@ -1035,6 +1120,44 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     }
 
     NS_LOG_DEBUG("Updated GPU-backed channel params cache and refreshed channel matrices.");
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
+{
+    NS_LOG_FUNCTION(this);
+    // Dedup ourselves: EnsureBatchFresh is called once per per-link
+    // CalcRxPowerSpectralDensity invocation, but we only want to do the
+    // GPU batch work once per simulator-time tick. Without this, the
+    // 2nd per-link call within the same tick would re-enter
+    // UpdateChannel with m_channelMatrixMap containing just the 1
+    // entry the previous link's GetChannel had populated -- the GPU
+    // pipeline would then run with nSite=1/nUt=1, producing garbage
+    // LSPs and cp.nCluster=0 downstream.
+    const Time now = Simulator::Now();
+    if (m_lastMezBatchTime.has_value() && *m_lastMezBatchTime == now)
+    {
+        return;
+    }
+    m_lastMezBatchTime = now;
+
+    // 1. LSP draw (base class GPU kernel; fills m_gpuLspCache).
+    ThreeGppChannelModel::EnsureBatchFresh();
+    // 2. Small-scale (calClusterRay + generateCIR) on GPU, then write
+    //    cluster delays / ray angles / XPR / cluster powers into
+    //    m_channelParamsMap so the per-link GetNewChannel skips the
+    //    CPU small-scale draw.
+    //
+    //    UpdateChannel needs m_channelMatrixMap to have at least one
+    //    entry per link to know what to refresh. That map gets
+    //    populated by GetChannel only AFTER its first call. So the
+    //    very first EnsureBatchFresh at the very first tick has
+    //    nothing to act on -- tick 1 falls through to CPU. From
+    //    tick 2 onward the GPU path takes over.
+    if (!m_channelMatrixMap.empty())
+    {
+        UpdateChannel();
+    }
 }
 
 Ptr<MatrixBasedChannelModel::ChannelMatrix>

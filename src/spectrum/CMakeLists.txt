@@ -32,6 +32,7 @@ set(source_files
     model/spectrum-transmit-filter.cc
     model/spectrum-value.cc
     model/three-gpp-channel-model.cc
+    model/three-gpp-channel-model-wgpu-mezanine.cc
     model/three-gpp-spectrum-propagation-loss-model.cc
     model/trace-fading-loss-model.cc
     model/tv-spectrum-transmitter.cc
@@ -74,6 +75,7 @@ set(header_files
     model/spectrum-transmit-filter.h
     model/spectrum-value.h
     model/three-gpp-channel-model.h
+    model/three-gpp-channel-model-wgpu-mezanine.h
     model/three-gpp-spectrum-propagation-loss-model.h
     model/trace-fading-loss-model.h
     model/tv-spectrum-transmitter.h
@@ -114,7 +116,7 @@ option(NS3_SLS_PROFILE
 #                     upgrades may need a wrapper regeneration.
 include(FetchContent)
 set(WEBGPU_LINK_TYPE SHARED)
-set(WEBGPU_BACKEND "WGPU" CACHE STRING "WebGPU implementation backend (WGPU or DAWN)" FORCE)
+set(WEBGPU_BACKEND "DAWN" CACHE STRING "WebGPU implementation backend (WGPU or DAWN)" FORCE)
 # wgpu-native is pinned to v24.0.3.1 because eliemichel's C++ wrapper
 # (webgpu.hpp) is generated against v24's C API; newer wgpu-native
 # releases (v25+) removed types the wrapper references (e.g.

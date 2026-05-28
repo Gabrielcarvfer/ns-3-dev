@@ -39,6 +39,7 @@
 #include "ns3/spectrum-signal-parameters.h"
 #include "ns3/string.h"
 #include "ns3/three-gpp-channel-model.h"
+#include "ns3/three-gpp-channel-model-wgpu-mezanine.h"
 #include "ns3/three-gpp-spectrum-propagation-loss-model.h"
 #include "ns3/uinteger.h"
 #include "ns3/uniform-planar-array.h"
@@ -78,6 +79,11 @@ struct Args
     bool rxDualPol = true;
     uint32_t nPrb = 273; // 100 MHz @ 30 kHz SCS
     bool useGpu = false;
+    // --use-mezanine swaps to ThreeGppChannelModelWgpuMezanine, which
+    // overrides UpdateChannel to run the GPU small-scale kernels
+    // (calClusterRay + generateCIR) in addition to the LSP-only draw
+    // that --use-gpu turns on.
+    bool useMezanine = false;
     bool runPrx = true;
     bool dumpPsd = false;
     uint32_t dumpLinks = 8;
@@ -134,6 +140,8 @@ ParseArgs(int argc, char** argv)
             a.nPrb = static_cast<uint32_t>(std::atoi(val));
         else if (std::strcmp(arg, "--use-gpu") == 0)
             a.useGpu = true;
+        else if (std::strcmp(arg, "--use-mezanine") == 0)
+            a.useMezanine = true;
         else if (std::strcmp(arg, "--no-prx") == 0)
             a.runPrx = false;
         else if (std::strcmp(arg, "--dump-psd") == 0)
@@ -180,7 +188,10 @@ main(int argc, char** argv)
     constexpr uint32_t kNumSites = 19;
 
     Ptr<ChannelConditionModel> ccm = CreateObject<AlwaysLosChannelConditionModel>();
-    Ptr<ThreeGppChannelModel> channelModel = CreateObject<ThreeGppChannelModel>();
+    Ptr<ThreeGppChannelModel> channelModel =
+        args.useMezanine
+            ? Ptr<ThreeGppChannelModel>(CreateObject<ThreeGppChannelModelWgpuMezanine>())
+            : CreateObject<ThreeGppChannelModel>();
     channelModel->SetAttribute("Frequency", DoubleValue(6.0e9));
     channelModel->SetAttribute("Scenario", StringValue("UMa"));
     channelModel->SetAttribute("ChannelConditionModel", PointerValue(ccm));
