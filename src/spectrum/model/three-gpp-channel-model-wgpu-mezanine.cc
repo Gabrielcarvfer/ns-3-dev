@@ -62,21 +62,19 @@ ThreeGppChannelModelWgpuMezanine::GetTypeId()
             .SetGroupName("Spectrum")
             .SetParent<ThreeGppChannelModel>()
             .AddConstructor<ThreeGppChannelModelWgpuMezanine>()
-            // Phase D infrastructure -- opt-in. Set non-zero to enable
-            // a periodic UC schedule independent of PRX events. The
-            // existing PRX-driven EnsureBatchFresh path remains
-            // active either way; the periodic loop just adds an
-            // additional safety-net schedule. Default 0 (off) because
-            // at NR-cali Phase-1 scale the cold-start workload grows
-            // m_channelMatrixMap to ~43k entries before NR settles,
-            // and each UC tick allocates a fresh Ptr<ChannelMatrix>
-            // per link; running the periodic loop on top of the
-            // PRX-driven path during cold start blew memory to ~40 GB
-            // in measured runs. Enable explicitly after measuring.
+            // Phase D: periodic refresh schedule for the GPU channel
+            // caches. Each UC tick now reuses ChannelMatrix /
+            // ChannelParams / longTerm Ptrs in place (PRX captures
+            // m_generatedTime by value so identity-stable Ptrs still
+            // invalidate correctly), so the per-tick allocation cost
+            // is bounded by genuinely-resized links rather than the
+            // full link set. Safe to leave on at the 3GPP-typical
+            // small-scale update granularity. Set 0 to disable the
+            // periodic loop and fall back to PRX-driven UC only.
             .AddAttribute("MezRefreshPeriod",
-                          "Safety-net period at which mezanine refreshes the GPU "
+                          "Period at which mezanine refreshes the GPU "
                           "channel caches independent of PRX events.",
-                          TimeValue(MilliSeconds(0)),
+                          TimeValue(MilliSeconds(10)),
                           MakeTimeAccessor(&ThreeGppChannelModelWgpuMezanine::m_refreshPeriod),
                           MakeTimeChecker());
     return tid;
@@ -1533,22 +1531,19 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             prev = it->second;
         }
 
-        // Allocate a fresh ChannelParams Ptr each tick alongside the
-        // fresh matrix above. PRX caches `m_channelParams` per link
-        // and re-runs CalcLongTerm only when
-        // `cached.m_channelParams->m_generatedTime !=
-        //  channelParams->m_generatedTime`. With an in-place reused
-        // Ptr the cached object IS the current object, so its
-        // generatedTime advances with every tick and the comparison
-        // is trivially equal -- PRX never sees the param structural
-        // changes (m_alpha resize from FindStrongestClusters
-        // appending +2 or +4 subcluster entries, m_reducedClusterNumber
-        // shifts on cluster-count change) and keeps using a stale
-        // longTerm Ptr whose sizes no longer match the current matrix.
-        // Freezing the OLD object's generatedTime in the cache by
-        // moving to a fresh Ptr makes PRX's check fire correctly.
-        Ptr<ThreeGppChannelParams> params = Create<ThreeGppChannelParams>();
-        m_channelParamsMap[ctx.paramsKey] = params;
+        // Reuse the existing ChannelParams Ptr in place. The same
+        // generatedTime-snapshot trick we use for ChannelMatrix above
+        // applies here -- PRX captures the timestamp at cache time, so
+        // the comparison detects in-place updates even when the Ptr
+        // identity stays constant. Avoids the ~12 MB/tick allocation
+        // churn from creating fresh ThreeGppChannelParams every
+        // refresh.
+        Ptr<ThreeGppChannelParams>& paramsRef = m_channelParamsMap[ctx.paramsKey];
+        if (!paramsRef)
+        {
+            paramsRef = Create<ThreeGppChannelParams>();
+        }
+        Ptr<ThreeGppChannelParams> params = paramsRef;
         params->m_generatedTime = Simulator::Now();
 
         Ptr<MobilityModel> aMobOrdered = ctx.sMob;
@@ -1707,24 +1702,34 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             params->m_cluster1st != params->m_cluster2nd
                 ? static_cast<uint8_t>(params->m_reducedClusterNumber + 4)
                 : static_cast<uint8_t>(params->m_reducedClusterNumber + 2);
-        // Allocate a fresh ChannelMatrix Ptr each tick. We tried
-        // holding the same Ptr in place and only resizing m_channel
-        // -- it cut ~735 MB/tick of allocations but broke PRX's
-        // m_longTermMap invalidation: PRX caches `m_channel =
-        // channelMatrix` and detects updates with
-        // `cached.m_channel->m_generatedTime != channelMatrix
-        // ->m_generatedTime`. With same Ptr that comparison is
-        // always equal, so PRX kept returning a stale longTerm Ptr
-        // whose page count no longer matched the matrix's after a
-        // cluster-count change, tripping
-        // numCluster <= longTerm->GetNumPages(). Fresh Ptr makes the
-        // cached object's generatedTime VALUE freeze at its old
-        // timestamp so PRX's check fires correctly.
-        Ptr<ChannelMatrix> matrixPtr = Create<ChannelMatrix>();
-        matrixPtr->m_channel = MatrixBasedChannelModel::Complex3DVector(
-            globalUeAnt, globalBsAnt, numOverallCluster);
-        m_channelMatrixMap[ctx.matrixKey] = matrixPtr;
-        ChannelMatrix* matrix = PeekPointer(matrixPtr);
+        // Reuse the existing ChannelMatrix Ptr in place. Earlier
+        // versions allocated a fresh Ptr per tick because PRX detected
+        // updates via `cached.m_channel->m_generatedTime !=
+        // channelMatrix->m_generatedTime` -- with the same Ptr,
+        // accessing m_generatedTime through cached.m_channel always
+        // returned the live value, so the comparison was trivially
+        // equal and PRX never invalidated. Fresh-Ptr fixed that by
+        // letting the cached old object freeze its timestamp, at the
+        // cost of ~735 MB allocations per tick on NR-cali. PRX now
+        // captures m_generatedTime by value into
+        // LongTerm::m_capturedGeneratedTime, so the time comparison
+        // detects refreshes even when the Ptr identity stays the
+        // same. We can keep the matrix Ptr stable.
+        Ptr<ChannelMatrix>& matrixRef = m_channelMatrixMap[ctx.matrixKey];
+        if (!matrixRef)
+        {
+            matrixRef = Create<ChannelMatrix>();
+            matrixRef->m_channel = MatrixBasedChannelModel::Complex3DVector(
+                globalUeAnt, globalBsAnt, numOverallCluster);
+        }
+        else if (matrixRef->m_channel.GetNumRows() != globalUeAnt ||
+                 matrixRef->m_channel.GetNumCols() != globalBsAnt ||
+                 matrixRef->m_channel.GetNumPages() != numOverallCluster)
+        {
+            matrixRef->m_channel = MatrixBasedChannelModel::Complex3DVector(
+                globalUeAnt, globalBsAnt, numOverallCluster);
+        }
+        ChannelMatrix* matrix = PeekPointer(matrixRef);
         matrix->m_generatedTime = Simulator::Now();
         matrix->m_nodeIds = std::make_pair(
             ctx.sMob->GetObject<Node>()->GetId(),
@@ -1779,15 +1784,26 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                           << " longTermFlat.size()=" << longTermFlat.size()
                           << " (lspReadIdx=" << ctx.lspReadIdx
                           << " ltPerLink=" << ltPerLink << ")");
-            // Fresh longTerm Ptr each tick for the same reason as the
-            // matrix above (PRX caches the Ptr value and only
-            // invalidates on generatedTime difference, so identity
-            // must change to force a refresh).
-            Ptr<Complex3DVector> longTerm = Create<Complex3DVector>(
-                static_cast<uint16_t>(ltUPorts),
-                static_cast<uint16_t>(ltSPorts),
-                numOverallCluster);
+            // Reuse the existing longTerm Ptr in place. PRX's GetLongTerm
+            // takes a snapshot of generatedTime when it caches, so
+            // identity stability is fine -- the cache invalidates on
+            // generatedTime mismatch even when the Ptr stays the same.
             GpuLongTermEntry& entryRef = m_gpuLongTermMap[ctx.matrixKey];
+            Ptr<Complex3DVector> longTerm;
+            if (entryRef.longTerm &&
+                entryRef.longTerm->GetNumRows() == ltUPorts &&
+                entryRef.longTerm->GetNumCols() == ltSPorts &&
+                entryRef.longTerm->GetNumPages() == numOverallCluster)
+            {
+                longTerm = ConstCast<Complex3DVector>(entryRef.longTerm);
+            }
+            else
+            {
+                longTerm = Create<Complex3DVector>(
+                    static_cast<uint16_t>(ltUPorts),
+                    static_cast<uint16_t>(ltSPorts),
+                    numOverallCluster);
+            }
             const std::complex<float>* ltSrc = longTermFlat.data() + ltLinkBase;
             std::complex<double>* ltDst = longTerm->GetPagePtr(0);
             for (size_t k = 0; k < ltCells; ++k)

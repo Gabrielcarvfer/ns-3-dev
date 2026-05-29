@@ -801,7 +801,13 @@ ThreeGppSpectrumPropagationLossModel::GetLongTerm(
         // check if the channel matrix has been updated
         // or the s beam has been changed
         // or the u beam has been changed
-        update = m_longTermMap[longTermId]->m_channel->m_generatedTime !=
+        // We compare the captured snapshot to the current m_generatedTime
+        // because the mezanine reuses ChannelMatrix Ptrs across periodic
+        // refreshes -- the Ptr identity stays constant but the field
+        // advances in place. Reading via cached.m_channel-> would always
+        // return the current value (same object) and never detect the
+        // refresh.
+        update = m_longTermMap[longTermId]->m_capturedGeneratedTime !=
                      channelMatrix->m_generatedTime ||
                  m_longTermMap[longTermId]->m_sW != sW || m_longTermMap[longTermId]->m_uW != uW;
     }
@@ -837,6 +843,7 @@ ThreeGppSpectrumPropagationLossModel::GetLongTerm(
         Ptr<LongTerm> longTermItem = Create<LongTerm>();
         longTermItem->m_longTerm = longTerm;
         longTermItem->m_channel = channelMatrix;
+        longTermItem->m_capturedGeneratedTime = channelMatrix->m_generatedTime;
         longTermItem->m_sW = std::move(sW);
         longTermItem->m_uW = std::move(uW);
         // store the long term to reduce computation load

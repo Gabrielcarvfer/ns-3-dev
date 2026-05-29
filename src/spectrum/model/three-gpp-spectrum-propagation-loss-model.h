@@ -130,6 +130,13 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
             m_longTerm; //!< vector containing the long term component for each cluster
         Ptr<const MatrixBasedChannelModel::ChannelMatrix>
             m_channel; //!< pointer to the channel matrix used to compute the long term
+        //! Snapshot of m_channel->m_generatedTime at cache time. When the
+        //! mezanine reuses the ChannelMatrix Ptr in place across periodic
+        //! refreshes (to avoid ~4 GB/tick allocation churn), the Ptr
+        //! identity stays constant but m_generatedTime advances. Storing
+        //! a snapshot here lets the update check see the change without
+        //! needing fresh Ptr identity.
+        Time m_capturedGeneratedTime;
         PhasedArrayModel::ComplexVector
             m_sW; //!< the beamforming vector for the node s used to compute the long term
         PhasedArrayModel::ComplexVector
