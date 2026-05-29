@@ -1982,6 +1982,22 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
         const Time paramsT = channelParams ? channelParams->m_generatedTime : Time(0);
         const size_t cachedPages = it->second->m_channel.GetNumPages();
         const size_t paramsAlpha = channelParams ? channelParams->m_alpha.size() : 0;
+        const size_t cachedRows = it->second->m_channel.GetNumRows();
+        const size_t cachedCols = it->second->m_channel.GetNumCols();
+        // The actual antenna geometry on this call may differ from
+        // what the GPU bucket-built (mezanine batches by the dominant
+        // antenna shape, drops non-dominant links from the GPU
+        // dispatch). Non-dominant links can still find a stale
+        // entry from a previous tick where they WERE dominant -- and
+        // PRX's CalcLongTerm would then OOB read on row/col indices
+        // that overflow the cached matrix. Match rows/cols to the
+        // current sAntenna/uAntenna element count (matrix is stored
+        // (uRows, sCols, clusters)).
+        const size_t sElems = sAntenna->GetNumElems();
+        const size_t uElems = uAntenna->GetNumElems();
+        const bool dimsMatchNormal = (uElems == cachedRows && sElems == cachedCols);
+        const bool dimsMatchSwapped = (uElems == cachedCols && sElems == cachedRows);
+        const bool dimsOk = dimsMatchNormal || dimsMatchSwapped;
         // Strict cache validity: matrix must be at least as fresh as
         // params AND the cached pages must match the current params'
         // cluster count (otherwise CalcBeamformingGain asserts
@@ -1990,7 +2006,7 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
         // it can shrink alpha/D/angle without touching the matrix
         // cache; falling through here lets the base class regenerate
         // an aligned pair.
-        if (matrixT >= paramsT && cachedPages == paramsAlpha && cachedPages > 0)
+        if (matrixT >= paramsT && cachedPages == paramsAlpha && cachedPages > 0 && dimsOk)
         {
             return DynamicCast<ChannelMatrix>(
                 ConstCast<MatrixBasedChannelModel::ChannelMatrix>(it->second));
