@@ -12,6 +12,8 @@
 #include "sls-chan-wgpu.h"
 #include "sls-phase-timer.h"
 
+#include <unordered_set>
+
 #include "ns3/spectrum-value.h"
 
 #include "ns3/abort.h"
@@ -161,6 +163,27 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
 {
     SLS_PHASE_SCOPE("Mez::UpdateChannel");
     NS_LOG_FUNCTION(this);
+#if SLS_PROFILE_INSTRUMENT
+    // Dump phase stats every N UpdateChannel calls so kill-9 paths
+    // (Windows TerminateProcess) still leave a snapshot. The file is
+    // rewritten each call.
+    {
+        static thread_local int s_uc_calls = 0;
+        if ((++s_uc_calls % 5) == 0)
+        {
+            ::sls::detail::dumpPhaseStats();
+        }
+    }
+    {
+        static thread_local int s_uc_tick = 0;
+        std::fprintf(stderr,
+                     "[Mez::UpdateChannel start tick=%d] m_channelMatrixMap.size()=%zu m_channelParamsMap.size()=%zu\n",
+                     ++s_uc_tick,
+                     m_channelMatrixMap.size(),
+                     m_channelParamsMap.size());
+        std::fflush(stderr);
+    }
+#endif
 
     // EnsureBatchFresh drives this synchronously at the start of every
     // tick now (see the override above), so the historical 10 ms
@@ -554,6 +577,24 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             const auto sN = static_cast<uint32_t>(ctx.sAnt->GetNumElems());
             const auto uN = static_cast<uint32_t>(ctx.uAnt->GetNumElems());
             ++bucketCount[{sN, uN}];
+        }
+        // Diagnostic: per-tick histogram so we can see exactly what the
+        // antenna mix looks like and decide how to size the per-bucket
+        // multi-pass refactor.
+        {
+            static thread_local int s_bucket_log_ctr = 0;
+            if ((++s_bucket_log_ctr % 1) == 0)
+            {
+                std::fprintf(stderr, "[Mez bucket histogram tick=%d] %zu buckets, %zu links: ",
+                             s_bucket_log_ctr, bucketCount.size(), runtimeLinks.size());
+                for (const auto& [key, count] : bucketCount)
+                {
+                    std::fprintf(stderr, "(s=%u,u=%u)x%u ",
+                                 key.first, key.second, count);
+                }
+                std::fprintf(stderr, "\n");
+                std::fflush(stderr);
+            }
         }
         std::pair<uint32_t, uint32_t> dominant{globalBsAnt, globalUeAnt};
         uint32_t dominantCount = 0;
@@ -1240,14 +1281,17 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         std::min<uint64_t>({uint64_t(nActiveLinks), chunkByBufMain, chunkByWgMain}),
         1ull,
         uint64_t(nActiveLinks)));
-    // Hard cap: at NR-cali scale (16-element panels, 14 snapshots,
-    // ~24 clusters) the generate_cir_kernel + gen_channel_matrix
-    // dispatches on a chunk of ~512+ trip the Windows D3D12 watchdog
-    // ("Device is lost"). 256 keeps each dispatch comfortably under
-    // the ~2 s TDR threshold even at this scale; smaller deployments
-    // will naturally use bigger chunks via the buffer-cap heuristic.
-    // Future work: tile the matrix kernel by rays / pages so we can
-    // dispatch more links per submit without overrunning the watchdog.
+    // Hard cap on per-chunk dispatch size. The original 256 cap was
+    // dialled in against the SINGLE-threaded generate_cir_kernel
+    // (where lane 0 of each workgroup did all the cluster/ray work
+    // sequentially); above that the D3D12 watchdog ("Device is
+    // lost") fired on the GPU offload. After parallelising the
+    // kernel across all 24 workgroup threads (one cluster per
+    // thread), per-workgroup runtime drops ~24x, so larger chunks
+    // fit comfortably under the ~2 s TDR threshold. 1024 keeps a
+    // safety margin while cutting the per-tick number of submits +
+    // sync round-trips ~4x vs 256. Adjust upward (or remove
+    // entirely) if dispatch overhead is still dominating.
     chunkSize = std::min<uint32_t>(chunkSize, 256u);
 
     // Spec-batch chunk size: gen_spec_batch is a 1D dispatch over
@@ -1314,64 +1358,85 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         nSnapshots * globalUeAnt * globalBsAnt * nPrbg;
     {
         SLS_PHASE_SCOPE("Mez::SmallScaleKernels");
-        gpu->calClusterRay(nSite, nUt);
+        {
+            SLS_PHASE_SCOPE("Mez::CalClusterRay");
+            gpu->calClusterRay(nSite, nUt);
+        }
         static thread_local std::vector<ActiveLink> chunkLinks;
         for (uint32_t chunkStart = 0; chunkStart < nActiveLinks;
              chunkStart += chunkSize)
         {
             const uint32_t chunkLen = std::min(chunkSize, nActiveLinks - chunkStart);
-            chunkLinks.resize(chunkLen);
-            for (uint32_t i = 0; i < chunkLen; ++i)
             {
-                ActiveLink al = activeLinks[chunkStart + i];
-                al.linkIdx = i;
-                al.cirCoeOffset = i * cirCoeElemsPerLink;
-                al.cirNormDelayOffset = i * cirNormDelayElemsPerLink;
-                al.cirNtapsOffset = i * cirNtapsElemsPerLink;
-                al.freqChanPrbgOffset = i * freqChanElemsPerLink;
-                chunkLinks[i] = al;
+                SLS_PHASE_SCOPE("Mez::ChunkPrep");
+                chunkLinks.resize(chunkLen);
+                for (uint32_t i = 0; i < chunkLen; ++i)
+                {
+                    ActiveLink al = activeLinks[chunkStart + i];
+                    al.linkIdx = i;
+                    al.cirCoeOffset = i * cirCoeElemsPerLink;
+                    al.cirNormDelayOffset = i * cirNormDelayElemsPerLink;
+                    al.cirNtapsOffset = i * cirNtapsElemsPerLink;
+                    al.freqChanPrbgOffset = i * freqChanElemsPerLink;
+                    chunkLinks[i] = al;
+                }
             }
-            gpu->generateCIR(chunkLinks, chunkLen, nSnapshots, 0.0f);
-            gpu->genChannelMatrix(chunkLinks,
-                                  chunkLen,
-                                  /*uSize=*/globalUeAnt,
-                                  /*sSize=*/globalBsAnt,
-                                  /*numOverallCluster=*/SlsChanWgpu::kMatMaxPages,
-                                  /*numReducedCluster=*/0u,
-                                  /*nRays=*/20u,
-                                  /*cluster1st=*/0u,
-                                  /*cluster2nd=*/0u);
-            gpu->readChannelMatrixInto(
-                chunkLen,
-                globalUeAnt,
-                globalBsAnt,
-                matFlat.data() + size_t(chunkStart) * perLinkMatLen);
+            {
+                SLS_PHASE_SCOPE("Mez::GenerateCIR");
+                gpu->generateCIR(chunkLinks, chunkLen, nSnapshots, 0.0f);
+            }
+            {
+                SLS_PHASE_SCOPE("Mez::GenChannelMatrix");
+                gpu->genChannelMatrix(chunkLinks,
+                                      chunkLen,
+                                      /*uSize=*/globalUeAnt,
+                                      /*sSize=*/globalBsAnt,
+                                      /*numOverallCluster=*/SlsChanWgpu::kMatMaxPages,
+                                      /*numReducedCluster=*/0u,
+                                      /*nRays=*/20u,
+                                      /*cluster1st=*/0u,
+                                      /*cluster2nd=*/0u);
+            }
+            {
+                SLS_PHASE_SCOPE("Mez::ReadChannelMatrix");
+                gpu->readChannelMatrixInto(
+                    chunkLen,
+                    globalUeAnt,
+                    globalBsAnt,
+                    matFlat.data() + size_t(chunkStart) * perLinkMatLen);
+            }
             if (ltCanDispatch)
             {
                 const size_t chunkSWLen = size_t(chunkLen) * ltSPortElems;
                 const size_t chunkUWLen = size_t(chunkLen) * ltUPortElems;
-                gpu->genLongTerm(chunkLen,
-                                 /*uSize=*/globalUeAnt,
-                                 /*sSize=*/globalBsAnt,
-                                 ltSPorts,
-                                 ltUPorts,
-                                 ltSPortElems,
-                                 ltUPortElems,
-                                 ltSElemsPerPort,
-                                 ltUElemsPerPort,
-                                 ltSIncVal,
-                                 ltUIncVal,
-                                 ltSWFlat.data() + size_t(chunkStart) * ltSPortElems,
-                                 chunkSWLen,
-                                 ltUWFlat.data() + size_t(chunkStart) * ltUPortElems,
-                                 chunkUWLen,
-                                 ltStartS,
-                                 ltStartU);
-                gpu->readLongTermInto(
-                    chunkLen,
-                    ltSPorts,
-                    ltUPorts,
-                    longTermFlat.data() + size_t(chunkStart) * perLinkLT);
+                {
+                    SLS_PHASE_SCOPE("Mez::GenLongTerm");
+                    gpu->genLongTerm(chunkLen,
+                                     /*uSize=*/globalUeAnt,
+                                     /*sSize=*/globalBsAnt,
+                                     ltSPorts,
+                                     ltUPorts,
+                                     ltSPortElems,
+                                     ltUPortElems,
+                                     ltSElemsPerPort,
+                                     ltUElemsPerPort,
+                                     ltSIncVal,
+                                     ltUIncVal,
+                                     ltSWFlat.data() + size_t(chunkStart) * ltSPortElems,
+                                     chunkSWLen,
+                                     ltUWFlat.data() + size_t(chunkStart) * ltUPortElems,
+                                     chunkUWLen,
+                                     ltStartS,
+                                     ltStartU);
+                }
+                {
+                    SLS_PHASE_SCOPE("Mez::ReadLongTerm");
+                    gpu->readLongTermInto(
+                        chunkLen,
+                        ltSPorts,
+                        ltUPorts,
+                        longTermFlat.data() + size_t(chunkStart) * perLinkLT);
+                }
             }
         }
     }
@@ -1921,6 +1986,25 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
 
     auto matIt = m_channelMatrixMap.find(matrixKey);
     auto parIt = m_channelParamsMap.find(paramsKey);
+    static thread_local uint64_t miss_no_mat_entry = 0;
+    static thread_local uint64_t miss_no_par_entry = 0;
+    static thread_local uint64_t miss_unaligned = 0;
+    static thread_local uint64_t miss_time = 0;
+    static thread_local uint64_t miss_antenna = 0;
+    static thread_local uint64_t hit_total = 0;
+    static thread_local uint64_t dump_ctr = 0;
+    {
+        static thread_local uint64_t mapSizeProbe = 0;
+        if ((++mapSizeProbe & 0xFFFF) == 0)
+        {
+            std::fprintf(stderr,
+                         "[Mez::GetChannel probe] m_channelMatrixMap.size()=%zu hits=%llu mat_miss=%llu\n",
+                         m_channelMatrixMap.size(),
+                         (unsigned long long)hit_total,
+                         (unsigned long long)miss_no_mat_entry);
+            std::fflush(stderr);
+        }
+    }
     if (matIt != m_channelMatrixMap.end() && parIt != m_channelParamsMap.end())
     {
         const Ptr<const ChannelMatrix> cachedMatrix = matIt->second;
@@ -1928,12 +2012,6 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
         const size_t pages = cachedMatrix->m_channel.GetNumPages();
         const size_t alphaSize = cachedParams->m_alpha.size();
         const size_t dSize = cachedParams->m_D.size();
-        // PRX::CalcBeamformingGain reads m_alpha[c], m_D[c], and
-        // m_cachedAngleSincos[ZOA/ZOD/AOA/AOD][c] for c < numCluster
-        // (= pages). All six must be >= pages or the doppler loop
-        // walks off the end. Require exact equality + pages > 0 so
-        // a stale params struct from a previous tick with a different
-        // cluster count can't satisfy the check.
         const auto& cas = cachedParams->m_cachedAngleSincos;
         const bool casOk = cas.size() > MatrixBasedChannelModel::ZOD_INDEX &&
                            cas[MatrixBasedChannelModel::ZOA_INDEX].size() == pages &&
@@ -1946,8 +2024,69 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
             !AntennaSetupChanged(aAntenna, bAntenna, cachedMatrix);
         if (aligned && sameTime && antennaOk)
         {
+            ++hit_total;
+            if ((++dump_ctr & 0xFFFF) == 0)
+            {
+                std::fprintf(stderr,
+                             "[Mez::GetChannel cache stats] hits=%llu mat_miss=%llu par_miss=%llu unaligned=%llu time_mismatch=%llu antenna_changed=%llu\n",
+                             (unsigned long long)hit_total,
+                             (unsigned long long)miss_no_mat_entry,
+                             (unsigned long long)miss_no_par_entry,
+                             (unsigned long long)miss_unaligned,
+                             (unsigned long long)miss_time,
+                             (unsigned long long)miss_antenna);
+                std::fflush(stderr);
+            }
             return cachedMatrix;
         }
+        if (!aligned) ++miss_unaligned;
+        else if (!sameTime) ++miss_time;
+        else if (!antennaOk) ++miss_antenna;
+    }
+    else
+    {
+        if (matIt == m_channelMatrixMap.end())
+        {
+            ++miss_no_mat_entry;
+            static thread_local std::unordered_set<uint64_t> seenMissKeys;
+            static thread_local int printed = 0;
+            const bool isNew = seenMissKeys.insert(matrixKey).second;
+            if (isNew && printed < 20)
+            {
+                const uint32_t aId = static_cast<uint32_t>(aAntenna->GetId());
+                const uint32_t bId = static_cast<uint32_t>(bAntenna->GetId());
+                const uint32_t aNode = aMob->GetObject<Node>()->GetId();
+                const uint32_t bNode = bMob->GetObject<Node>()->GetId();
+                std::fprintf(stderr,
+                             "[Mez::GetChannel mat_miss #%d] matrixKey=0x%llx aAntId=%u bAntId=%u aNode=%u bNode=%u (unique miss keys so far: %zu)\n",
+                             ++printed,
+                             (unsigned long long)matrixKey,
+                             aId, bId, aNode, bNode,
+                             seenMissKeys.size());
+                std::fflush(stderr);
+            }
+            else if ((seenMissKeys.size() & 0xFF) == 0 && isNew)
+            {
+                std::fprintf(stderr,
+                             "[Mez::GetChannel mat_miss] unique miss keys so far: %zu (total misses: %llu)\n",
+                             seenMissKeys.size(),
+                             (unsigned long long)miss_no_mat_entry);
+                std::fflush(stderr);
+            }
+        }
+        else ++miss_no_par_entry;
+    }
+    if ((++dump_ctr & 0xFFFF) == 0)
+    {
+        std::fprintf(stderr,
+                     "[Mez::GetChannel cache stats] hits=%llu mat_miss=%llu par_miss=%llu unaligned=%llu time_mismatch=%llu antenna_changed=%llu\n",
+                     (unsigned long long)hit_total,
+                     (unsigned long long)miss_no_mat_entry,
+                     (unsigned long long)miss_no_par_entry,
+                     (unsigned long long)miss_unaligned,
+                     (unsigned long long)miss_time,
+                     (unsigned long long)miss_antenna);
+        std::fflush(stderr);
     }
 
     // Cache miss / shape mismatch / antenna change -- fall through to

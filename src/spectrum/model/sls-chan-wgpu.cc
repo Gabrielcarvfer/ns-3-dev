@@ -5,6 +5,8 @@
 #define WEBGPU_CPP_IMPLEMENTATION
 #include "sls-chan-wgpu.h"
 
+#include "sls-phase-timer.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -412,6 +414,7 @@ SlsChanWgpu::dawnPumpEvents()
 void
 SlsChanWgpu::waitIdle()
 {
+    SLS_PHASE_SCOPE("WGPU::WaitIdle");
 #ifdef WEBGPU_BACKEND_DAWN
     // Wait for any submitted work to finish. We use waitAny on a
     // queue.onSubmittedWorkDone future with WaitAnyOnly mode — this is
@@ -600,11 +603,14 @@ SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
 bool
 SlsChanWgpu::mapReadBufferInto(wgpu::Buffer& staging, uint64_t byteSize, void* dst)
 {
+    SLS_PHASE_SCOPE("WGPU::MapReadBufferInto");
     MapCtx ctx;
 
 #ifdef WEBGPU_BACKEND_DAWN
     wgpu::MapAsyncStatus mapStatus = wgpu::MapAsyncStatus::Force32;
     wgpu::StringView mapMsg;
+    {
+    SLS_PHASE_SCOPE("WGPU::MapReadBufferInto::MapAsyncWait");
     auto fut = staging.mapAsync(
         wgpu::MapMode::Read,
         0,
@@ -635,6 +641,7 @@ SlsChanWgpu::mapReadBufferInto(wgpu::Buffer& staging, uint64_t byteSize, void* d
                      mapMsg.data ? mapMsg.data : "");
         std::fflush(stderr);
     }
+    }  // end MapAsyncWait scope
 #else
     wgpu::BufferMapCallbackInfo cbInfo = wgpu::Default;
     cbInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
@@ -653,6 +660,7 @@ SlsChanWgpu::mapReadBufferInto(wgpu::Buffer& staging, uint64_t byteSize, void* d
     bool ok = false;
     if (mapped)
     {
+        SLS_PHASE_SCOPE("WGPU::MapReadBufferInto::Memcpy");
         std::memcpy(dst, mapped, byteSize);
         ok = true;
     }

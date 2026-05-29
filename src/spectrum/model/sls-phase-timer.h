@@ -22,8 +22,10 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 
 namespace sls
 {
@@ -104,35 +106,69 @@ slot(const char* name)
     return t.back();
 }
 
+inline void
+dumpPhaseStatsTo(std::FILE* fp)
+{
+    std::fprintf(fp,
+                 "\n==== SLS phase timing (calls / total ms / us avg) ====\n");
+    auto& tbl = table();
+    for (auto& s : tbl)
+    {
+        const char* nm = s.name;
+        uint64_t calls = s.calls.load(std::memory_order_relaxed);
+        if (!nm || calls == 0)
+            continue;
+        uint64_t totalNs = s.totalNanos.load(std::memory_order_relaxed);
+        std::fprintf(fp,
+                     "  %-44s %10llu  %10.2f  %10.2f\n",
+                     nm,
+                     static_cast<unsigned long long>(calls),
+                     totalNs / 1.0e6,
+                     (totalNs / 1.0e3) / static_cast<double>(calls));
+    }
+    std::fflush(fp);
+}
+
+inline void
+dumpPhaseStats()
+{
+    dumpPhaseStatsTo(stderr);
+    // Also write to a file so that kill-9 paths (TerminateProcess on
+    // Windows) leave a record. The file is truncated each call so it
+    // always reflects the latest snapshot.
+    if (auto* fp = std::fopen("C:/tmp/sls_profile_dump.txt", "w"))
+    {
+        dumpPhaseStatsTo(fp);
+        std::fclose(fp);
+    }
+}
+
 struct Dumper
 {
-    ~Dumper()
+    Dumper()
     {
-        std::fprintf(stderr,
-                     "\n==== SLS phase timing (calls / total ms / us avg) ====\n");
-        for (auto& s : table())
-        {
-            const char* nm = s.name;
-            uint64_t calls = s.calls.load(std::memory_order_relaxed);
-            if (!nm || calls == 0)
-                continue;
-            uint64_t totalNs = s.totalNanos.load(std::memory_order_relaxed);
-            std::fprintf(stderr,
-                         "  %-44s %10llu  %10.2f  %10.2f\n",
-                         nm,
-                         static_cast<unsigned long long>(calls),
-                         totalNs / 1.0e6,
-                         (totalNs / 1.0e3) / static_cast<double>(calls));
-        }
+        // Also catch Ctrl+C / SIGTERM / abort -- otherwise the
+        // dtor below only fires on a clean exit, and a 5-min
+        // benchmark of a multi-hour sim never gets that far.
+        std::signal(SIGINT, [](int) { dumpPhaseStats(); std::_Exit(130); });
+        std::signal(SIGTERM, [](int) { dumpPhaseStats(); std::_Exit(143); });
+        std::atexit([]() { dumpPhaseStats(); });
     }
+    ~Dumper() { /* atexit handler covers normal exit */ }
 };
 
+// Unconditional static initialization -- ensures the dumper is constructed
+// (and the atexit + signal handlers are installed) even if no SLS_PHASE_SCOPE
+// ever fires during the run. Otherwise short sims that skip the GPU pipeline
+// silently produce no profile dump.
 inline Dumper&
 dumper()
 {
     static Dumper d;
     return d;
 }
+
+inline bool g_sls_phase_dumper_armed = (dumper(), true);
 
 } // namespace detail
 
