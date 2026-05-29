@@ -1921,6 +1921,12 @@ fn generate_cir_kernel(
                 }
             }
         }
+
+        // Barrier before the next BA iteration's wg_Hlink reset:
+        // without it some threads can race ahead and start zeroing
+        // wg_Hlink while sibling threads are still reading from it
+        // for the writeback above.
+        workgroupBarrier();
     } // end BS antenna loop
 
     workgroupBarrier();
