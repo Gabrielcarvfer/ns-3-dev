@@ -2317,7 +2317,7 @@ Ptr<MatrixBasedChannelModel::Complex3DVector>
 ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
     Ptr<const ChannelMatrix> channelMatrix,
     Ptr<const ChannelParams> channelParams,
-    [[maybe_unused]] Ptr<const Complex3DVector> longTerm,
+    Ptr<const Complex3DVector> longTerm,
     Ptr<const SpectrumValue> inPsd,
     const std::vector<std::complex<double>>& delayT,
     const std::vector<double>& sqrtVit,
@@ -2341,10 +2341,15 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
         if (it != m_gpuChanSpctMap.end())
         {
             const GpuChanSpctEntry& e = it->second;
+            // m_batchRbFreqsHash is captured atomically with
+            // m_batchRbFreqs (see below) and the array is write-once,
+            // so comparing the stored hash avoids re-running FNV over
+            // 273 floats on every PRX eval.
             if (e.generatedTime == channelMatrix->m_generatedTime &&
                 e.numRxPorts == numRxPorts && e.numTxPorts == numTxPorts &&
-                e.numRb == numRb && e.rbFreqsHash == HashFloatVector(m_batchRbFreqs))
+                e.numRb == numRb && e.rbFreqsHash == m_batchRbFreqsHash)
             {
+                SLS_PHASE_SCOPE("Mez::TryGenSpecHit");
                 // Lookup hit: alloc chanSpct, copy + scale by sqrt(PSD).
                 Ptr<Complex3DVector> chanSpct = Create<Complex3DVector>(
                     static_cast<uint16_t>(numRxPorts),
@@ -2386,6 +2391,104 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
             m_batchRbFreqs = std::move(freqs);
             m_batchRbFreqsHash = HashFloatVector(m_batchRbFreqs);
         }
+    }
+
+    // Phase D-3b: on-demand miss caching. When the batched GenSpec
+    // path didn't pre-compute this link (link wasn't dominant in the
+    // last UpdateChannel tick, OR the very first eval just captured
+    // rb_freqs and no UpdateChannel has run yet, OR shape drift
+    // invalidated the cached entry), compute chanSpct_unscaled on CPU
+    // once and stash it. Subsequent PRX evals on the same
+    // (matrixKey, generatedTime, rb_freqs, shape) hit the cache above
+    // and skip the contraction entirely.
+    //
+    // Without this, ~67% of PRX evals at NR-cali densities fall
+    // through to PRX::GenSpec's CPU contraction (~540 us each in
+    // Debug) -- the first call pays that, every later call is the
+    // existing O(rxtx * numRb) scaling-only path.
+    //
+    // Only the !isReverse case is cached. The cache hit branch above
+    // is gated on !isReverse and uses (numRxPorts, numTxPorts, numRb)
+    // shape directly; PRX's isReverse path materialises a transposed
+    // longTerm before the contraction, so caching with our shape would
+    // be wrong for the reverse orientation. Reverse evals just fall
+    // through to CPU below.
+    if (!isReverse && channelMatrix && channelParams && longTerm &&
+        !m_batchRbFreqs.empty() &&
+        longTerm->GetNumPages() == channelMatrix->m_channel.GetNumPages() &&
+        longTerm->GetNumRows() == numRxPorts &&
+        longTerm->GetNumCols() == numTxPorts &&
+        delayT.size() == size_t(longTerm->GetNumPages()) * numRb &&
+        sqrtVit.size() == numRb)
+    {
+        SLS_PHASE_SCOPE("Mez::TryGenSpecCpuMiss");
+        const size_t numCluster = channelMatrix->m_channel.GetNumPages();
+        const size_t rxtx = size_t(numRxPorts) * numTxPorts;
+        const uint64_t key = MatrixBasedChannelModel::GetKey(
+            channelMatrix->m_antennaPair.first,
+            channelMatrix->m_antennaPair.second);
+
+        // Reuse the entry vector in place. .assign() over an existing
+        // vector of the same capacity just memsets + memcpys without
+        // touching the allocator; the per-tick churn was visible in
+        // earlier profiles before this same pattern landed for the
+        // batched-write path.
+        GpuChanSpctEntry& eRef = m_gpuChanSpctMap[key];
+        eRef.chanSpctUnscaled.assign(rxtx * numRb, std::complex<float>(0.0f, 0.0f));
+
+        // Mirror PRX::GenSpec's c-outermost outer-product contraction
+        // exactly so future cache hits produce numerically identical
+        // chanSpct. We walk the raw double pairs (re, im) to dodge
+        // Debug-mode std::complex<double> operator overhead -- same
+        // optimisation rationale as PRX's CPU path.
+        const auto& ltVals = longTerm->GetValues();
+        const auto* ltRaw = reinterpret_cast<const double*>(&ltVals[0]);
+        const auto* dRaw = reinterpret_cast<const double*>(delayT.data());
+        auto* outRaw = reinterpret_cast<float*>(eRef.chanSpctUnscaled.data());
+        for (size_t c = 0; c < numCluster; ++c)
+        {
+            const double* aRow = ltRaw + c * rxtx * 2;
+            const double* bRow = dRaw + c * numRb * 2;
+            for (size_t rb = 0; rb < numRb; ++rb)
+            {
+                const double bRe = bRow[rb * 2];
+                const double bIm = bRow[rb * 2 + 1];
+                float* outRow = outRaw + rb * rxtx * 2;
+                for (size_t i = 0; i < rxtx; ++i)
+                {
+                    const double aRe = aRow[i * 2];
+                    const double aIm = aRow[i * 2 + 1];
+                    outRow[i * 2] += static_cast<float>(aRe * bRe - aIm * bIm);
+                    outRow[i * 2 + 1] += static_cast<float>(aRe * bIm + aIm * bRe);
+                }
+            }
+        }
+        eRef.numRxPorts = numRxPorts;
+        eRef.numTxPorts = numTxPorts;
+        eRef.numRb = numRb;
+        eRef.generatedTime = channelMatrix->m_generatedTime;
+        eRef.rbFreqsHash = m_batchRbFreqsHash;
+
+        // Emit a scaled chanSpct for THIS eval. Subsequent evals on
+        // the same (key, generatedTime, rb_freqs, shape) hit the
+        // branch above and skip this contraction.
+        Ptr<Complex3DVector> chanSpct = Create<Complex3DVector>(
+            static_cast<uint16_t>(numRxPorts),
+            static_cast<uint16_t>(numTxPorts),
+            static_cast<uint16_t>(numRb));
+        auto* dst = reinterpret_cast<double*>(chanSpct->GetPagePtr(0));
+        for (size_t rb = 0; rb < numRb; ++rb)
+        {
+            const double s = sqrtVit[rb];
+            const size_t off = rb * rxtx;
+            for (size_t i = 0; i < rxtx; ++i)
+            {
+                const auto& sc = eRef.chanSpctUnscaled[off + i];
+                dst[(off + i) * 2] = static_cast<double>(sc.real()) * s;
+                dst[(off + i) * 2 + 1] = static_cast<double>(sc.imag()) * s;
+            }
+        }
+        return chanSpct;
     }
 
     // Disabled by default. Per-eval GPU dispatch overhead (~600 us

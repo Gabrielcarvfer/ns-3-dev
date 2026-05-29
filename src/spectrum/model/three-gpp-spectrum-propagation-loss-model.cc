@@ -590,11 +590,6 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     const MatrixBasedChannelModel::Complex3DVector& directionalLongTerm =
         isReverse ? reversedLongTerm : *longTerm;
 
-    Ptr<MatrixBasedChannelModel::Complex3DVector> chanSpct =
-        Create<MatrixBasedChannelModel::Complex3DVector>(numRxPorts,
-                                                         numTxPorts,
-                                                         static_cast<uint16_t>(numRb));
-
     // Precompute the delay until numRb, numCluster or RB width changes
     // Whenever the channelParams is updated, the number of numRbs, numClusters
     // and RB width (12*SCS) are reset, ensuring these values are updated too
@@ -693,6 +688,10 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     // overrides this and dispatches gen_spec_chan_kernel against
     // the longTerm matrix that's already resident on its GPU buffer.
     // On nullptr we fall through to the CPU contraction below.
+    //
+    // We defer the chanSpct alloc until here so the cache-hit path in
+    // the mezanine (~83% of evals at NR-cali densities) doesn't pay
+    // the 1.1 MB Complex3DVector allocation we'd otherwise throw away.
     if (channelModel)
     {
         if (auto gpuChanSpct = channelModel->TryGenSpectrumChannelMatrix(
@@ -702,6 +701,11 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
             return gpuChanSpct;
         }
     }
+
+    Ptr<MatrixBasedChannelModel::Complex3DVector> chanSpct =
+        Create<MatrixBasedChannelModel::Complex3DVector>(numRxPorts,
+                                                         numTxPorts,
+                                                         static_cast<uint16_t>(numRb));
 
     // Outer-product contraction. c-outermost so the chanSpct[:, :, rb]
     // tail (rxtx*16 B per rb) stays in cache while we walk all rbs for
