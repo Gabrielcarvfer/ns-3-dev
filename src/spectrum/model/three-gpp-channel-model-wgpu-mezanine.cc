@@ -68,13 +68,25 @@ ThreeGppChannelModelWgpuMezanine::GetTypeId()
             // m_generatedTime by value so identity-stable Ptrs still
             // invalidate correctly), so the per-tick allocation cost
             // is bounded by genuinely-resized links rather than the
-            // full link set. Safe to leave on at the 3GPP-typical
-            // small-scale update granularity. Set 0 to disable the
-            // periodic loop and fall back to PRX-driven UC only.
+            // full link set.
+            //
+            // Default 100 ms aligns with 3GPP TR 38.901's typical
+            // small-scale update granularity AND keeps per-tick UC
+            // cost amortised across a slot window: at NR-cali Phase-1
+            // scale a full refresh takes ~40 s wall when the link
+            // set has grown to ~43k entries (every 10 ms would mean
+            // 4000 s wall per second of simulated time). PRX-driven
+            // EnsureBatchFresh still triggers UC on every new
+            // Simulator::Now() that NR fires events at, so genuine
+            // reconfigurations (antenna reshuffle, BWP change) are
+            // caught immediately rather than waiting up to 100 ms.
+            // The periodic loop just guarantees a refresh happens at
+            // least this often.
+            // Set 0 to disable the periodic loop entirely.
             .AddAttribute("MezRefreshPeriod",
                           "Period at which mezanine refreshes the GPU "
                           "channel caches independent of PRX events.",
-                          TimeValue(MilliSeconds(10)),
+                          TimeValue(MilliSeconds(100)),
                           MakeTimeAccessor(&ThreeGppChannelModelWgpuMezanine::m_refreshPeriod),
                           MakeTimeChecker());
     return tid;
