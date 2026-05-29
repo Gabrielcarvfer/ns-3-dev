@@ -2073,6 +2073,21 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
     {
         return nullptr;
     }
+    // Validate port-count dimensions against the CURRENT antenna model.
+    // The cached longTerm has shape (entry.ltUPorts, entry.ltSPorts,
+    // pages). If the antenna's port count has changed since the cache
+    // was filled -- e.g. a link that was dominant in the previous tick
+    // (cached with 1x4 ports) is now queried with different antennas
+    // having (4,4) ports -- the cached longTerm shape no longer
+    // matches what PRX::GenSpectrumChannelMatrix expects, and its
+    // c * (numRxPorts * numTxPorts) flat-index walk OOBs the
+    // underlying valarray.
+    const auto curSPorts = static_cast<uint16_t>(sAnt->GetNumPorts());
+    const auto curUPorts = static_cast<uint16_t>(uAnt->GetNumPorts());
+    if (entry.ltSPorts != curSPorts || entry.ltUPorts != curUPorts)
+    {
+        return nullptr;
+    }
     if (entry.sWHash != HashComplexVector(sW) || entry.uWHash != HashComplexVector(uW))
     {
         return nullptr;
