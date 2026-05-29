@@ -365,13 +365,37 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
 
     // Make sure that all the structures that are passed to this function
     // are of the correct dimensions before using the operator [].
-    NS_ASSERT(numCluster <= channelParams->m_alpha.size());
-    NS_ASSERT(numCluster <= channelParams->m_D.size());
-    NS_ASSERT(numCluster <= channelParams->m_angle[MatrixBasedChannelModel::ZOA_INDEX].size());
-    NS_ASSERT(numCluster <= channelParams->m_angle[MatrixBasedChannelModel::ZOD_INDEX].size());
-    NS_ASSERT(numCluster <= channelParams->m_angle[MatrixBasedChannelModel::AOA_INDEX].size());
-    NS_ASSERT(numCluster <= channelParams->m_angle[MatrixBasedChannelModel::AOD_INDEX].size());
-    NS_ASSERT(numCluster <= longTerm->GetNumPages());
+    // Per-vector NS_ASSERT_MSG so when one fires we know which dim
+    // is short rather than guessing from a bare assert line.
+    NS_ASSERT_MSG(numCluster <= channelParams->m_alpha.size(),
+                  "PRX::CBG: m_alpha.size()=" << channelParams->m_alpha.size()
+                                              << " < numCluster=" << numCluster);
+    NS_ASSERT_MSG(numCluster <= channelParams->m_D.size(),
+                  "PRX::CBG: m_D.size()=" << channelParams->m_D.size()
+                                          << " < numCluster=" << numCluster);
+    NS_ASSERT_MSG(
+        numCluster <= channelParams->m_angle[MatrixBasedChannelModel::ZOA_INDEX].size(),
+        "PRX::CBG: m_angle[ZOA].size()="
+            << channelParams->m_angle[MatrixBasedChannelModel::ZOA_INDEX].size()
+            << " < numCluster=" << numCluster);
+    NS_ASSERT_MSG(
+        numCluster <= channelParams->m_angle[MatrixBasedChannelModel::ZOD_INDEX].size(),
+        "PRX::CBG: m_angle[ZOD].size()="
+            << channelParams->m_angle[MatrixBasedChannelModel::ZOD_INDEX].size()
+            << " < numCluster=" << numCluster);
+    NS_ASSERT_MSG(
+        numCluster <= channelParams->m_angle[MatrixBasedChannelModel::AOA_INDEX].size(),
+        "PRX::CBG: m_angle[AOA].size()="
+            << channelParams->m_angle[MatrixBasedChannelModel::AOA_INDEX].size()
+            << " < numCluster=" << numCluster);
+    NS_ASSERT_MSG(
+        numCluster <= channelParams->m_angle[MatrixBasedChannelModel::AOD_INDEX].size(),
+        "PRX::CBG: m_angle[AOD].size()="
+            << channelParams->m_angle[MatrixBasedChannelModel::AOD_INDEX].size()
+            << " < numCluster=" << numCluster);
+    NS_ASSERT_MSG(numCluster <= longTerm->GetNumPages(),
+                  "PRX::CBG: longTerm->GetNumPages()=" << longTerm->GetNumPages()
+                                                      << " < numCluster=" << numCluster);
 
     // check if channelParams structure is generated in direction s-to-u or u-to-s
     const bool isSameDir = channelParams->m_nodeIds == channelMatrix->m_nodeIds;
@@ -392,10 +416,22 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
                                                  : MatrixBasedChannelModel::AOD_INDEX];
     const DPV& aod = cachedAngleSincos[isSameDir ? MatrixBasedChannelModel::AOD_INDEX
                                                  : MatrixBasedChannelModel::AOA_INDEX];
-    NS_ASSERT(numCluster <= zoa.size());
-    NS_ASSERT(numCluster <= zod.size());
-    NS_ASSERT(numCluster <= aoa.size());
-    NS_ASSERT(numCluster <= aod.size());
+    NS_ASSERT_MSG(numCluster <= zoa.size(),
+                  "PRX::CBG: m_cachedAngleSincos[ZOA].size()=" << zoa.size()
+                                                              << " < numCluster=" << numCluster
+                                                              << " (isSameDir=" << isSameDir << ")");
+    NS_ASSERT_MSG(numCluster <= zod.size(),
+                  "PRX::CBG: m_cachedAngleSincos[ZOD].size()=" << zod.size()
+                                                              << " < numCluster=" << numCluster
+                                                              << " (isSameDir=" << isSameDir << ")");
+    NS_ASSERT_MSG(numCluster <= aoa.size(),
+                  "PRX::CBG: m_cachedAngleSincos[AOA].size()=" << aoa.size()
+                                                              << " < numCluster=" << numCluster
+                                                              << " (isSameDir=" << isSameDir << ")");
+    NS_ASSERT_MSG(numCluster <= aod.size(),
+                  "PRX::CBG: m_cachedAngleSincos[AOD].size()=" << aod.size()
+                                                              << " < numCluster=" << numCluster
+                                                              << " (isSameDir=" << isSameDir << ")");
 
     {
     SLS_PHASE_SCOPE("PRX::CBG::DopplerLoop");

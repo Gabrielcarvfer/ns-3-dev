@@ -515,6 +515,7 @@ class SlsChanWgpu
     wgpu::BindGroup emptyBg(wgpu::ComputePipeline& pip, uint32_t slot);
     template <typename T>
     std::vector<T> mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize);
+    bool mapReadBufferInto(wgpu::Buffer& staging, uint64_t byteSize, void* dst);
     bool isDead();
     std::vector<ClusterParamsGpu> readClusterParams(uint32_t nSite, uint32_t nUT);
     std::vector<uint32_t> readCirNtaps();
@@ -582,6 +583,29 @@ class SlsChanWgpu
                      const std::vector<uint32_t>& startS,
                      const std::vector<uint32_t>& startU);
 
+    // Overload that takes raw pointers + lengths for the per-link sW
+    // / uW slabs. The chunked mezanine path holds the full per-tick
+    // ltSWFlat / ltUWFlat once and feeds each chunk's slice via
+    // pointer arithmetic, avoiding the per-chunk `chunkSW` / `chunkUW`
+    // copy.
+    void genLongTerm(uint32_t nActiveLinks,
+                     uint32_t uSize,
+                     uint32_t sSize,
+                     uint32_t sPorts,
+                     uint32_t uPorts,
+                     uint32_t sPortElems,
+                     uint32_t uPortElems,
+                     uint32_t sElemsPerPort,
+                     uint32_t uElemsPerPort,
+                     uint32_t sIncVal,
+                     uint32_t uIncVal,
+                     const std::complex<float>* sWData,
+                     size_t sWLen,
+                     const std::complex<float>* uWData,
+                     size_t uWLen,
+                     const std::vector<uint32_t>& startS,
+                     const std::vector<uint32_t>& startU);
+
     // Read back the longTerm buffer. Layout per link:
     //   (u, s, c) at u + uPorts*s + uPorts*sPorts*c
     // for c in [0, kMatMaxPages). Caller slices into per-link
@@ -633,6 +657,46 @@ class SlsChanWgpu
                                                    uint32_t numRb,
                                                    uint32_t numRxPorts,
                                                    uint32_t numTxPorts);
+
+    /**
+     * Device's maxStorageBufferBindingSize (in bytes), captured at
+     * adapter init. Returns 0 if the adapter limit query failed.
+     * Used by chunked-batch callers to size per-chunk dispatches.
+     */
+    uint64_t getMaxStorageBufferBindingSize() const { return m_maxGpuBuffer_; }
+
+    /**
+     * Repopulate longTermOutBuf_ from a host vector. Used by chunked
+     * spec-batch dispatch to feed each chunk's pre-computed longTerm
+     * (from a prior chunk-1 readback) back into the GPU without
+     * re-running gen_long_term_kernel.
+     */
+    void uploadLongTermBatch(const std::complex<float>* hostData,
+                             uint32_t nLinks,
+                             uint32_t sPorts,
+                             uint32_t uPorts);
+
+    /**
+     * No-allocation readback variants. Chunked callers pre-allocate a
+     * single full-size host accumulator and ask each chunk's readback
+     * to memcpy into the chunk's slice — avoids returning ~120 MB
+     * vectors per chunk and the staging-buffer churn that comes with
+     * it. Returns true on a successful map+copy, false if the source
+     * buffer isn't populated yet.
+     */
+    bool readChannelMatrixInto(uint32_t nLinks,
+                               uint32_t uSize,
+                               uint32_t sSize,
+                               std::complex<float>* dst);
+    bool readLongTermInto(uint32_t nLinks,
+                          uint32_t sPorts,
+                          uint32_t uPorts,
+                          std::complex<float>* dst);
+    bool readSpecBatchInto(uint32_t nLinks,
+                           uint32_t numRb,
+                           uint32_t numRxPorts,
+                           uint32_t numTxPorts,
+                           std::complex<float>* dst);
 
   private:
     // Gather one of the per-link sub-views out of the packed

@@ -1083,37 +1083,12 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     gpu->uploadCellParamsSS(cellsSS);
     gpu->uploadUtParamsSS(utsSS);
 
-    {
-        SLS_PHASE_SCOPE("Mez::SmallScaleKernels");
-        gpu->calClusterRay(nSite, nUt);
-        gpu->generateCIR(activeLinks, nActiveLinks, nSnapshots, 0.0f);
-
-        // After cluster delays + ray angles + xpr + random phases are on
-        // the GPU, dispatch the channel-matrix kernel and read back the
-        // per-link Complex3DVector blocks. Pass kMatMaxPages as the
-        // upper bound -- the kernel writes zeros for pages past the
-        // per-link numOverallCluster.
-        gpu->genChannelMatrix(activeLinks,
-                              nActiveLinks,
-                              /*uSize=*/globalUeAnt,
-                              /*sSize=*/globalBsAnt,
-                              /*numOverallCluster=*/SlsChanWgpu::kMatMaxPages,
-                              /*numReducedCluster=*/0u,
-                              /*nRays=*/20u,
-                              /*cluster1st=*/0u,
-                              /*cluster2nd=*/0u);
-    }
-
-    // The channel matrix is now on GPU. Before reading it back, push
-    // the beam weights for each link and dispatch gen_long_term_kernel
-    // so PRX::GetLongTerm finds a pre-computed result waiting in
-    // m_gpuLongTermMap and skips its CPU CalcLongTerm path entirely.
-    //
-    // Port-mapping info (sPorts, sPortElems, ...) is shared across
-    // every link in this batch because the mezanine already enforces
-    // one BS antenna geometry + one UE antenna geometry per batch.
-    // Beam weights vary per link in the general case so the upload
-    // is per-link.
+    // ── LongTerm setup hoisted before the per-link GPU loop ───────────
+    // We need ltSPorts / ltUPorts to size the chunked dispatch, so the
+    // beam-weight assembly that used to follow genChannelMatrix moves
+    // here. ltCanDispatch gates the whole longTerm leg of the chunk
+    // loop; when false, only CIR + ChannelMatrix run per chunk and the
+    // CPU CalcLongTerm path takes over downstream.
     uint32_t ltSPorts = 0;
     uint32_t ltUPorts = 0;
     uint32_t ltSPortElems = 0;
@@ -1166,22 +1141,19 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             }
             ltSWFlat.resize(size_t(nActiveLinks) * ltSPortElems);
             ltUWFlat.resize(size_t(nActiveLinks) * ltUPortElems);
+            bool assembleOk = true;
             for (size_t i = 0; i < runtimeLinks.size(); ++i)
             {
                 const auto& ctx = runtimeLinks[i];
                 if (!ctx.sAnt || !ctx.uAnt)
                 {
-                    ltCanDispatch = false;
+                    assembleOk = false;
                     break;
                 }
                 const auto& sBV = ctx.sAnt->GetBeamformingVectorRef();
                 const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
                 const size_t sBase = i * ltSPortElems;
                 const size_t uBase = i * ltUPortElems;
-                // The reference link picked ltSPortElems / ltUPortElems
-                // from the FIRST runtime link's antennas; later links in
-                // the same batch might (in NR) have shorter beam vectors
-                // -- accessing sBV[k] / uBV[k] would walk past the end.
                 NS_ASSERT_MSG(sBV.GetSize() >= ltSPortElems,
                               "Mez::genLongTerm: sBV[" << ctx.sAntId << "].size()="
                               << sBV.GetSize() << " < ltSPortElems=" << ltSPortElems
@@ -1198,9 +1170,6 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                               "Mez::genLongTerm: ltUWFlat OOB: "
                               "uBase=" << uBase << " ltUPortElems=" << ltUPortElems
                               << " ltUWFlat.size()=" << ltUWFlat.size());
-                // CalcLongTerm only ever reads sW[0..sPortElems-1] and
-                // uW[0..uPortElems-1] -- the first port's slice -- so
-                // that's all we upload.
                 for (uint32_t k = 0; k < ltSPortElems; ++k)
                 {
                     const auto v = sBV[k];
@@ -1216,39 +1185,187 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                         static_cast<float>(v.imag()));
                 }
             }
-            ltCanDispatch = ltSPortElems > 0 && ltUPortElems > 0 && ltSPorts > 0 && ltUPorts > 0;
+            ltCanDispatch = assembleOk && ltSPortElems > 0 && ltUPortElems > 0 &&
+                            ltSPorts > 0 && ltUPorts > 0;
         }
     }
-    std::vector<std::complex<float>> longTermFlat;
-    if (ltCanDispatch)
-    {
-        SLS_PHASE_SCOPE("Mez::GenLongTerm");
-        gpu->genLongTerm(nActiveLinks,
-                         /*uSize=*/globalUeAnt,
-                         /*sSize=*/globalBsAnt,
-                         ltSPorts,
-                         ltUPorts,
-                         ltSPortElems,
-                         ltUPortElems,
-                         ltSElemsPerPort,
-                         ltUElemsPerPort,
-                         ltSIncVal,
-                         ltUIncVal,
-                         ltSWFlat,
-                         ltUWFlat,
-                         ltStartS,
-                         ltStartU);
-        SLS_PHASE_SCOPE("Mez::ReadLongTerm");
-        longTermFlat = gpu->readLongTerm(nActiveLinks, ltSPorts, ltUPorts);
-    }
 
-    std::vector<std::complex<float>> matFlat;
-    {
-        SLS_PHASE_SCOPE("Mez::ReadMatrix");
-        matFlat = gpu->readChannelMatrix(nActiveLinks, globalUeAnt, globalBsAnt);
-    }
+    // ── Chunk size: largest per-pass batch the device can run in one
+    // dispatch. Bounded by (a) the per-shader-stage 2 GB storage-buffer
+    // binding cap and (b) the D3D12 65 535-workgroups-per-dimension
+    // cap. We pick chunk sizes *per pass* because the CIR / matrix /
+    // long-term kernels share one workgroup-per-link factor, while
+    // gen_spec_batch's 1D-dispatched (links × rxPorts × txPorts × rb)
+    // can be much smaller at high port counts. Treating them as one
+    // chunk size makes the matrix pass run far more chunks than it
+    // needs to, which torpedoes GPU occupancy and bloats the
+    // per-chunk staging allocations.
+    const uint64_t maxBuf = gpu->getMaxStorageBufferBindingSize();
+    const uint64_t kWgPerDimCap = 65535ull;
+    const uint64_t effectiveBufCap = maxBuf == 0 ? (1ull << 31) : maxBuf;
+    const uint64_t cirBytesPerLink =
+        uint64_t(nSnapshots) * globalUeAnt * globalBsAnt * 24u *
+        2u * sizeof(float); // complex<float>
+    const uint64_t cmBytesPerLink =
+        uint64_t(globalUeAnt) * globalBsAnt * SlsChanWgpu::kMatMaxPages *
+        2u * sizeof(float);
+    const uint64_t ltBytesPerLink =
+        ltCanDispatch
+            ? uint64_t(ltSPorts) * ltUPorts * SlsChanWgpu::kMatMaxPages *
+                  2u * sizeof(float)
+            : 0u;
+    // Spec-batch is sized below; main-pass chunking ignores it so
+    // CIR/CM/LT can run in much larger waves at high port counts.
+    const uint32_t sbNumRb = static_cast<uint32_t>(m_batchRbFreqs.size());
+    const uint64_t maxBytesPerLinkMain =
+        std::max({cirBytesPerLink, cmBytesPerLink, ltBytesPerLink, uint64_t(1)});
+    const uint64_t cirWgPerLink = 1ull;  // dispatch(chunk, snapshots, 1)
+    const uint64_t cmWgPerLink = 1ull;   // dispatch(chunk, kMatMaxPages, usGroups)
+    const uint64_t ltWgPerLink =
+        ltCanDispatch
+            ? (uint64_t(ltSPorts) * ltUPorts * SlsChanWgpu::kMatMaxPages + 63u) / 64u
+            : 0u;
+    const uint64_t maxWgPerLinkMain = std::max({cirWgPerLink, cmWgPerLink,
+                                                  ltWgPerLink, uint64_t(1)});
+    // Reserve 10% of the cap for the per-chunk inputs (active-link
+    // slab, sW/uW, doppler/delay/rbFreqs slabs) that also scale with
+    // chunkSize.
+    const uint64_t chunkByBufMain =
+        std::max<uint64_t>(1ull,
+                           (effectiveBufCap * 9ull) / 10ull /
+                               std::max<uint64_t>(maxBytesPerLinkMain, 1ull));
+    const uint64_t chunkByWgMain =
+        std::max<uint64_t>(1ull, kWgPerDimCap / std::max<uint64_t>(maxWgPerLinkMain, 1ull));
+    uint32_t chunkSize = static_cast<uint32_t>(std::clamp<uint64_t>(
+        std::min<uint64_t>({uint64_t(nActiveLinks), chunkByBufMain, chunkByWgMain}),
+        1ull,
+        uint64_t(nActiveLinks)));
+
+    // Spec-batch chunk size: gen_spec_batch is a 1D dispatch over
+    // chunkLen × numRxPorts × numTxPorts × numRb / 64, so at large
+    // port counts the X-dim cap dominates and the chunk must be
+    // smaller than the main pass.
+    const uint64_t sbBytesPerLink =
+        (ltCanDispatch && sbNumRb > 0)
+            ? uint64_t(ltUPorts) * ltSPorts * sbNumRb * 2u * sizeof(float)
+            : 0u;
+    const uint64_t sbWgPerLink =
+        (ltCanDispatch && sbNumRb > 0)
+            ? (uint64_t(ltUPorts) * ltSPorts * sbNumRb + 63u) / 64u
+            : 0u;
+    const uint64_t chunkByBufSpec =
+        std::max<uint64_t>(1ull,
+                           (effectiveBufCap * 9ull) / 10ull /
+                               std::max<uint64_t>(sbBytesPerLink, 1ull));
+    const uint64_t chunkByWgSpec =
+        std::max<uint64_t>(1ull, kWgPerDimCap / std::max<uint64_t>(sbWgPerLink, 1ull));
+    const uint32_t chunkSizeSpec = static_cast<uint32_t>(std::clamp<uint64_t>(
+        std::min<uint64_t>({uint64_t(nActiveLinks), chunkByBufSpec, chunkByWgSpec}),
+        1ull,
+        uint64_t(nActiveLinks)));
+    NS_LOG_INFO("Mez::UpdateChannel chunkSize main="
+                << chunkSize << " spec=" << chunkSizeSpec
+                << " (nLinks=" << nActiveLinks
+                << " bufMain=" << chunkByBufMain << " wgMain=" << chunkByWgMain
+                << " ltSPorts=" << ltSPorts << " ltUPorts=" << ltUPorts
+                << " sbNumRb=" << sbNumRb << ")");
+
+    // ── Host accumulators for chunked per-link kernel outputs. These
+    // are held as static thread_locals so the storage persists across
+    // UpdateChannel calls -- the chunked path used to allocate them
+    // fresh per call (a ~360 MB malloc for matFlat alone). The vector
+    // capacity stays at its peak; .assign / .resize just touches the
+    // already-allocated pages.
     const size_t perLinkMatLen =
         size_t(globalUeAnt) * globalBsAnt * SlsChanWgpu::kMatMaxPages;
+    const size_t perLinkLT =
+        ltCanDispatch ? size_t(ltSPorts) * ltUPorts * SlsChanWgpu::kMatMaxPages : 0;
+    static thread_local std::vector<std::complex<float>> matFlat;
+    static thread_local std::vector<std::complex<float>> longTermFlat;
+    matFlat.resize(size_t(nActiveLinks) * perLinkMatLen);
+    longTermFlat.clear();
+    if (ltCanDispatch)
+    {
+        longTermFlat.resize(size_t(nActiveLinks) * perLinkLT);
+    }
+
+    // ── Chunk loop 1: CIR + channel matrix (+ longTerm).
+    // calClusterRay runs once per tick (depends only on per-LSP-grid
+    // params), then we dispatch generateCIR + genChannelMatrix +
+    // genLongTerm in chunkSize-sized waves. Each chunk re-emits a
+    // chunk-local ActiveLink vector with linkIdx / cirCoeOffset /
+    // cirNormDelayOffset / cirNtapsOffset / freqChanPrbgOffset reset
+    // to 0..chunkLen-1 so the per-link slabs land at the chunk-local
+    // origin of the (now chunk-sized) GPU output buffers.
+    const uint32_t cirCoeElemsPerLink =
+        nSnapshots * globalUeAnt * globalBsAnt * 24u;
+    const uint32_t cirNormDelayElemsPerLink = 24u;
+    const uint32_t cirNtapsElemsPerLink = 1u;
+    const uint32_t freqChanElemsPerLink =
+        nSnapshots * globalUeAnt * globalBsAnt * nPrbg;
+    {
+        SLS_PHASE_SCOPE("Mez::SmallScaleKernels");
+        gpu->calClusterRay(nSite, nUt);
+        static thread_local std::vector<ActiveLink> chunkLinks;
+        for (uint32_t chunkStart = 0; chunkStart < nActiveLinks;
+             chunkStart += chunkSize)
+        {
+            const uint32_t chunkLen = std::min(chunkSize, nActiveLinks - chunkStart);
+            chunkLinks.resize(chunkLen);
+            for (uint32_t i = 0; i < chunkLen; ++i)
+            {
+                ActiveLink al = activeLinks[chunkStart + i];
+                al.linkIdx = i;
+                al.cirCoeOffset = i * cirCoeElemsPerLink;
+                al.cirNormDelayOffset = i * cirNormDelayElemsPerLink;
+                al.cirNtapsOffset = i * cirNtapsElemsPerLink;
+                al.freqChanPrbgOffset = i * freqChanElemsPerLink;
+                chunkLinks[i] = al;
+            }
+            gpu->generateCIR(chunkLinks, chunkLen, nSnapshots, 0.0f);
+            gpu->genChannelMatrix(chunkLinks,
+                                  chunkLen,
+                                  /*uSize=*/globalUeAnt,
+                                  /*sSize=*/globalBsAnt,
+                                  /*numOverallCluster=*/SlsChanWgpu::kMatMaxPages,
+                                  /*numReducedCluster=*/0u,
+                                  /*nRays=*/20u,
+                                  /*cluster1st=*/0u,
+                                  /*cluster2nd=*/0u);
+            gpu->readChannelMatrixInto(
+                chunkLen,
+                globalUeAnt,
+                globalBsAnt,
+                matFlat.data() + size_t(chunkStart) * perLinkMatLen);
+            if (ltCanDispatch)
+            {
+                const size_t chunkSWLen = size_t(chunkLen) * ltSPortElems;
+                const size_t chunkUWLen = size_t(chunkLen) * ltUPortElems;
+                gpu->genLongTerm(chunkLen,
+                                 /*uSize=*/globalUeAnt,
+                                 /*sSize=*/globalBsAnt,
+                                 ltSPorts,
+                                 ltUPorts,
+                                 ltSPortElems,
+                                 ltUPortElems,
+                                 ltSElemsPerPort,
+                                 ltUElemsPerPort,
+                                 ltSIncVal,
+                                 ltUIncVal,
+                                 ltSWFlat.data() + size_t(chunkStart) * ltSPortElems,
+                                 chunkSWLen,
+                                 ltUWFlat.data() + size_t(chunkStart) * ltUPortElems,
+                                 chunkUWLen,
+                                 ltStartS,
+                                 ltStartU);
+                gpu->readLongTermInto(
+                    chunkLen,
+                    ltSPorts,
+                    ltUPorts,
+                    longTermFlat.data() + size_t(chunkStart) * perLinkLT);
+            }
+        }
+    }
 
     NS_LOG_DEBUG("UpdateChannel uploaded " << nSite << " cells, " << nUt << " UEs, "
                                            << antCfgs.size() << " antenna panels, " << nActiveLinks
@@ -1302,7 +1419,16 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             prev = it->second;
         }
 
-        Ptr<ThreeGppChannelParams> params = Create<ThreeGppChannelParams>();
+        // Same in-place reuse pattern as the matrix above: keep the
+        // existing ThreeGppChannelParams Ptr in the map, refresh its
+        // fields in place. Avoids ~7477 Create<ThreeGppChannelParams>
+        // + vector<double> allocations per tick.
+        Ptr<ThreeGppChannelParams>& paramsRef = m_channelParamsMap[ctx.paramsKey];
+        if (!paramsRef)
+        {
+            paramsRef = Create<ThreeGppChannelParams>();
+        }
+        Ptr<ThreeGppChannelParams> params = paramsRef;
         params->m_generatedTime = Simulator::Now();
 
         Ptr<MobilityModel> aMobOrdered = ctx.sMob;
@@ -1441,7 +1567,8 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         params->m_cachedAngleSincos.clear();
         PrecomputeAnglesSinCos(params, &params->m_cachedAngleSincos);
 
-        m_channelParamsMap.insert_or_assign(ctx.paramsKey, params);
+        // paramsRef is already in the map (or was just inserted with
+        // the freshly-created Ptr); no insert_or_assign needed.
 
         // Build the per-link ChannelMatrix straight from the GPU's
         // matrix kernel output. Layout per link (per kernel):
@@ -1460,14 +1587,34 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             params->m_cluster1st != params->m_cluster2nd
                 ? static_cast<uint8_t>(params->m_reducedClusterNumber + 4)
                 : static_cast<uint8_t>(params->m_reducedClusterNumber + 2);
-        Ptr<ChannelMatrix> matrix = Create<ChannelMatrix>();
+        // Reuse the existing matrix entry when present -- the per-link
+        // ChannelMatrix backs a Complex3DVector of size globalUeAnt *
+        // globalBsAnt * numOverallCluster complex<double> which works
+        // out to ~98 KB per link at NR-cali geometry; at 7477 active
+        // links a fresh Create<ChannelMatrix>() + Complex3DVector ctor
+        // every tick churns ~735 MB through the heap. Holding the
+        // ChannelMatrix Ptr in place and only resizing m_channel on a
+        // shape mismatch keeps the allocations bounded.
+        Ptr<ChannelMatrix>& matrixRef = m_channelMatrixMap[ctx.matrixKey];
+        if (!matrixRef)
+        {
+            matrixRef = Create<ChannelMatrix>();
+            matrixRef->m_channel = MatrixBasedChannelModel::Complex3DVector(
+                globalUeAnt, globalBsAnt, numOverallCluster);
+        }
+        else if (matrixRef->m_channel.GetNumRows() != globalUeAnt ||
+                 matrixRef->m_channel.GetNumCols() != globalBsAnt ||
+                 matrixRef->m_channel.GetNumPages() != numOverallCluster)
+        {
+            matrixRef->m_channel = MatrixBasedChannelModel::Complex3DVector(
+                globalUeAnt, globalBsAnt, numOverallCluster);
+        }
+        ChannelMatrix* matrix = PeekPointer(matrixRef);
         matrix->m_generatedTime = Simulator::Now();
         matrix->m_nodeIds = std::make_pair(
             ctx.sMob->GetObject<Node>()->GetId(),
             ctx.uMob->GetObject<Node>()->GetId());
         matrix->m_antennaPair = std::make_pair(ctx.sAntId, ctx.uAntId);
-        matrix->m_channel = MatrixBasedChannelModel::Complex3DVector(
-            globalUeAnt, globalBsAnt, numOverallCluster);
         const size_t perPage = size_t(globalUeAnt) * globalBsAnt;
         // genChannelMatrix kernel dispatched with sequential workgroup
         // ids 0..nActiveLinks-1, so matFlat is packed by sequential
@@ -1495,7 +1642,8 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             dr[0] = static_cast<double>(sr[0]);
             dr[1] = static_cast<double>(sr[1]);
         }
-        m_channelMatrixMap.insert_or_assign(ctx.matrixKey, matrix);
+        // matrixRef already points at the map entry we just refreshed
+        // in-place; no insert_or_assign needed.
 
         // Build per-link longTerm from the GPU kernel's output (when
         // available) and stash it in m_gpuLongTermMap together with
@@ -1516,10 +1664,27 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                           << " longTermFlat.size()=" << longTermFlat.size()
                           << " (lspReadIdx=" << ctx.lspReadIdx
                           << " ltPerLink=" << ltPerLink << ")");
-            Ptr<Complex3DVector> longTerm = Create<Complex3DVector>(
-                static_cast<uint16_t>(ltUPorts),
-                static_cast<uint16_t>(ltSPorts),
-                numOverallCluster);
+            // Same in-place reuse story as the channel matrix above:
+            // recycle the existing Complex3DVector when present and
+            // its shape matches, so we don't churn 12 MB/tick of
+            // longTerm allocations through the heap on a 7477-link
+            // batch.
+            GpuLongTermEntry& entryRef = m_gpuLongTermMap[ctx.matrixKey];
+            Ptr<Complex3DVector> longTerm;
+            if (entryRef.longTerm &&
+                entryRef.longTerm->GetNumRows() == ltUPorts &&
+                entryRef.longTerm->GetNumCols() == ltSPorts &&
+                entryRef.longTerm->GetNumPages() == numOverallCluster)
+            {
+                longTerm = ConstCast<Complex3DVector>(entryRef.longTerm);
+            }
+            else
+            {
+                longTerm = Create<Complex3DVector>(
+                    static_cast<uint16_t>(ltUPorts),
+                    static_cast<uint16_t>(ltSPorts),
+                    numOverallCluster);
+            }
             const std::complex<float>* ltSrc = longTermFlat.data() + ltLinkBase;
             std::complex<double>* ltDst = longTerm->GetPagePtr(0);
             for (size_t k = 0; k < ltCells; ++k)
@@ -1531,17 +1696,15 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             }
             const auto& sBV = ctx.sAnt->GetBeamformingVectorRef();
             const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
-            GpuLongTermEntry entry;
-            entry.longTerm = longTerm;
-            entry.sWHash = HashComplexVector(sBV);
-            entry.uWHash = HashComplexVector(uBV);
-            entry.sWSize = sBV.GetSize();
-            entry.uWSize = uBV.GetSize();
-            entry.generatedTime = matrix->m_generatedTime;
-            entry.gpuLinkIdx = static_cast<uint32_t>(ctx.lspReadIdx);
-            entry.ltUPorts = ltUPorts;
-            entry.ltSPorts = ltSPorts;
-            m_gpuLongTermMap.insert_or_assign(ctx.matrixKey, std::move(entry));
+            entryRef.longTerm = longTerm;
+            entryRef.sWHash = HashComplexVector(sBV);
+            entryRef.uWHash = HashComplexVector(uBV);
+            entryRef.sWSize = sBV.GetSize();
+            entryRef.uWSize = uBV.GetSize();
+            entryRef.generatedTime = matrix->m_generatedTime;
+            entryRef.gpuLinkIdx = static_cast<uint32_t>(ctx.lspReadIdx);
+            entryRef.ltUPorts = ltUPorts;
+            entryRef.ltSPorts = ltSPorts;
         }
     }
 
@@ -1564,122 +1727,136 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         const uint32_t numRxPorts = ltUPorts;
         const uint32_t numTxPorts = ltSPorts;
         const uint64_t rbFreqsHash = HashFloatVector(m_batchRbFreqs);
+        const size_t perLinkSpec = size_t(numRxPorts) * numTxPorts * numRb;
 
-        // Pack per-link delays + doppler. Doppler mirrors
-        // CalcBeamformingGain's formula at the current Simulator::Now()
-        // -- bench evals all happen at the same time within a tick, so
-        // pre-computing here matches what PRX would re-derive per call.
-        std::vector<float> delays(size_t(nActiveLinks) * numClusters, 0.0f);
-        std::vector<std::complex<float>> doppler(
-            size_t(nActiveLinks) * numClusters, std::complex<float>(1.0f, 0.0f));
+        // Pre-allocate the full batched-output accumulator (held as
+        // thread_local so the storage persists across UpdateChannel
+        // calls -- ~13 MB on NR-cali, was getting malloc'd per call).
+        static thread_local std::vector<std::complex<float>> batchFlat;
+        batchFlat.resize(size_t(nActiveLinks) * perLinkSpec);
         const double slotTime = Simulator::Now().GetSeconds();
         const double dopplerScale = 2.0 * M_PI * slotTime * m_frequency / 3e8;
+        static thread_local std::vector<float> chunkDelays;
+        static thread_local std::vector<std::complex<float>> chunkDoppler;
 
-        for (size_t i = 0; i < runtimeLinks.size(); ++i)
+        for (uint32_t chunkStart = 0; chunkStart < nActiveLinks;
+             chunkStart += chunkSizeSpec)
         {
-            const auto& ctx = runtimeLinks[i];
-            // delays / doppler are sized nActiveLinks * numClusters and
-            // the genSpecBatch kernel was dispatched with sequential
-            // workgroup ids 0..nActiveLinks-1, so per-link rows here
-            // must be indexed by the SEQUENTIAL active-link index `i`
-            // and NOT by ctx.lspReadIdx (= cid*nUt + uid, which is the
-            // LSP grid index and is sparse under NR's distance
-            // filtering -- can exceed nActiveLinks).
-            const size_t linkIdx = i;
-            NS_ASSERT_MSG(linkIdx < nActiveLinks,
-                          "Mez::GenSpecBatch: i=" << linkIdx
-                          << " >= nActiveLinks=" << nActiveLinks);
-            auto pit = m_channelParamsMap.find(ctx.paramsKey);
-            if (pit == m_channelParamsMap.end())
+            const uint32_t chunkLen = std::min(chunkSizeSpec, nActiveLinks - chunkStart);
+
+            // Re-publish this chunk's longTerm slab from the host
+            // accumulator. Chunk-1 (above) overwrote longTermOutBuf_
+            // with the LAST chunk's data when it walked the full link
+            // set; gen_spec_batch needs THIS chunk's slab so we feed
+            // it back via uploadLongTermBatch rather than re-running
+            // gen_long_term_kernel.
+            gpu->uploadLongTermBatch(longTermFlat.data() +
+                                         size_t(chunkStart) * perLinkLT,
+                                     chunkLen,
+                                     ltSPorts,
+                                     ltUPorts);
+
+            // Pack chunk's delays + doppler. Doppler mirrors
+            // CalcBeamformingGain's formula at the current
+            // Simulator::Now() so bench evals at the same tick match
+            // what PRX would derive per call.
+            chunkDelays.assign(size_t(chunkLen) * numClusters, 0.0f);
+            chunkDoppler.assign(size_t(chunkLen) * numClusters,
+                                std::complex<float>(1.0f, 0.0f));
+            for (uint32_t li = 0; li < chunkLen; ++li)
             {
-                continue;
+                const size_t i = size_t(chunkStart) + li;
+                const auto& ctx = runtimeLinks[i];
+                auto pit = m_channelParamsMap.find(ctx.paramsKey);
+                if (pit == m_channelParamsMap.end())
+                {
+                    continue;
+                }
+                const auto p = DynamicCast<const ThreeGppChannelParams>(pit->second);
+                if (!p)
+                {
+                    continue;
+                }
+                const size_t nc = std::min(size_t(numClusters), p->m_delay.size());
+                const size_t baseIdx = size_t(li) * numClusters;
+                for (size_t c = 0; c < nc; ++c)
+                {
+                    chunkDelays[baseIdx + c] = static_cast<float>(p->m_delay[c]);
+                }
+                const Vector sSpeed =
+                    ctx.sMob ? ctx.sMob->GetVelocity() : Vector(0, 0, 0);
+                const Vector uSpeed =
+                    ctx.uMob ? ctx.uMob->GetVelocity() : Vector(0, 0, 0);
+                if (p->m_cachedAngleSincos.size() <= ZOD_INDEX)
+                {
+                    continue;
+                }
+                const size_t ncDop = std::min(
+                    {nc, p->m_alpha.size(), p->m_D.size(),
+                     p->m_cachedAngleSincos[ZOA_INDEX].size(),
+                     p->m_cachedAngleSincos[ZOD_INDEX].size(),
+                     p->m_cachedAngleSincos[AOA_INDEX].size(),
+                     p->m_cachedAngleSincos[AOD_INDEX].size()});
+                const auto& zoa = p->m_cachedAngleSincos[ZOA_INDEX];
+                const auto& zod = p->m_cachedAngleSincos[ZOD_INDEX];
+                const auto& aoa = p->m_cachedAngleSincos[AOA_INDEX];
+                const auto& aod = p->m_cachedAngleSincos[AOD_INDEX];
+                for (size_t c = 0; c < ncDop; ++c)
+                {
+                    const double tempDoppler = dopplerScale *
+                        (zoa[c].first * aoa[c].second * uSpeed.x +
+                         zoa[c].first * aoa[c].first * uSpeed.y +
+                         zoa[c].second * uSpeed.z +
+                         (zod[c].first * aod[c].second * sSpeed.x +
+                          zod[c].first * aod[c].first * sSpeed.y +
+                          zod[c].second * sSpeed.z) +
+                         2.0 * p->m_alpha[c] * p->m_D[c]);
+                    chunkDoppler[baseIdx + c] = std::complex<float>(
+                        static_cast<float>(std::cos(tempDoppler)),
+                        static_cast<float>(std::sin(tempDoppler)));
+                }
             }
-            const auto p = DynamicCast<const ThreeGppChannelParams>(pit->second);
-            if (!p)
-            {
-                continue;
-            }
-            const size_t nc = std::min(size_t(numClusters), p->m_delay.size());
-            const size_t baseIdx = linkIdx * numClusters;
-            NS_ASSERT_MSG(baseIdx + nc <= delays.size(),
-                          "Mez::GenSpecBatch: delays write OOB: "
-                          "baseIdx=" << baseIdx << " nc=" << nc
-                          << " delays.size()=" << delays.size());
-            for (size_t c = 0; c < nc; ++c)
-            {
-                delays[baseIdx + c] = static_cast<float>(p->m_delay[c]);
-            }
-            const Vector sSpeed = ctx.sMob ? ctx.sMob->GetVelocity() : Vector(0, 0, 0);
-            const Vector uSpeed = ctx.uMob ? ctx.uMob->GetVelocity() : Vector(0, 0, 0);
-            const size_t ncDop = std::min(
-                {nc, p->m_alpha.size(), p->m_D.size(),
-                 size_t(p->m_cachedAngleSincos.size() > ZOA_INDEX
-                            ? p->m_cachedAngleSincos[ZOA_INDEX].size()
-                            : 0)});
-            if (p->m_cachedAngleSincos.size() <= ZOD_INDEX)
-            {
-                continue;
-            }
-            const auto& zoa = p->m_cachedAngleSincos[ZOA_INDEX];
-            const auto& zod = p->m_cachedAngleSincos[ZOD_INDEX];
-            const auto& aoa = p->m_cachedAngleSincos[AOA_INDEX];
-            const auto& aod = p->m_cachedAngleSincos[AOD_INDEX];
-            NS_ASSERT_MSG(baseIdx + ncDop <= doppler.size(),
-                          "Mez::GenSpecBatch: doppler write OOB: "
-                          "baseIdx=" << baseIdx << " ncDop=" << ncDop
-                          << " doppler.size()=" << doppler.size());
-            for (size_t c = 0; c < ncDop; ++c)
-            {
-                const double tempDoppler = dopplerScale *
-                    (zoa[c].first * aoa[c].second * uSpeed.x +
-                     zoa[c].first * aoa[c].first * uSpeed.y +
-                     zoa[c].second * uSpeed.z +
-                     (zod[c].first * aod[c].second * sSpeed.x +
-                      zod[c].first * aod[c].first * sSpeed.y +
-                      zod[c].second * sSpeed.z) +
-                     2.0 * p->m_alpha[c] * p->m_D[c]);
-                doppler[baseIdx + c] = std::complex<float>(
-                    static_cast<float>(std::cos(tempDoppler)),
-                    static_cast<float>(std::sin(tempDoppler)));
-            }
+
+            gpu->genSpecBatch(chunkLen,
+                              numClusters,
+                              numRb,
+                              numRxPorts,
+                              numTxPorts,
+                              ltUPorts,
+                              ltSPorts,
+                              chunkDelays,
+                              chunkDoppler,
+                              m_batchRbFreqs);
+            gpu->readSpecBatchInto(
+                chunkLen,
+                numRb,
+                numRxPorts,
+                numTxPorts,
+                batchFlat.data() + size_t(chunkStart) * perLinkSpec);
         }
 
-        gpu->genSpecBatch(nActiveLinks,
-                          numClusters,
-                          numRb,
-                          numRxPorts,
-                          numTxPorts,
-                          ltUPorts,
-                          ltSPorts,
-                          delays,
-                          doppler,
-                          m_batchRbFreqs);
-        std::vector<std::complex<float>> batchFlat;
-        {
-            SLS_PHASE_SCOPE("Mez::ReadSpecBatch");
-            batchFlat = gpu->readSpecBatch(nActiveLinks, numRb, numRxPorts, numTxPorts);
-        }
-
-        const size_t perLink = size_t(numRxPorts) * numTxPorts * numRb;
         const Time generatedTime = Simulator::Now();
         for (size_t activeLinkIdx2 = 0; activeLinkIdx2 < runtimeLinks.size(); ++activeLinkIdx2)
         {
             const auto& ctx = runtimeLinks[activeLinkIdx2];
             // genSpecBatch kernel packs by sequential active-link idx.
-            const size_t linkBase = activeLinkIdx2 * perLink;
-            if (linkBase + perLink > batchFlat.size())
+            const size_t linkBase = activeLinkIdx2 * perLinkSpec;
+            if (linkBase + perLinkSpec > batchFlat.size())
             {
                 continue;
             }
-            GpuChanSpctEntry e;
-            e.chanSpctUnscaled.assign(batchFlat.begin() + linkBase,
-                                      batchFlat.begin() + linkBase + perLink);
-            e.numRxPorts = numRxPorts;
-            e.numTxPorts = numTxPorts;
-            e.numRb = numRb;
-            e.generatedTime = generatedTime;
-            e.rbFreqsHash = rbFreqsHash;
-            m_gpuChanSpctMap.insert_or_assign(ctx.matrixKey, std::move(e));
+            // Reuse the existing chanSpctUnscaled vector in place when
+            // present. `.assign` on an existing vector of the same
+            // capacity just memcpys; building a fresh GpuChanSpctEntry
+            // every tick was allocating ~25 MB through the heap.
+            GpuChanSpctEntry& eRef = m_gpuChanSpctMap[ctx.matrixKey];
+            eRef.chanSpctUnscaled.assign(batchFlat.begin() + linkBase,
+                                          batchFlat.begin() + linkBase + perLinkSpec);
+            eRef.numRxPorts = numRxPorts;
+            eRef.numTxPorts = numTxPorts;
+            eRef.numRb = numRb;
+            eRef.generatedTime = generatedTime;
+            eRef.rbFreqsHash = rbFreqsHash;
         }
     }
 
@@ -1752,11 +1929,20 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
         const Ptr<const ChannelParams> cachedParams = parIt->second;
         const size_t pages = cachedMatrix->m_channel.GetNumPages();
         const size_t alphaSize = cachedParams->m_alpha.size();
-        // Matrix + params must be from the same tick and have matching
-        // cluster counts. AntennaSetupChanged check guards against
-        // antennas being swapped between calls (NR can reassign during
-        // initial association).
-        const bool aligned = pages == alphaSize && pages > 0;
+        const size_t dSize = cachedParams->m_D.size();
+        // PRX::CalcBeamformingGain reads m_alpha[c], m_D[c], and
+        // m_cachedAngleSincos[ZOA/ZOD/AOA/AOD][c] for c < numCluster
+        // (= pages). All six must be >= pages or the doppler loop
+        // walks off the end. Require exact equality + pages > 0 so
+        // a stale params struct from a previous tick with a different
+        // cluster count can't satisfy the check.
+        const auto& cas = cachedParams->m_cachedAngleSincos;
+        const bool casOk = cas.size() > MatrixBasedChannelModel::ZOD_INDEX &&
+                           cas[MatrixBasedChannelModel::ZOA_INDEX].size() == pages &&
+                           cas[MatrixBasedChannelModel::ZOD_INDEX].size() == pages &&
+                           cas[MatrixBasedChannelModel::AOA_INDEX].size() == pages &&
+                           cas[MatrixBasedChannelModel::AOD_INDEX].size() == pages;
+        const bool aligned = pages > 0 && pages == alphaSize && pages == dSize && casOk;
         const bool sameTime = cachedMatrix->m_generatedTime == cachedParams->m_generatedTime;
         const bool antennaOk =
             !AntennaSetupChanged(aAntenna, bAntenna, cachedMatrix);
@@ -1854,6 +2040,18 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
     // collision on two distinct beam vectors yielding a false hit
     // is ~1 in 1.8e19 -- fine for any realistic sim.
     if (!channelMatrix || entry.generatedTime != channelMatrix->m_generatedTime)
+    {
+        return nullptr;
+    }
+    // PRX::CalcBeamformingGain iterates the doppler loop up to
+    // channelMatrix->m_channel.GetNumPages() and asserts that the
+    // longTerm exposes at least that many pages. When the base class
+    // falls through and CPU-rebuilds the matrix with a different page
+    // count from the one our mezanine cached (cluster-count drift), the
+    // mismatch crashes the assert. Reject the cached longTerm in that
+    // case so PRX falls back to CalcLongTerm.
+    if (!entry.longTerm ||
+        entry.longTerm->GetNumPages() < channelMatrix->m_channel.GetNumPages())
     {
         return nullptr;
     }

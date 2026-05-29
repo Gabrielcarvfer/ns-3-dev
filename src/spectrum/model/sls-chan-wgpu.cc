@@ -201,7 +201,15 @@ createDevice()
     ddesc.requiredLimits = &limits;
     wgpu::Limits::WGPULimits requiredLimits{};
     requiredLimits.maxBindGroups = WGPU_LIMIT_U32_UNDEFINED;
-    requiredLimits.maxBufferSize = WGPU_LIMIT_U64_UNDEFINED;
+    // Dawn defaults maxBufferSize to 256 MB even when the adapter
+    // supports much more. Explicitly request the adapter's max so
+    // multi-hundred-MB CRN / channel-matrix / freqChan buffers can
+    // be allocated. WGPU_LIMIT_U64_UNDEFINED means "use default",
+    // not "unlimited" -- on Dawn it caps allocations at 256 MB and
+    // silently rejects bigger ones from the kernel-uniform path,
+    // which is what was making the NR-cali pipeline produce zero
+    // output across the board.
+    requiredLimits.maxBufferSize = supported.maxBufferSize;
     requiredLimits.maxColorAttachmentBytesPerSample = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxColorAttachments = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxComputeInvocationsPerWorkgroup = WGPU_LIMIT_U32_UNDEFINED;
@@ -519,17 +527,20 @@ SlsChanWgpu::uploadAntPanelConfigs(const std::vector<AntPanelConfigGPU>& configs
     antCfgsCache_ = configs;
 }
 
-// ── mapAsync readback helper ──────────────────────────────────────────────────
+// ── mapAsync readback core ──────────────────────────────────────────────────
+namespace
+{
+struct MapCtx
+{
+    bool done = false;
+};
+} // namespace
+
 template <typename T>
 std::vector<T>
 SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
 {
     std::vector<T> result(byteSize / sizeof(T));
-
-    struct MapCtx
-    {
-        bool done = false;
-    };
 
     MapCtx ctx;
 
@@ -580,6 +591,82 @@ SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
     }
     staging.unmap();
     return result;
+}
+
+// No-allocation readback. Mirrors mapReadBuffer but memcpys into a
+// caller-supplied destination -- used by the chunked mezanine path to
+// avoid the per-chunk std::vector alloc that was scaling the host
+// working-set linearly with chunk count.
+bool
+SlsChanWgpu::mapReadBufferInto(wgpu::Buffer& staging, uint64_t byteSize, void* dst)
+{
+    MapCtx ctx;
+
+#ifdef WEBGPU_BACKEND_DAWN
+    wgpu::MapAsyncStatus mapStatus = wgpu::MapAsyncStatus::Force32;
+    wgpu::StringView mapMsg;
+    auto fut = staging.mapAsync(
+        wgpu::MapMode::Read,
+        0,
+        byteSize,
+        wgpu::CallbackMode::WaitAnyOnly,
+        [&ctx, &mapStatus, &mapMsg](wgpu::MapAsyncStatus s, wgpu::StringView m) {
+            mapStatus = s;
+            mapMsg = m;
+            ctx.done = true;
+        });
+    wgpu::FutureWaitInfo waitInfo{};
+    waitInfo.future = fut;
+    waitInfo.completed = false;
+    auto waitStatus = instance_.waitAny(1, &waitInfo, UINT64_MAX);
+    if (waitStatus != wgpu::WaitStatus::Success)
+    {
+        std::fprintf(stderr,
+                     "[ERROR] mapReadBufferInto: waitAny returned %d (not Success)\n",
+                     (int)waitStatus);
+        std::fflush(stderr);
+    }
+    if (mapStatus != wgpu::MapAsyncStatus::Success)
+    {
+        std::fprintf(stderr,
+                     "[ERROR] mapReadBufferInto: mapAsync status=%d msg='%.*s'\n",
+                     (int)mapStatus,
+                     (int)mapMsg.length,
+                     mapMsg.data ? mapMsg.data : "");
+        std::fflush(stderr);
+    }
+#else
+    wgpu::BufferMapCallbackInfo cbInfo = wgpu::Default;
+    cbInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
+    cbInfo.callback = [](WGPUMapAsyncStatus, WGPUStringView, void* ud1, void*) {
+        static_cast<MapCtx*>(ud1)->done = true;
+    };
+    cbInfo.userdata1 = &ctx;
+    staging.mapAsync(wgpu::MapMode::Read, 0, byteSize, cbInfo);
+    while (!ctx.done)
+    {
+        device_.poll(false, nullptr);
+    }
+    wgpu::MapAsyncStatus mapStatus = wgpu::MapAsyncStatus::Success;
+#endif
+    const void* mapped = staging.getConstMappedRange(0, byteSize);
+    bool ok = false;
+    if (mapped)
+    {
+        std::memcpy(dst, mapped, byteSize);
+        ok = true;
+    }
+    else
+    {
+        std::fprintf(stderr,
+                     "[ERROR] mapReadBufferInto: getConstMappedRange returned null, mapStatus=%d, byteSize=%llu, stagingSize=%llu\n",
+                     (int)mapStatus,
+                     (unsigned long long)byteSize,
+                     (unsigned long long)staging.getSize());
+        std::fflush(stderr);
+    }
+    staging.unmap();
+    return ok;
 }
 
 // ── readLinkParams ────────────────────────────────────────────────────────────
@@ -676,11 +763,58 @@ SlsChanWgpu::generateCRN(float maxX,
         maxCorrDist = std::max(maxCorrDist, corrO2i[i]);
     }
 
+    // Auto-coarsen the CRN step so the CRN buffers stay under the
+    // safety cap. Big NR-cali deployments (~8 km square × 57 sites)
+    // would otherwise hit ~1.3 GB at step=10 and abort. The grid is a
+    // metres -> pixels rasterisation, so the actual LSP read at a
+    // given (x,y) lands in the same pixel up to a sub-step quantisation
+    // error -- coarsening the step trades small bilinear-interp
+    // accuracy for fitting in the cap.
+    constexpr uint64_t CRN_BUFFER_SAFETY_CAP = 1ULL << 30; // 1 GB
+    uint64_t effectiveCapEarly = CRN_BUFFER_SAFETY_CAP;
+    if (m_maxGpuBuffer_ != 0)
+    {
+        effectiveCapEarly = std::min(effectiveCapEarly, m_maxGpuBuffer_);
+    }
+    float step_m = std::max(crnStep_, 1.0f);
+    // Worst-case CRN buffer = nSite * 8 (LOS) * gridSz * sizeof(float).
+    // gridSz = nX * nY scales like ~1/step^2 (the +2*D px pad also
+    // shrinks because D is corrDist/step). Solve for the minimum step
+    // such that nSite * 8 * nX * nY * 4 <= cap, with a ~5% margin for
+    // the D-pad term. Round UP to the nearest 5 m so the grid step
+    // remains predictable and the kernel doesn't flicker step-to-step.
+    {
+        const float xSpan = std::max(maxX - minX, 1.0f);
+        const float ySpan = std::max(maxY - minY, 1.0f);
+        // Total CRN payload is LOS(8) + NLOS(7) + O2I(7) = 22 floats/pixel/site.
+        // The downstream "combined upload" guard rejects this whole thing if
+        // it's bigger than the cap, so size for the combined total here.
+        const double bufScalar = double(nSite_) * 22.0 * 4.0;
+        const double maxPixels = double(effectiveCapEarly) / bufScalar * 0.95;
+        for (int iter = 0; iter < 10; ++iter)
+        {
+            const float D_px = 3.0f * (maxCorrDist / step_m);
+            const double pxX = double(xSpan) / step_m + 1.0 + 2.0 * D_px;
+            const double pxY = double(ySpan) / step_m + 1.0 + 2.0 * D_px;
+            if (pxX * pxY <= maxPixels)
+                break;
+            // Scale step by the required pixel reduction. nX*nY scales
+            // ~ 1/step^2 so step *= sqrt(pxX*pxY/maxPixels).
+            const float scale = static_cast<float>(std::sqrt(pxX * pxY / maxPixels));
+            step_m = std::ceil(step_m * scale / 5.0f) * 5.0f;
+        }
+        if (step_m != crnStep_)
+        {
+            SLS_LOG("[INFO] generateCRN: auto-coarsened step from %.1f to %.1f m to fit CRN cap\n",
+                    (double)crnStep_, (double)step_m);
+            crnStep_ = step_m;
+        }
+    }
+
     SLS_LOG("[DEBUG] generateCRN: maxCorrDist=%.1f step=%.1f\n", maxCorrDist, crnStep_);
     // All grid sizing is in PIXELS. corrDist (metres) maps to corrDist/step
     // pixels of correlation; D = 3*corr_px is the per-side filter pad; the
     // total grid is round(bound/step + 1 + 2*D) pixels per axis.
-    const float step_m = std::max(crnStep_, 1.0f);
     const float D_px = 3.0f * (maxCorrDist / step_m);
     const int32_t nX = static_cast<int32_t>((maxX - minX) / step_m + 1.0f + 2.0f * D_px + 0.5f);
     const int32_t nY = static_cast<int32_t>((maxY - minY) / step_m + 1.0f + 2.0f * D_px + 0.5f);
@@ -709,7 +843,6 @@ SlsChanWgpu::generateCRN(float maxX,
     // squared and site count; if you blow this budget, shrink the deployment
     // (and/or coarsen the CRN grid step via the third arg to generateCRN).
     const uint64_t maxCrn = std::max({losBufSz, nlosBufSz, o2iBufSz});
-    constexpr uint64_t CRN_BUFFER_SAFETY_CAP = 1ULL << 30; // 1 GB
     uint64_t effectiveCap = CRN_BUFFER_SAFETY_CAP;
     if (m_maxGpuBuffer_ != 0)
     {
@@ -1793,7 +1926,7 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
                 cu.raysInSubCluster[sc][ri / 4][ri % 4] = src[ri];
             }
         }
-        cirCmnUniformBuf_ = makeBuffer(sizeof(cu), WGPUBufferUsage_Uniform, &cu);
+            cirCmnUniformBuf_ = makeBuffer(sizeof(cu), WGPUBufferUsage_Uniform, &cu);
     }
 
     auto layout2 = generateCIRPipeline_.getBindGroupLayout(2);
@@ -2474,20 +2607,40 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
 std::vector<std::complex<float>>
 SlsChanWgpu::readChannelMatrix(uint32_t nLinks, uint32_t uSize, uint32_t sSize)
 {
-    if (!channelMatrixBuf_)
+    const uint64_t totalBytes =
+        uint64_t(nLinks) * uSize * sSize * kMatMaxPages * sizeof(std::complex<float>);
+    std::vector<std::complex<float>> result(totalBytes / sizeof(std::complex<float>));
+    if (!readChannelMatrixInto(nLinks, uSize, sSize, result.data()))
     {
         return {};
+    }
+    return result;
+}
+
+bool
+SlsChanWgpu::readChannelMatrixInto(uint32_t nLinks,
+                                   uint32_t uSize,
+                                   uint32_t sSize,
+                                   std::complex<float>* dst)
+{
+    if (!channelMatrixBuf_)
+    {
+        return false;
     }
     const uint64_t totalBytes =
         uint64_t(nLinks) * uSize * sSize * kMatMaxPages * sizeof(std::complex<float>);
     assert(channelMatrixBuf_.getSize() >= totalBytes);
-    wgpu::Buffer staging =
-        makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    // Fresh staging buffer per read. Reusing a single persistent
+    // staging buffer across chunks let mapAsync return Aborted
+    // (status=4) on the next chunk's read -- Dawn's internal post-
+    // unmap state didn't recycle quickly enough.
+    wgpu::Buffer staging = makeBuffer(totalBytes,
+                                      WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     auto enc = device_.createCommandEncoder(wgpu::Default);
     enc.copyBufferToBuffer(channelMatrixBuf_, 0, staging, 0, totalBytes);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
-    return mapReadBuffer<std::complex<float>>(staging, totalBytes);
+    return mapReadBufferInto(staging, totalBytes, dst);
 }
 
 // ── gen_long_term_kernel ─────────────────────────────────────────────────
@@ -2508,9 +2661,36 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
                          const std::vector<uint32_t>& startS,
                          const std::vector<uint32_t>& startU)
 {
+    genLongTerm(nActiveLinks, uSize, sSize, sPorts, uPorts,
+                sPortElems, uPortElems, sElemsPerPort, uElemsPerPort,
+                sIncVal, uIncVal,
+                sWFlat.data(), sWFlat.size(),
+                uWFlat.data(), uWFlat.size(),
+                startS, startU);
+}
+
+void
+SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
+                         uint32_t uSize,
+                         uint32_t sSize,
+                         uint32_t sPorts,
+                         uint32_t uPorts,
+                         uint32_t sPortElems,
+                         uint32_t uPortElems,
+                         uint32_t sElemsPerPort,
+                         uint32_t uElemsPerPort,
+                         uint32_t sIncVal,
+                         uint32_t uIncVal,
+                         const std::complex<float>* sWData,
+                         size_t sWLen,
+                         const std::complex<float>* uWData,
+                         size_t uWLen,
+                         const std::vector<uint32_t>& startS,
+                         const std::vector<uint32_t>& startU)
+{
     assert(channelMatrixBuf_ && "genLongTerm requires genChannelMatrix to have run first");
-    assert(sWFlat.size() == size_t(nActiveLinks) * sPortElems);
-    assert(uWFlat.size() == size_t(nActiveLinks) * uPortElems);
+    assert(sWLen == size_t(nActiveLinks) * sPortElems);
+    assert(uWLen == size_t(nActiveLinks) * uPortElems);
     assert(startS.size() == sPorts);
     assert(startU.size() == uPorts);
 
@@ -2527,17 +2707,19 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
     if (!longTermOutBuf_ || longTermCfgNLinks_ != nActiveLinks ||
         longTermCfgSPorts_ != sPorts || longTermCfgUPorts_ != uPorts)
     {
+        // CopyDst is needed so uploadLongTermBatch can writeBuffer into
+        // this same buffer for the chunked spec-batch pass.
         longTermOutBuf_ =
-            makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+            makeBuffer(outBytes,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
         longTermCfgNLinks_ = nActiveLinks;
         longTermCfgSPorts_ = sPorts;
         longTermCfgUPorts_ = uPorts;
     }
-    // sW / uW buffers vary every dispatch (caller may have new beam weights).
-    const uint64_t sWBytes = sWFlat.size() * sizeof(float) * 2;
-    const uint64_t uWBytes = uWFlat.size() * sizeof(float) * 2;
-    longTermSWBuf_ = makeBuffer(sWBytes, WGPUBufferUsage_Storage, sWFlat.data());
-    longTermUWBuf_ = makeBuffer(uWBytes, WGPUBufferUsage_Storage, uWFlat.data());
+    const uint64_t sWBytes = sWLen * sizeof(float) * 2;
+    const uint64_t uWBytes = uWLen * sizeof(float) * 2;
+    longTermSWBuf_ = makeBuffer(sWBytes, WGPUBufferUsage_Storage, sWData);
+    longTermUWBuf_ = makeBuffer(uWBytes, WGPUBufferUsage_Storage, uWData);
     longTermStartSBuf_ =
         makeBuffer(startS.size() * sizeof(uint32_t), WGPUBufferUsage_Storage, startS.data());
     longTermStartUBuf_ =
@@ -2559,8 +2741,13 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
         uint32_t uIncVal;
     } du{nActiveLinks, uSize,    sSize,         kMatMaxPages,    sPorts,  uPorts,
          sPortElems,   uPortElems, sElemsPerPort, uElemsPerPort, sIncVal, uIncVal};
-    longTermDispatchBuf_ =
-        makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
+    if (!longTermDispatchBuf_)
+    {
+        longTermDispatchBuf_ = makeBuffer(sizeof(du),
+                                          WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
+                                              WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(longTermDispatchBuf_, 0, &du, sizeof(du));
 
     auto layout0 = longTermPipeline_.getBindGroupLayout(0);
     std::vector<wgpu::BindGroupEntry> entries(7, wgpu::Default);
@@ -2605,20 +2792,63 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
 std::vector<std::complex<float>>
 SlsChanWgpu::readLongTerm(uint32_t nLinks, uint32_t sPorts, uint32_t uPorts)
 {
-    if (!longTermOutBuf_)
+    const uint64_t totalBytes =
+        uint64_t(nLinks) * sPorts * uPorts * kMatMaxPages * sizeof(std::complex<float>);
+    std::vector<std::complex<float>> result(totalBytes / sizeof(std::complex<float>));
+    if (!readLongTermInto(nLinks, sPorts, uPorts, result.data()))
     {
         return {};
+    }
+    return result;
+}
+
+bool
+SlsChanWgpu::readLongTermInto(uint32_t nLinks,
+                              uint32_t sPorts,
+                              uint32_t uPorts,
+                              std::complex<float>* dst)
+{
+    if (!longTermOutBuf_)
+    {
+        return false;
     }
     const uint64_t totalBytes =
         uint64_t(nLinks) * sPorts * uPorts * kMatMaxPages * sizeof(std::complex<float>);
     assert(longTermOutBuf_.getSize() >= totalBytes);
-    wgpu::Buffer staging =
-        makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    wgpu::Buffer staging = makeBuffer(totalBytes,
+                                      WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     auto enc = device_.createCommandEncoder(wgpu::Default);
     enc.copyBufferToBuffer(longTermOutBuf_, 0, staging, 0, totalBytes);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
-    return mapReadBuffer<std::complex<float>>(staging, totalBytes);
+    return mapReadBufferInto(staging, totalBytes, dst);
+}
+
+void
+SlsChanWgpu::uploadLongTermBatch(const std::complex<float>* hostData,
+                                 uint32_t nLinks,
+                                 uint32_t sPorts,
+                                 uint32_t uPorts)
+{
+    // Used by the chunked spec-batch path: chunk-1 read longTerm back
+    // to the host; chunk-2 needs the same per-link slab visible to
+    // gen_spec_batch_kernel as longTermOutBuf_, but the GPU buffer
+    // was overwritten by the LAST chunk of gen_long_term. Re-uploading
+    // from the host accumulator is far cheaper than re-running
+    // gen_long_term per chunk in pass 2.
+    const uint64_t bytes =
+        uint64_t(nLinks) * sPorts * uPorts * kMatMaxPages * sizeof(std::complex<float>);
+    const bool needRealloc = !longTermOutBuf_ || longTermOutBuf_.getSize() < bytes;
+    if (needRealloc)
+    {
+        longTermOutBuf_ =
+            makeBuffer(bytes,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(longTermOutBuf_, 0, hostData, bytes);
+    longTermCfgNLinks_ = nLinks;
+    longTermCfgSPorts_ = sPorts;
+    longTermCfgUPorts_ = uPorts;
 }
 
 // ── gen_spec_chan_kernel (per-eval dispatch) ─────────────────────────────
@@ -2866,9 +3096,26 @@ SlsChanWgpu::readSpecBatch(uint32_t nLinks,
                            uint32_t numRxPorts,
                            uint32_t numTxPorts)
 {
-    if (!specBatchOutBuf_)
+    const uint64_t totalBytes =
+        uint64_t(nLinks) * numRxPorts * numTxPorts * numRb * sizeof(std::complex<float>);
+    std::vector<std::complex<float>> result(totalBytes / sizeof(std::complex<float>));
+    if (!readSpecBatchInto(nLinks, numRb, numRxPorts, numTxPorts, result.data()))
     {
         return {};
+    }
+    return result;
+}
+
+bool
+SlsChanWgpu::readSpecBatchInto(uint32_t nLinks,
+                                uint32_t numRb,
+                                uint32_t numRxPorts,
+                                uint32_t numTxPorts,
+                                std::complex<float>* dst)
+{
+    if (!specBatchOutBuf_)
+    {
+        return false;
     }
     const uint64_t totalBytes =
         uint64_t(nLinks) * numRxPorts * numTxPorts * numRb * sizeof(std::complex<float>);
@@ -2877,7 +3124,7 @@ SlsChanWgpu::readSpecBatch(uint32_t nLinks,
     enc.copyBufferToBuffer(specBatchOutBuf_, 0, specBatchStagingBuf_, 0, totalBytes);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
-    return mapReadBuffer<std::complex<float>>(specBatchStagingBuf_, totalBytes);
+    return mapReadBufferInto(specBatchStagingBuf_, totalBytes, dst);
 }
 
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──
