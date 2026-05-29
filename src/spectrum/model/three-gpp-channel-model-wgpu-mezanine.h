@@ -31,6 +31,13 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     ~ThreeGppChannelModelWgpuMezanine();
     static TypeId GetTypeId();
     void UpdateChannel();
+    // Phase D: decouple channel-state advancement from PRX events.
+    // The mez schedules itself on a periodic NS-3 timer and refreshes
+    // the GPU caches independent of when PRX evaluates. PRX events
+    // become pure cache consumers. NR reconfigurations (antenna
+    // reshuffle from MaxRsrpInitialAssociation, BWP/numerology change
+    // on MIB/SIB1) are caught at the next refresh tick.
+    void PeriodicRefresh();
     // Override the base batch-fresh hook so the small-scale GPU
     // pipeline runs at the start of each tick instead of waiting for
     // an external 10 ms self-scheduled loop. Base does LSP draw; this
@@ -97,6 +104,14 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // tick instead of once per link. std::optional so the very first
     // tick still triggers a refresh (Time::Zero() is a valid tick).
     std::optional<Time> m_lastMezBatchTime;
+
+    // Phase D: periodic-refresh state.
+    // Period at which PeriodicRefresh runs. Defaults to the channel
+    // update period (m_updatePeriod) on the base, but is decoupled --
+    // setting MezRefreshPeriod=0 disables the periodic loop and falls
+    // back to the on-demand EnsureBatchFresh path.
+    Time m_refreshPeriod;
+    bool m_periodicRefreshScheduled = false;
 
     // GPU-built longTerm cache. Keyed by (sAntId, uAntId) the same way
     // m_channelMatrixMap is. Each entry holds the longTerm matrix the

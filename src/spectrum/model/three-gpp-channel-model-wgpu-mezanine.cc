@@ -57,11 +57,51 @@ ThreeGppChannelModelWgpuMezanine::~ThreeGppChannelModelWgpuMezanine()
 TypeId
 ThreeGppChannelModelWgpuMezanine::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::ThreeGppChannelModelWgpuMezanine")
-                            .SetGroupName("Spectrum")
-                            .SetParent<ThreeGppChannelModel>()
-                            .AddConstructor<ThreeGppChannelModelWgpuMezanine>();
+    static TypeId tid =
+        TypeId("ns3::ThreeGppChannelModelWgpuMezanine")
+            .SetGroupName("Spectrum")
+            .SetParent<ThreeGppChannelModel>()
+            .AddConstructor<ThreeGppChannelModelWgpuMezanine>()
+            // Phase D infrastructure -- opt-in. Set non-zero to enable
+            // a periodic UC schedule independent of PRX events. The
+            // existing PRX-driven EnsureBatchFresh path remains
+            // active either way; the periodic loop just adds an
+            // additional safety-net schedule. Default 0 (off) because
+            // at NR-cali Phase-1 scale the cold-start workload grows
+            // m_channelMatrixMap to ~43k entries before NR settles,
+            // and each UC tick allocates a fresh Ptr<ChannelMatrix>
+            // per link; running the periodic loop on top of the
+            // PRX-driven path during cold start blew memory to ~40 GB
+            // in measured runs. Enable explicitly after measuring.
+            .AddAttribute("MezRefreshPeriod",
+                          "Safety-net period at which mezanine refreshes the GPU "
+                          "channel caches independent of PRX events.",
+                          TimeValue(MilliSeconds(0)),
+                          MakeTimeAccessor(&ThreeGppChannelModelWgpuMezanine::m_refreshPeriod),
+                          MakeTimeChecker());
     return tid;
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::PeriodicRefresh()
+{
+    // Drive a channel-state update on our own clock. EnsureBatchFresh
+    // dedups against Simulator::Now(), so per-eval calls within the
+    // same tick will see this refresh's work and short-circuit.
+    if (!m_channelMatrixMap.empty())
+    {
+        UpdateChannel();
+    }
+    if (!m_refreshPeriod.IsZero())
+    {
+        Simulator::Schedule(m_refreshPeriod,
+                            &ThreeGppChannelModelWgpuMezanine::PeriodicRefresh,
+                            this);
+    }
+    else
+    {
+        m_periodicRefreshScheduled = false;
+    }
 }
 
 namespace
@@ -1961,6 +2001,17 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
     if (!m_channelMatrixMap.empty())
     {
         UpdateChannel();
+    }
+    // Phase D: kick off the periodic refresh loop the first time
+    // EnsureBatchFresh fires. At sim start the channel maps are empty
+    // so we have nothing to refresh; once the first PRX call populates
+    // them, mez owns the channel-update cadence from then on.
+    if (!m_periodicRefreshScheduled && !m_refreshPeriod.IsZero() && !m_channelMatrixMap.empty())
+    {
+        m_periodicRefreshScheduled = true;
+        Simulator::Schedule(m_refreshPeriod,
+                            &ThreeGppChannelModelWgpuMezanine::PeriodicRefresh,
+                            this);
     }
 }
 
