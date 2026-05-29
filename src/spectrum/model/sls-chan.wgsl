@@ -1600,6 +1600,16 @@ var<workgroup> wg_Hlink  : array<vec2f, 192>;   // NMAXTAPS(24) * MAX_UE_ANT(8)
 var<workgroup> wg_tapIdx : array<u32,   24>;
 var<workgroup> wg_tapCnt : atomic<u32>;
 
+// Per-cluster parallelization scaffolding: each of the 24 workgroup
+// threads handles one cluster of the link. Strongest clusters expand
+// into N_SUB_CLUSTER(=3) sub-taps; regular clusters produce a single
+// tap. wg_clusterTapOffset[c] = starting slot in wg_Hlink/wg_tapIdx
+// for cluster c; wg_clusterTapCount[c] = number of taps (1 or 3).
+// wg_tapCountTotal = sum over active clusters (capped at NMAXTAPS).
+var<workgroup> wg_clusterTapOffset : array<u32, 24>;
+var<workgroup> wg_clusterTapCount  : array<u32, 24>;
+var<workgroup> wg_tapCountTotal    : u32;
+
 // Packed-buffer helpers for cir_buf_packed_out. The buffer is a flat
 // array<u32>; cirCoe entries (vec2f = 2 floats) are stored as 2 u32
 // via bitcast. cirNormDelay and cirNtaps entries are u32 directly.
@@ -1704,124 +1714,113 @@ fn generate_cir_kernel(
     let zetaBs = cell.antPanelOrientation[2];
     let zetaUt = ut.antPanelOrientation[2];
 
+    // -----------------------------------------------------------------
+    // Per-cluster parallelization scaffolding.
+    //
+    // The original CUDA port wrapped the cluster loop in an `if tid == 0`
+    // gate so all of the ray accumulation ran on lane 0 of a 24-thread
+    // workgroup -- the other 23 threads were idle, which is why even a
+    // few hundred workgroups per dispatch ran into the D3D12 watchdog.
+    //
+    // Each of the 24 threads now handles one cluster (li.x = c). Tap
+    // indices and per-cluster tap counts are link-level state (don't
+    // depend on the BS antenna), so we compute them once on thread 0
+    // and broadcast via workgroup memory, then re-use them across the
+    // BA loop. Sub-cluster tap_count growth (strongest clusters expand
+    // into N_SUB_CLUSTER taps) is folded into a prefix-sum so each
+    // thread knows where to write in wg_Hlink/wg_tapIdx without
+    // collisions or atomics.
+    // -----------------------------------------------------------------
+
+    if li.x == 0u {
+        var acc = 0u;
+        for (var ci = 0u; ci < n_cl; ci++) {
+            let is_strong = (ci == cp.strongest2[0] || ci == cp.strongest2[1]);
+            let nTaps = select(1u, N_SUB_CLUSTER, is_strong);
+            wg_clusterTapOffset[ci] = acc;
+            wg_clusterTapCount[ci]  = nTaps;
+            acc += nTaps;
+            if acc > NMAXTAPS { acc = NMAXTAPS; break; }
+        }
+        wg_tapCountTotal = acc;
+    }
+    workgroupBarrier();
+
+    let my_c            = li.x;
+    let my_is_cluster   = my_c < n_cl;
+    let my_is_strongest = my_is_cluster && (my_c == cp.strongest2[0] || my_c == cp.strongest2[1]);
+    let my_tap_off      = select(0u, wg_clusterTapOffset[my_c], my_is_cluster);
+    let my_tap_cnt      = select(0u, wg_clusterTapCount[my_c],  my_is_cluster);
+    var my_cl_power     = select(0.0, cp.powers[my_c], my_is_cluster);
+    if my_is_cluster && lk.losInd != 0u && is_o2i == 0u && my_c == 0u {
+        my_cl_power = max(my_cl_power - los_power, 0.0);
+    }
+    let my_link_packed_base = al.lspReadIdx * PACKED_LINK_STRIDE;
+    let my_cl_delay_base    = select(0.0, cp.delays[my_c], my_is_cluster);
+    let C_DS                = cir_buf_cmn.C_DS[lsp_idx];
+
+    // Each thread writes its tap indices once (link-level, shared across
+    // BS antennas).
+    if my_is_cluster && my_tap_off < NMAXTAPS {
+        for (var sc = 0u; sc < my_tap_cnt && (my_tap_off + sc) < NMAXTAPS; sc++) {
+            var cl_delay = my_cl_delay_base;
+            if my_is_strongest {
+                if sc == 1u { cl_delay += 1.28 * C_DS; }
+                if sc == 2u { cl_delay += 2.56 * C_DS; }
+            }
+            var tap_idx = 0u;
+            if cir_uni_sys.enable_propagation_delay == 1u {
+                tap_idx = u32(round((cl_delay * 1e-9 + lk.d3d / 3.0e8 + lk.delta_tau)
+                                    * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
+            } else {
+                tap_idx = u32(round(cl_delay * 1e-9
+                                    * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
+            }
+            wg_tapIdx[my_tap_off + sc] = tap_idx;
+        }
+    }
+    workgroupBarrier();
+
+    let n_ray_f = f32(n_ray);
+
     // ---- Outer BS antenna loop (serial) ----
     for (var ba = 0u; ba < nCellAnt; ba++) {
 
-        // Reset workgroup H_link and tap count
-        if li.x == 0u { atomicStore(&wg_tapCnt, 0u); }
+        // Reset workgroup H_link in parallel across threads.
         for (var i = li.x; i < NMAXTAPS * MAX_UE_ANT; i += 24u) { wg_Hlink[i] = vec2f(0.0); }
         workgroupBarrier();
 
-        var tap_count = 0u;
-
-        // ---- cluster loop ----
-        for (var c = 0u; c < n_cl; c++) {
-            let is_strongest = (c == cp.strongest2[0] || c == cp.strongest2[1]);
-            var cl_power = cp.powers[c];
-            if lk.losInd != 0u && is_o2i == 0u && c == 0u {
-                cl_power = max(cl_power - los_power, 0.0);
-            }
-
-            if is_strongest {
-                // Sub-cluster processing (3 sub-clusters per 3GPP Table 7.5-5)
-                for (var sc = 0u; sc < cir_buf_cmn.nSubCluster; sc++) {
+        // ---- parallel cluster work: each thread handles one cluster ----
+        if my_is_cluster && my_tap_off < NMAXTAPS {
+            if my_is_strongest {
+                for (var sc = 0u; sc < N_SUB_CLUSTER && (my_tap_off + sc) < NMAXTAPS; sc++) {
                     var sc_power = 0.0;
                     if      sc == 0u { sc_power = sqrt(10.0 / 20.0); }
                     else if sc == 1u { sc_power = sqrt( 6.0 / 20.0); }
                     else             { sc_power = sqrt( 4.0 / 20.0); }
 
-                    var cl_delay = cp.delays[c];
-                    let C_DS     = cir_buf_cmn.C_DS[lsp_idx];
-                    if sc == 1u { cl_delay += 1.28 * C_DS; }
-                    if sc == 2u { cl_delay += 2.56 * C_DS; }
-
-                    // tap index (matches CUDA: clusterDelay + d3d/c + delta_tau)
-                    var tap_idx = 0u;
-                    if cir_uni_sys.enable_propagation_delay == 1u {
-                        tap_idx = u32(round((cl_delay * 1e-9 + lk.d3d / 3.0e8 + lk.delta_tau)
-                                           * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
-                    } else {
-                        tap_idx = u32(round(cl_delay * 1e-9
-                                           * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
-                    }
-                    if li.x == 0u { wg_tapIdx[tap_count] = tap_idx; }
-
-                    // ray loop – only thread 0 executes (matches CUDA tid==0 path for tapIdx)
                     let sc_size = cir_buf_cmn.raysInSubClusterSizes[sc];
-                    let power   = sqrt(cl_power / f32(n_ray));
+                    let power   = sqrt(my_cl_power / n_ray_f);
+                    let my_tap  = my_tap_off + sc;
 
-                    if li.x == 0u {
-                        for (var ri = 0u; ri < sc_size; ri++) {
-                            // Packed-buffer addressing: each link gets a
-                            // PACKED_LINK_STRIDE-f32 slab in cir_packed_in
-                            // sub-divided into XPR / RNDP / AOA / AOD /
-                            // ZOA / ZOD regions (PACKED_OFF_*).
-                            let link_packed_base = al.lspReadIdx * PACKED_LINK_STRIDE;
-                            // raysInSubClusterN became array<vec4<u32>, 3> for
-                            // uniform layout; map ri in [0,10) to (vec4_idx, lane).
-                            let ri_vec  = ri / 4u;
-                            let ri_lane = ri % 4u;
-                            var ray_local_idx = 0u;
-                            if sc == 0u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster0[ri_vec][ri_lane]; }
-                            else if sc == 1u { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster1[ri_vec][ri_lane]; }
-                            else             { ray_local_idx = c * n_ray + cir_buf_cmn.raysInSubCluster2[ri_vec][ri_lane]; }
+                    for (var ri = 0u; ri < sc_size; ri++) {
+                        let ri_vec  = ri / 4u;
+                        let ri_lane = ri % 4u;
+                        var ray_local_idx = 0u;
+                        if sc == 0u { ray_local_idx = my_c * n_ray + cir_buf_cmn.raysInSubCluster0[ri_vec][ri_lane]; }
+                        else if sc == 1u { ray_local_idx = my_c * n_ray + cir_buf_cmn.raysInSubCluster1[ri_vec][ri_lane]; }
+                        else             { ray_local_idx = my_c * n_ray + cir_buf_cmn.raysInSubCluster2[ri_vec][ri_lane]; }
 
-                            let tZOA = cir_packed_in[link_packed_base + PACKED_OFF_ZOA + ray_local_idx]
-                                       - ut.antPanelOrientation[0];
-                            let pAOA = cir_packed_in[link_packed_base + PACKED_OFF_AOA + ray_local_idx]
-                                       - ut.antPanelOrientation[1];
-                            let tZOD = cir_packed_in[link_packed_base + PACKED_OFF_ZOD + ray_local_idx]
-                                       - cell.antPanelOrientation[0];
-                            let pAOD = cir_packed_in[link_packed_base + PACKED_OFF_AOD + ray_local_idx]
-                                       - cell.antPanelOrientation[1];
-                            let xpr  = cir_packed_in[link_packed_base + PACKED_OFF_XPR + ray_local_idx];
-                            // rph_off = fully-resolved offset to ray's 4 random phases.
-                            let rph_off = link_packed_base + PACKED_OFF_RNDP + ray_local_idx * 4u;
-
-                            for (var ua = 0u; ua < nUtAnt; ua++) {
-                                let rc = calc_ray_coeff(
-                                    utCfg, ua, tZOA, pAOA, zetaUt,
-                                    bsCfg, ba, tZOD, pAOD, zetaBs,
-                                    xpr, rph_off, al.lspReadIdx,
-                                    snap_time, vel, cir_buf_cmn.lambda_0
-                                );
-                                let hi = ua * NMAXTAPS + tap_count;
-                                wg_Hlink[hi] = cadd(wg_Hlink[hi], rc * power * sc_power);
-                            }
-                        }
-                    }
-                    tap_count++;
-                }
-            } else {
-                // Regular cluster
-                var cl_delay = cp.delays[c];
-                var tap_idx = 0u;
-                if cir_uni_sys.enable_propagation_delay == 1u {
-                    tap_idx = u32(round((cl_delay * 1e-9 + lk.d3d / 3.0e8 + lk.delta_tau)
-                                       * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
-                } else {
-                    tap_idx = u32(round(cl_delay * 1e-9
-                                       * cir_uni_sim.sc_spacing_hz * f32(cir_uni_sim.fft_size)));
-                }
-                if li.x == 0u { wg_tapIdx[tap_count] = tap_idx; }
-
-                let power = sqrt(cl_power / f32(n_ray));
-                if li.x == 0u {
-                    for (var r = 0u; r < n_ray; r++) {
-                        // Same packed-buffer addressing as the
-                        // strongest-cluster path above.
-                        let ray_local_idx = c * n_ray + r;
-                        let link_packed_base = al.lspReadIdx * PACKED_LINK_STRIDE;
-                        let tZOA = cir_packed_in[link_packed_base + PACKED_OFF_ZOA + ray_local_idx]
+                        let tZOA = cir_packed_in[my_link_packed_base + PACKED_OFF_ZOA + ray_local_idx]
                                    - ut.antPanelOrientation[0];
-                        let pAOA = cir_packed_in[link_packed_base + PACKED_OFF_AOA + ray_local_idx]
+                        let pAOA = cir_packed_in[my_link_packed_base + PACKED_OFF_AOA + ray_local_idx]
                                    - ut.antPanelOrientation[1];
-                        let tZOD = cir_packed_in[link_packed_base + PACKED_OFF_ZOD + ray_local_idx]
+                        let tZOD = cir_packed_in[my_link_packed_base + PACKED_OFF_ZOD + ray_local_idx]
                                    - cell.antPanelOrientation[0];
-                        let pAOD = cir_packed_in[link_packed_base + PACKED_OFF_AOD + ray_local_idx]
+                        let pAOD = cir_packed_in[my_link_packed_base + PACKED_OFF_AOD + ray_local_idx]
                                    - cell.antPanelOrientation[1];
-                        let xpr  = cir_packed_in[link_packed_base + PACKED_OFF_XPR + ray_local_idx];
-                        let rph_off = link_packed_base + PACKED_OFF_RNDP + ray_local_idx * 4u;
+                        let xpr  = cir_packed_in[my_link_packed_base + PACKED_OFF_XPR + ray_local_idx];
+                        let rph_off = my_link_packed_base + PACKED_OFF_RNDP + ray_local_idx * 4u;
 
                         for (var ua = 0u; ua < nUtAnt; ua++) {
                             let rc = calc_ray_coeff(
@@ -1830,18 +1829,48 @@ fn generate_cir_kernel(
                                 xpr, rph_off, al.lspReadIdx,
                                 snap_time, vel, cir_buf_cmn.lambda_0
                             );
-                            let hi = ua * NMAXTAPS + tap_count;
-                            wg_Hlink[hi] = cadd(wg_Hlink[hi], rc * power);
+                            let hi = ua * NMAXTAPS + my_tap;
+                            wg_Hlink[hi] = cadd(wg_Hlink[hi], rc * power * sc_power);
                         }
                     }
                 }
-                tap_count++;
+            } else {
+                let power = sqrt(my_cl_power / n_ray_f);
+                let my_tap = my_tap_off;
+                for (var r = 0u; r < n_ray; r++) {
+                    let ray_local_idx = my_c * n_ray + r;
+                    let tZOA = cir_packed_in[my_link_packed_base + PACKED_OFF_ZOA + ray_local_idx]
+                               - ut.antPanelOrientation[0];
+                    let pAOA = cir_packed_in[my_link_packed_base + PACKED_OFF_AOA + ray_local_idx]
+                               - ut.antPanelOrientation[1];
+                    let tZOD = cir_packed_in[my_link_packed_base + PACKED_OFF_ZOD + ray_local_idx]
+                               - cell.antPanelOrientation[0];
+                    let pAOD = cir_packed_in[my_link_packed_base + PACKED_OFF_AOD + ray_local_idx]
+                               - cell.antPanelOrientation[1];
+                    let xpr  = cir_packed_in[my_link_packed_base + PACKED_OFF_XPR + ray_local_idx];
+                    let rph_off = my_link_packed_base + PACKED_OFF_RNDP + ray_local_idx * 4u;
+
+                    for (var ua = 0u; ua < nUtAnt; ua++) {
+                        let rc = calc_ray_coeff(
+                            utCfg, ua, tZOA, pAOA, zetaUt,
+                            bsCfg, ba, tZOD, pAOD, zetaBs,
+                            xpr, rph_off, al.lspReadIdx,
+                            snap_time, vel, cir_buf_cmn.lambda_0
+                        );
+                        let hi = ua * NMAXTAPS + my_tap;
+                        wg_Hlink[hi] = cadd(wg_Hlink[hi], rc * power);
+                    }
+                }
             }
-        } // end cluster loop
+        }
 
         workgroupBarrier();
 
-        // LOS component (added at tap 0)
+        // LOS component (added at tap 0). Single-threaded -- the LOS
+        // contribution is small (one calc_los_coeff per UA) and we'd
+        // need a barrier+broadcast to parallelize cleanly. Thread 0 is
+        // already idle while other threads finished their cluster work
+        // identically in the barrier above.
         if lk.losInd != 0u && is_o2i == 0u && li.x == 0u {
             let los_scale = sqrt(KR / (KR + 1.0));
             let tZOA = wrap_zenith (lk.theta_LOS_ZOA - ut.antPanelOrientation[0]);
@@ -1860,14 +1889,16 @@ fn generate_cir_kernel(
             }
         }
 
-        // Path loss scaling
-        if cir_uni_sys.disable_pl_shadowing == 0u && li.x == 0u {
+        workgroupBarrier();
+
+        // Path loss scaling: parallel across (ua, tap) slots; each
+        // thread owns a strided slice of wg_Hlink (no overlap, no
+        // race).
+        if cir_uni_sys.disable_pl_shadowing == 0u {
             let path_gain = -(lk.pathloss - lk.SF);
             let ps        = pow(10.0, path_gain / 20.0);
-            for (var ua = 0u; ua < nUtAnt; ua++) {
-                for (var t2 = 0u; t2 < NMAXTAPS; t2++) {
-                    wg_Hlink[ua * NMAXTAPS + t2] = wg_Hlink[ua * NMAXTAPS + t2] * ps;
-                }
+            for (var idx = li.x; idx < NMAXTAPS * MAX_UE_ANT; idx += 24u) {
+                wg_Hlink[idx] = wg_Hlink[idx] * ps;
             }
         }
 
@@ -1875,16 +1906,18 @@ fn generate_cir_kernel(
 
         let buf_len_u32 = arrayLength(&cir_buf_packed_out);
 
-        // Write H_link -> cirCoe for this BS antenna (into packed_out)
-        if li.x == 0u {
-            for (var ti = 0u; ti < tap_count; ti++) {
-                for (var ua = 0u; ua < nUtAnt; ua++) {
-                    let dst_u32 = snap_off_u32
-                                + ((ua * nCellAnt + ba) * NMAXTAPS + ti) * 2u;
-                    if dst_u32 + 1u < buf_len_u32 {
-                        let cur = pack_read_vec2f(dst_u32);
-                        pack_write_vec2f(dst_u32, cadd(cur, wg_Hlink[ua * NMAXTAPS + ti]));
-                    }
+        // Write H_link -> cirCoe for this BS antenna (parallel
+        // across taps). Each thread writes one tap; taps beyond
+        // wg_tapCountTotal are skipped.
+        let total_taps = wg_tapCountTotal;
+        if li.x < total_taps {
+            let ti = li.x;
+            for (var ua = 0u; ua < nUtAnt; ua++) {
+                let dst_u32 = snap_off_u32
+                            + ((ua * nCellAnt + ba) * NMAXTAPS + ti) * 2u;
+                if dst_u32 + 1u < buf_len_u32 {
+                    let cur = pack_read_vec2f(dst_u32);
+                    pack_write_vec2f(dst_u32, cadd(cur, wg_Hlink[ua * NMAXTAPS + ti]));
                 }
             }
         }
@@ -1892,27 +1925,20 @@ fn generate_cir_kernel(
 
     workgroupBarrier();
 
-    // Sparse tap indexing (only thread 0, only snapshot 0)
+    // Sparse tap indexing (only thread 0, only snapshot 0). The
+    // per-cluster pre-pass above already wrote tap_count_total values
+    // into wg_tapIdx (no UINT_MAX sentinels needed). Sort+dedup in
+    // place, then write to packed_out cirNormDelay / cirNtaps regions.
     if li.x == 0u && snapshot_idx == 0u {
-        let tap_count = atomicLoad(&wg_tapCnt); // reuse stored value via last wg_tapIdx valid count
-        // Determine actual tap_count from cluster processing above.
-        // Because we wrote sequentially into wg_tapIdx, we count unique sorted entries.
-
-        // Use the last tap_count written above – track it in wg_tapCnt
-        // (wg_tapCnt is set atomically at the end of cluster loop, see below – but
-        //  we keep it simple: sort wg_tapIdx[0..tap_count-1] and deduplicate)
-
-        // We re-derive tap_count: count non-UINT_MAX entries
-        var tc = 0u;
-        for (var i = 0u; i < NMAXTAPS; i++) {
-            if wg_tapIdx[i] != 0xFFFFFFFFu { tc++; } else { break; }
-        }
+        let tc = wg_tapCountTotal;
 
         // Bubble sort wg_tapIdx[0..tc)
-        for (var i = 0u; i < tc - 1u; i++) {
-            for (var j = 0u; j < tc - 1u - i; j++) {
-                if wg_tapIdx[j] > wg_tapIdx[j+1u] {
-                    let tmp = wg_tapIdx[j]; wg_tapIdx[j] = wg_tapIdx[j+1u]; wg_tapIdx[j+1u] = tmp;
+        if tc > 1u {
+            for (var i = 0u; i < tc - 1u; i++) {
+                for (var j = 0u; j < tc - 1u - i; j++) {
+                    if wg_tapIdx[j] > wg_tapIdx[j+1u] {
+                        let tmp = wg_tapIdx[j]; wg_tapIdx[j] = wg_tapIdx[j+1u]; wg_tapIdx[j+1u] = tmp;
+                    }
                 }
             }
         }
