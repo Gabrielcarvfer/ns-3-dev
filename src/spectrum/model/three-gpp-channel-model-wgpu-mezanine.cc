@@ -1240,15 +1240,6 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         std::min<uint64_t>({uint64_t(nActiveLinks), chunkByBufMain, chunkByWgMain}),
         1ull,
         uint64_t(nActiveLinks)));
-    // Hard cap: at NR-cali scale (16-element panels, 14 snapshots,
-    // ~24 clusters) the generate_cir_kernel + gen_channel_matrix
-    // dispatches on a chunk of ~512+ trip the Windows D3D12 watchdog
-    // ("Device is lost"). 256 keeps each dispatch comfortably under
-    // the ~2 s TDR threshold even at this scale; smaller deployments
-    // will naturally use bigger chunks via the buffer-cap heuristic.
-    // Future work: tile the matrix kernel by rays / pages so we can
-    // dispatch more links per submit without overrunning the watchdog.
-    chunkSize = std::min<uint32_t>(chunkSize, 256u);
 
     // Spec-batch chunk size: gen_spec_batch is a 1D dispatch over
     // chunkLen × numRxPorts × numTxPorts × numRb / 64, so at large
@@ -1596,24 +1587,29 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             params->m_cluster1st != params->m_cluster2nd
                 ? static_cast<uint8_t>(params->m_reducedClusterNumber + 4)
                 : static_cast<uint8_t>(params->m_reducedClusterNumber + 2);
-        // Allocate a fresh ChannelMatrix Ptr each tick. We tried
-        // holding the same Ptr in place and only resizing m_channel
-        // -- it cut ~735 MB/tick of allocations but broke PRX's
-        // m_longTermMap invalidation: PRX caches `m_channel =
-        // channelMatrix` and detects updates with
-        // `cached.m_channel->m_generatedTime != channelMatrix
-        // ->m_generatedTime`. With same Ptr that comparison is
-        // always equal, so PRX kept returning a stale longTerm Ptr
-        // whose page count no longer matched the matrix's after a
-        // cluster-count change, tripping
-        // numCluster <= longTerm->GetNumPages(). Fresh Ptr makes the
-        // cached object's generatedTime VALUE freeze at its old
-        // timestamp so PRX's check fires correctly.
-        Ptr<ChannelMatrix> matrixPtr = Create<ChannelMatrix>();
-        matrixPtr->m_channel = MatrixBasedChannelModel::Complex3DVector(
-            globalUeAnt, globalBsAnt, numOverallCluster);
-        m_channelMatrixMap[ctx.matrixKey] = matrixPtr;
-        ChannelMatrix* matrix = PeekPointer(matrixPtr);
+        // Reuse the existing matrix entry when present -- the per-link
+        // ChannelMatrix backs a Complex3DVector of size globalUeAnt *
+        // globalBsAnt * numOverallCluster complex<double> which works
+        // out to ~98 KB per link at NR-cali geometry; at 7477 active
+        // links a fresh Create<ChannelMatrix>() + Complex3DVector ctor
+        // every tick churns ~735 MB through the heap. Holding the
+        // ChannelMatrix Ptr in place and only resizing m_channel on a
+        // shape mismatch keeps the allocations bounded.
+        Ptr<ChannelMatrix>& matrixRef = m_channelMatrixMap[ctx.matrixKey];
+        if (!matrixRef)
+        {
+            matrixRef = Create<ChannelMatrix>();
+            matrixRef->m_channel = MatrixBasedChannelModel::Complex3DVector(
+                globalUeAnt, globalBsAnt, numOverallCluster);
+        }
+        else if (matrixRef->m_channel.GetNumRows() != globalUeAnt ||
+                 matrixRef->m_channel.GetNumCols() != globalBsAnt ||
+                 matrixRef->m_channel.GetNumPages() != numOverallCluster)
+        {
+            matrixRef->m_channel = MatrixBasedChannelModel::Complex3DVector(
+                globalUeAnt, globalBsAnt, numOverallCluster);
+        }
+        ChannelMatrix* matrix = PeekPointer(matrixRef);
         matrix->m_generatedTime = Simulator::Now();
         matrix->m_nodeIds = std::make_pair(
             ctx.sMob->GetObject<Node>()->GetId(),
@@ -1668,15 +1664,27 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                           << " longTermFlat.size()=" << longTermFlat.size()
                           << " (lspReadIdx=" << ctx.lspReadIdx
                           << " ltPerLink=" << ltPerLink << ")");
-            // Fresh longTerm Ptr each tick for the same reason as the
-            // matrix above (PRX caches the Ptr value and only
-            // invalidates on generatedTime difference, so identity
-            // must change to force a refresh).
-            Ptr<Complex3DVector> longTerm = Create<Complex3DVector>(
-                static_cast<uint16_t>(ltUPorts),
-                static_cast<uint16_t>(ltSPorts),
-                numOverallCluster);
+            // Same in-place reuse story as the channel matrix above:
+            // recycle the existing Complex3DVector when present and
+            // its shape matches, so we don't churn 12 MB/tick of
+            // longTerm allocations through the heap on a 7477-link
+            // batch.
             GpuLongTermEntry& entryRef = m_gpuLongTermMap[ctx.matrixKey];
+            Ptr<Complex3DVector> longTerm;
+            if (entryRef.longTerm &&
+                entryRef.longTerm->GetNumRows() == ltUPorts &&
+                entryRef.longTerm->GetNumCols() == ltSPorts &&
+                entryRef.longTerm->GetNumPages() == numOverallCluster)
+            {
+                longTerm = ConstCast<Complex3DVector>(entryRef.longTerm);
+            }
+            else
+            {
+                longTerm = Create<Complex3DVector>(
+                    static_cast<uint16_t>(ltUPorts),
+                    static_cast<uint16_t>(ltSPorts),
+                    numOverallCluster);
+            }
             const std::complex<float>* ltSrc = longTermFlat.data() + ltLinkBase;
             std::complex<double>* ltDst = longTerm->GetPagePtr(0);
             for (size_t k = 0; k < ltCells; ++k)
