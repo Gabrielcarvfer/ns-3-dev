@@ -1428,16 +1428,22 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             prev = it->second;
         }
 
-        // Same in-place reuse pattern as the matrix above: keep the
-        // existing ThreeGppChannelParams Ptr in the map, refresh its
-        // fields in place. Avoids ~7477 Create<ThreeGppChannelParams>
-        // + vector<double> allocations per tick.
-        Ptr<ThreeGppChannelParams>& paramsRef = m_channelParamsMap[ctx.paramsKey];
-        if (!paramsRef)
-        {
-            paramsRef = Create<ThreeGppChannelParams>();
-        }
-        Ptr<ThreeGppChannelParams> params = paramsRef;
+        // Allocate a fresh ChannelParams Ptr each tick alongside the
+        // fresh matrix above. PRX caches `m_channelParams` per link
+        // and re-runs CalcLongTerm only when
+        // `cached.m_channelParams->m_generatedTime !=
+        //  channelParams->m_generatedTime`. With an in-place reused
+        // Ptr the cached object IS the current object, so its
+        // generatedTime advances with every tick and the comparison
+        // is trivially equal -- PRX never sees the param structural
+        // changes (m_alpha resize from FindStrongestClusters
+        // appending +2 or +4 subcluster entries, m_reducedClusterNumber
+        // shifts on cluster-count change) and keeps using a stale
+        // longTerm Ptr whose sizes no longer match the current matrix.
+        // Freezing the OLD object's generatedTime in the cache by
+        // moving to a fresh Ptr makes PRX's check fire correctly.
+        Ptr<ThreeGppChannelParams> params = Create<ThreeGppChannelParams>();
+        m_channelParamsMap[ctx.paramsKey] = params;
         params->m_generatedTime = Simulator::Now();
 
         Ptr<MobilityModel> aMobOrdered = ctx.sMob;
