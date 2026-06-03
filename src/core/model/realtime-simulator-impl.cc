@@ -278,7 +278,10 @@ RealtimeSimulatorImpl::ProcessOneEvent()
         //
         if (m_synchronizer->Synchronize(tsNow, tsDelay))
         {
-            NS_LOG_LOGIC("Interrupted ...");
+            // Synchronize returned true: we slept until the event timestamp was
+            // due, so we break out of the loop. (The "interrupted" case is the
+            // false return, handled by continuing the loop below.)
+            NS_LOG_LOGIC("Synchronized; break out of loop");
             break;
         }
 
