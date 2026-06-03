@@ -305,6 +305,42 @@ Ipv4FlowProbe::GetTypeId()
 void
 Ipv4FlowProbe::DoDispose()
 {
+    if (m_ipv4)
+    {
+        // Disconnect from the trace sources so that this (disposed) probe is no
+        // longer invoked when packets keep flowing through the node, e.g. after
+        // the FlowMonitorHelper that created it has gone out of scope (issue
+        // #665). Otherwise the callbacks would dereference the now-null members.
+        m_ipv4->TraceDisconnectWithoutContext(
+            "SendOutgoing",
+            MakeCallback(&Ipv4FlowProbe::SendOutgoingLogger, Ptr<Ipv4FlowProbe>(this)));
+        m_ipv4->TraceDisconnectWithoutContext(
+            "UnicastForward",
+            MakeCallback(&Ipv4FlowProbe::ForwardLogger, Ptr<Ipv4FlowProbe>(this)));
+        m_ipv4->TraceDisconnectWithoutContext(
+            "LocalDeliver",
+            MakeCallback(&Ipv4FlowProbe::ForwardUpLogger, Ptr<Ipv4FlowProbe>(this)));
+        m_ipv4->TraceDisconnectWithoutContext(
+            "Drop",
+            MakeCallback(&Ipv4FlowProbe::DropLogger, Ptr<Ipv4FlowProbe>(this)));
+
+        Ptr<Node> node = m_ipv4->GetObject<Node>();
+        if (node)
+        {
+            std::ostringstream qd;
+            qd << "/NodeList/" << node->GetId()
+               << "/$ns3::TrafficControlLayer/RootQueueDiscList/*/Drop";
+            Config::DisconnectWithoutContext(
+                qd.str(),
+                MakeCallback(&Ipv4FlowProbe::QueueDiscDropLogger, Ptr<Ipv4FlowProbe>(this)));
+
+            std::ostringstream oss;
+            oss << "/NodeList/" << node->GetId() << "/DeviceList/*/TxQueue/Drop";
+            Config::DisconnectWithoutContext(
+                oss.str(),
+                MakeCallback(&Ipv4FlowProbe::QueueDropLogger, Ptr<Ipv4FlowProbe>(this)));
+        }
+    }
     m_ipv4 = nullptr;
     m_classifier = nullptr;
     FlowProbe::DoDispose();
