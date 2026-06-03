@@ -253,7 +253,10 @@ OfdmPhy::GetPayloadDuration(uint32_t size,
 {
     //(Section 17.3.2.4 "Timing related parameters" Table 17-5 "Timing-related parameters"; IEEE Std
     // 802.11-2016 corresponds to T_{SYM} in the table)
-    Time symbolDuration = MicroSeconds(4);
+    // The OFDM symbol duration depends on the channel width (4/8/16 us for
+    // 20/10/5 MHz); use the width-aware helper instead of hardcoding 20 MHz
+    // (issue #1022).
+    Time symbolDuration = GetSymbolDuration(txVector.GetChannelWidth());
 
     double numDataBitsPerSymbol =
         txVector.GetMode().GetDataRate(txVector) * symbolDuration.GetNanoSeconds() / 1e9;
