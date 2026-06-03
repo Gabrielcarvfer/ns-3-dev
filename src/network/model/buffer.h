@@ -11,14 +11,25 @@
 #include "ns3/assert.h"
 #include "ns3/deprecated.h"
 
+#include <iterator>
 #include <ostream>
 #include <stdint.h>
+#include <type_traits>
 #include <vector>
 
 #define BUFFER_FREE_LIST 1
 
 namespace ns3
 {
+
+/**
+ * @ingroup packet
+ * Concept matching a forward iterator whose value type is uint8_t.
+ */
+template <typename It>
+concept Uint8tForwardIterator =
+    std::forward_iterator<It> &&
+    std::is_same_v<typename std::iterator_traits<It>::value_type, uint8_t>;
 
 /**
  * @ingroup packet
@@ -261,6 +272,24 @@ class Buffer
         void Write(Iterator start, Iterator end);
 
         /**
+         * @brief Write a range of uint8_t values into the buffer.
+         *
+         * @tparam Iter a forward iterator with value type uint8_t
+         * @param first start of the range to copy in
+         * @param last one-past-the-end of the range to copy in
+         *
+         * Advances the iterator position by std::distance(first, last) bytes.
+         */
+        template <Uint8tForwardIterator Iter>
+        void Write(Iter first, Iter last)
+        {
+            for (; first != last; ++first)
+            {
+                WriteU8(*first);
+            }
+        }
+
+        /**
          * @return the byte read in the buffer.
          *
          * Read data, but do not advance the Iterator read.
@@ -362,6 +391,24 @@ class Buffer
          * bytes read.
          */
         void Read(uint8_t* buffer, uint32_t size);
+
+        /**
+         * @brief Read into a range of uint8_t storage from the buffer.
+         *
+         * @tparam Iter a forward iterator with value type uint8_t
+         * @param first start of the destination range
+         * @param last one-past-the-end of the destination range
+         *
+         * Advances the iterator position by std::distance(first, last) bytes.
+         */
+        template <Uint8tForwardIterator Iter>
+        void Read(Iter first, Iter last)
+        {
+            for (; first != last; ++first)
+            {
+                *first = ReadU8();
+            }
+        }
 
         /**
          * @param start start iterator of the buffer to copy data into

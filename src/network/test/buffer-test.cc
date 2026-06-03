@@ -376,6 +376,22 @@ BufferTest::DoRun()
     val2 <<= 8;
     val2 |= i.ReadU8();
     NS_TEST_ASSERT_MSG_EQ(val1, val2, "Bad ReadNtohU16()");
+
+    // issue #1298: write/read a uint8_t container through the iterator-pair
+    // Write(first, last) / Read(first, last) overloads.
+    {
+        std::vector<uint8_t> src = {0xde, 0xad, 0xbe, 0xef, 0x42};
+        Buffer rangeBuf;
+        rangeBuf.AddAtStart(src.size());
+        Buffer::Iterator wi = rangeBuf.Begin();
+        wi.Write(src.begin(), src.end());
+        std::vector<uint8_t> dst(src.size(), 0);
+        Buffer::Iterator ri = rangeBuf.Begin();
+        ri.Read(dst.begin(), dst.end());
+        NS_TEST_ASSERT_MSG_EQ((src == dst),
+                              true,
+                              "Buffer iterator-pair Write/Read round-trip failed");
+    }
 }
 
 /**
