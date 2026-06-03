@@ -410,6 +410,27 @@ TxDurationTest::DoRun()
 
     NS_TEST_EXPECT_MSG_EQ(retval, true, "an 802.11b CCK duration failed");
 
+    // Reduced-bandwidth OFDM payload durations (issue #1022): the OFDM symbol
+    // duration is 8 us at 10 MHz and 16 us at 5 MHz (vs 4 us at 20 MHz). For a
+    // 1000-byte payload the data field is ceil((16 + 8000 + 6) / 24) = 335
+    // symbols, i.e. 335 * 8 us = 2680 us at 10 MHz and 335 * 16 us = 5360 us at
+    // 5 MHz. (Before the fix these were 2676 us and 5348 us.)
+    retval = retval &&
+             CheckPayloadDuration(1000,
+                                  OfdmPhy::GetOfdmRate3MbpsBW10MHz(),
+                                  MHz_u{10},
+                                  NanoSeconds(800),
+                                  WIFI_PREAMBLE_LONG,
+                                  MicroSeconds(2680)) &&
+             CheckPayloadDuration(1000,
+                                  OfdmPhy::GetOfdmRate1_5MbpsBW5MHz(),
+                                  MHz_u{5},
+                                  NanoSeconds(800),
+                                  WIFI_PREAMBLE_LONG,
+                                  MicroSeconds(5360));
+
+    NS_TEST_EXPECT_MSG_EQ(retval, true, "a reduced-bandwidth OFDM payload duration failed");
+
     // Similar, but we add PHY preamble and header durations
     // and we test different rates.
     // The payload durations for modes other than 11mbb have been
