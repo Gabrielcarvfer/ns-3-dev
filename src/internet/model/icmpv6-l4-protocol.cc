@@ -28,6 +28,8 @@
 #include "ns3/string.h"
 #include "ns3/uinteger.h"
 
+#include <vector>
+
 namespace ns3
 {
 
@@ -230,6 +232,32 @@ Icmpv6L4Protocol::GetProtocolNumber() const
     return PROT_NUMBER;
 }
 
+bool
+Icmpv6L4Protocol::CheckIcmpv6Checksum(Ptr<const Packet> packet,
+                                      Ipv6Address source,
+                                      Ipv6Address destination)
+{
+    NS_LOG_FUNCTION_NOARGS();
+    uint32_t size = packet->GetSize();
+
+    // Compute the IPv6 pseudo-header partial checksum, reusing the same logic
+    // used on transmission.
+    Icmpv6Header pseudoHeader;
+    pseudoHeader.CalculatePseudoHeaderChecksum(source, destination, size, PROT_NUMBER);
+    uint16_t partialChecksum = pseudoHeader.GetChecksum();
+
+    // Fold the partial checksum with the received message as-is (the carried
+    // checksum field included). For a valid checksum the result is zero.
+    std::vector<uint8_t> data(size);
+    packet->CopyData(data.data(), size);
+    Buffer buffer;
+    buffer.AddAtStart(size);
+    Buffer::Iterator it = buffer.Begin();
+    it.Write(data.data(), size);
+    it = buffer.Begin();
+    return it.CalculateIpChecksum(size, partialChecksum) == 0;
+}
+
 int
 Icmpv6L4Protocol::GetVersion() const
 {
@@ -291,6 +319,16 @@ Icmpv6L4Protocol::Receive(Ptr<Packet> packet,
     NS_LOG_FUNCTION(this << packet << header.GetSource() << header.GetDestination() << interface);
     Ptr<Packet> p = packet->Copy();
     Ptr<Ipv6> ipv6 = m_node->GetObject<Ipv6>();
+
+    // RFC 4443: a node that receives an ICMPv6 packet with an invalid checksum
+    // must silently discard it. Only verify when checksum computation is enabled
+    // for the simulation (consistent with UDP and TCP).
+    if (Node::ChecksumEnabled() &&
+        !CheckIcmpv6Checksum(p, header.GetSource(), header.GetDestination()))
+    {
+        NS_LOG_LOGIC("Bad checksum, dropping ICMPv6 packet");
+        return IpL4Protocol::RX_CSUM_FAILED;
+    }
 
     /* very ugly! try to find something better in the future */
     uint8_t type;
