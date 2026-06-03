@@ -90,6 +90,22 @@ class Icmpv6L4Protocol : public IpL4Protocol
     static uint16_t GetStaticProtocolNumber();
 
     /**
+     * @brief Verify the checksum of a received ICMPv6 packet.
+     *
+     * Recomputes the ICMPv6 checksum over the IPv6 pseudo-header and the
+     * received message (RFC 4443 section 2.3) and compares it against the
+     * value carried in the packet.
+     *
+     * @param packet the received ICMPv6 message (header and payload)
+     * @param source the IPv6 source address from the IPv6 header
+     * @param destination the IPv6 destination address from the IPv6 header
+     * @return true if the checksum is valid, false otherwise
+     */
+    static bool CheckIcmpv6Checksum(Ptr<const Packet> packet,
+                                    Ipv6Address source,
+                                    Ipv6Address destination);
+
+    /**
      * @brief Constructor.
      */
     Icmpv6L4Protocol();
