@@ -2268,6 +2268,15 @@ WifiPhy::AbortCurrentReception(WifiPhyRxfailureReason reason)
         {
             m_state->SwitchFromRxAbort(GetChannelWidth());
         }
+        else if (reason == FRAME_CAPTURE_PACKET_SWITCH && m_state->IsStateRx())
+        {
+            // A frame is being captured while the PHY is already in the RX state
+            // (the frame capture window extended past the first frame's preamble
+            // detection). End the aborted reception so that the PHY is no longer
+            // in RX when the captured frame's preamble detection period ends,
+            // otherwise EndPreambleDetectionPeriod asserts !IsStateRx() (issue #746).
+            m_state->SwitchFromRxAbort(GetChannelWidth());
+        }
         if (reason == RECEPTION_ABORTED_BY_TX)
         {
             Reset();

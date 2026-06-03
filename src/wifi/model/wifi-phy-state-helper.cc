@@ -572,8 +572,10 @@ void
 WifiPhyStateHelper::SwitchFromRxAbort(MHz_u operatingWidth)
 {
     NS_LOG_FUNCTION(this << operatingWidth);
-    NS_ASSERT(IsStateCcaBusy()); // abort is called (with OBSS_PD_CCA_RESET reason) before RX is set
-                                 // by payload start
+    // Abort may be called before RX is set by payload start (OBSS_PD_CCA_RESET,
+    // state is CCA_BUSY) or while already in RX when a frame is captured during
+    // the RX of a previous frame (FRAME_CAPTURE_PACKET_SWITCH, issue #746).
+    NS_ASSERT(IsStateCcaBusy() || IsStateRx());
     NotifyListeners(&WifiPhyListener::NotifyRxEndOk);
     DoSwitchFromRx();
     m_endCcaBusy = Simulator::Now();
