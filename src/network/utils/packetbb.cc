@@ -2450,7 +2450,16 @@ PbbAddressBlock::GetHeadTail(uint8_t* head, uint8_t& headlen, uint8_t* tail, uin
                     break;
                 }
             }
-            taillen = GetAddressLength() - 1 - i;
+            // The block-wide tail is the common suffix across all addresses, so taillen may
+            // only shrink across iterations.  Without this clamp a later address pair that
+            // happens to share a trailing byte could resurrect a tail that an earlier pair had
+            // already reduced (e.g. addresses ...01, ...01, ...03, ...03 wrongly yield a 1-byte
+            // tail of 03), corrupting the addresses that do not share it on deserialization.
+            uint8_t newtaillen = GetAddressLength() - 1 - i;
+            if (newtaillen < taillen)
+            {
+                taillen = newtaillen;
+            }
         }
         else if (headlen == 0)
         {
