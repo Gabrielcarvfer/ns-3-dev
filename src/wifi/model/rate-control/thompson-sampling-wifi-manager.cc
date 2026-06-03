@@ -311,13 +311,46 @@ ThompsonSamplingWifiManager::DoGetDataTxVector(WifiRemoteStation* st, MHz_u allo
     InitializeStation(st);
     auto station = static_cast<ThompsonSamplingWifiRemoteStation*>(st);
 
-    auto& stats = station->m_mcsStats.at(station->m_nextMode);
+    auto selectedMode = station->m_nextMode;
+    auto channelWidth = std::min(station->m_mcsStats.at(selectedMode).channelWidth, allowedWidth);
+
+    // The mode chosen by Thompson sampling may have been associated with a wider
+    // channel than allowedWidth. Reducing the channel width can make the
+    // (mode, nss) combination invalid (e.g. VHT MCS 9 is forbidden at 20 MHz
+    // unless NSS is 3), which would abort in GetDataRate (issue #1194). In that
+    // case, fall back to the highest-rate stats entry whose channel width does
+    // not exceed allowedWidth: those entries were built by InitializeStation()
+    // only for allowed (mode, width, nss) combinations and are therefore valid
+    // at their own width.
+    if (!station->m_mcsStats.at(selectedMode)
+             .mode.IsAllowed(channelWidth, station->m_mcsStats.at(selectedMode).nss))
+    {
+        uint64_t bestRate = 0;
+        for (std::size_t i = 0; i < station->m_mcsStats.size(); ++i)
+        {
+            const auto& cand = station->m_mcsStats.at(i);
+            if (cand.channelWidth > allowedWidth)
+            {
+                continue;
+            }
+            const auto candRate =
+                cand.mode.GetDataRate(cand.channelWidth, GetModeGuardInterval(st, cand.mode), cand.nss);
+            if (candRate > bestRate)
+            {
+                bestRate = candRate;
+                selectedMode = i;
+            }
+        }
+        NS_ABORT_MSG_IF(bestRate == 0, "No rate compatible with the allowed width found");
+        channelWidth = std::min(station->m_mcsStats.at(selectedMode).channelWidth, allowedWidth);
+    }
+
+    auto& stats = station->m_mcsStats.at(selectedMode);
     const auto mode = stats.mode;
-    const auto channelWidth = std::min(stats.channelWidth, allowedWidth);
     const auto nss = stats.nss;
     const auto guardInterval = GetModeGuardInterval(st, mode);
 
-    station->m_lastMode = station->m_nextMode;
+    station->m_lastMode = selectedMode;
 
     NS_LOG_DEBUG("Using mode=" << mode << " channelWidth=" << channelWidth << " nss=" << +nss
                                << " guardInterval=" << guardInterval);
