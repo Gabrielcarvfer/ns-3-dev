@@ -909,19 +909,34 @@ SetDefaultFailSafe(std::string fullName, const AttributeValue& value)
     {
         return false;
     }
+    // LookupAttributeByName walks the inheritance chain and honors the support
+    // level (deprecation warnings, obsolete fatal error). Use it to validate the
+    // name, then locate the TypeId that actually declares the attribute: the
+    // initial value must be written there, because ObjectBase::ConstructSelf
+    // reads each level's own initial value when constructing a derived instance.
+    // The original code looked up the index only on tid, so an attribute
+    // declared on a parent TypeId could not be set through a derived name
+    // (issue #147).
     TypeId::AttributeInformation info;
-    tid.LookupAttributeByName(paramName, &info);
-    for (uint32_t j = 0; j < tid.GetAttributeN(); j++)
+    if (!tid.LookupAttributeByName(paramName, &info))
     {
-        TypeId::AttributeInformation tmp = tid.GetAttribute(j);
-        if (tmp.name == paramName)
+        return false;
+    }
+    auto [found, winningTid, winningInfo] = TypeId::FindAttribute(tid, paramName);
+    if (!found)
+    {
+        return false;
+    }
+    for (uint32_t j = 0; j < winningTid.GetAttributeN(); j++)
+    {
+        if (winningTid.GetAttribute(j).name == paramName)
         {
-            Ptr<AttributeValue> v = tmp.checker->CreateValidValue(value);
+            Ptr<AttributeValue> v = info.checker->CreateValidValue(value);
             if (!v)
             {
                 return false;
             }
-            tid.SetAttributeInitialValue(j, v);
+            winningTid.SetAttributeInitialValue(j, v);
             return true;
         }
     }

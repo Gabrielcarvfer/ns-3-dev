@@ -572,6 +572,62 @@ NS_OBJECT_ENSURE_REGISTERED(AttributeObjectTest);
 /**
  * @ingroup attribute-tests
  *
+ * @brief A class deriving from AttributeObjectTest, declaring no new attributes.
+ *
+ * Used to verify that Config::SetDefault can set an attribute declared on a
+ * parent TypeId when addressed through a derived TypeId name (issue #147).
+ */
+class AttributeDerivedObjectTest : public AttributeObjectTest
+{
+  public:
+    /**
+     * @brief Get the type ID.
+     * @return The object TypeId.
+     */
+    static TypeId GetTypeId()
+    {
+        static TypeId tid = TypeId("ns3::AttributeDerivedObjectTest")
+                                .AddConstructor<AttributeDerivedObjectTest>()
+                                .SetParent<AttributeObjectTest>()
+                                .HideFromDocumentation();
+        return tid;
+    }
+};
+
+NS_OBJECT_ENSURE_REGISTERED(AttributeDerivedObjectTest);
+
+/**
+ * @ingroup attribute-tests
+ *
+ * @brief Verify that Config::SetDefault applies to an attribute inherited from a
+ * parent TypeId when it is addressed through a derived TypeId name (issue #147).
+ */
+class InheritedAttributeDefaultTestCase : public TestCase
+{
+  public:
+    InheritedAttributeDefaultTestCase()
+        : TestCase("Config::SetDefault resolves parent-declared attributes")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        // TestBoolName is declared on the parent AttributeObjectTest and defaults
+        // to false. Setting it via the derived TypeId name must take effect.
+        Config::SetDefault("ns3::AttributeDerivedObjectTest::TestBoolName", BooleanValue(true));
+        Ptr<AttributeDerivedObjectTest> obj = CreateObject<AttributeDerivedObjectTest>();
+        BooleanValue v;
+        obj->GetAttribute("TestBoolName", v);
+        NS_TEST_ASSERT_MSG_EQ(v.Get(),
+                              true,
+                              "Config::SetDefault did not apply to the parent-declared attribute");
+    }
+};
+
+/**
+ * @ingroup attribute-tests
+ *
  * @brief Test case template used for generic Attribute Value types -- used to make
  * sure that Attributes work as expected.
  */
@@ -2111,6 +2167,7 @@ AttributesTestSuite::AttributesTestSuite()
     AddTestCase(new TracedCallbackTestCase(
                     "Ensure TracedCallback<double, int, float> works as trace source"),
                 TestCase::Duration::QUICK);
+    AddTestCase(new InheritedAttributeDefaultTestCase(), TestCase::Duration::QUICK);
 }
 
 static AttributesTestSuite g_attributesTestSuite; //!< Static variable for test initialization
