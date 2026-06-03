@@ -1588,8 +1588,17 @@ HeFrameExchangeManager::SetTargetRssi(CtrlTriggerHeader& trigger) const
     NS_LOG_FUNCTION(this);
     NS_ASSERT(m_apMac);
 
-    trigger.SetApTxPower(static_cast<int8_t>(
-        m_phy->GetPower(GetWifiRemoteStationManager()->GetDefaultTxPowerLevel())));
+    // The AP Tx Power subfield of the Trigger frame can only encode the range
+    // [-20, 40] dBm (Table 9-25f of the 802.11ax amendment). Abort with a clear
+    // message if the configured Tx power falls outside this range, rather than
+    // failing deep inside CtrlTriggerHeader::SetApTxPower (issue #649).
+    const auto apTxPower = m_phy->GetPower(GetWifiRemoteStationManager()->GetDefaultTxPowerLevel());
+    NS_ABORT_MSG_IF(apTxPower < dBm_u{-20} || apTxPower > dBm_u{40},
+                    "The configured AP Tx power (" << apTxPower
+                                                   << " dBm) cannot be encoded in the Trigger frame "
+                                                      "AP Tx Power subfield, whose valid range is "
+                                                      "[-20, 40] dBm; use a Tx power within range.");
+    trigger.SetApTxPower(static_cast<int8_t>(apTxPower));
     for (auto& userInfo : trigger)
     {
         const auto staList = m_apMac->GetStaList(m_linkId);
