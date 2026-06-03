@@ -211,6 +211,13 @@ DataRate::DataRate(std::string rate)
     }
 }
 
+DataRate::DataRate(double bits, Time span)
+{
+    NS_LOG_FUNCTION(this << bits << span.As(Time::S));
+    NS_ASSERT_MSG(span.IsStrictlyPositive(), "DataRate: time span must be positive");
+    m_bps = static_cast<uint64_t>(bits / span.GetSeconds());
+}
+
 /* For printing of data rate */
 std::ostream&
 operator<<(std::ostream& os, const DataRate& rate)

@@ -108,6 +108,19 @@ class DataRate
     DataRate(std::string rate);
 
     /**
+     * @brief Construct a data rate from an amount of bits transferred over a
+     * time span.
+     *
+     * The resulting rate is `bits / span`, expressed in bits/s. As with the
+     * other constructors the value is stored as an integral number of bits/s
+     * (truncated toward zero).
+     *
+     * @param bits the number of bits transferred over @p span
+     * @param span the duration over which @p bits were transferred (must be > 0)
+     */
+    DataRate(double bits, Time span);
+
+    /**
      * @return the DataRate representing the sum of this object with rhs
      *
      * @param rhs the DataRate to add to this DataRate
