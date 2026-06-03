@@ -4131,8 +4131,22 @@ TcpSocketBase::PersistTimeout()
     NS_LOG_LOGIC("PersistTimeout expired at " << Simulator::Now().GetSeconds());
     m_persistTimeout =
         std::min(Seconds(60), Time(2 * m_persistTimeout)); // max persist timeout = 60s
-    Ptr<Packet> p = m_txBuffer->CopyFromSequence(1, m_tcb->m_nextTxSequence)->GetPacketCopy();
-    m_txBuffer->ResetLastSegmentSent();
+    // CopyFromSequence() returns nullptr when there is no data left to send
+    // (the tx buffer has been drained to its tail). In that case fall back to a
+    // zero-length zero-window probe, which RFC 1122 4.2.2.17 permits and which
+    // still elicits a window-advertising ACK. Dereferencing the null return
+    // here previously segfaulted (issue #1326).
+    Ptr<Packet> p;
+    TcpTxItem* outItem = m_txBuffer->CopyFromSequence(1, m_tcb->m_nextTxSequence);
+    if (outItem)
+    {
+        p = outItem->GetPacketCopy();
+        m_txBuffer->ResetLastSegmentSent();
+    }
+    else
+    {
+        p = Create<Packet>();
+    }
     TcpHeader tcpHeader;
     tcpHeader.SetSequenceNumber(m_tcb->m_nextTxSequence);
     tcpHeader.SetAckNumber(m_tcb->m_rxBuffer->NextRxSequence());
