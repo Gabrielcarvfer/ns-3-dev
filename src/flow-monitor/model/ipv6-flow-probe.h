@@ -118,6 +118,7 @@ class Ipv6FlowProbe : public FlowProbe
     void QueueDiscDropLogger(Ptr<const QueueDiscItem> item);
 
     Ptr<Ipv6FlowClassifier> m_classifier; //!< the Ipv6FlowClassifier this probe is associated with
+    Ptr<Ipv6L3Protocol> m_ipv6;           //!< the Ipv6L3Protocol this probe is bound to
 };
 
 } // namespace ns3

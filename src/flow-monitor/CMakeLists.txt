@@ -21,4 +21,5 @@ build_lib(
   LIBRARIES_TO_LINK ${libinternet}
   TEST_SOURCES
     test/flow-classifier-dscp-test-suite.cc
+    test/flow-monitor-lifetime-test-suite.cc
 )
