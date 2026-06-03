@@ -45,9 +45,12 @@ namespace ns3
  * Because these macros generate class and function definitions, it's
  * difficult to document the results directly.  Instead, we use a
  * set of functions in print-introspected-doxygen.cc to generate
- * most of the APi documentation.  When using these macros,
- * please add the required function calls to print-introspected-doxygen.cc
- * so your new API is documented.
+ * most of the API documentation.  When introducing a new AttributeValue
+ * subclass (whether via these macros or by hand), the new type must also
+ * be added to the attributes[] list in PrintAttributeImplementations() in
+ * utils/print-introspected-doxygen.cc.  Otherwise the introspected Doxygen
+ * documentation for the new value type, its accessors and its checker will
+ * not be generated.
  */
 
 /**
