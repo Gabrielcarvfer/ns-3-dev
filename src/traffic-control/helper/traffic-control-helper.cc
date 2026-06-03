@@ -116,9 +116,14 @@ TrafficControlHelper::Default(std::size_t nTxQueues)
 uint16_t
 TrafficControlHelper::DoSetRootQueueDisc(ObjectFactory factory)
 {
-    NS_ABORT_MSG_UNLESS(m_queueDiscFactory.empty(),
-                        "A root queue disc has been already added to this factory");
-
+    // Setting a new root queue disc discards any previously configured queue
+    // disc tree. The whole tree (root, classes and child queue discs) is stored
+    // in m_queueDiscFactory and indexed by handle, so clearing it before
+    // inserting the new root atomically drops the prior configuration with no
+    // dangling handles, allowing the helper to be reconfigured and reused
+    // (issue #101). m_queueDiscs is only populated at Install(), so already
+    // installed devices are unaffected.
+    m_queueDiscFactory.clear();
     m_queueDiscFactory.emplace_back(factory);
     return 0;
 }
