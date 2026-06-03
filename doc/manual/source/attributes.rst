@@ -767,6 +767,15 @@ the attribute system:
 
 See the API documentation for these constructs for more information.
 
+.. note::
+
+   When introducing a new ``AttributeValue`` subclass (whether via the
+   ``ATTRIBUTE_HELPER_*`` macros or by hand), the new type must also be added
+   to the ``attributes[]`` list in ``PrintAttributeImplementations()`` in
+   ``utils/print-introspected-doxygen.cc``. Otherwise the introspected Doxygen
+   documentation for the new value type, its accessors and its checker will not
+   be generated.
+
 Initialization Order
 ++++++++++++++++++++
 
