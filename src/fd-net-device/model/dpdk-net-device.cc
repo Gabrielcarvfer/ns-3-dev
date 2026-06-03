@@ -25,6 +25,7 @@
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
 #include <rte_port.h>
+#include <rte_version.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/signal.h>
@@ -387,7 +388,15 @@ DpdkNetDevice::InitDpdk(int argc, char** argv, std::string dpdkDriver)
     CheckAllPortsLinkStatus();
 
     NS_LOG_INFO("Launching core threads");
+    // DPDK 20.11 renamed the lcore enumeration from master/slave to main/worker;
+    // CALL_MASTER is a deprecated alias of CALL_MAIN, and ns-3's -Werror build
+    // turns the deprecation warning into an error (issue #481). Use CALL_MAIN on
+    // DPDK >= 20.11 and keep CALL_MASTER for older releases.
+#if RTE_VERSION >= RTE_VERSION_NUM(20, 11, 0, 0)
+    rte_eal_mp_remote_launch(LaunchCore, this, CALL_MAIN);
+#else
     rte_eal_mp_remote_launch(LaunchCore, this, CALL_MASTER);
+#endif
 }
 
 uint8_t*
