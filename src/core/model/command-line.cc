@@ -999,6 +999,16 @@ CommandLineHelper::UserItemParse<uint8_t>(const std::string& value, uint8_t& des
     return true;
 }
 
+template <>
+bool
+CommandLineHelper::UserItemParse<std::string>(const std::string& value, std::string& dest)
+{
+    // Assign the whole value verbatim. The generic implementation relies on
+    // operator>>, which would truncate the string at the first whitespace.
+    dest = value;
+    return true;
+}
+
 std::ostream&
 operator<<(std::ostream& os, const CommandLine& cmd)
 {
