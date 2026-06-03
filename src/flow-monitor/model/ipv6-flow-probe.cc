@@ -202,28 +202,28 @@ Ipv6FlowProbe::Ipv6FlowProbe(Ptr<FlowMonitor> monitor,
 {
     NS_LOG_FUNCTION(this << node->GetId());
 
-    Ptr<Ipv6L3Protocol> ipv6 = node->GetObject<Ipv6L3Protocol>();
+    m_ipv6 = node->GetObject<Ipv6L3Protocol>();
 
-    if (!ipv6->TraceConnectWithoutContext(
+    if (!m_ipv6->TraceConnectWithoutContext(
             "SendOutgoing",
             MakeCallback(&Ipv6FlowProbe::SendOutgoingLogger, Ptr<Ipv6FlowProbe>(this))))
     {
         NS_FATAL_ERROR("trace fail");
     }
-    if (!ipv6->TraceConnectWithoutContext(
+    if (!m_ipv6->TraceConnectWithoutContext(
             "UnicastForward",
             MakeCallback(&Ipv6FlowProbe::ForwardLogger, Ptr<Ipv6FlowProbe>(this))))
     {
         NS_FATAL_ERROR("trace fail");
     }
-    if (!ipv6->TraceConnectWithoutContext(
+    if (!m_ipv6->TraceConnectWithoutContext(
             "LocalDeliver",
             MakeCallback(&Ipv6FlowProbe::ForwardUpLogger, Ptr<Ipv6FlowProbe>(this))))
     {
         NS_FATAL_ERROR("trace fail");
     }
 
-    if (!ipv6->TraceConnectWithoutContext(
+    if (!m_ipv6->TraceConnectWithoutContext(
             "Drop",
             MakeCallback(&Ipv6FlowProbe::DropLogger, Ptr<Ipv6FlowProbe>(this))))
     {
@@ -263,6 +263,44 @@ Ipv6FlowProbe::~Ipv6FlowProbe()
 void
 Ipv6FlowProbe::DoDispose()
 {
+    if (m_ipv6)
+    {
+        // Disconnect from the trace sources so that this (disposed) probe is no
+        // longer invoked when packets keep flowing through the node, e.g. after
+        // the FlowMonitorHelper that created it has gone out of scope (issue
+        // #665). Otherwise the callbacks would dereference the now-null members.
+        m_ipv6->TraceDisconnectWithoutContext(
+            "SendOutgoing",
+            MakeCallback(&Ipv6FlowProbe::SendOutgoingLogger, Ptr<Ipv6FlowProbe>(this)));
+        m_ipv6->TraceDisconnectWithoutContext(
+            "UnicastForward",
+            MakeCallback(&Ipv6FlowProbe::ForwardLogger, Ptr<Ipv6FlowProbe>(this)));
+        m_ipv6->TraceDisconnectWithoutContext(
+            "LocalDeliver",
+            MakeCallback(&Ipv6FlowProbe::ForwardUpLogger, Ptr<Ipv6FlowProbe>(this)));
+        m_ipv6->TraceDisconnectWithoutContext(
+            "Drop",
+            MakeCallback(&Ipv6FlowProbe::DropLogger, Ptr<Ipv6FlowProbe>(this)));
+
+        Ptr<Node> node = m_ipv6->GetObject<Node>();
+        if (node)
+        {
+            std::ostringstream qd;
+            qd << "/NodeList/" << node->GetId()
+               << "/$ns3::TrafficControlLayer/RootQueueDiscList/*/Drop";
+            Config::DisconnectWithoutContext(
+                qd.str(),
+                MakeCallback(&Ipv6FlowProbe::QueueDiscDropLogger, Ptr<Ipv6FlowProbe>(this)));
+
+            std::ostringstream oss;
+            oss << "/NodeList/" << node->GetId() << "/DeviceList/*/TxQueue/Drop";
+            Config::DisconnectWithoutContext(
+                oss.str(),
+                MakeCallback(&Ipv6FlowProbe::QueueDropLogger, Ptr<Ipv6FlowProbe>(this)));
+        }
+    }
+    m_ipv6 = nullptr;
+    m_classifier = nullptr;
     FlowProbe::DoDispose();
 }
 
