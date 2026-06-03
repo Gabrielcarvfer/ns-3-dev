@@ -185,7 +185,16 @@ bool
 Ipv4FlowClassifier::SortByCount::operator()(std::pair<Ipv4Header::DscpType, uint32_t> left,
                                             std::pair<Ipv4Header::DscpType, uint32_t> right)
 {
-    return left.second > right.second;
+    // Sort by decreasing packet count. Ties are broken by the DSCP value so
+    // that the ordering is total and the sorted result is deterministic:
+    // std::sort is not stable, so without a tie-breaker the relative order of
+    // equal-count entries is unspecified and may vary across standard library
+    // implementations (issue #1318).
+    if (left.second != right.second)
+    {
+        return left.second > right.second;
+    }
+    return left.first < right.first;
 }
 
 std::vector<std::pair<Ipv4Header::DscpType, uint32_t>>
