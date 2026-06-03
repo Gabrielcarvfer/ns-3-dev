@@ -5208,6 +5208,130 @@ class TestPpduArrivalAtRxEnd : public WifiPhyReceptionTest
  * @ingroup wifi-test
  * @ingroup tests
  *
+ * @brief Frame capture of a PPDU arriving while the PHY is already receiving the payload
+ * of another one (@issueid{746}).
+ *
+ * With a capture window longer than the PHY header, a PPDU 10 dB stronger than the one
+ * being received arrives once the PHY is in the RX state (after the PHY header of the
+ * first PPDU): the PHY must abort the first reception, leave the RX state and receive the
+ * second PPDU, instead of asserting at the end of its preamble detection period.
+ */
+class TestFrameCaptureDuringRx : public WifiPhyReceptionTest
+{
+  public:
+    TestFrameCaptureDuringRx();
+
+  private:
+    void DoSetup() override;
+    void DoRun() override;
+
+    /**
+     * Callback invoked when a PSDU is received.
+     *
+     * @param psdu the PSDU
+     * @param rxSignalInfo the info on the received signal (\see RxSignalInfo)
+     * @param txVector the transmit vector
+     * @param statusPerMpdu reception status per MPDU
+     */
+    void RxSuccess(Ptr<const WifiPsdu> psdu,
+                   RxSignalInfo rxSignalInfo,
+                   const WifiTxVector& txVector,
+                   const std::vector<bool>& statusPerMpdu);
+
+    /**
+     * Callback invoked when a packet is dropped.
+     *
+     * @param p the packet
+     * @param reason the reason
+     */
+    void RxDropped(Ptr<const Packet> p, WifiPhyRxfailureReason reason);
+
+    uint32_t m_rxSecond{0}; ///< receptions of the second (1500 B) PPDU
+    uint32_t m_switches{0}; ///< receptions aborted for frame capture
+};
+
+TestFrameCaptureDuringRx::TestFrameCaptureDuringRx()
+    : WifiPhyReceptionTest("Frame capture of a PPDU arriving during the payload of another")
+{
+}
+
+void
+TestFrameCaptureDuringRx::RxSuccess(Ptr<const WifiPsdu> psdu,
+                                    RxSignalInfo rxSignalInfo,
+                                    const WifiTxVector& txVector,
+                                    const std::vector<bool>& statusPerMpdu)
+{
+    if (psdu->GetSize() > 1500)
+    {
+        ++m_rxSecond;
+    }
+}
+
+void
+TestFrameCaptureDuringRx::RxDropped(Ptr<const Packet> p, WifiPhyRxfailureReason reason)
+{
+    if (reason == FRAME_CAPTURE_PACKET_SWITCH)
+    {
+        ++m_switches;
+    }
+}
+
+void
+TestFrameCaptureDuringRx::DoSetup()
+{
+    WifiPhyReceptionTest::DoSetup();
+
+    m_phy->SetReceiveOkCallback(MakeCallback(&TestFrameCaptureDuringRx::RxSuccess, this));
+    m_phy->TraceConnectWithoutContext("PhyRxDrop",
+                                      MakeCallback(&TestFrameCaptureDuringRx::RxDropped, this));
+
+    auto preambleDetectionModel = CreateObject<ThresholdPreambleDetectionModel>();
+    preambleDetectionModel->SetAttribute("Threshold", DoubleValue(2));
+    m_phy->SetPreambleDetectionModel(preambleDetectionModel);
+
+    // a capture window longer than the PHY header of the first PPDU
+    auto frameCaptureModel = CreateObject<SimpleFrameCaptureModel>();
+    frameCaptureModel->SetAttribute("Margin", DoubleValue(5));
+    frameCaptureModel->SetAttribute("CaptureWindow", TimeValue(MicroSeconds(100)));
+    m_phy->SetFrameCaptureModel(frameCaptureModel);
+}
+
+void
+TestFrameCaptureDuringRx::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+    m_phy->AssignStreams(2);
+
+    Simulator::Schedule(Seconds(1),
+                        &TestFrameCaptureDuringRx::SendPacket,
+                        this,
+                        dBm_u{-50},
+                        1000,
+                        0);
+    // the PHY is in RX by then: the PHY header of the first PPDU is over
+    Simulator::Schedule(Seconds(1) + MicroSeconds(46),
+                        &TestFrameCaptureDuringRx::CheckPhyState,
+                        this,
+                        WifiPhyState::RX);
+    Simulator::Schedule(Seconds(1) + MicroSeconds(50),
+                        &TestFrameCaptureDuringRx::SendPacket,
+                        this,
+                        dBm_u{-40},
+                        1500,
+                        0);
+
+    Simulator::Run();
+    Simulator::Destroy();
+
+    NS_TEST_EXPECT_MSG_EQ(m_switches, 1, "The first reception was not aborted for frame capture");
+    NS_TEST_EXPECT_MSG_EQ(m_rxSecond, 1, "The captured PPDU was not received");
+}
+
+/**
+ * @ingroup wifi-test
+ * @ingroup tests
+ *
  * @brief wifi PHY reception Test Suite
  */
 class WifiPhyReceptionTestSuite : public TestSuite
@@ -5222,6 +5346,7 @@ WifiPhyReceptionTestSuite::WifiPhyReceptionTestSuite()
     AddTestCase(new TestThresholdPreambleDetectionWithoutFrameCapture, TestCase::Duration::QUICK);
     AddTestCase(new TestThresholdPreambleDetectionWithFrameCapture, TestCase::Duration::QUICK);
     AddTestCase(new TestSimpleFrameCaptureModel, TestCase::Duration::QUICK);
+    AddTestCase(new TestFrameCaptureDuringRx, TestCase::Duration::QUICK);
     AddTestCase(new TestPhyHeadersReception, TestCase::Duration::QUICK);
     AddTestCase(new TestAmpduReception, TestCase::Duration::QUICK);
     AddTestCase(new TestUnsupportedModulationReception(), TestCase::Duration::QUICK);
