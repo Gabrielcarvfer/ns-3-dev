@@ -519,8 +519,19 @@ WifiMacQueueSchedulerImpl<Priority, Compare>::InitQueueInfo(AcIndex ac, Ptr<cons
     {
         // the TA field of the frame contains a link address, which means that the
         // frame can only be sent on the corresponding link
-        auto linkId = GetMac() ? GetMac()->GetLinkIdByAddress(mpdu->GetHeader().GetAddr2())
-                               : SINGLE_LINK_OP_ID; // make unit test happy
+        std::optional<uint8_t> linkId;
+        if (!GetMac() || GetMac()->GetNLinks() == 1)
+        {
+            // Single-link device (or no MAC, for unit tests): there is only one
+            // link, which is SINGLE_LINK_OP_ID, regardless of the TA field. The
+            // TA may not be a known link address, e.g. for frames injected via a
+            // tap bridge that carry no proper transmitter address (issue #1166).
+            linkId = SINGLE_LINK_OP_ID;
+        }
+        else
+        {
+            linkId = GetMac()->GetLinkIdByAddress(mpdu->GetHeader().GetAddr2());
+        }
         NS_ASSERT(linkId.has_value());
         auto& linkIdsMap = queueInfoIt->second.linkIds;
         NS_ASSERT_MSG(linkIdsMap.size() <= 1,
