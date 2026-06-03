@@ -86,8 +86,13 @@ TcpPrrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes, boo
     if (tcb->m_bytesInFlight > tcb->m_ssThresh)
     {
         // Proportional Rate Reductions
-        sendCount =
-            std::ceil(m_prrDelivered * tcb->m_ssThresh * 1.0 / m_recoveryFlightSize) - m_prrOut;
+        // The product m_prrDelivered * m_ssThresh must be evaluated in 64-bit
+        // arithmetic: both operands are uint32_t and their product overflows a
+        // uint32_t after only a few dozen segments into recovery, which would
+        // wrap around and shrink the congestion window incorrectly (issue #1282).
+        sendCount = std::ceil(static_cast<uint64_t>(m_prrDelivered) * tcb->m_ssThresh * 1.0 /
+                              m_recoveryFlightSize) -
+                    m_prrOut;
     }
     else
     {

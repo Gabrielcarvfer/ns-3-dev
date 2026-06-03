@@ -17,6 +17,9 @@
 #include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
 
+#include <algorithm>
+#include <cmath>
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpPrrRecoveryTestSuite");
@@ -129,6 +132,70 @@ PrrRecoveryTest::DoRun()
 /**
  * @ingroup internet-test
  *
+ * @brief PRR Recovery integer-overflow regression test (issue #1282)
+ *
+ * Drives the Proportional Rate Reduction computation with values large enough
+ * that the product m_prrDelivered * m_ssThresh exceeds the range of a uint32_t.
+ * With the (buggy) 32-bit multiplication the product wraps around, producing a
+ * congestion window that is far too small. This test asserts the resulting
+ * cwnd matches the value computed in 64-bit arithmetic.
+ */
+class PrrRecoveryOverflowTest : public TestCase
+{
+  public:
+    PrrRecoveryOverflowTest()
+        : TestCase("Prr test against uint32_t overflow of m_prrDelivered * m_ssThresh")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+PrrRecoveryOverflowTest::DoRun()
+{
+    const uint32_t segmentSize = 1448;
+    const uint32_t ssThresh = 1000000;
+    // bytesInFlight must exceed ssThresh so the PRR (not the PRR-CRB) branch is taken.
+    // It is also captured as the recovery flight size on entering recovery.
+    const uint32_t bytesInFlight = ssThresh + 1;
+
+    auto state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_ssThresh = ssThresh;
+    state->m_bytesInFlight = bytesInFlight;
+    state->m_cWnd = bytesInFlight;
+    state->m_cWndInfl = bytesInFlight;
+
+    auto recovery = CreateObject<TcpPrrRecovery>();
+    // On entering recovery, m_prrDelivered becomes one segment and m_prrOut is 0.
+    recovery->EnterRecovery(state, 3, bytesInFlight, 0);
+
+    // Deliver enough additional bytes so that m_prrDelivered * m_ssThresh > 2^32.
+    // m_prrDelivered after entering recovery is exactly one segment.
+    const uint32_t prrDelivered = 5000;
+    recovery->DoRecovery(state, prrDelivered - segmentSize, false);
+
+    // Reference computation in 64-bit arithmetic (m_prrOut is still 0 here).
+    const uint32_t prrOut = 0;
+    int sendCount = static_cast<int>(std::ceil(static_cast<uint64_t>(prrDelivered) * ssThresh *
+                                               1.0 / bytesInFlight)) -
+                    prrOut;
+    sendCount = std::max(sendCount, prrOut > 0 ? 0 : static_cast<int>(segmentSize));
+    const uint32_t expectedCwnd = bytesInFlight + sendCount;
+
+    NS_TEST_ASSERT_MSG_EQ(static_cast<uint64_t>(prrDelivered) * ssThresh > 0xFFFFFFFFULL,
+                          true,
+                          "Test setup error: product does not exceed uint32_t range");
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                          expectedCwnd,
+                          "cwnd is wrong: m_prrDelivered * m_ssThresh overflowed uint32_t");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief PRR Recovery TestSuite
  */
 class PrrRecoveryTestSuite : public TestSuite
@@ -177,6 +244,7 @@ class PrrRecoveryTestSuite : public TestSuite
                         1000,
                         "Prr test on cWnd when bytesInFlight is lower than ssThresh with CRB"),
                     TestCase::Duration::QUICK);
+        AddTestCase(new PrrRecoveryOverflowTest(), TestCase::Duration::QUICK);
     }
 };
 
