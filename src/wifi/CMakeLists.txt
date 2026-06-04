@@ -417,6 +417,7 @@ build_lib(
     test/wifi-emlsr-test-base.cc
     test/wifi-error-rate-models-test.cc
     test/wifi-fils-frame-test.cc
+    test/wifi-fragmentation-blockack-test-suite.cc
     test/wifi-gcr-test.cc
     test/wifi-he-info-elems-test.cc
     test/wifi-ht-single-model-spectrum-test-suite.cc
