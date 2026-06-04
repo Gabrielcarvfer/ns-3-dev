@@ -40,6 +40,7 @@ build_lib(
     model/csma-channel.h
     model/csma-net-device.h
   LIBRARIES_TO_LINK ${libnetwork}
-  TEST_SOURCES ${csma_system_test_sources}
+  TEST_SOURCES test/csma-link-change-test-suite.cc
+               ${csma_system_test_sources}
   TEST_LIBRARIES_TO_LINK ${csma_system_test_libs}
 )
