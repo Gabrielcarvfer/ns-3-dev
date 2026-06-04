@@ -419,6 +419,7 @@ build_lib(
     test/wifi-fils-frame-test.cc
     test/wifi-gcr-test.cc
     test/wifi-he-info-elems-test.cc
+    test/wifi-ht-single-model-spectrum-test-suite.cc
     test/wifi-ie-fragment-test.cc
     test/wifi-mac-ofdma-test.cc
     test/wifi-mac-queue-test.cc
@@ -429,6 +430,7 @@ build_lib(
     test/wifi-phy-thresholds-test.cc
     test/wifi-primary-channels-test.cc
     test/wifi-probe-exchange-test.cc
+    test/wifi-promisc-receive-test-suite.cc
     test/wifi-queue-scheduler-test.cc
     test/wifi-retransmit-test.cc
     test/wifi-ru-allocation-test.cc
