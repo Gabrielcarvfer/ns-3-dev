@@ -14,6 +14,7 @@
 #include "wifi-units.h"
 
 #include "ns3/fatal-error.h"
+#include "ns3/wifi-export.h"
 
 #include <compare>
 #include <list>
@@ -66,21 +67,21 @@ enum MpduType
 };
 
 /// SignalNoiseDbm structure
-struct SignalNoiseDbm
+struct WIFI_EXPORT SignalNoiseDbm
 {
     dBm_u signal; ///< signal strength
     dBm_u noise;  ///< noise power
 };
 
 /// MpduInfo structure
-struct MpduInfo
+struct WIFI_EXPORT MpduInfo
 {
     MpduType type;          ///< type of MPDU
     uint32_t mpduRefNumber; ///< MPDU ref number
 };
 
 /// RxSignalInfo structure containing info on the received signal
-struct RxSignalInfo
+struct WIFI_EXPORT RxSignalInfo
 {
     double snr; ///< SNR in linear scale
     dBm_u rssi; ///< RSSI
@@ -90,11 +91,11 @@ struct RxSignalInfo
  * Struct defining the configuration of a wifi channel, which can be made of one or multiple
  * channel segments.
  */
-struct WifiChannelConfig
+struct WIFI_EXPORT WifiChannelConfig
 {
     /// a channel segment, as a struct without units for channel width (to be deprecated when using
     /// strong types)
-    struct SegmentWithoutUnits
+    struct WIFI_EXPORT SegmentWithoutUnits
     {
         uint8_t number{};                            ///< channel number
         MHz_u width{};                               ///< channel width in MHz
@@ -119,7 +120,7 @@ struct WifiChannelConfig
     };
 
     /// a channel segment, as a struct with units for channel width
-    struct Segment
+    struct WIFI_EXPORT Segment
     {
         uint8_t number{};                            ///< channel number
         MHz_u width{};                               ///< channel width

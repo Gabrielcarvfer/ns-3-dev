@@ -14,6 +14,7 @@
 #include "wifi-units.h"
 
 #include "ns3/spectrum-value.h"
+#include "ns3/wifi-export.h"
 
 #include <vector>
 
@@ -32,7 +33,7 @@ using WifiSpectrumBandIndices = std::pair<uint32_t, uint32_t>;
  *  Wi-Fi based on a a spectral model aligned with an OFDM subcarrier
  *  spacing of 312.5 KHz (model also reused for DSSS modulations)
  */
-class WifiSpectrumValueHelper
+class WIFI_EXPORT WifiSpectrumValueHelper
 {
   public:
     /**
@@ -304,7 +305,7 @@ class WifiSpectrumValueHelper
  * @ingroup spectrum
  * Struct defining a frequency range between minFrequency and maxFrequency.
  */
-struct FrequencyRange
+struct WIFI_EXPORT FrequencyRange
 {
     MHz_u minFrequency{0}; ///< the minimum frequency
     MHz_u maxFrequency{0}; ///< the maximum frequency
@@ -318,7 +319,7 @@ struct FrequencyRange
  *
  * @return true if minFrequency of left is less than minFrequency of right, false otherwise
  */
-bool operator<(const FrequencyRange& lhs, const FrequencyRange& rhs);
+WIFI_EXPORT bool operator<(const FrequencyRange& lhs, const FrequencyRange& rhs);
 
 /**
  * Compare two FrequencyRange values
@@ -329,7 +330,7 @@ bool operator<(const FrequencyRange& lhs, const FrequencyRange& rhs);
  * @return true if both minFrequency and maxFrequency of left are equal to minFrequency and
  * maxFrequency of right respectively, false otherwise
  */
-bool operator==(const FrequencyRange& lhs, const FrequencyRange& rhs);
+WIFI_EXPORT bool operator==(const FrequencyRange& lhs, const FrequencyRange& rhs);
 
 /**
  * Compare two FrequencyRange values
@@ -340,7 +341,7 @@ bool operator==(const FrequencyRange& lhs, const FrequencyRange& rhs);
  * @return true if either minFrequency or maxFrequency of left different from minFrequency or
  * maxFrequency of right respectively, false otherwise
  */
-bool operator!=(const FrequencyRange& lhs, const FrequencyRange& rhs);
+WIFI_EXPORT bool operator!=(const FrequencyRange& lhs, const FrequencyRange& rhs);
 
 /**
  * Serialize FrequencyRange values to ostream (human-readable).
@@ -350,7 +351,7 @@ bool operator!=(const FrequencyRange& lhs, const FrequencyRange& rhs);
  *
  * @return std::ostream
  */
-std::ostream& operator<<(std::ostream& os, const FrequencyRange& freqRange);
+WIFI_EXPORT std::ostream& operator<<(std::ostream& os, const FrequencyRange& freqRange);
 
 /// Identifier for the frequency range covering the whole wifi spectrum
 constexpr FrequencyRange WHOLE_WIFI_SPECTRUM = {MHz_u{2401}, MHz_u{7125}};

@@ -15,6 +15,7 @@
 
 #include "ns3/qos-utils.h"
 #include "ns3/trace-helper.h"
+#include "ns3/wifi-export.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/wifi-phy.h"
 
@@ -36,7 +37,7 @@ class QueueItem;
  * This base class must be implemented by new PHY implementation which wish to integrate
  * with the \ref ns3::WifiHelper class.
  */
-class WifiPhyHelper : public PcapHelperForDevice, public AsciiTraceHelperForDevice
+class WIFI_EXPORT WifiPhyHelper : public PcapHelperForDevice, public AsciiTraceHelperForDevice
 {
   public:
     /**
@@ -184,7 +185,7 @@ class WifiPhyHelper : public PcapHelperForDevice, public AsciiTraceHelperForDevi
     /**
      * structure holding the information about PCAP files generated for a given device
      */
-    struct PcapFilesInfo
+    struct WIFI_EXPORT PcapFilesInfo
     {
         /**
          * Constructor
@@ -374,7 +375,7 @@ class WifiPhyHelper : public PcapHelperForDevice, public AsciiTraceHelperForDevi
  * WifiNetDevice objects and to configure a large set of
  * their attributes during creation.
  */
-class WifiHelper
+class WIFI_EXPORT WifiHelper
 {
   public:
     virtual ~WifiHelper();

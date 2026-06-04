@@ -13,6 +13,8 @@
 
 #include "wifi-mac.h"
 
+#include "ns3/wifi-export.h"
+
 namespace ns3
 {
 
@@ -21,7 +23,7 @@ namespace ns3
  *
  * @brief Wifi MAC high model for an ad-hoc Wifi MAC
  */
-class AdhocWifiMac : public WifiMac
+class WIFI_EXPORT AdhocWifiMac : public WifiMac
 {
   public:
     /**

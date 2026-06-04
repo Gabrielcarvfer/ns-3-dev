@@ -15,6 +15,7 @@
 #include "ns3/object.h"
 #include "ns3/traced-value.h"
 #include "ns3/uniform-random-bit-generator.h"
+#include "ns3/wifi-export.h"
 
 #include <map>
 #include <memory>
@@ -52,7 +53,7 @@ enum WifiMacDropReason : uint8_t; // opaque enum declaration
  * parameters (one Txop per AC). It generates backoff values and stores the channel access status
  * (not requested, requested, granted) for the corresponding DCF/EDCA and for each link.
  */
-class Txop : public Object
+class WIFI_EXPORT Txop : public Object
 {
   public:
     Txop();
@@ -455,7 +456,7 @@ class Txop : public Object
      * increasing order of link ID. If user provides access parameters, they are used by WifiMac
      * instead of the default values specified by Table 9-155 of 802.11-2020.
      */
-    struct UserDefinedAccessParams
+    struct WIFI_EXPORT UserDefinedAccessParams
     {
         std::vector<uint32_t> cwMins; //!< the minimum contention window values for all the links
         std::vector<uint32_t> cwMaxs; //!< the maximum contention window values for all the links
@@ -525,7 +526,7 @@ class Txop : public Object
      * "link" is that of the 11be amendment which introduced multi-link devices. For
      * previous amendments, only one link can be created.
      */
-    struct LinkEntity
+    struct WIFI_EXPORT LinkEntity
     {
         /// Destructor (a virtual method is needed to make this struct polymorphic)
         virtual ~LinkEntity() = default;
