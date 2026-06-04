@@ -109,7 +109,7 @@ class ThompsonSamplingWifiManager : public WifiRemoteStationManager
      * @param beta second parameter of beta distribution
      * @return beta random variable sample
      */
-    double SampleBetaVariable(uint64_t alpha, uint64_t beta) const;
+    double SampleBetaVariable(double alpha, double beta) const;
 
     Ptr<GammaRandomVariable>
         m_gammaRandomVariable; //!< Variable used to sample beta-distributed random variables
