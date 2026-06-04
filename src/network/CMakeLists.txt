@@ -165,10 +165,12 @@ build_lib(
     test/error-model-test-suite.cc
     test/ipv6-address-test-suite.cc
     test/lollipop-counter-test.cc
+    test/netdevice-untraced-drop-test-suite.cc
     test/packet-metadata-test.cc
     test/packet-socket-apps-test-suite.cc
     test/packet-test-suite.cc
     test/packetbb-test-suite.cc
+    test/pcap-explicit-filename-test-suite.cc
     test/pcap-file-test-suite.cc
     test/sequence-number-test-suite.cc
     test/test-data-rate.cc
