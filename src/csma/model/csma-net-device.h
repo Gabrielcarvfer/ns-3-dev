@@ -222,6 +222,14 @@ class CsmaNetDevice : public NetDevice
     Address GetAddress() const override;
     bool IsLinkUp() const override;
     void AddLinkChangeCallback(Callback<void> callback) override;
+
+    /**
+     * Notify any interested parties that the link has gone down, i.e. that the
+     * device has been detached from its channel. Marks the link as down and
+     * fires the link-change callbacks.
+     */
+    void NotifyLinkDown();
+
     bool IsBroadcast() const override;
     Address GetBroadcast() const override;
     bool IsMulticast() const override;

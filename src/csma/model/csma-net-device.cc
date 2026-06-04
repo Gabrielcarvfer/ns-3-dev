@@ -844,6 +844,14 @@ CsmaNetDevice::NotifyLinkUp()
 }
 
 void
+CsmaNetDevice::NotifyLinkDown()
+{
+    NS_LOG_FUNCTION_NOARGS();
+    m_linkUp = false;
+    m_linkChangeCallbacks();
+}
+
+void
 CsmaNetDevice::SetIfIndex(const uint32_t index)
 {
     NS_LOG_FUNCTION(index);
