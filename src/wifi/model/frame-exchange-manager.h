@@ -25,6 +25,7 @@
 #include "wifi-protection-manager.h"
 
 #include "ns3/object.h"
+#include "ns3/wifi-export.h"
 
 #include <functional>
 #include <optional>
@@ -56,7 +57,7 @@ struct WifiAcknowledgment;
  * retransmitted until it is either successfully transmitted or
  * it has been retransmitted up until the SSRC or SLRC thresholds.
  */
-class FrameExchangeManager : public Object
+class WIFI_EXPORT FrameExchangeManager : public Object
 {
   public:
     /**
@@ -106,7 +107,7 @@ class FrameExchangeManager : public Object
      * Information about the MPDU being received. The TXVECTOR is populated upon
      * PHY-RXSTART indication; the MAC header is populated when notified by the PHY.
      */
-    struct OngoingRxInfo
+    struct WIFI_EXPORT OngoingRxInfo
     {
         std::optional<WifiMacHeader> macHdr; //!< MAC header of the MPDU being received
         WifiTxVector txVector;               //!< TXVECTOR of the MPDU being received
