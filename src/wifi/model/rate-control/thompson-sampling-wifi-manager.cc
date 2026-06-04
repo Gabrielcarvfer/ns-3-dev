@@ -404,8 +404,13 @@ ThompsonSamplingWifiManager::DoGetRtsTxVector(WifiRemoteStation* st)
 }
 
 double
-ThompsonSamplingWifiManager::SampleBetaVariable(uint64_t alpha, uint64_t beta) const
+ThompsonSamplingWifiManager::SampleBetaVariable(double alpha, double beta) const
 {
+    // alpha and beta are the real-valued Beta parameters (1 + the EWMA-averaged
+    // success/failure counts). They must not be truncated to integers, otherwise
+    // small differences in the success/failure estimates of competing rates are
+    // lost and Thompson sampling can converge slowly to (or get stuck on) a poor
+    // rate for some random seeds (issue #414).
     double X = m_gammaRandomVariable->GetValue(alpha, 1.0);
     double Y = m_gammaRandomVariable->GetValue(beta, 1.0);
     return X / (X + Y);
