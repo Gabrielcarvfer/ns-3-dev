@@ -91,6 +91,10 @@ class FdNetDevice : public NetDevice
                     Flags [2 bytes]
                     Proto [2 bytes]
                     Raw protocol(IP, IPv6, etc) frame. */
+        UTUN,  /**< Raw IP packets with a 4-byte address-family prefix.
+                    Used with macOS utun interfaces: the kernel prepends
+                    AF_INET (2) or AF_INET6 (30) in network byte order
+                    before each packet. */
     };
 
     /**

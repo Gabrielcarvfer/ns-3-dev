@@ -24,6 +24,30 @@ check_include_file_cxx(
   sys/ioctl.h
   HAVE_SYS_IOCTL_H
 )
+check_include_file_cxx(
+  sys/socket.h
+  HAVE_SYS_SOCKET_H
+)
+
+# macOS utun / TAP support
+if(APPLE)
+  check_include_file_cxx(
+    sys/kern_control.h
+    HAVE_SYS_KERN_CONTROL_H
+  )
+  check_include_file_cxx(
+    sys/sys_domain.h
+    HAVE_SYS_SYS_DOMAIN_H
+  )
+endif()
+
+# Windows tap-windows6 support
+if(WIN32)
+  check_include_file_cxx(
+    windows.h
+    HAVE_WINDOWS_H
+  )
+endif()
 
 include(FindPkgConfig)
 set(DPDK_INCLUDE_DIRS
@@ -42,6 +66,8 @@ mark_as_advanced(
   ENABLE_TAPNETDEV
   ENABLE_EMUNETDEV
   ENABLE_NETMAP_EMU
+  ENABLE_MACOS_TAP_TUN
+  ENABLE_WIN_TAP
 )
 set(ENABLE_FDNETDEV
     False
@@ -68,8 +94,22 @@ set(ENABLE_NETMAP_EMU
     CACHE INTERNAL
           ""
 )
+set(ENABLE_MACOS_TAP_TUN
+    False
+    CACHE INTERNAL
+          ""
+)
+set(ENABLE_WIN_TAP
+    False
+    CACHE INTERNAL
+          ""
+)
 
-if(HAVE_NET_ETHERNET_H)
+# On Windows, net/ethernet.h is not available; the module provides its own
+# compatibility definitions via winsock2.h, so we enable it unconditionally.
+if(HAVE_NET_ETHERNET_H
+   OR WIN32
+)
   set(ENABLE_FDNETDEV
       True
       CACHE INTERNAL
@@ -100,6 +140,40 @@ if(HAVE_NET_ETHERNET_H)
      AND ${ENABLE_EMU}
   )
     set(ENABLE_TAPNETDEV
+        True
+        CACHE INTERNAL
+              ""
+    )
+  endif()
+
+  # macOS: utun-based TUN (native) and /dev/tapN TAP (requires third-party kext)
+  if(APPLE
+     AND HAVE_SYS_KERN_CONTROL_H
+     AND HAVE_SYS_SYS_DOMAIN_H
+     AND ${ENABLE_TAP}
+  )
+    set(ENABLE_TAPNETDEV
+        True
+        CACHE INTERNAL
+              ""
+    )
+    set(ENABLE_MACOS_TAP_TUN
+        True
+        CACHE INTERNAL
+              ""
+    )
+  endif()
+
+  # Windows: tap-windows6 adapter (requires OpenVPN TAP driver installed)
+  if(WIN32
+     AND ${ENABLE_TAP}
+  )
+    set(ENABLE_TAPNETDEV
+        True
+        CACHE INTERNAL
+              ""
+    )
+    set(ENABLE_WIN_TAP
         True
         CACHE INTERNAL
               ""
@@ -142,13 +216,15 @@ if(${ENABLE_FDNETDEV})
 
   set(emu_sources)
   set(emu_headers)
-  if(${ENABLE_EMUNETDEV})
+  if(${ENABLE_EMUNETDEV} OR ${ENABLE_DPDKDEVNET})
     set(emu_sources
         helper/emu-fd-net-device-helper.cc
     )
     set(emu_headers
         helper/emu-fd-net-device-helper.h
     )
+  endif()
+  if(${ENABLE_EMUNETDEV})
 
     add_definitions(
       -DRAW_SOCK_CREATOR="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-raw-sock-creator${build_profile_suffix}"
@@ -187,28 +263,64 @@ if(${ENABLE_FDNETDEV})
         helper/tap-fd-net-device-helper.h
     )
 
-    add_definitions(
-      -DTAP_DEV_CREATOR="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-tap-device-creator${build_profile_suffix}"
+    if(NOT
+       APPLE
+       AND NOT
+           WIN32
     )
+      # Linux: privileged tap-device-creator helper
+      add_definitions(
+        -DTAP_DEV_CREATOR="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-tap-device-creator${build_profile_suffix}"
+      )
 
-    build_exec(
-      EXECNAME tap-device-creator
-      SOURCE_FILES
-        helper/creator-utils.cc
-        helper/encode-decode.cc
-        helper/tap-device-creator.cc
-      LIBRARIES_TO_LINK ${libnetwork}
-      EXECUTABLE_DIRECTORY_PATH
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/
-      INSTALL_DIRECTORY_PATH ${CMAKE_INSTALL_LIBEXECDIR}/ns3
-      STANDALONE
-    )
+      build_exec(
+        EXECNAME tap-device-creator
+        SOURCE_FILES
+          helper/creator-utils.cc
+          helper/encode-decode.cc
+          helper/tap-device-creator.cc
+        LIBRARIES_TO_LINK ${libnetwork}
+        EXECUTABLE_DIRECTORY_PATH
+          ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/
+        INSTALL_DIRECTORY_PATH ${CMAKE_INSTALL_LIBEXECDIR}/ns3
+        STANDALONE
+      )
 
-    list(
-      APPEND
-      fd-net-device_creators
-      tap-device-creator
-    )
+      list(
+        APPEND
+        fd-net-device_creators
+        tap-device-creator
+      )
+    endif()
+
+    if(ENABLE_MACOS_TAP_TUN)
+      # macOS: privileged macos-tap-tun-device-creator helper
+      add_definitions(
+        -DMACOS_TAP_TUN_CREATOR="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/ns${NS3_VER}-macos-tap-tun-device-creator${build_profile_suffix}"
+      )
+
+      build_exec(
+        EXECNAME macos-tap-tun-device-creator
+        SOURCE_FILES
+          helper/creator-utils.cc
+          helper/encode-decode.cc
+          helper/macos-tap-tun-device-creator.cc
+        LIBRARIES_TO_LINK ${libnetwork}
+        EXECUTABLE_DIRECTORY_PATH
+          ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/fd-net-device/
+        INSTALL_DIRECTORY_PATH ${CMAKE_INSTALL_LIBEXECDIR}/ns3
+        STANDALONE
+      )
+
+      list(
+        APPEND
+        fd-net-device_creators
+        macos-tap-tun-device-creator
+      )
+    endif()
+
+    # Windows uses direct Windows API — no separate creator binary required.
+
     list(
       APPEND
       module_enabled_features
@@ -296,7 +408,9 @@ if(${ENABLE_FDNETDEV})
       ${dpdk_libraries}
   )
 
-  set(test_sources)
+  set(test_sources
+      test/fd-net-device-test.cc
+  )
 
   build_lib(
     LIBNAME fd-net-device

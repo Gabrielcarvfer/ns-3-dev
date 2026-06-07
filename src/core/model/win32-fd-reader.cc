@@ -6,6 +6,10 @@
  * Author: Tom Goff <thomas.goff@boeing.com>
  */
 
+// winsock2.h must come before any header that might pull in windows.h
+// (ns-3 headers include ostream which transitively includes windows.h on
+// some toolchains).  WIN32_LEAN_AND_MEAN prevents winsock.h re-inclusion.
+#define WIN32_LEAN_AND_MEAN
 #include "fatal-error.h"
 #include "fd-reader.h"
 #include "log.h"
@@ -13,11 +17,13 @@
 #include "simulator.h"
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <fcntl.h>
-#include <winsock.h>
-
-// #define pipe(fds) _pipe(fds,4096, _O_BINARY)
+#include <io.h>
+#include <thread>
+#include <windows.h>
+#include <winsock2.h>
 
 /**
  * @file
@@ -31,14 +37,15 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("FdReader");
 
 // conditional compilation to avoid Doxygen errors
-#ifdef __WIN32__
+#ifdef _WIN32
 bool FdReader::winsock_initialized = false;
 #endif
 
 FdReader::FdReader()
     : m_fd(-1),
       m_stop(false),
-      m_destroyEvent()
+      m_destroyEvent(),
+      m_eventsignal(nullptr)
 {
     NS_LOG_FUNCTION(this);
     m_evpipe[0] = -1;
@@ -61,28 +68,11 @@ FdReader::Start(int fd, Callback<void, uint8_t*, ssize_t> readCallback)
     {
         WSADATA wsaData;
         tmp = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        NS_ASSERT_MSG(tmp != NO_ERROR, "Error at WSAStartup()");
+        NS_ASSERT_MSG(tmp == NO_ERROR, "Error at WSAStartup()");
         winsock_initialized = true;
     }
 
     NS_ASSERT_MSG(!m_readThread.joinable(), "read thread already exists");
-
-    // create a pipe for inter-thread event notification
-    m_evpipe[0] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    m_evpipe[1] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if ((static_cast<uint64_t>(m_evpipe[0]) == INVALID_SOCKET) ||
-        (static_cast<uint64_t>(m_evpipe[1]) == INVALID_SOCKET))
-    {
-        NS_FATAL_ERROR("pipe() failed: " << std::strerror(errno));
-    }
-
-    // make the read end non-blocking
-    ULONG iMode = 1;
-    tmp = ioctlsocket(m_evpipe[0], FIONBIO, &iMode);
-    if (tmp != NO_ERROR)
-    {
-        NS_FATAL_ERROR("fcntl() failed: " << std::strerror(errno));
-    }
 
     m_fd = fd;
     m_readCallback = readCallback;
@@ -102,11 +92,23 @@ FdReader::Start(int fd, Callback<void, uint8_t*, ssize_t> readCallback)
     }
 
     //
-    // Now spin up a thread to read from the fd
+    // Now spin up a thread to read from the fd.  On Windows, the discrete-event
+    // simulator can finish processing 0..N ms of simulation time before the OS
+    // ever grants the new thread a CPU time slice.  We use a one-shot Windows
+    // Event so that Start() (which executes on the simulator's main thread, i.e.
+    // inside a scheduled event callback) blocks until Run() has completed its
+    // first loop iteration.  If data was already in the pipe, the thread will
+    // have called ReceiveCallback / ScheduleWithContext before signaling, so the
+    // simulator will find the forwarded packet event in the queue when it
+    // resumes.
     //
     NS_LOG_LOGIC("Spinning up read thread");
 
+    m_eventsignal = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     m_readThread = std::thread(&FdReader::Run, this);
+    WaitForSingleObject(m_eventsignal, INFINITE);
+    CloseHandle(m_eventsignal);
+    m_eventsignal = nullptr;
 }
 
 void
@@ -123,37 +125,11 @@ FdReader::Stop()
     NS_LOG_FUNCTION(this);
     m_stop = true;
 
-    // signal the read thread
-    if (m_evpipe[1] != -1)
-    {
-        char zero = 0;
-        ssize_t len = send(m_evpipe[1], &zero, sizeof(zero), 0);
-        if (len != sizeof(zero))
-        {
-            NS_LOG_WARN("incomplete write(): " << std::strerror(errno));
-        }
-    }
-
     if (m_readThread.joinable())
     {
         m_readThread.join();
     }
 
-    // close the write end of the event pipe
-    if (m_evpipe[1] != -1)
-    {
-        closesocket(m_evpipe[1]);
-        m_evpipe[1] = -1;
-    }
-
-    // close the read end of the event pipe
-    if (m_evpipe[0] != -1)
-    {
-        closesocket(m_evpipe[0]);
-        m_evpipe[0] = -1;
-    }
-
-    // reset everything else
     m_fd = -1;
     m_readCallback.Nullify();
     m_stop = false;
@@ -164,71 +140,73 @@ void
 FdReader::Run()
 {
     NS_LOG_FUNCTION(this);
-    int nfds;
-    fd_set rfds;
 
-    nfds = (m_fd > m_evpipe[0] ? m_fd : m_evpipe[0]) + 1;
+    // On Windows, Winsock's select() only accepts actual SOCKETs — it cannot
+    // monitor POSIX file descriptors such as those created by _pipe().
+    // Anonymous pipes do not support WaitForMultipleObjects either.
+    // The only portable way to check readiness of an anonymous pipe handle
+    // without blocking is PeekNamedPipe().  We poll at 1 ms intervals, which
+    // is fine for simulation purposes and keeps CPU usage negligible.
+    HANDLE hFd = (HANDLE)_get_osfhandle(m_fd);
 
-    FD_ZERO(&rfds);
-    FD_SET(m_fd, &rfds);
-    FD_SET(m_evpipe[0], &rfds);
+    // Signal Start() exactly once after our first loop iteration so it can
+    // unblock.  For the pipe case with pre-queued data this happens after the
+    // first ReceiveCallback / ScheduleWithContext, so the simulator sees the
+    // event immediately.  For the non-pipe (TAP device) case we signal before
+    // blocking in DoRead so Start() is not held up indefinitely.
+    bool startSignaled = false;
+    auto signalStart = [&]() {
+        if (!startSignaled && m_eventsignal)
+        {
+            SetEvent(m_eventsignal);
+            startSignaled = true;
+        }
+    };
 
     for (;;)
     {
-        int r;
-        fd_set readfds = rfds;
-
-        r = select(nfds, &readfds, nullptr, nullptr, nullptr);
-        if (r == -1 && errno != EINTR)
-        {
-            NS_FATAL_ERROR("select() failed: " << std::strerror(errno));
-        }
-
-        if (FD_ISSET(m_evpipe[0], &readfds))
-        {
-            // drain the event pipe
-            for (;;)
-            {
-                char buf[1024];
-                ssize_t len = recv(m_evpipe[0], buf, sizeof(buf), 0);
-                if (len == 0)
-                {
-                    NS_FATAL_ERROR("event pipe closed");
-                }
-                if (len < 0)
-                {
-                    if (errno == EAGAIN || errno == EINTR || errno == EWOULDBLOCK)
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        NS_FATAL_ERROR("read() failed: " << std::strerror(errno));
-                    }
-                }
-            }
-        }
-
         if (m_stop)
         {
-            // this thread is done
+            signalStart(); // unblock Start() if we exit early
             break;
         }
 
-        if (FD_ISSET(m_fd, &readfds))
+        DWORD avail = 0;
+        BOOL ok = PeekNamedPipe(hFd, nullptr, 0, nullptr, &avail, nullptr);
+        if (!ok)
         {
+            // Not a pipe (e.g., TAP/TUN device handle).  Signal Start() now so
+            // it is not blocked while we wait for the first frame.
+            signalStart();
             FdReader::Data data = DoRead();
-            // reading stops when m_len is zero
             if (data.m_len == 0)
             {
                 break;
             }
-            // the callback is only called when m_len is positive (data
-            // is ignored if m_len is negative)
-            else if (data.m_len > 0)
+            if (data.m_len > 0)
             {
                 m_readCallback(data.m_buf, data.m_len);
             }
+        }
+        else if (avail > 0)
+        {
+            FdReader::Data data = DoRead();
+            if (data.m_len == 0)
+            {
+                break;
+            }
+            if (data.m_len > 0)
+            {
+                m_readCallback(data.m_buf, data.m_len);
+            }
+            // Signal after callback so any ScheduleWithContext call is visible
+            // to the simulator before Start() returns.
+            signalStart();
+        }
+        else
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            signalStart();
         }
     }
 }

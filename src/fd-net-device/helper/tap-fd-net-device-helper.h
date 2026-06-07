@@ -8,7 +8,7 @@
 #ifndef TAP_FD_NET_DEVICE_HELPER_H
 #define TAP_FD_NET_DEVICE_HELPER_H
 
-#include "emu-fd-net-device-helper.h"
+#include "fd-net-device-helper.h"
 
 #include "ns3/attribute.h"
 #include "ns3/fd-net-device.h"
@@ -28,7 +28,7 @@ namespace ns3
  * interface
  *
  */
-class TapFdNetDeviceHelper : public EmuFdNetDeviceHelper
+class TapFdNetDeviceHelper : public FdNetDeviceHelper
 {
   public:
     /**
@@ -46,6 +46,22 @@ class TapFdNetDeviceHelper : public EmuFdNetDeviceHelper
      * @param pi Set the IFF_NO_PI flag if pi is false.
      */
     void SetModePi(bool pi);
+
+    /**
+     * Select TAP (L2, Ethernet) vs TUN (L3, IP) mode.
+     *
+     * On Linux, TAP mode opens an IFF_TAP device; TUN mode opens an IFF_TUN
+     * device.  On macOS, TAP mode opens /dev/tapN (requires a third-party kext)
+     * while TUN mode creates a native utun interface.  On Windows, TAP mode
+     * opens a tap-windows6 (OpenVPN) adapter in Ethernet mode; TUN mode
+     * opens the same adapter in point-to-point mode.
+     *
+     * The FdNetDevice encapsulation mode is set automatically: DIX for TAP,
+     * UTUN for macOS TUN, and DIX for Windows TUN.
+     *
+     * @param modeTap true for TAP (default), false for TUN.
+     */
+    void SetModeTap(bool modeTap);
 
     /**
      * Set the device IPv4 address.
@@ -109,6 +125,11 @@ class TapFdNetDeviceHelper : public EmuFdNetDeviceHelper
      * The TAP device flag IFF_NO_PI.
      */
     bool m_modePi;
+
+    /**
+     * True selects TAP (L2/Ethernet) mode; false selects TUN (L3/IP) mode.
+     */
+    bool m_modeTap;
 
     /**
      * The IPv4 address for the TAP device.

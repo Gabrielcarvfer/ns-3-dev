@@ -1207,12 +1207,14 @@ macro(process_options)
   set(PLATFORM_UNSUPPORTED_PRE "Platform doesn't support")
   set(PLATFORM_UNSUPPORTED_POST "features. Continuing without them.")
   # Remove from libs_to_build all incompatible libraries or the ones that
-  # dependencies couldn't be installed
-  if(APPLE
-     OR WSLv1
-     OR WIN32
-     OR BSD
-  )
+  # dependencies couldn't be installed.
+  #
+  # On Linux, both EMU (PF_PACKET raw sockets) and TAP (via /dev/net/tun) are
+  # available.  On macOS and Windows, PF_PACKET raw sockets are not available
+  # (EMU is disabled) but fd-net-device itself is kept in the build so that the
+  # macOS utun / tap-windows6 TAP/TUN support can be compiled. WSLv1 and BSD
+  # still disable the entire fd-net-device module.
+  if(WSLv1 OR BSD)
     set(ENABLE_TAP OFF)
     set(ENABLE_EMU OFF)
     set(ENABLE_FDNETDEV FALSE)
@@ -1230,6 +1232,20 @@ macro(process_options)
       STATUS
         "${PLATFORM_UNSUPPORTED_PRE} TAP and EMU ${PLATFORM_UNSUPPORTED_POST}"
     )
+  elseif(APPLE OR WIN32)
+    # EMU (PF_PACKET) is Linux-only; disable it but keep fd-net-device for the
+    # native TAP/TUN implementations (macOS utun, Windows tap-windows6).
+    set(ENABLE_EMU OFF)
+    set(ENABLE_EMUNETDEV False CACHE INTERNAL "")
+    set(ENABLE_NETMAP_EMU False CACHE INTERNAL "")
+    set(ENABLE_DPDKDEVNET False CACHE INTERNAL "")
+    message(
+      STATUS
+        "${PLATFORM_UNSUPPORTED_PRE} EMU FdNetDevice (PF_PACKET) ${PLATFORM_UNSUPPORTED_POST}"
+    )
+    # ENABLE_TAP and ENABLE_FDNETDEV remain as set from NS3_TAP / NS3_EMU above;
+    # the fd-net-device module's own CMakeLists.txt will enable the
+    # platform-appropriate TAP/TUN back-end.
   endif()
 
   if(NOT ${ENABLE_MPI})

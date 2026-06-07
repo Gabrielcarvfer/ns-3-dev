@@ -53,21 +53,9 @@ EmuFdNetDeviceHelper::EmuFdNetDeviceHelper()
 }
 
 void
-EmuFdNetDeviceHelper::SetDeviceName(std::string deviceName)
-{
-    m_deviceName = deviceName;
-}
-
-void
 EmuFdNetDeviceHelper::HostQdiscBypass(bool hostQdiscBypass)
 {
     m_hostQdiscBypass = hostQdiscBypass;
-}
-
-std::string
-EmuFdNetDeviceHelper::GetDeviceName()
-{
-    return m_deviceName;
 }
 
 Ptr<NetDevice>

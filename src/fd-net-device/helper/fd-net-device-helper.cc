@@ -29,6 +29,19 @@ NS_LOG_COMPONENT_DEFINE("FdNetDeviceHelper");
 FdNetDeviceHelper::FdNetDeviceHelper()
 {
     m_deviceFactory.SetTypeId("ns3::FdNetDevice");
+    m_deviceName = "";
+}
+
+void
+FdNetDeviceHelper::SetDeviceName(std::string deviceName)
+{
+    m_deviceName = deviceName;
+}
+
+std::string
+FdNetDeviceHelper::GetDeviceName() const
+{
+    return m_deviceName;
 }
 
 void

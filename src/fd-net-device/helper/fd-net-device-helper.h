@@ -60,6 +60,20 @@ class FdNetDeviceHelper : public PcapHelperForDevice, public AsciiTraceHelperFor
     void SetAttribute(std::string n1, const AttributeValue& v1);
 
     /**
+     * Get the device name of this device.
+     *
+     * @returns The device name of this device.
+     */
+    std::string GetDeviceName() const;
+
+    /**
+     * Set the device name of this device.
+     *
+     * @param deviceName The device name of this device.
+     */
+    void SetDeviceName(std::string deviceName);
+
+    /**
      * This method creates a FdNetDevice and associates it to a node
      *
      * @param node The node to install the device in
@@ -129,6 +143,9 @@ class FdNetDeviceHelper : public PcapHelperForDevice, public AsciiTraceHelperFor
                              bool explicitFilename) override;
 
     ObjectFactory m_deviceFactory; //!< factory for the NetDevices
+
+  protected:
+    std::string m_deviceName; //!< The name of the underlying network interface
 };
 
 } // namespace ns3

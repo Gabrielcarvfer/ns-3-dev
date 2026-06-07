@@ -24,9 +24,23 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/uinteger.h"
 
+#ifdef _WIN32
+#include <io.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+// Map POSIX I/O names to their Windows CRT equivalents so the rest of the
+// file can use standard names without scattered ifdefs.
+#define read _read
+#define write(fd, buf, len) _write((fd), (buf), static_cast<unsigned int>(len))
+#define close _close
+#else
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <unistd.h>
+#endif
+
+#include <chrono>
+#include <thread>
 
 namespace ns3
 {
@@ -96,7 +110,7 @@ FdNetDevice::GetTypeId()
                           "The link-layer encapsulation type to use.",
                           EnumValue(DIX),
                           MakeEnumAccessor<EncapsulationMode>(&FdNetDevice::m_encapMode),
-                          MakeEnumChecker(DIX, "Dix", LLC, "Llc", DIXPI, "DixPi"))
+                          MakeEnumChecker(DIX, "Dix", LLC, "Llc", DIXPI, "DixPi", UTUN, "Utun"))
             .AddAttribute("RxQueueSize",
                           "Maximum size of the read queue.  "
                           "This value limits number of packets that have been read "
@@ -316,8 +330,7 @@ FdNetDevice::ReceiveCallback(uint8_t* buf, ssize_t len)
 
     if (skip)
     {
-        struct timespec time = {0, 100000000L}; // 100 ms
-        nanosleep(&time, nullptr);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     else
     {
@@ -451,6 +464,60 @@ FdNetDevice::ForwardUp()
     bool isBroadcast = false;
     bool isMulticast = false;
 
+    //
+    // UTUN mode: macOS utun sends raw IP with a 4-byte address-family prefix.
+    // Strip it, determine the Ethernet protocol type, and deliver directly
+    // without attempting to parse an Ethernet header.
+    //
+    if (m_encapMode == UTUN)
+    {
+        if (packet->GetSize() < 4)
+        {
+            m_phyRxDropTrace(originalPacket);
+            return;
+        }
+
+        uint8_t afBuf[4];
+        packet->CopyData(afBuf, 4);
+        packet->RemoveAtStart(4);
+
+        // Address family is in network byte order on macOS utun
+        uint32_t af = (static_cast<uint32_t>(afBuf[0]) << 24) |
+                      (static_cast<uint32_t>(afBuf[1]) << 16) |
+                      (static_cast<uint32_t>(afBuf[2]) << 8) | static_cast<uint32_t>(afBuf[3]);
+
+        if (af == 2) // AF_INET
+        {
+            protocol = 0x0800;
+        }
+        else if (af == 30) // AF_INET6 on macOS
+        {
+            protocol = 0x86DD;
+        }
+        else
+        {
+            m_phyRxDropTrace(originalPacket);
+            return;
+        }
+
+        // TUN is point-to-point: use the device address as destination
+        destination = m_address;
+        source = Mac48Address("00:00:00:00:00:00");
+
+        NS_LOG_LOGIC("UTUN pkt af=" << af << " proto=" << std::hex << protocol);
+
+        m_promiscSnifferTrace(originalPacket);
+        if (!m_promiscRxCallback.IsNull())
+        {
+            m_macPromiscRxTrace(originalPacket);
+            m_promiscRxCallback(this, packet, protocol, source, destination, NS3_PACKET_HOST);
+        }
+        m_snifferTrace(originalPacket);
+        m_macRxTrace(originalPacket);
+        m_rxCallback(this, packet, protocol, source);
+        return;
+    }
+
     EthernetHeader header(false);
 
     //
@@ -565,6 +632,63 @@ FdNetDevice::SendFrom(Ptr<Packet> packet,
         return false;
     }
 
+    //
+    // UTUN mode: macOS utun expects raw IP with a 4-byte address-family prefix.
+    // Skip Ethernet header construction entirely.
+    //
+    if (m_encapMode == UTUN)
+    {
+        NS_ASSERT_MSG(packet->GetSize() <= m_mtu,
+                      "FdNetDevice::SendFrom(): Packet too big " << packet->GetSize());
+
+        m_macTxTrace(packet);
+        m_promiscSnifferTrace(packet);
+        m_snifferTrace(packet);
+
+        NS_LOG_LOGIC("UTUN calling write, proto=" << std::hex << protocolNumber);
+
+        // 4-byte AF header in network byte order, followed by raw IP
+        uint32_t af;
+        if (protocolNumber == 0x0800)
+        {
+            af = 0x00000002; // AF_INET, already big-endian
+        }
+        else if (protocolNumber == 0x86DD)
+        {
+            af = 0x0000001e; // AF_INET6 (30) on macOS, big-endian
+        }
+        else
+        {
+            m_macTxDropTrace(packet);
+            return false;
+        }
+
+        auto payloadLen = (size_t)packet->GetSize();
+        size_t totalLen = payloadLen + 4;
+        uint8_t* buffer = AllocateBuffer(totalLen);
+        if (!buffer)
+        {
+            m_macTxDropTrace(packet);
+            return false;
+        }
+
+        buffer[0] = static_cast<uint8_t>((af >> 24) & 0xFF);
+        buffer[1] = static_cast<uint8_t>((af >> 16) & 0xFF);
+        buffer[2] = static_cast<uint8_t>((af >> 8) & 0xFF);
+        buffer[3] = static_cast<uint8_t>(af & 0xFF);
+        packet->CopyData(buffer + 4, payloadLen);
+
+        ssize_t written = Write(buffer, totalLen);
+        FreeBuffer(buffer);
+
+        if (written == -1 || (size_t)written != totalLen)
+        {
+            m_macTxDropTrace(packet);
+            return false;
+        }
+        return true;
+    }
+
     Mac48Address destination = Mac48Address::ConvertFrom(dest);
     Mac48Address source = Mac48Address::ConvertFrom(src);
 
@@ -639,7 +763,7 @@ FdNetDevice::Write(uint8_t* buffer, size_t length)
 {
     NS_LOG_FUNCTION(this << static_cast<void*>(buffer) << length);
 
-    uint32_t ret = write(m_fd, buffer, length);
+    ssize_t ret = write(m_fd, buffer, length);
     return ret;
 }
 

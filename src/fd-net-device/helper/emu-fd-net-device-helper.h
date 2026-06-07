@@ -40,20 +40,6 @@ class EmuFdNetDeviceHelper : public FdNetDeviceHelper
     }
 
     /**
-     * Get the device name of this device.
-     *
-     * @returns The device name of this device.
-     */
-    std::string GetDeviceName();
-
-    /**
-     * Set the device name of this device.
-     *
-     * @param deviceName The device name of this device.
-     */
-    void SetDeviceName(std::string deviceName);
-
-    /**
      * @brief Request host qdisc bypass
      * @param hostQdiscBypass to enable host qdisc bypass
      */
@@ -82,10 +68,6 @@ class EmuFdNetDeviceHelper : public FdNetDeviceHelper
      */
     virtual int CreateFileDescriptor() const;
 
-    /**
-     * The Unix/Linux name of the underlying device (e.g., eth0)
-     */
-    std::string m_deviceName;
     bool m_hostQdiscBypass; //!< True if request host qdisc bypass
 };
 

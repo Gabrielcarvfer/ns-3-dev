@@ -3,14 +3,16 @@ include_directories(
   ${DPDK_INCLUDE_DIRS}
 )
 
-build_lib_example(
-  NAME dummy-network
-  SOURCE_FILES dummy-network.cc
-  LIBRARIES_TO_LINK
-    ${libfd-net-device}
-    ${libinternet}
-    ${libinternet-apps}
-)
+if(HAVE_SYS_SOCKET_H)
+  build_lib_example(
+    NAME dummy-network
+    SOURCE_FILES dummy-network.cc
+    LIBRARIES_TO_LINK
+      ${libfd-net-device}
+      ${libinternet}
+      ${libinternet-apps}
+  )
+endif()
 
 build_lib_example(
   NAME fd2fd-onoff
@@ -40,7 +42,7 @@ build_lib_example(
     ${libapplications}
 )
 
-if(${ENABLE_EMU})
+if(${ENABLE_EMUNETDEV})
   build_lib_example(
     NAME fd-emu-ping
     SOURCE_FILES fd-emu-ping.cc

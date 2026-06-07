@@ -444,3 +444,253 @@ Several examples are provided:
   traffic over a real channel.
 * ``fd-tap-ping.cc``: This example uses the TapFdNetDeviceHelper to send ICMP
   traffic over a real channel.
+
+Platform-specific TAP/TUN Implementations
+==========================================
+
+This section explains in detail how each supported platform obtains a file
+descriptor that represents a virtual network interface.  The explanation is
+aimed at readers who are new to the relevant kernel or OS APIs.
+
+Linux
+#####
+
+On Linux the kernel exposes TAP (Layer 2, Ethernet frames) and TUN (Layer 3,
+raw IP datagrams) interfaces through the character device ``/dev/net/tun``.
+
+Because creating these interfaces requires the ``CAP_NET_ADMIN`` capability
+(or root privileges), ns-3 delegates the work to a small privileged helper
+program, ``tap-device-creator``, that can be installed setuid-root.  The
+helper communicates the file descriptor back to the ns-3 process using a
+Unix-domain socket and the ``SCM_RIGHTS`` ancillary-data mechanism (which
+lets one process hand an open file descriptor to another over a socket).
+
+The sequence in ``tap-device-creator.cc`` is:
+
+#. ``open("/dev/net/tun", O_RDWR)`` — open the kernel TUN/TAP multiplexer.
+#. ``ioctl(fd, TUNSETIFF, &ifr)`` — configure the interface name and flags.
+   ``IFF_TAP`` selects Layer 2 (Ethernet); ``IFF_TUN`` selects Layer 3 (IP).
+   ``IFF_NO_PI`` suppresses the 4-byte Packet Information (PI) header that
+   the kernel otherwise prepends to every read.  Without ``IFF_NO_PI`` each
+   frame is prefixed with ``flags(2) + proto(2)``; the ``DIXPI`` encapsulation
+   mode tells FdNetDevice to strip that header.
+#. ``ioctl(sock, SIOCSIFADDR, …)`` / ``SIOCSIFNETMASK`` — set the IP address
+   and netmask on the new interface via a datagram socket on ``AF_INET``.
+#. ``ioctl(sock, SIOCSIFFLAGS, … | IFF_UP | IFF_RUNNING)`` — bring the
+   interface up so the kernel starts routing packets to it.
+#. ``sendmsg(unix_sock, …, SCM_RIGHTS)`` — send the TAP/TUN fd back to the
+   ns-3 parent over the Unix-domain socket.
+
+The parent (``TapFdNetDeviceHelper::CreateFileDescriptor()``) forks, exec's
+the creator with the encoded socket path as an argument, waits for it to
+exit, then calls ``recvmsg()`` with a ``CMSG_SPACE(sizeof(int))`` control
+buffer.  On receipt the control message type is ``SCM_RIGHTS`` and
+``CMSG_DATA`` contains the raw fd integer.
+
+macOS
+#####
+
+macOS supports only TUN (Layer 3) via the built-in ``utun`` interface.  TAP
+(Layer 2) required *tuntaposx*, which was abandoned in 2015 and cannot load
+on macOS Catalina (10.15) or any later release.
+
+utun interface (Layer 3)
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The macOS path uses the built-in ``utun``
+driver, which does **not** require a third-party kernel extension.  The API
+uses the kernel control socket framework:
+
+#. ``socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL)`` — create a kernel
+   control socket.  ``PF_SYSTEM`` is macOS's namespace for kernel-internal
+   communication; ``SYSPROTO_CONTROL`` selects the control plane sub-protocol.
+#. ``ioctl(fd, CTLIOCGINFO, &ci)`` — look up the numeric ID of the
+   ``com.apple.net.utun_control`` kernel control.  The kernel assigns IDs
+   dynamically at boot, so this ioctl translates the well-known name string
+   into the current numeric ``ctl_id``.
+#. Fill in a ``sockaddr_ctl`` structure:
+
+   .. code-block:: c
+
+      struct sockaddr_ctl sc = {};
+      sc.sc_family  = AF_SYSTEM;
+      sc.ss_sysaddr = AF_SYS_CONTROL;
+      sc.sc_id      = ci.ctl_id;
+      sc.sc_unit    = unit + 1;  // 0 = auto-assign
+
+#. ``connect(fd, (struct sockaddr *)&sc, sizeof(sc))`` — "connect" the
+   control socket to the kernel's utun control.  Despite the name, this is
+   not a TCP-style connection; it tells the kernel to create the utun
+   interface and bind this fd to it.
+#. ``getsockopt(fd, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, …)`` — retrieve the
+   kernel-assigned interface name (e.g. ``utun3``).
+
+   .. note::
+      The utun driver prepends a 4-byte address-family prefix (``AF_INET`` = 2
+      in network byte order) to every datagram read from or written to the fd.
+      FdNetDevice's ``UTUN`` encapsulation mode automatically strips this
+      prefix on receive and adds it on send.
+
+The fd returned by the helper is passed back to the ns-3 parent via the
+same ``SCM_RIGHTS``/Unix-domain socket mechanism used on Linux.
+
+Windows
+#######
+
+Windows has no in-kernel TUN/TAP API.  Bridging the simulator to a real
+network interface requires the *tap-windows6* (OpenVPN TAP) virtual adapter
+driver, which can be installed by OpenVPN or Tunnelblick.
+
+Because the driver is a user-accessible device object, no privilege escalation
+helper is needed; the ns-3 simulation process opens the adapter directly
+(though administrator privileges are still required by the driver).
+
+**Step 1 — Adapter discovery via the Registry**
+
+The tap-windows6 driver registers each adapter under the NDIS network adapter
+class key in HKLM:
+
+.. code-block:: text
+
+   HKLM\SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}
+
+``FindTapWindowsGuid()`` calls ``RegOpenKeyExA`` to open the class key, then
+iterates over sub-keys with ``RegEnumKeyA``.  For each sub-key it reads the
+``ComponentId`` value: ``tap0901`` or ``tap0902`` identifies a tap-windows6
+adapter.  Once found, the ``NetCfgInstanceId`` value contains the GUID string
+of the adapter (e.g. ``{55E64B16-AA3F-4A86-A120-7B2B8740432E}``).
+
+**Step 2 — Opening the device**
+
+The Windows device path for a tap-windows6 adapter is:
+
+.. code-block:: text
+
+   \\.\Global\{GUID}.tap
+
+``CreateFileA()`` opens this path with ``GENERIC_READ | GENERIC_WRITE``.  The
+``FILE_ATTRIBUTE_SYSTEM`` flag is required by the driver.
+
+**Step 3 — Bringing the link up**
+
+By default the adapter appears as "disconnected".  The tap-windows6 driver
+exposes custom ``DeviceIoControl`` commands to control the virtual link:
+
+.. code-block:: c
+
+   #define TAP_WIN_IOCTL_SET_MEDIA_STATUS \
+       CTL_CODE(FILE_DEVICE_UNKNOWN, 6, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+   ULONG mediaStatus = 1;  // 1 = connected
+   DeviceIoControl(hTap, TAP_WIN_IOCTL_SET_MEDIA_STATUS,
+                   &mediaStatus, sizeof(mediaStatus),
+                   &mediaStatus, sizeof(mediaStatus),
+                   &returned, nullptr);
+
+**Step 4 — TUN (L3) mode IP configuration**
+
+For TUN mode, the driver also needs the local IP address, remote IP address,
+and netmask so it can set up the point-to-point routing entry:
+
+.. code-block:: c
+
+   #define TAP_WIN_IOCTL_CONFIG_TUN \
+       CTL_CODE(FILE_DEVICE_UNKNOWN, 10, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+   ULONG ip[3];  // [0]=local, [1]=remote (same as local for P2P), [2]=netmask
+   DeviceIoControl(hTap, TAP_WIN_IOCTL_CONFIG_TUN,
+                   ip, sizeof(ip), ip, sizeof(ip), &returned, nullptr);
+
+**Step 5 — Converting HANDLE to a POSIX fd**
+
+The Windows C runtime provides ``_open_osfhandle()`` to wrap a Win32 ``HANDLE``
+in a POSIX-style integer file descriptor.  The ``_O_RDWR | _O_BINARY`` flags
+tell the CRT to treat the fd as a binary read/write stream:
+
+.. code-block:: c
+
+   int fd = _open_osfhandle((intptr_t)hTap, _O_RDWR | _O_BINARY);
+
+This fd can then be passed to ``FdNetDevice::SetFileDescriptor()`` exactly as
+on Linux or macOS.
+
+Windows FdReader Threading Model
+#################################
+
+POSIX platforms use ``select()`` to wait for activity on multiple file
+descriptors simultaneously, including a self-pipe ``evpipe`` used to signal
+the read thread to stop.  Neither mechanism works for Windows anonymous pipes
+or tap-windows6 device handles:
+
+* Winsock's ``WSAEventSelect`` / ``select()`` only accept ``SOCKET`` handles,
+  not arbitrary ``HANDLE`` values or POSIX-style fds.
+* Anonymous pipes created by ``_pipe()`` do not support
+  ``WaitForMultipleObjects``.
+
+The Windows ``FdReader`` implementation (``win32-fd-reader.cc``) therefore
+uses a polling approach based on ``PeekNamedPipe()``:
+
+#. ``_get_osfhandle(m_fd)`` converts the POSIX fd to a Win32 ``HANDLE``.
+#. The read loop calls ``PeekNamedPipe(hFd, nullptr, 0, nullptr, &avail,
+   nullptr)`` once per millisecond (``Sleep(1)``) to check how many bytes are
+   available without consuming them.
+#. When ``avail > 0`` the loop calls ``DoRead()``, then invokes the receive
+   callback.
+#. When ``PeekNamedPipe`` itself fails (return value 0), the fd is not a
+   pipe — it is a tap-windows6 device handle, for which the driver provides
+   blocking read semantics directly.  In that case the loop calls ``DoRead()``
+   directly without polling.
+
+**Start/Run synchronization**
+
+The ns-3 discrete-event simulator processes simulation time in near-zero
+wall-clock time.  If the read thread is scheduled by the OS only *after* the
+simulator has already advanced past the point where it would process the
+incoming packet, the packet is silently lost.
+
+To prevent this, ``FdReader::Start()`` creates a one-shot Windows Event object
+(``CreateEvent(nullptr, FALSE, FALSE, nullptr)``) and blocks on
+``WaitForSingleObject(m_eventsignal, INFINITE)`` after launching the read
+thread.  The read thread signals the event (``SetEvent(m_eventsignal)``) after
+completing its first loop iteration.
+
+For the pipe case with pre-queued data (used in tests), the thread calls
+``DoRead()``, invokes the receive callback which calls
+``Simulator::ScheduleWithContext``, and *then* signals the event — so by the
+time ``Start()`` returns to the simulator, the packet-receive event is already
+in the scheduler queue at simulation time t=0.  When the simulator resumes
+and processes t=0 events, it finds and processes the packet.
+
+Testing
+*******
+
+The test suite (``src/fd-net-device/test/fd-net-device-test.cc``) contains:
+
+* **FdNetDeviceReceiveTest** — injects a complete Ethernet II frame into the
+  write end of an anonymous pipe and verifies that the FdNetDevice's receive
+  callback is invoked with the correct EtherType (0x0800), payload size, and
+  payload bytes.
+* **FdNetDeviceSendTest** — schedules a ``device->Send()`` call and reads the
+  resulting raw Ethernet frame from the read end of the pipe; verifies all
+  header fields (destination MAC, source MAC, EtherType) and payload bytes.
+* **FdNetDeviceDixpiReceiveTest** — same as the receive test, but with a
+  4-byte PI header prepended to the frame; verifies that FdNetDevice in
+  ``DIXPI`` mode strips the PI header correctly.
+* **FdNetDeviceUtunReceiveTest** — injects a 4-byte ``AF_INET`` prefix plus a
+  minimal 20-byte IPv4 header and verifies that FdNetDevice in ``UTUN`` mode
+  strips the prefix and delivers the raw IP datagram.
+* **FdNetDeviceLinuxTunProbeTest** (Linux only) — attempts to open
+  ``/dev/net/tun`` and configure a ``IFF_TUN | IFF_NO_PI`` interface.  The
+  test passes silently if ``/dev/net/tun`` is unavailable or
+  ``CAP_NET_ADMIN`` is not granted.
+* **FdNetDeviceMacOsUtunProbeTest** (macOS only) — attempts to create a utun
+  socket using the ``SYSPROTO_CONTROL`` API.  The test passes silently if the
+  API is unavailable.
+* **FdNetDeviceWindowsTapRegistryTest** (Windows only) — reads the NDIS
+  adapter class registry key and counts tap-windows6 adapters.  The test
+  passes regardless of whether any adapter is installed; it exercises the
+  registry scan code path used by ``TapFdNetDeviceHelper``.
+
+All tests except the platform-specific probe tests run on every supported
+platform (Linux, macOS, Windows) without any special hardware, drivers, or
+privileges, using anonymous pipes to simulate the file-descriptor I/O.

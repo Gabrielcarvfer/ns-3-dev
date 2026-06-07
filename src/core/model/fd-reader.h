@@ -15,7 +15,7 @@
 #include <cstdint>
 #include <thread>
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #include <BaseTsd.h>
 
 /**
@@ -66,7 +66,7 @@ class FdReader : public SimpleRefCount<FdReader>
      */
     void Stop();
 
-#ifdef __WIN32__
+#ifdef _WIN32
     /**
      * Keeps track if the Winsock library has been initialized.
      */
@@ -145,6 +145,14 @@ class FdReader : public SimpleRefCount<FdReader>
      * and halt the thread.
      */
     EventId m_destroyEvent;
+
+#ifdef _WIN32
+    /** One-shot event signaled by Run() after its first loop iteration so
+     *  Start() can return once any pre-queued data has been processed.
+     *  Stored as void* to avoid pulling <windows.h> into every TU;
+     *  the win32-fd-reader.cc implementation casts it to HANDLE. */
+    void* m_eventsignal;
+#endif
 };
 
 } // namespace ns3

@@ -8,6 +8,7 @@
 
 #include "encode-decode.h"
 
+#ifndef _WIN32
 #include <arpa/inet.h>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +24,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#endif
 
 namespace ns3
 {
@@ -39,6 +41,7 @@ bool gVerbose = false;
  * @param magic_number A verification number to verify the caller is talking to the
  * right process.
  */
+#ifndef _WIN32
 void
 SendSocket(const char* path, int fd, const int magic_number)
 {
@@ -162,5 +165,6 @@ SendSocket(const char* path, int fd, const int magic_number)
 
     LOG("sendmsg complete");
 }
+#endif // !_WIN32
 
 } // namespace ns3
