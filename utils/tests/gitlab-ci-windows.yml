@@ -1,0 +1,108 @@
+# Copyright (c) 2026 Centre Tecnologic de Telecomunicacions de Catalunya (CTTC)
+# SPDX-License-Identifier: GPL-2.0-only
+# NS3 CI script for Windows
+#
+# Runner requirements:
+#   "windows" + "mingw"         Runner with MSYS2 installed at C:\msys64
+#   "windows" + "visualstudio"  Runner with Visual Studio 2022 and Python in PATH
+
+# MinGW (MSYS2/MinGW64) base -----------------------------------------------
+
+.build-windows-mingw-base:
+  variables:
+    CCACHE_BASEDIR_VALUE: ns-3-ccache-storage
+    # Launch the MSYS2 login shell in the MinGW64 environment so that the
+    # mingw-w64 toolchain (gcc, ninja, python3, ...) is placed on PATH.
+    MSYSTEM: MINGW64
+  before_script:
+    # Chocolatey installs MSYS2 to C:\tools\msys64 by default.
+    - choco install msys2 --yes --no-progress
+    - C:\tools\msys64\usr\bin\bash.exe -lc 'pacman -S --noconfirm --needed mingw-w64-x86_64-cmake mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-python mingw-w64-x86_64-ccache mingw-w64-x86_64-gsl mingw-w64-x86_64-libxml2 mingw-w64-x86_64-lld && pacman --noconfirm -Scc'
+  script:
+    # The MSYS2 login shell (-l, required to set up the MinGW64 PATH) starts in
+    # the home directory, so cd into the project first ($PWD then also feeds the
+    # ccache and build paths correctly). The cygpath result is captured in a
+    # variable to avoid nested double quotes, which Windows PowerShell mangles
+    # when building the bash.exe command line.
+    - C:\tools\msys64\usr\bin\bash.exe -lc 'p=$(cygpath -u "$CI_PROJECT_DIR") && cd "$p" && export CCACHE_BASEDIR="$PWD" && export CCACHE_DIR="$PWD/$CCACHE_BASEDIR_VALUE" && ccache -M 3G && ccache -F 0 && ccache -z && python3 ns3 configure -d $MODE --enable-asserts --enable-examples --enable-tests --disable-werror -G Ninja && python3 ns3 build && ccache -s'
+    - C:\tools\msys64\usr\bin\bash.exe -lc 'p=$(cygpath -u "$CI_PROJECT_DIR") && cd "$p" && export PATH="$PWD/build:$PATH" && python3 test.py --no-build --verbose-failed'
+  cache:
+    key: "ccache-$CI_JOB_NAME"
+    paths:
+      - $CCACHE_BASEDIR_VALUE/
+  interruptible: true
+  timeout: 6h
+  tags:
+    - saas-windows-medium-amd64
+
+# ClangCL (Visual Studio 2022) base ----------------------------------------
+
+.build-windows-clangcl-base:
+  before_script:
+    # Locate the Visual Studio Build Tools, add the ClangCL (LLVM) toolset (the
+    # SaaS image ships VS Build Tools without it, so "-T ClangCL" fails with
+    # MSB8020), then enter the developer shell so msbuild is on PATH. ns3's
+    # generator auto-detection (search_cmake_cache) probes for a build tool on
+    # PATH and aborts with "No generator available." if none is found, which is
+    # why the developer shell must be entered first.
+    - |
+      $installerDir = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+      $installPath = & "$installerDir\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+      if (-not $installPath) { throw "Visual Studio with MSBuild not found" }
+      # ArgumentList must be a single quoted string: Windows PowerShell 5.1
+      # Start-Process does not quote array elements containing spaces. Note the
+      # VS Installer rejects --wait (ERROR_INVALID_PARAMETER, exit 87); with
+      # --quiet the operation is synchronous and Start-Process -Wait suffices.
+      # A quiet modify must run from an elevated process (else exit 5007); the
+      # SaaS runner executes elevated.
+      $vsArgs = "modify --installPath `"$installPath`" --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --quiet --norestart --nocache"
+      $setup = Start-Process -FilePath "$installerDir\setup.exe" -ArgumentList $vsArgs -Wait -PassThru
+      if ($setup.ExitCode -ne 0 -and $setup.ExitCode -ne 3010) { throw "VS ClangCL component install failed (exit $($setup.ExitCode))" }
+      Import-Module (Join-Path $installPath "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+      Enter-VsDevShell -VsInstallPath $installPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+  script:
+    # Pass the generator via ns3's native -G flag (not as a "--" CMake
+    # passthrough): "Visual Studio" generators automatically append
+    # "-A x64 -T ClangCL", and the value is seen by generator auto-detection.
+    - python ns3 configure --enable-tests --enable-examples --enable-asserts -d release -G "Visual Studio 17 2022"
+    - python ns3 build
+    - '$env:PATH = "$env:CI_PROJECT_DIR\build;" + $env:PATH'
+    - python test.py --no-build --verbose-failed
+  interruptible: true
+  timeout: 6h
+  tags:
+    - saas-windows-medium-amd64
+
+# Gate job ------------------------------------------------------------------
+
+daily-windows:
+  rules:
+    - if: $RELEASE == "daily"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: manual
+      allow_failure: true
+  stage: pre-build
+  script:
+    - echo "Starting Windows jobs"
+
+# Daily build+test jobs (build stage) --------------------------------------
+
+daily-build-windows-clangcl:
+  extends: .build-windows-clangcl-base
+  rules:
+    - if: $RELEASE == "daily"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      allow_failure: true
+  needs: ["daily-windows"]
+  stage: build
+
+daily-build-windows-mingw:
+  extends: .build-windows-mingw-base
+  rules:
+    - if: $RELEASE == "daily"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      allow_failure: true
+  needs: ["daily-windows"]
+  stage: build
+  variables:
+    MODE: default
