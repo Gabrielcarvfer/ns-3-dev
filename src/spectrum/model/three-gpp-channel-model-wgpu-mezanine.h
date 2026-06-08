@@ -96,6 +96,14 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         uint8_t numTxPorts,
         bool isReverse) const override;
 
+    // Pre-seed the RB frequency table from a representative PSD so that
+    // the first UpdateChannel call can run GenSpecBatch immediately
+    // rather than waiting for the first PRX eval to capture rb_freqs.
+    // Call this (with txPsd) after pre-warming GetChannel for all links
+    // but before the first Simulator::Run() tick to eliminate tick-0
+    // TryGenSpecCpuMiss calls (Opt C).
+    void CaptureRbFreqs(Ptr<const SpectrumValue> psd);
+
   private:
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
     mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
@@ -112,6 +120,23 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // back to the on-demand EnsureBatchFresh path.
     Time m_refreshPeriod;
     bool m_periodicRefreshScheduled = false;
+
+    // Opt H: multi-tick UpdateChannel reuse.
+    // EnsureBatchFresh calls UpdateChannel only once every m_ucPeriod
+    // simulator ticks. Default=1 (every tick, same as before). Higher
+    // values amortize the UC cost over more PRX evals at the cost of
+    // using a stale channel for up to (m_ucPeriod-1) ticks.
+    uint32_t m_ucPeriod{1};
+    uint32_t m_ucTickCount{0};
+    // UpdateChannel simtime gate.
+    // Mirrors base-class semantics: m_updatePeriod=0 means static channel
+    // (UpdateChannel fires exactly ONCE, at the first non-empty tick), and
+    // m_updatePeriod>0 fires every m_updatePeriod of simulated time.
+    // Negative sentinel means "never fired yet" so the first call always
+    // triggers a dispatch regardless of m_updatePeriod.
+    // This prevents staging-buffer accumulation when EnsureBatchFresh is
+    // called thousands of times per simtime-second (NR with many UEs).
+    Time m_lastUCSimTime{Seconds(-1.0)};
 
     // GPU-built longTerm cache. Keyed by (sAntId, uAntId) the same way
     // m_channelMatrixMap is. Each entry holds the longTerm matrix the
@@ -162,22 +187,47 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // every cache lookup -- mismatch -> fall back to CPU.
     mutable std::vector<float> m_batchRbFreqs;
     mutable uint64_t m_batchRbFreqsHash{0};
-    // Per-link chanSpct_unscaled buffers indexed by matrixKey. The
-    // value pair is (linkSlab f32, generatedTime + rbFreqsHash + dims
-    // snapshot). Same matrixKey policy as m_gpuLongTermMap so
-    // invalidation rules line up.
+    // Per-link chanSpct_unscaled metadata indexed by matrixKey.
+    // The actual float data lives in m_specBatchFlat[batchIdx * m_specBatchPerLink].
+    // Storing only the index (not the data) avoids a full second copy of the
+    // 4+ GB spectrum-channel flat buffer.
     struct GpuChanSpctEntry
     {
-        std::vector<std::complex<float>> chanSpctUnscaled;
+        uint32_t reducedPowBaseIdx{0}; ///< Start index into m_reducedPowFlat for slot 0
         uint32_t numRxPorts{0};
         uint32_t numTxPorts{0};
         uint32_t numRb{0};
         Time generatedTime;
         uint64_t rbFreqsHash{0};
+        /// Pre-allocated (1,1,numRb) fake chanSpct returned by TryGenSpecHit.
+        /// PsdReduction sees shape (1,1,numRb) and computes psd[rb] = |H[0,0,rb]|^2
+        /// where H[0,0,rb] = sqrt((1/numTx) * inPsd[rb] * reducedPow[rb]).
+        mutable Ptr<Complex3DVector> fakeChanSpct;
+        /// M>1 batched-slot metadata. batchM=1 means only slot 0 is valid.
+        uint32_t batchM{1};
+        /// perSlotStride is the number of float elements between consecutive
+        /// slots in m_reducedPowFlat: stride = nBucketLinks * numRb.
+        uint32_t perSlotStride{0};
+        /// Simulation time (seconds) at which slot 0 was computed.
+        double batchStartTimeSec{-1.0};
+        /// Duration of one slot in seconds (= MezSlotDuration attribute).
+        double slotDurationSec{0.0};
     };
     mutable std::unordered_map<uint64_t, GpuChanSpctEntry> m_gpuChanSpctMap;
+    /// Per-link isotropic power: reducedPow[link, rb] = sum_rx |sum_tx H_unscaled[rx,tx,rb]|^2.
+    /// Layout: link i -> m_reducedPowFlat[i * m_reducedPowNumRb .. (i+1)*m_reducedPowNumRb).
+    mutable std::vector<float> m_reducedPowFlat;
+    mutable uint32_t m_reducedPowNumRb{0}; ///< numRb for the current batch
 
     static uint64_t HashFloatVector(const std::vector<float>& v);
+
+    /// Number of future slots to pre-compute per PeriodicRefresh tick.
+    /// Default 1 = current behaviour (only the current slot).
+    /// M>1 dispatches genSpecBatch M times with Doppler extrapolated
+    /// M-1 slots ahead, caching M reducedPow arrays per link.
+    uint32_t m_batchM{1};
+    /// Duration of one NR slot for M>1 lookahead. Default 0.5 ms (mu=1).
+    Time m_slotDuration{MicroSeconds(500)};
 };
 
 } // namespace ns3
