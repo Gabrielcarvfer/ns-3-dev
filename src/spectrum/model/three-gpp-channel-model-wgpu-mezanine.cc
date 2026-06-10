@@ -1088,9 +1088,31 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     mezPrintMem("post-CRN");
     {
         SLS_PHASE_SCOPE("Mez::CalLinkParam");
-        // The four bool args used to be tracked locally as updatePL etc.;
-        // since the mezanine path is a full LSP regen on every UpdateChannel
-        // tick, we just request all updates.
+        // LOS-condition sync: the ns-3 channel-condition model already
+        // decided LOS/NLOS per link (and the CPU pathloss uses it). Write
+        // those states into LinkParams.losInd and disable the kernel's own
+        // independent draw — otherwise ~2P(1-P) of links get LOS pathloss
+        // with NLOS fading (or vice versa), which cost outdoor serving
+        // links their boresight LOS ray (~-10 dB median, heavy left tail).
+        // Opt out with MEZ_LOSSYNC=0.
+        static const bool losSync = []() {
+            const char* e = std::getenv("MEZ_LOSSYNC");
+            return !(e && e[0] == '0' && e[1] == '\0');
+        }();
+        if (losSync)
+        {
+            std::vector<uint32_t> losInd(size_t(nSite) * nUt, 0u);
+            for (const auto& ctx : runtimeLinks)
+            {
+                if (ctx.condition &&
+                    ctx.condition->GetLosCondition() ==
+                        ChannelCondition::LosConditionValue::LOS)
+                {
+                    losInd[ctx.lspReadIdx] = 1u;
+                }
+            }
+            gpu->uploadLosOverride(losInd);
+        }
         gpu->calLinkParam(nSite,
                           nUt,
                           1,
@@ -1100,7 +1122,7 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                           minYf,
                           /*updatePL=*/true,
                           /*updateAllLSPs=*/true,
-                          /*updateLos=*/true,
+                          /*updateLos=*/!losSync,
                           /*updateOptionalPL=*/false,
                           gpu->nX(),
                           gpu->nY());
@@ -2560,7 +2582,19 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
             const double az = std::atan2(up.y - sp.y, up.x - sp.x) * 180.0 / M_PI;
             const double bear = upa->GetAlpha() * 180.0 / M_PI;
             const double rel = std::fabs(std::fmod(az - bear + 540.0, 360.0) - 180.0);
-            std::fprintf(stderr, " (%.0f,%.1f)", rel, powDb);
+            // Tag: O=outdoor/I=indoor, L=LOS/N=NLOS — splits the curve to
+            // localize level offsets that only affect one population.
+            const bool outdoor =
+                ctx.condition &&
+                ctx.condition->GetO2iCondition() == ChannelCondition::O2iConditionValue::O2O;
+            const bool los = ctx.condition && ctx.condition->GetLosCondition() ==
+                                                  ChannelCondition::LosConditionValue::LOS;
+            std::fprintf(stderr,
+                         " (%c%c,%.0f,%.1f)",
+                         outdoor ? 'O' : 'I',
+                         los ? 'L' : 'N',
+                         rel,
+                         powDb);
             ++pcN;
         }
         std::fprintf(stderr, "\n");

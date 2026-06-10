@@ -456,6 +456,10 @@ class SlsChanWgpu
     void uploadClusterSkipMask(const std::vector<uint32_t>& mask);
     void writeClusterParams(uint32_t linkIdx, const ClusterParamsGpu& cp);
     void driftPackedAngles(const std::vector<DriftEntryGpu>& entries);
+    // Write ns-3 channel-condition LOS states into LinkParams.losInd so the
+    // GPU fading matches the CPU pathloss condition. Call BEFORE calLinkParam
+    // and pass updateLos=false there.
+    void uploadLosOverride(const std::vector<uint32_t>& losInd);
 
     // Upload the large-scale LSP draw parameters (mu/sigma per condition
     // slot [0]=LOS, [1]=NLOS, [2]=O2I, the sqrt cross-correlation

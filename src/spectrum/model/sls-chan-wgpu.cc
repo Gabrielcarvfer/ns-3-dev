@@ -1370,7 +1370,9 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     if (!linkParamsBuf_)
     {
         linkParamsBuf_ =
-            makeBuffer(linkParamsSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+            makeBuffer(linkParamsSz,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                           WGPUBufferUsage_CopyDst); // CopyDst: uploadLosOverride
     }
     if (!cellParamsBuf_)
     {
@@ -1707,6 +1709,36 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
     assert(!isDead());
+}
+
+// ── per-link LOS-condition sync ──────────────────────────────────────────────
+void
+SlsChanWgpu::uploadLosOverride(const std::vector<uint32_t>& losInd)
+{
+    // The ns-3 channel-condition model is the single source of truth for
+    // LOS/NLOS (the pathloss model consumes it CPU-side). The GPU kernel's
+    // own probabilistic draw is independent, so ~2 P(1-P) of links would
+    // otherwise get LOS pathloss with NLOS fading (or vice versa) — losing
+    // the boresight LOS ray on serving links. Write the ns-3 conditions
+    // into LinkParams.losInd BEFORE cal_link_param (its LSP table slot
+    // selection depends on it) and call calLinkParam with updateLos=false.
+    const uint64_t sz = losInd.size() * sizeof(LinkParams);
+    if (!linkParamsBuf_ || linkParamsBuf_.getSize() < sz)
+    {
+        std::vector<LinkParams> zeros(losInd.size());
+        std::memset(zeros.data(), 0, losInd.size() * sizeof(LinkParams));
+        linkParamsBuf_ = makeBuffer(sz,
+                                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                                        WGPUBufferUsage_CopyDst,
+                                    zeros.data());
+    }
+    for (size_t i = 0; i < losInd.size(); ++i)
+    {
+        queue_.writeBuffer(linkParamsBuf_,
+                           uint64_t(i) * sizeof(LinkParams) + offsetof(LinkParams, losInd),
+                           &losInd[i],
+                           sizeof(uint32_t));
+    }
 }
 
 // ── spatial-consistency drift support ────────────────────────────────────────
