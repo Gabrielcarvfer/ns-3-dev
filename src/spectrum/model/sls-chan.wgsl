@@ -354,14 +354,17 @@ fn fill_crn_kernel(
     let corr_px  = uni.corrDist / step;
     let D        = select(3.0 * corr_px, 0.0, corr_px == 0.0);
     let iD       = u32(D);
-    // padded grid = round(bound/step + 1 + 2*D) matching the new CPU sizing.
-    let boundF   = uni.boundX;  // = maxX - minX (metres)
-    let boundFY  = uni.boundY;  // = maxY - minY (metres)
-    // Use u32(x + 0.5) for rounding positive floats to nearest integer.
-    let padded_n = select(u32(0u), u32(boundF / step + 1.0 + 2.0 * D + 0.5), iD > 0u);
-    let padded_m = select(u32(0u), u32(boundFY / step + 1.0 + 2.0 * D + 0.5), iD > 0u);
-    let padded_nx = padded_n;
-    let padded_ny = padded_m;
+    // EVERY channel produces a FULL uni.nX x uni.nY output grid (the slot
+    // dimensions the sampler maps the deployment extent onto). Previously
+    // each channel produced its own smaller bound-derived rectangle inside
+    // the slot while lsp_at_loc_* sampled the full slot: positions
+    // compressed/landed on unwritten cells and the effective per-channel
+    // sigma collapsed by ~corr_max/corr (measured SF sigma 0.94 dB vs the
+    // spec's 4 dB). The white-noise fill is padded by this channel's own
+    // filter support; tempBuf is sized for the max-corr pad, so every
+    // channel fits.
+    let padded_nx = uni.nX + 2u * iD;
+    let padded_ny = uni.nY + 2u * iD;
     let total_pad = padded_nx * padded_ny;
 
     // Use chunkY to compute total elements for this chunk
@@ -398,17 +401,15 @@ fn convolve_crn_kernel(
     let D        = 3.0 * corr_px;
     let iD       = u32(D);
     let L        = select(2u * iD + 1u, 1u, corr_px == 0.0);
-    // final grid = round(bound/step + 1 + 2*D) â€” valid pixels per channel.
-    let final_nx = select(u32(0u), u32(uni.boundX / step + 1.0 + 2.0 * D), iD > 0u);
-    let final_ny = select(u32(0u), u32(uni.boundY / step + 1.0 + 2.0 * D), iD > 0u);
+    // EVERY channel emits the FULL uni.nX x uni.nY slot (see the matching
+    // comment in fill_crn_kernel): the sampler maps the deployment extent
+    // onto [0, nX-1] x [0, nY-1], so the whole slot must hold valid field.
+    // Orientation matches the sampler's `y * nX + x` indexing: ci = y row,
+    // cj = x column.
+    let final_nx = uni.nX;
+    let final_ny = uni.nY;
     let padded_nx = final_nx + L - 1u;
     let padded_ny = final_ny + L - 1u;
-    // Each per-(site, LSP) slot in conv_output is sized uni.nX Ã— uni.nY (the
-    // maximum corrDist's final grid). The reader (lsp_at_loc_*) indexes
-    // cells at stride uni.nX, so we write at the same stride and only emit
-    // the channel's `final_nx Ã— final_ny` valid sub-rectangle. Cells past
-    // (final_nx-1, final_ny-1) stay zero â€” they're outside the UE deployment
-    // disk anyway and would never be sampled.
     let stride_nx = uni.nX;
     let chunk_ny  = select(final_ny, uni.chunkY, uni.chunkY > 0u);
     let valid_total = final_nx * chunk_ny;
@@ -421,13 +422,22 @@ fn convolve_crn_kernel(
         if corr_px == 0.0 {
             wg_filter[0] = 1.0;
         } else {
-            var wsum = 0.0;
+            // L2 normalization (divide by sqrt(sum w^2) per axis): a
+            // weighted sum of iid N(0,1) then has EXACTLY unit variance,
+            // so the filtered field is marginally N(0,1) by construction.
+            // The previous sum-normalization (divide by sum w) collapsed
+            // the variance to ~(sum w^2)^2 in 2D — the LSP draws came out
+            // 2-6x under-dispersed and normalize_crn's empirical
+            // standardization could not reliably restore it (its sample
+            // std over a spatially-correlated field is itself biased).
+            var wsum2 = 0.0;
             for (var k = 0u; k < L; k++) {
                 wg_filter[k] = exp(-abs(f32(k) - f32(iD)) / corr_px);
-                wsum += wg_filter[k];
+                wsum2 += wg_filter[k] * wg_filter[k];
             }
+            let inv = 1.0 / sqrt(wsum2);
             for (var k = 0u; k < L; k++) {
-                wg_filter[k] /= wsum;
+                wg_filter[k] *= inv;
             }
         }
     }
@@ -436,25 +446,24 @@ fn convolve_crn_kernel(
     for (var e = 0u; e < elems_per_thr; e++) {
         let lin = tid * elems_per_thr + e;
         if lin >= valid_total { break; }
-        // (ci, cj) now ranges only over the valid output rectangle.
-        let ci = lin / final_ny;   // 0 .. final_nx-1
-        let cj = lin % final_ny;   // 0 .. final_ny-1
+        // ci = y row [0, chunk_ny), cj = x column [0, final_nx): the write
+        // index ci*nX + cj matches lsp_at_loc_*'s `y0*nx + x0`.
+        let ci = lin / final_nx;
+        let cj = lin % final_nx;
         var s  = 0.0;
         if corr_px == 0.0 {
-            s = fill_temp[ci * padded_ny + cj];
+            s = fill_temp[ci * padded_nx + cj];
         } else {
             for (var di = 0u; di < L; di++) {
                 for (var dj = 0u; dj < L; dj++) {
                     let pi = ci + di; let pj = cj + dj;
-                    if pi < padded_nx && pj < padded_ny {
+                    if pi < padded_ny && pj < padded_nx {
                         s += wg_filter[di] * wg_filter[dj] *
-                             fill_temp[pi * padded_ny + pj];
+                             fill_temp[pi * padded_nx + pj];
                     }
                 }
             }
         }
-        // Write at the slot's stride (uni.nX), not the channel's packed
-        // stride â€” this is what `lsp_at_loc_*` indexes with.
         conv_output[uni.outputGridOffset + ci * stride_nx + cj] = s;
     }
 }

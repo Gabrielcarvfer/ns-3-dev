@@ -2554,6 +2554,213 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         // 8 - min(12*(rel/65)^2, 30) dB plus fading noise; a steeper or
         // offset curve localizes a pattern/rotation bug without needing
         // the CPU reference run.
+        // Fading residual: E_mat minus the LOS pattern expectation for every
+        // LOS link. With a correct realization this is ~N(0, small); a deep
+        // negative tail (-15..-20 dB on a few % of links) is the remaining
+        // over-dispersion that drags outdoor serving RSRP outliers down.
+        {
+            std::vector<std::pair<double, const RuntimeLinkCtx*>> resid;
+            std::vector<std::pair<double, const RuntimeLinkCtx*>> residN; // NLOS
+            for (const auto& ctx : runtimeLinks)
+            {
+                if (!ctx.sAnt || !ctx.sMob || !ctx.uMob || !ctx.condition)
+                    continue;
+                const bool isLosLink = ctx.condition->GetLosCondition() ==
+                                       ChannelCondition::LosConditionValue::LOS;
+                auto mit2 = m_channelMatrixMap.find(ctx.matrixKey);
+                if (mit2 == m_channelMatrixMap.end() || !mit2->second)
+                    continue;
+                const auto& ch = mit2->second->m_channel;
+                const size_t n = ch.GetNumRows() * ch.GetNumCols() * ch.GetNumPages();
+                if (n == 0)
+                    continue;
+                double acc = 0.0;
+                const auto& vals = ch.GetValues();
+                for (size_t i = 0; i < n; ++i)
+                    acc += std::norm(vals[i]);
+                const double powDb =
+                    10.0 * std::log10(acc / double(ch.GetNumRows() * ch.GetNumCols()));
+                auto upa = DynamicCast<UniformPlanarArray>(ctx.sAnt);
+                if (!upa)
+                    continue;
+                const Vector sp = ctx.sMob->GetPosition();
+                const Vector up = ctx.uMob->GetPosition();
+                const double az = std::atan2(up.y - sp.y, up.x - sp.x) * 180.0 / M_PI;
+                const double bear = upa->GetAlpha() * 180.0 / M_PI;
+                const double rel = std::fabs(std::fmod(az - bear + 540.0, 360.0) - 180.0);
+                const double expDb =
+                    8.0 - std::min(12.0 * (rel / 65.0) * (rel / 65.0), 30.0);
+                (isLosLink ? resid : residN).emplace_back(powDb - expDb, &ctx);
+            }
+            auto dumpResid = [&linkParams](const char* tag,
+                                           std::vector<std::pair<double, const RuntimeLinkCtx*>>&
+                                               v) {
+                if (v.empty())
+                    return;
+                std::sort(v.begin(), v.end());
+                const size_t n = v.size();
+                std::fprintf(stderr,
+                             "[MEZ_DIAG_H] %s n=%zu p5=%.1f p25=%.1f p50=%.1f "
+                             "p75=%.1f p95=%.1f | worst:",
+                             tag,
+                             n,
+                             v[n / 20].first,
+                             v[n / 4].first,
+                             v[n / 2].first,
+                             v[3 * n / 4].first,
+                             v[19 * n / 20].first);
+                for (size_t i = 0; i < std::min<size_t>(4, n); ++i)
+                {
+                    const auto* c = v[i].second;
+                    const LinkParams* lkp =
+                        (c->lspReadIdx < linkParams.size()) ? &linkParams[c->lspReadIdx]
+                                                            : nullptr;
+                    std::fprintf(stderr,
+                                 " (cid%u,uid%u,%.1fdB,K=%.1f,DS=%.0fns)",
+                                 c->cid,
+                                 c->uid,
+                                 v[i].first,
+                                 lkp ? lkp->K : -1.0f,
+                                 lkp ? lkp->DS : -1.0f);
+                }
+                std::fprintf(stderr, "\n");
+            };
+            dumpResid("losResid ", resid);
+            dumpResid("nlosResid", residN);
+        }
+
+        // LSP draw statistics: the CRN-based draws must match the table's
+        // mu/sigma. An inflated effective sigma (CRN normalization off)
+        // widens ASD/ASA on every link — total power preserved, but the
+        // beamformed array gain drops (the generic bfAB deficit).
+        if (!linkParams.empty())
+        {
+            auto lspStats = [&](const char* name, auto getter, bool losOnly) {
+                double s = 0, s2 = 0;
+                int n = 0;
+                for (const auto& lk : linkParams)
+                {
+                    if (losOnly && lk.losInd == 0)
+                        continue;
+                    const double v = getter(lk);
+                    if (!std::isfinite(v))
+                        continue;
+                    s += v;
+                    s2 += v * v;
+                    ++n;
+                }
+                if (n < 2)
+                    return;
+                const double mean = s / n;
+                const double var = s2 / n - mean * mean;
+                std::fprintf(stderr,
+                             " %s=%.2f+-%.2f(n=%d)",
+                             name,
+                             mean,
+                             var > 0 ? std::sqrt(var) : 0.0,
+                             n);
+            };
+            // Raw values: which axis collapses? Identical values across
+            // SECTORS (same uid, different cid) = identical per-site grids;
+            // near-identical across UEs = over-correlation in the field.
+            std::fprintf(stderr,
+                         "[MEZ_DIAG_H] crnBounds x[%.0f,%.0f] y[%.0f,%.0f] uePos:",
+                         minXf,
+                         maxXf,
+                         minYf,
+                         maxYf);
+            int bN = 0;
+            for (const auto& ctx2 : runtimeLinks)
+            {
+                if (bN >= 4 || !ctx2.uMob)
+                    continue;
+                const Vector p = ctx2.uMob->GetPosition();
+                std::fprintf(stderr,
+                             " u%u(%.0f,%.0f|nx=%.2f,ny=%.2f)",
+                             ctx2.uid,
+                             p.x,
+                             p.y,
+                             (p.x - minXf) / (maxXf - minXf),
+                             (p.y - minYf) / (maxYf - minYf));
+                ++bN;
+            }
+            std::fprintf(stderr, "\n");
+            std::fprintf(stderr, "[MEZ_DIAG_H] lspRaw ASA(cid,uid):");
+            int rawN = 0;
+            for (const auto& ctx2 : runtimeLinks)
+            {
+                if (rawN >= 12 || ctx2.lspReadIdx >= linkParams.size())
+                    continue;
+                if (ctx2.uid > 3)
+                    continue;
+                std::fprintf(stderr,
+                             " (%u,%u)=%.2f",
+                             ctx2.cid,
+                             ctx2.uid,
+                             linkParams[ctx2.lspReadIdx].ASA);
+                ++rawN;
+            }
+            std::fprintf(stderr, "\n");
+            // Cross-LSP correlation across links: TR 38.901 UMa-LOS expects
+            // corr(lgASD, lgASA) = 0 and corr(SF, lgASA) = -0.2. If all CRN
+            // grids are clones of one realization, every LSP is the same
+            // shared draw scaled by its sqrtC row, forcing |corr| ~ 1.
+            {
+                std::vector<double> a, b, c;
+                for (const auto& lk : linkParams)
+                {
+                    if (lk.losInd == 0 || !(lk.ASA > 0) || !(lk.ASD > 0))
+                        continue;
+                    a.push_back(std::log10(double(lk.ASD)));
+                    b.push_back(std::log10(double(lk.ASA)));
+                    c.push_back(double(lk.SF));
+                }
+                if (a.size() > 4)
+                {
+                    auto corr = [](const std::vector<double>& x, const std::vector<double>& y) {
+                        const size_t n = x.size();
+                        double mx = 0, my = 0;
+                        for (size_t i = 0; i < n; ++i)
+                        {
+                            mx += x[i];
+                            my += y[i];
+                        }
+                        mx /= n;
+                        my /= n;
+                        double sxy = 0, sxx = 0, syy = 0;
+                        for (size_t i = 0; i < n; ++i)
+                        {
+                            sxy += (x[i] - mx) * (y[i] - my);
+                            sxx += (x[i] - mx) * (x[i] - mx);
+                            syy += (y[i] - my) * (y[i] - my);
+                        }
+                        return (sxx > 0 && syy > 0) ? sxy / std::sqrt(sxx * syy) : 0.0;
+                    };
+                    std::fprintf(stderr,
+                                 "[MEZ_DIAG_H] lspCorr n=%zu corr(lgASD,lgASA)=%.2f "
+                                 "corr(SF,lgASA)=%.2f\n",
+                                 a.size(),
+                                 corr(a, b),
+                                 corr(c, b));
+                }
+            }
+            std::fprintf(stderr, "[MEZ_DIAG_H] lspStats LOS:");
+            lspStats("lgASA", [](const LinkParams& l) { return std::log10(double(l.ASA)); }, true);
+            lspStats("lgASD", [](const LinkParams& l) { return std::log10(double(l.ASD)); }, true);
+            lspStats("lgDSns", [](const LinkParams& l) { return std::log10(double(l.DS)); }, true);
+            lspStats("Kdb",
+                     [](const LinkParams& l) {
+                         return l.K > 0 ? 10.0 * std::log10(double(l.K)) : NAN;
+                     },
+                     true);
+            lspStats("lgZSA", [](const LinkParams& l) { return std::log10(double(l.ZSA)); }, true);
+            lspStats("lgZSD", [](const LinkParams& l) { return std::log10(double(l.ZSD)); }, true);
+            // SF (dB): cv[SF] = 1.0 * z0 (identity Cholesky row), so this is a
+            // DIRECT variance probe of CRN grid 0. Spec sigma: 4 dB (UMa LOS).
+            lspStats("SFdb", [](const LinkParams& l) { return double(l.SF); }, true);
+            std::fprintf(stderr, "\n");
+        }
+
         std::fprintf(stderr, "[MEZ_DIAG_H] patternCurve (relDeg,powDb):");
         int pcN = 0;
         for (const auto& ctx : runtimeLinks)
@@ -2749,6 +2956,99 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                          (hBandPow > 0 && ltCohPow > 0)
                              ? 10.0 * std::log10(hBandPow / ltCohPow)
                              : -99.0);
+            // Generator-parity comparator: draw a fresh CPU-MODEL channel for
+            // this link (independent realization; same geometry, condition and
+            // beams) and contract it identically. The ratio distribution of
+            // beamformed powers GPU-vs-CPU samples parity of the quantity that
+            // actually drives RSRP — total matrix power and lt wiring can be
+            // perfect while port-level coherence statistics differ. Diag-only
+            // (advances the CPU RNG stream).
+            {
+                Ptr<MobilityModel> aMobOrd = ctx.sMob;
+                Ptr<MobilityModel> bMobOrd = ctx.uMob;
+                if (ctx.sNodeId > ctx.uNodeId)
+                    std::swap(aMobOrd, bMobOrd);
+                auto table = GetThreeGppTable(aMobOrd, bMobOrd, ctx.condition);
+                auto cpuParams =
+                    GenerateChannelParameters(ctx.condition, table, aMobOrd, bMobOrd);
+                auto cpuMat = ThreeGppChannelModel::GetNewChannel(cpuParams,
+                                                                  table,
+                                                                  ctx.sMob,
+                                                                  ctx.uMob,
+                                                                  ctx.sAnt,
+                                                                  ctx.uAnt);
+                if (cpuMat)
+                {
+                    const auto& cm = cpuMat->m_channel;
+                    // Element-level total powers of both realizations:
+                    // separates a coherence deficit (totRatio ~ 0 dB while
+                    // bf ratio is negative) from a level deficit.
+                    double totGpu = 0.0;
+                    double totCpu = 0.0;
+                    {
+                        const auto& gv = ch.GetValues();
+                        for (size_t i = 0;
+                             i < ch.GetNumRows() * ch.GetNumCols() * ch.GetNumPages();
+                             ++i)
+                            totGpu += std::norm(gv[i]);
+                        const auto& cvv = cm.GetValues();
+                        for (size_t i = 0;
+                             i < cm.GetNumRows() * cm.GetNumCols() * cm.GetNumPages();
+                             ++i)
+                            totCpu += std::norm(cvv[i]);
+                    }
+                    double cpuModelPow = 0.0;
+                    for (size_t c = 0; c < cm.GetNumPages(); ++c)
+                    {
+                        for (size_t sp = 0; sp < sPorts; ++sp)
+                        {
+                            for (size_t up = 0; up < uPorts; ++up)
+                            {
+                                const auto startS = ctx.sAnt->ArrayIndexFromPortIndex(sp, 0);
+                                const auto startU = ctx.uAnt->ArrayIndexFromPortIndex(up, 0);
+                                std::complex<double> txSum{0.0, 0.0};
+                                size_t sIndex = startS;
+                                for (size_t t = 0; t < sPortElems; ++t)
+                                {
+                                    std::complex<double> rxSum{0.0, 0.0};
+                                    size_t uIndex = startU;
+                                    for (size_t r = 0; r < uPortElems; ++r)
+                                    {
+                                        rxSum += std::conj(uW[uIndex - startU]) *
+                                                 cm(uIndex, sIndex, c);
+                                        ++uIndex;
+                                        if (uElemsPerPort > 0 &&
+                                            (r % uElemsPerPort) == uElemsPerPort - 1)
+                                            uIndex +=
+                                                ctx.uAnt->GetNumColumns() - uElemsPerPort;
+                                    }
+                                    txSum += sW[sIndex - startS] * rxSum;
+                                    ++sIndex;
+                                    if (sElemsPerPort > 0 &&
+                                        (t % sElemsPerPort) == sElemsPerPort - 1)
+                                        sIndex +=
+                                            ctx.sAnt->GetNumColumns() - sElemsPerPort;
+                                }
+                                cpuModelPow += std::norm(txSum);
+                            }
+                        }
+                    }
+                    std::fprintf(stderr,
+                                 "[MEZ_DIAG_H] bfAB link(cid=%u,uid=%u) gpuBf=%.3f "
+                                 "cpuModelBf=%.3f ratioDb=%.2f totRatioDb=%.2f\n",
+                                 ctx.cid,
+                                 ctx.uid,
+                                 gpuPow,
+                                 cpuModelPow,
+                                 (gpuPow > 0 && cpuModelPow > 0)
+                                     ? 10.0 * std::log10(gpuPow / cpuModelPow)
+                                     : -99.0,
+                                 (totGpu > 0 && totCpu > 0)
+                                     ? 10.0 * std::log10(totGpu / totCpu)
+                                     : -99.0);
+                }
+            }
+
             if (audited == 0)
             {
                 // Spatial-structure check: per-cluster power profile and the
