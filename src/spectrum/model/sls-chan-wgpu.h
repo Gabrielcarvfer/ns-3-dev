@@ -361,10 +361,28 @@ struct AntPanelConfigGPU
     float antPolarAngles[2]; // roll angle first/second polarization
     uint32_t thetaOffset;    // offset into flat antTheta buffer (181 entries per panel)
     uint32_t phiOffset;      // offset into flat antPhi buffer   (360 entries per panel)
-    uint32_t _pad0;
+    float bearingDeg;        // panel bearing (alpha) in degrees; rotates the
+                             // azimuth before the directional pattern lookup
 };
 
 static_assert(sizeof(AntPanelConfigGPU) == 64, "AntPanelConfigGPU must be 64 B (WGSL stride)");
+
+// Spatial-consistency drift entry (WGSL DriftEntry): per-cluster mean-angle
+// deltas (degrees) applied to the preserved packed per-ray angles of one
+// link (TR 38.901 7.6.3.2 procedure A).
+struct DriftEntryGpu
+{
+    uint32_t linkIdx;
+    uint32_t _p0;
+    uint32_t _p1;
+    uint32_t _p2;
+    float dAOA[20];
+    float dAOD[20];
+    float dZOA[20];
+    float dZOD[20];
+};
+
+static_assert(sizeof(DriftEntryGpu) == 336, "DriftEntryGpu must match the WGSL stride");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // String helper for v24 WGPUStringView
@@ -429,6 +447,23 @@ class SlsChanWgpu
     // Upload CmnLinkParams extended with small-scale fields
     void uploadCmnLinkParamsSmallScale(const SsCmnParams& cmn);
 
+    // Spatial-consistency drift (TR 38.901 7.6.3.2 procedure A):
+    // uploadClusterSkipMask marks links whose realization calClusterRay
+    // must preserve (1 entry per nSite*nUT grid slot); writeClusterParams
+    // overwrites one link's cluster-level data with host-drifted values;
+    // driftPackedAngles shifts the preserved per-ray angles by per-cluster
+    // deltas on the GPU.
+    void uploadClusterSkipMask(const std::vector<uint32_t>& mask);
+    void writeClusterParams(uint32_t linkIdx, const ClusterParamsGpu& cp);
+    void driftPackedAngles(const std::vector<DriftEntryGpu>& entries);
+
+    // Upload the large-scale LSP draw parameters (mu/sigma per condition
+    // slot [0]=LOS, [1]=NLOS, [2]=O2I, the sqrt cross-correlation
+    // matrices, and lgfc) used by cal_link_param_kernel. Replaces the
+    // hardcoded UMa/identity defaults that calLinkParam installs lazily
+    // when nothing was uploaded. Call before calLinkParam.
+    void uploadCmnLinkParams(const CmnLinkParamsGPU& cl);
+
     constexpr int32_t nSite()
     {
         return nSite_;
@@ -490,6 +525,10 @@ class SlsChanWgpu
 
     void calClusterRay(uint32_t nSite, uint32_t nUT);
 
+    // Upload activeLinkBuf_ without running the CIR kernel.
+    // Must be called before genChannelMatrix when skipping generateCIR.
+    void uploadActiveLinkBuf(const std::vector<ActiveLink>& activeLinks);
+
     void generateCIR(const std::vector<ActiveLink>& activeLinks,
                      uint32_t nActiveLinks,
                      uint32_t nSnapshots,
@@ -525,14 +564,40 @@ class SlsChanWgpu
     std::vector<float> readThetaNmZOA();
     std::vector<float> readThetaNmZOD();
 
-    // Dispatch gen_channel_matrix_kernel. Inputs already on the GPU
-    // (linkParamsBuf_, clusterParamsBuf_, activeLinkBuf_, the packed
-    // cluster outputs at clusterOutputsBuf_); output goes into a
-    // dedicated channelMatrixBuf_ sized for nActiveLinks * uSize *
-    // sSize * MAT_MAX_PAGES vec2<f32>. Caller passes per-link
-    // (cluster1st, cluster2nd, numReducedCluster); the kernel
-    // currently emits zeros into the matrix and the host falls back
-    // to the CPU build (math still in progress).
+    // Layout constants for the packed cluster-output buffer written by
+    // calClusterRay. Each link occupies kPackedLinkStride f32 values;
+    // per-ray sub-arrays start at the offsets below.
+    static constexpr uint32_t kPackedLinkStride = 3600u;
+    static constexpr uint32_t kMaxCr            = 400u;  // MAX_CLUSTERS * MAX_RAYS
+    static constexpr uint32_t kPackedOffXpr     = 0u;
+    static constexpr uint32_t kPackedOffAoA     = 2000u;
+    static constexpr uint32_t kPackedOffAoD     = 2400u;
+    static constexpr uint32_t kPackedOffZoA     = 2800u;
+    static constexpr uint32_t kPackedOffZoD     = 3200u;
+
+    // Download the entire clusterOutputsBuf_ in a single GPU-to-CPU
+    // transfer.  The caller can then slice the five per-ray sub-arrays
+    // from this flat f32 vector using the kPackedOff* / kMaxCr constants
+    // above — avoiding the five redundant full-buffer readbacks that the
+    // individual readXpr/readPhiNm*/readTheta* helpers would otherwise issue.
+    std::vector<float> downloadClusterOutputsPacked();
+
+    // Bulk readback: copies clusterParamsBuf_ AND clusterOutputsBuf_ in a
+    // single CommandEncoder submit + one WaitIdle, then maps both staging
+    // buffers sequentially.  Preferred over calling readClusterParams() +
+    // downloadClusterOutputsPacked() individually because it issues only one
+    // GPU submission.
+    struct AllClusterData
+    {
+        std::vector<ClusterParamsGpu> clusterParams;  ///< per-link cluster params
+        std::vector<float>            packedOutputs;  ///< raw kPackedLinkStride*nLinks floats
+    };
+    AllClusterData readAllClusterData(uint32_t nSite, uint32_t nUT);
+
+    // Dispatch gen_channel_matrix_kernel. Reads cluster-ray angles from
+    // clusterOutputsBuf_ (set by calClusterRay) via activeLinkBuf_ (set by
+    // uploadActiveLinkBuf). Writes H[u,s,n] into channelMatrixBuf_ sized for
+    // nActiveLinks * uSize * sSize * MAT_MAX_PAGES vec2<f32>.
     void genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
                           uint32_t nActiveLinks,
                           uint32_t uSize,
@@ -652,7 +717,33 @@ class SlsChanWgpu
                       uint32_t ltSPorts,
                       const std::vector<float>& delays,
                       const std::vector<std::complex<float>>& doppler,
-                      const std::vector<float>& rbFreqs);
+                      const std::vector<float>& rbFreqs,
+                      uint32_t outSlotOffset,
+                      uint32_t totalBatchSlots);
+    // Signal completion of all genSpecBatch dispatches submitted since the
+    // last waitForSpecBatch() / waitIdle() call. Called once after the M-slot
+    // dispatch loop to avoid per-slot GPU round-trips.
+    void waitForSpecBatch();
+    // Read the per-port complex H matrices written by gen_spec_pow_kernel.
+    // Layout: dst[((s * nLinks + li) * numRb + rb) * rxtx + tx*nRx + rx] for
+    // slot s, link li; rxtx = numRxPorts * numTxPorts. dst must hold
+    // nSlots * nLinks * numRb * rxtx complex<float>.
+    bool readSpecHBatchInto(uint32_t nLinks,
+                            uint32_t numRb,
+                            uint32_t rxtx,
+                            uint32_t nSlots,
+                            std::complex<float>* dst);
+    // Read the scalar power sections (fwd for all nSlots, then rev):
+    // dst must hold 2 * nSlots * nLinks * numRb floats.
+    bool readPowBatchInto(uint32_t nLinks, uint32_t numRb, uint32_t nSlots, float* dst);
+    // Fused H + pow readback: one encoder/submit/waitIdle for both copies
+    // (halves the per-chunk round-trip cost vs the two separate reads).
+    bool readSpecHAndPowBatchInto(uint32_t nLinks,
+                                  uint32_t numRb,
+                                  uint32_t rxtx,
+                                  uint32_t nSlots,
+                                  std::complex<float>* hDst,
+                                  float* powDst);
     std::vector<std::complex<float>> readSpecBatch(uint32_t nLinks,
                                                    uint32_t numRb,
                                                    uint32_t numRxPorts,
@@ -692,11 +783,44 @@ class SlsChanWgpu
                           uint32_t sPorts,
                           uint32_t uPorts,
                           std::complex<float>* dst);
+
+    // Opt E: fuse genChannelMatrix + readChannelMatrix + genLongTerm +
+    // readLongTerm into a single command encoder submission. Reduces
+    // WaitIdle calls from 4 per chunk to 1, cutting D3D12 round-trip
+    // overhead. WebGPU guarantees execution order within an encoder, so
+    // the implicit storage barrier between compute passes and copy
+    // commands ensures channelMatrixBuf_ is fully written before either
+    // the staging copy or genLongTerm reads it.
+    bool genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
+                                          uint32_t uSize,
+                                          uint32_t sSize,
+                                          uint32_t numOverallCluster,
+                                          uint32_t nRays,
+                                          uint32_t sPorts,
+                                          uint32_t uPorts,
+                                          uint32_t sPortElems,
+                                          uint32_t uPortElems,
+                                          uint32_t sElemsPerPort,
+                                          uint32_t uElemsPerPort,
+                                          uint32_t sIncVal,
+                                          uint32_t uIncVal,
+                                          const std::complex<float>* sWData,
+                                          size_t sWLen,
+                                          const std::complex<float>* uWData,
+                                          size_t uWLen,
+                                          const std::vector<uint32_t>& startS,
+                                          const std::vector<uint32_t>& startU,
+                                          std::complex<float>* cmDst,
+                                          std::complex<float>* ltDst);
     bool readSpecBatchInto(uint32_t nLinks,
                            uint32_t numRb,
                            uint32_t numRxPorts,
                            uint32_t numTxPorts,
                            std::complex<float>* dst);
+    // Reads back the GPU-reduced isotropic power per (link, rb) computed by
+    // reduce_spec_batch_kernel. dst must hold nLinks * numRb float values.
+    // Returns false if the reduction kernel hasn't been dispatched yet.
+    bool readReducedPowInto(uint32_t nLinks, uint32_t numRb, float* dst);
 
   private:
     // Gather one of the per-link sub-views out of the packed
@@ -827,6 +951,8 @@ class SlsChanWgpu
     wgpu::Buffer crnDataBuf_;
     wgpu::Buffer crnOffsetsBuf_;
     wgpu::Buffer stagingBuf_;
+    int32_t crnLastNX_ = 0;
+    int32_t crnLastNY_ = 0;
 
     ///////////////////////////////
     //// Small-scale buffers & pipelines
@@ -868,10 +994,21 @@ class SlsChanWgpu
     // readXpr / readPhiNmA*/ readThetaNmZ* helpers slice this back
     // into independent views on the host side.
     wgpu::Buffer clusterOutputsBuf_;
+    // Spatial-consistency drift: per-link skip mask for cal_cluster_ray
+    // and the per-cluster angle-delta entries for drift_packed_angles.
+    wgpu::Buffer clusterSkipBuf_;
+    wgpu::Buffer driftBuf_;
+    wgpu::ComputePipeline driftPipeline_;
+    // Persistent readback staging for clusterOutputsBuf_ and
+    // clusterParamsBuf_.  Re-used across UpdateChannel calls to avoid
+    // the per-call D3D12 READBACK heap allocation overhead.
+    wgpu::Buffer clusterOutputsStagingBuf_;
+    wgpu::Buffer clusterParamsStagingBuf_;
     // Output of gen_channel_matrix_kernel: per-link block of
     // uSize * sSize * MAT_MAX_PAGES vec2<f32>. Sized at the
     // first genChannelMatrix() call.
     wgpu::Buffer channelMatrixBuf_;
+    wgpu::Buffer channelMatrixStagingBuf_; // persistent readback staging for readChannelMatrixInto
     wgpu::ComputePipeline channelMatrixPipeline_;
     wgpu::Buffer matrixDispatchBuf_;
     uint32_t channelMatrixCfgUSize_{0};
@@ -886,6 +1023,7 @@ class SlsChanWgpu
     wgpu::Buffer longTermStartSBuf_; // [sPorts] u32
     wgpu::Buffer longTermStartUBuf_; // [uPorts] u32
     wgpu::Buffer longTermOutBuf_;    // per-link [uPorts*sPorts*kMatMaxPages] vec2f
+    wgpu::Buffer longTermStagingBuf_; // persistent readback staging for readLongTermInto
     uint32_t longTermCfgNLinks_{0};
     uint32_t longTermCfgSPorts_{0};
     uint32_t longTermCfgUPorts_{0};
@@ -904,17 +1042,29 @@ class SlsChanWgpu
     uint32_t specChanCfgNumRb_{0};
 
     // gen_spec_batch_kernel scratch. Bindings @group(0) at 70..75.
+    // NOTE: specBatchOutBuf_ / specBatchStagingBuf_ are no longer allocated;
+    // gen_spec_pow_kernel replaces gen_spec_batch + reduce with a single
+    // fused pass that never materialises the 4+ GB intermediate buffer.
     wgpu::ComputePipeline specBatchPipeline_;
     wgpu::Buffer specBatchDispatchBuf_;
     wgpu::Buffer specBatchDopplerBuf_;
     wgpu::Buffer specBatchDelaysBuf_;
     wgpu::Buffer specBatchRbFreqsBuf_;
-    wgpu::Buffer specBatchOutBuf_;
-    wgpu::Buffer specBatchStagingBuf_;
-    uint32_t specBatchCfgNLinks_{0};
-    uint32_t specBatchCfgNumRxPorts_{0};
-    uint32_t specBatchCfgNumTxPorts_{0};
     uint32_t specBatchCfgNumRb_{0};
+    // gen_spec_pow_kernel: fused outer-product + reduction.
+    // Bindings 70..74 (shared with gen_spec_batch) + 77 (rb_pow_out).
+    wgpu::ComputePipeline genSpecPowPipeline_;
+    // reduce_spec_batch_kernel scratch (kept for readReducedPowInto path).
+    wgpu::ComputePipeline reduceBatchPipeline_;
+    wgpu::Buffer reduceBatchOutBuf_;
+    wgpu::Buffer reduceBatchStagingBuf_;
+    // Scalar power (fwd + rev sections) written by gen_spec_pow_kernel
+    // alongside the per-port H; consumed by 1-rx-port fast-path evals.
+    wgpu::Buffer powBatchOutBuf_;
+    wgpu::Buffer powBatchStagingBuf_;
+    uint32_t reduceBatchCfgNLinks_{0};
+    uint32_t reduceBatchCfgNumRb_{0};
+    uint32_t reduceBatchCfgNSlots_{0};
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24

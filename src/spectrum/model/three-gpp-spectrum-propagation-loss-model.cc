@@ -16,6 +16,7 @@
 
 #include <cstring>
 
+#include "ns3/boolean.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
@@ -61,7 +62,20 @@ ThreeGppSpectrumPropagationLossModel::GetTypeId()
                 StringValue("ns3::ThreeGppChannelModel"),
                 MakePointerAccessor(&ThreeGppSpectrumPropagationLossModel::SetChannelModel,
                                     &ThreeGppSpectrumPropagationLossModel::GetChannelModel),
-                MakePointerChecker<MatrixBasedChannelModel>());
+                MakePointerChecker<MatrixBasedChannelModel>())
+            .AddAttribute(
+                "InPlaceParams",
+                "Mutate the input SpectrumSignalParameters in place inside "
+                "CalcBeamformingGain instead of deep-copying them (psd, "
+                "PacketBurst, tags). ONLY safe when the spectrum channel "
+                "passes an exclusively-owned per-receiver copy, as "
+                "MultiModelSpectrumChannel does. Profiling at NR-calibration "
+                "densities showed the deep copy was ~20% of the per-eval "
+                "cost. Default false to preserve the const contract for "
+                "channels that share params between receivers.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&ThreeGppSpectrumPropagationLossModel::m_inPlaceParams),
+                MakeBooleanChecker());
     return tid;
 }
 
@@ -338,7 +352,8 @@ ThreeGppSpectrumPropagationLossModel::CalculateLongTermComponent(
 Ptr<SpectrumSignalParameters>
 ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     Ptr<const SpectrumSignalParameters> params,
-    Ptr<const MatrixBasedChannelModel::Complex3DVector> longTerm,
+    Ptr<const PhasedArrayModel> aPhasedArrayModel,
+    Ptr<const PhasedArrayModel> bPhasedArrayModel,
     Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix,
     Ptr<const MatrixBasedChannelModel::ChannelParams> channelParams,
     const Vector& sSpeed,
@@ -351,10 +366,64 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     SLS_PHASE_SCOPE("PRX::CalcBeamformingGain");
     NS_LOG_FUNCTION(this);
     Ptr<SpectrumSignalParameters> rxParams;
+    if (m_inPlaceParams)
+    {
+        // Caller (MultiModelSpectrumChannel::StartRx) hands us a
+        // per-receiver copy that nothing else references; the deep copy
+        // (psd + PacketBurst + tags) below would be created only for the
+        // input to die immediately after. spectrumChannelMatrix and psd
+        // are overwritten below either way.
+        rxParams = ConstCast<SpectrumSignalParameters>(params);
+    }
+    else
     {
         SLS_PHASE_SCOPE("PRX::CalcBeamformingGain::ParamsCopy");
         rxParams = params->Copy();
     }
+
+    // Beam-aware cache key: the cached spectrum entries embed the beams
+    // they were computed with, and gNB beams change per scheduled UE many
+    // times within a channel update period. Hash the canonical (s, u)
+    // beam pair once per eval; mismatching beams miss and are recomputed
+    // (then cached per beam pair) by the back-end.
+    const auto sAntCanonical = isReverse ? bPhasedArrayModel : aPhasedArrayModel;
+    const auto uAntCanonical = isReverse ? aPhasedArrayModel : bPhasedArrayModel;
+    // Cached on the antenna (recomputed only after SetBeamformingVector) —
+    // hashing the full vector here cost ~1 us/eval at 141M evals/run.
+    const uint64_t sWBeamHash = sAntCanonical->GetBeamformingVectorHash();
+    const uint64_t uWBeamHash = uAntCanonical->GetBeamformingVectorHash();
+    // With no precoding matrix and a single RX port the interference
+    // covariance is a scalar, so a power-only (1,1) channel matrix is
+    // exact and much cheaper than the per-port phased copy.
+    const bool scalarPsdOk = (params->precodingMatrix == nullptr);
+
+    // GPU fast path: if the batch has pre-computed this link's spectrum matrix,
+    // skip DopplerLoop + GenSpectrumChannelMatrix entirely. On GPU-hit calls
+    // (~72% at ring-3 scale) the per-cluster doppler trig and contraction are
+    // wasted work — the pre-batched reducedPow already bakes in all of that.
+    bool gpuHit = false;
+    if (m_channelModel)
+    {
+        const uint32_t fastNumRb = rxParams->psd->GetValuesN();
+        static const std::vector<std::complex<double>> kEmptyDelayT{};
+        static const std::vector<double> kEmptySqrtVit{};
+        // longTerm is not needed for the GPU cache-hit path; pass nullptr so we only
+        // compute it (via GetLongTerm) when we actually fall through to DopplerLoop.
+        static const Ptr<const MatrixBasedChannelModel::Complex3DVector> kNullLongTerm{};
+        if (auto gpuSpct = m_channelModel->TryGenSpectrumChannelMatrix(
+                channelMatrix, channelParams, kNullLongTerm, rxParams->psd,
+                kEmptyDelayT, kEmptySqrtVit, fastNumRb, numRxPorts, numTxPorts, isReverse,
+                sWBeamHash, uWBeamHash, scalarPsdOk))
+        {
+            rxParams->spectrumChannelMatrix = std::move(gpuSpct);
+            gpuHit = true;
+        }
+    }
+
+    if (!gpuHit)
+    {
+    // Lazy: only compute longTerm on CPU miss — skipped for ~75% of calls on GPU hits.
+    const auto longTerm = GetLongTerm(channelMatrix, aPhasedArrayModel, bPhasedArrayModel);
     const size_t numCluster = channelMatrix->m_channel.GetNumPages();
     // compute the doppler term
     // NOTE the update of Doppler is simplified by only taking the center angle of
@@ -475,7 +544,11 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
                                                                numTxPorts,
                                                                numRxPorts,
                                                                isReverse,
-                                                               m_channelModel);
+                                                               m_channelModel,
+                                                               sWBeamHash,
+                                                               uWBeamHash,
+                                                               scalarPsdOk);
+    } // !gpuHit
 
     NS_ASSERT_MSG(rxParams->psd->GetValuesN() == rxParams->spectrumChannelMatrix->GetNumPages(),
                   "RX PSD and the spectrum channel matrix should have the same number of RBs ");
@@ -570,11 +643,44 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     uint8_t numTxPorts,
     uint8_t numRxPorts,
     const bool isReverse,
-    Ptr<MatrixBasedChannelModel> channelModel)
+    Ptr<MatrixBasedChannelModel> channelModel,
+    uint64_t sWBeamHash,
+    uint64_t uWBeamHash,
+    bool scalarPsdOk)
 {
     SLS_PHASE_SCOPE("PRX::GenSpectrumChannelMatrix");
     const size_t numCluster = channelMatrix->m_channel.GetNumPages();
     const auto numRb = inPsd->GetValuesN();
+
+    // Opt D+E: sqrtVit (273 sqrt, ~2 µs) then GPU spec-cache quick-check
+    // BEFORE any other expensive work. The two costliest operations that
+    // follow — m_cachedDelaySincos recompute (273×numCluster trig ops,
+    // ~196 µs on numCluster change) and reversedLongTerm transpose
+    // (393 KB alloc+copy when isReverse=true) — are entirely skipped on
+    // GPU cache hits, which is the steady-state path.
+    std::vector<double> sqrtVit(numRb, 0.0);
+    {
+        auto vit = inPsd->ValuesBegin();
+        for (size_t rb = 0; rb < numRb; ++rb, ++vit)
+        {
+            const double v = *vit;
+            if (v > 0.0)
+                sqrtVit[rb] = std::sqrt(v);
+        }
+    }
+    if (channelModel)
+    {
+        static const std::vector<std::complex<double>> kEmptyDelayT{};
+        if (auto quickHit = channelModel->TryGenSpectrumChannelMatrix(
+                channelMatrix, channelParams, longTerm, inPsd,
+                kEmptyDelayT, sqrtVit, numRb, numRxPorts, numTxPorts, isReverse,
+                sWBeamHash, uWBeamHash, scalarPsdOk))
+        {
+            return quickHit;
+        }
+    }
+
+    // Cache miss (or no channel model) — pay the full cost below.
     NS_ASSERT_MSG(numCluster <= channelParams->m_delay.size(),
                   "Channel params delays size is smaller than number of clusters");
 
@@ -590,10 +696,9 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     const MatrixBasedChannelModel::Complex3DVector& directionalLongTerm =
         isReverse ? reversedLongTerm : *longTerm;
 
-    // Precompute the delay until numRb, numCluster or RB width changes
+    // Precompute the delay until numRb, numCluster or RB width changes.
     // Whenever the channelParams is updated, the number of numRbs, numClusters
-    // and RB width (12*SCS) are reset, ensuring these values are updated too
-
+    // and RB width (12*SCS) are reset, ensuring these values are updated too.
     if (const double rbWidth = inPsd->ConstBandsBegin()->fh - inPsd->ConstBandsBegin()->fl;
         channelParams->m_cachedDelaySincos.GetNumRows() != numRb ||
         channelParams->m_cachedDelaySincos.GetNumCols() != numCluster ||
@@ -632,6 +737,8 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     // contiguous read of longTermT (rxtx) AND a contiguous
     // write of chanSpct (rxtx) — best possible cache behaviour, with
     // dpoint-product / FMAs SIMD-friendly.
+
+    // Cache miss (or no channel model): pack longTermT and compute delayT.
     const size_t rxtx = static_cast<size_t>(numRxPorts) * numTxPorts;
     std::vector<std::complex<double>> longTermT(numCluster * rxtx);
     {
@@ -668,35 +775,17 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
         }
     }
 
-    // Precompute sqrt(*vit[rb]) for the entire PSD. Zeros stay zero, so
-    // subbands with zero TX power are skipped after the contraction
-    // (their column in chanSpct is just zeroed by the initial Create
-    // call -- we never write to it).
-    std::vector<double> sqrtVit(numRb, 0.0);
-    {
-        auto vit = inPsd->ValuesBegin();
-        for (size_t rb = 0; rb < numRb; ++rb, ++vit)
-        {
-            const double v = *vit;
-            if (v > 0.0)
-                sqrtVit[rb] = std::sqrt(v);
-        }
-    }
-
     // Give the channel model a chance to run the per-cluster
     // outer-product on the GPU. The mezanine WebGPU back-end
     // overrides this and dispatches gen_spec_chan_kernel against
     // the longTerm matrix that's already resident on its GPU buffer.
     // On nullptr we fall through to the CPU contraction below.
-    //
-    // We defer the chanSpct alloc until here so the cache-hit path in
-    // the mezanine (~83% of evals at NR-cali densities) doesn't pay
-    // the 1.1 MB Complex3DVector allocation we'd otherwise throw away.
     if (channelModel)
     {
         if (auto gpuChanSpct = channelModel->TryGenSpectrumChannelMatrix(
                 channelMatrix, channelParams, longTerm, inPsd,
-                delayT, sqrtVit, numRb, numRxPorts, numTxPorts, isReverse))
+                delayT, sqrtVit, numRb, numRxPorts, numTxPorts, isReverse,
+                sWBeamHash, uWBeamHash, scalarPsdOk))
         {
             return gpuChanSpct;
         }
@@ -899,16 +988,13 @@ ThreeGppSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(
     NS_ASSERT_MSG(channelMatrix != nullptr, "Channel matrix is null");
     NS_ASSERT_MSG(channelParams != nullptr, "Channel params are null");
 
-    // retrieve the long term component
-    const Ptr<const MatrixBasedChannelModel::Complex3DVector> longTerm =
-        GetLongTerm(channelMatrix, aPhasedArrayModel, bPhasedArrayModel);
-
     const auto isReverse =
         channelMatrix->IsReverse(aPhasedArrayModel->GetId(), bPhasedArrayModel->GetId());
 
-    // apply the beamforming gain
+    // apply the beamforming gain (longTerm computed lazily inside, skipped on GPU hits)
     return CalcBeamformingGain(spectrumSignalParams,
-                               longTerm,
+                               aPhasedArrayModel,
+                               bPhasedArrayModel,
                                channelMatrix,
                                channelParams,
                                a->GetVelocity(),

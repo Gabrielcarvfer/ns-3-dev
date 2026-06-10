@@ -281,9 +281,39 @@ class MatrixBasedChannelModel : public Object
         [[maybe_unused]] uint32_t numRb,
         [[maybe_unused]] uint8_t numRxPorts,
         [[maybe_unused]] uint8_t numTxPorts,
-        [[maybe_unused]] bool isReverse) const
+        [[maybe_unused]] bool isReverse,
+        [[maybe_unused]] uint64_t sWBeamHash = 0,
+        [[maybe_unused]] uint64_t uWBeamHash = 0,
+        [[maybe_unused]] bool scalarPsdOk = false) const
     {
         return nullptr;
+    }
+
+    /**
+     * FNV-1a hash of a beamforming vector, used by beam-aware spectrum
+     * caches: a cached spectrum channel embeds the TX/RX beam pair it was
+     * computed with, and evals must only consume entries whose beams match
+     * (the beams change per scheduled UE, many times within a channel
+     * update period).
+     * @param v the beamforming vector
+     * @return 64-bit hash of the complex weights
+     */
+    static uint64_t HashBeamVector(const PhasedArrayModel::ComplexVector& v)
+    {
+        uint64_t h = 1469598103934665603ull;
+        const size_t n = v.GetSize();
+        for (size_t i = 0; i < n; ++i)
+        {
+            const auto c = v[i];
+            const double parts[2] = {c.real(), c.imag()};
+            const auto* bytes = reinterpret_cast<const unsigned char*>(parts);
+            for (size_t b = 0; b < sizeof(parts); ++b)
+            {
+                h ^= bytes[b];
+                h *= 1099511628211ull;
+            }
+        }
+        return h;
     }
 
     /**

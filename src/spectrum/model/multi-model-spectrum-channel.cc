@@ -317,7 +317,16 @@ MultiModelSpectrumChannel::StartTx(Ptr<SpectrumSignalParameters> txParams)
 
                 NS_LOG_LOGIC("copying signal parameters " << txParams);
                 auto rxParams = txParams->Copy();
-                rxParams->psd = Copy<SpectrumValue>(convertedPsds.at(rxSpectrumModelUid));
+                // The copy ctor above already deep-copied txParams->psd. When
+                // tx and rx share the spectrum model (no conversion), that
+                // copy IS the right per-receiver psd — re-copying the
+                // converted psd here would allocate and clone a second
+                // O(numRb) buffer per receiver only to discard the first.
+                const auto& convertedPsd = convertedPsds.at(rxSpectrumModelUid);
+                if (convertedPsd != txParams->psd)
+                {
+                    rxParams->psd = Copy<SpectrumValue>(convertedPsd);
+                }
                 Time delay{0};
 
                 if (rxParams->precodingMatrix &&

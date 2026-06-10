@@ -144,6 +144,24 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     void EnsureBatchFresh() override;
 
     /**
+     * @brief Bypass GPU batch dispatch for phases that use temporary antennas.
+     *
+     * When @p bypass is true, TryGenSpectrumChannelMatrix returns nullptr
+     * immediately (CPU fallback) and EnsureBatchFresh skips GPU batch
+     * dispatch. No cache entries are created or invalidated during this
+     * phase.  Default implementation is a no-op (CPU-only path).
+     *
+     * NR initial-association code should call SetBypassGpuBatch(true) before
+     * the maxRSRP scan and SetBypassGpuBatch(false) after so that temporary
+     * single-port antenna copies never pollute the batch cache.
+     *
+     * @param bypass When true, bypass GPU batch dispatch and cache writes.
+     */
+    virtual void SetBypassGpuBatch(bool /*bypass*/)
+    {
+    }
+
+    /**
      * @brief Dump the most recent GPU batch's channel state to an HDF5
      * file in the NVIDIA-compatible layout used by
      * `analysis_channel_stats.py`.

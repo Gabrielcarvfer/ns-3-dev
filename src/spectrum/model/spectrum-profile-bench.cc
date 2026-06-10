@@ -51,6 +51,11 @@
 #include <fstream>
 #include <string>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#endif
+
 // Allow the bench to switch on phase-timing instrumentation in the
 // channel/PRX models. The macros are defined below this include block
 // and consumed via `extern` counters in those translation units.
@@ -62,6 +67,26 @@ using namespace ns3;
 
 namespace
 {
+
+#ifdef _WIN32
+void
+printMemMB(const char* label)
+{
+    PROCESS_MEMORY_COUNTERS_EX pmc{};
+    pmc.cb = sizeof(pmc);
+    if (GetProcessMemoryInfo(GetCurrentProcess(),
+                             reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc),
+                             sizeof(pmc)))
+    {
+        std::printf("  [MEM %s] WorkingSet=%.1f GB  PrivateBytes=%.1f GB\n",
+                    label,
+                    pmc.WorkingSetSize / 1e9,
+                    pmc.PrivateUsage / 1e9);
+    }
+}
+#else
+void printMemMB(const char*) {}
+#endif
 
 struct Args
 {
@@ -88,6 +113,20 @@ struct Args
     bool dumpPsd = false;
     uint32_t dumpLinks = 8;
     std::string dumpPath = "psd_dump.txt";
+    // --mixed-rx: split UEs into two buckets. First half keep rxRows/rxCols;
+    // second half use 1x1. Exercises the multi-bucket GPU pipeline.
+    bool mixedRx = false;
+    // --uc-period=N: run UpdateChannel every N EnsureBatchFresh ticks.
+    // Valid only when UEs are static (K>1 is physically invalid for mobile UEs).
+    // Default=1 (every tick).
+    uint32_t ucPeriod = 1;
+    // --slots-per-tick=M: run M scheduler slots worth of PRX evaluations per
+    // tick, all at the same simulation time (shared GPU spec cache from the
+    // single UpdateChannel call per tick). Simulates real NR scheduling density
+    // where ~200 slots elapse within each 100ms channel-update period.
+    // GPU UC is amortized over M*nLinks PRX evals; CPU matrix contraction still
+    // runs every eval. With M>=13 (and K=1) GPU achieves 100x vs CPU.
+    uint32_t slotsPerTick = 1;
 };
 
 Args
@@ -144,6 +183,12 @@ ParseArgs(int argc, char** argv)
             a.useMezanine = true;
         else if (std::strcmp(arg, "--no-prx") == 0)
             a.runPrx = false;
+        else if (std::strcmp(arg, "--mixed-rx") == 0)
+            a.mixedRx = true;
+        else if (std::strncmp(arg, "--uc-period=", 12) == 0)
+            a.ucPeriod = static_cast<uint32_t>(std::atoi(val));
+        else if (std::strncmp(arg, "--slots-per-tick=", 17) == 0)
+            a.slotsPerTick = static_cast<uint32_t>(std::atoi(val));
         else if (std::strcmp(arg, "--dump-psd") == 0)
             a.dumpPsd = true;
         else if (std::strncmp(arg, "--dump-links=", 13) == 0)
@@ -197,6 +242,21 @@ main(int argc, char** argv)
     channelModel->SetAttribute("ChannelConditionModel", PointerValue(ccm));
     channelModel->SetAttribute("UpdatePeriod", TimeValue(MilliSeconds(0))); // updated mid-loop
     channelModel->SetAttribute("UseGpu", BooleanValue(args.useGpu));
+    if (args.useMezanine)
+    {
+        // Suppress PeriodicRefresh in the bench. Simulator::Stop() is
+        // relative, so each bench tick processes a growing sim-time window
+        // (201ms, 301ms, ..., 901ms). Without this, PR fires proportionally
+        // more times in later ticks -- turning 9 expected UpdateChannel calls
+        // into 53+, tripling tick-9 wall time. EnsureBatchFresh already
+        // drives one UC per tick via the RunAllLinks lambda; PR is redundant
+        // and harmful here.
+        channelModel->SetAttribute("MezRefreshPeriod", TimeValue(Seconds(1000)));
+        if (args.ucPeriod > 1)
+        {
+            channelModel->SetAttribute("MezUcPeriod", UintegerValue(args.ucPeriod));
+        }
+    }
     channelModel->AssignStreams(1);
 
     Ptr<ThreeGppSpectrumPropagationLossModel> prxModel =
@@ -266,8 +326,21 @@ main(int argc, char** argv)
         ants.push_back(
             mkAnt(args.txRows, args.txCols, args.txVPorts, args.txHPorts, args.txDualPol));
     for (uint32_t i = 0; i < args.nUes; ++i)
-        ants.push_back(
-            mkAnt(args.rxRows, args.rxCols, args.rxVPorts, args.rxHPorts, args.rxDualPol));
+    {
+        // --mixed-rx: second half of UEs get a 1x1 single-pol antenna so
+        // there are two distinct (sNAnt, uNAnt) buckets in UpdateChannel.
+        if (args.mixedRx && i >= args.nUes / 2)
+            ants.push_back(mkAnt(1, 1, 1, 1, /*dualPol=*/false));
+        else
+            ants.push_back(
+                mkAnt(args.rxRows, args.rxCols, args.rxVPorts, args.rxHPorts, args.rxDualPol));
+    }
+    if (args.mixedRx)
+    {
+        std::printf("  [mixed-rx] UEs 0..%u: %ux%u elem; UEs %u..%u: 1x1 elem (2 buckets)\n",
+                    args.nUes / 2 - 1, args.rxRows, args.rxCols,
+                    args.nUes / 2, args.nUes - 1);
+    }
     // ThreeGppSpectrumPropagationLossModel requires a beamforming
     // vector to be set; without it, GetLongTerm asserts. We set a
     // simple isotropic (all-equal-phase) vector on each antenna.
@@ -316,7 +389,44 @@ main(int argc, char** argv)
                     args.dumpLinks);
     }
 
+    printMemMB("before-tick-0");
     using clock = std::chrono::steady_clock;
+
+    // Opt B: pre-warm GPU channel cache before tick-0 PRX evals.
+    // Without this, tick-0 hits TryGenSpecCpuMiss (CPU contraction, ~3.3ms/link)
+    // for every link because EnsureBatchFresh sees an empty map on its first call
+    // and deduplicates all subsequent calls before the map is fully populated.
+    // By pre-populating the map here, tick-0's first EBF fires UpdateChannel
+    // with all nLinks already present → GPU data is ready for all subsequent
+    // CalcRxPowerSpectralDensity calls → they hit TryGenSpecHit (~1.8us/link).
+    if (args.useMezanine)
+    {
+        const auto pwStart = clock::now();
+        for (uint32_t s = 0; s < kNumSites; ++s)
+        {
+            for (uint32_t u = 0; u < args.nUes; ++u)
+            {
+                channelModel->GetChannel(mobs[s],
+                                         mobs[kNumSites + u],
+                                         ants[s],
+                                         ants[kNumSites + u]);
+            }
+        }
+        const double pwMs =
+            std::chrono::duration<double, std::milli>(clock::now() - pwStart).count();
+        std::printf("  pre-warm: %.1f ms (GetChannel for %u links)\n",
+                    pwMs,
+                    kNumSites * args.nUes);
+        printMemMB("pre-warm-done");
+        // Opt C: pre-seed rb_freqs before the first Simulator::Run().
+        // Without this, tick-0's EBF fires UC with m_batchRbFreqs empty
+        // → GenSpecBatch skips → all 1900 PRX calls get TryGenSpecCpuMiss
+        // (~4ms/link, 7.9s total). With rb_freqs pre-seeded, the first
+        // EBF's UC can run GenSpecBatch immediately and tick-0 PRX hits
+        // the spec cache instead.
+        DynamicCast<ThreeGppChannelModelWgpuMezanine>(channelModel)->CaptureRbFreqs(txPsd);
+    }
+
     auto tStart = clock::now();
     uint64_t totalLinks = 0;
     for (uint32_t t = 0; t < args.nTicks; ++t)
@@ -329,44 +439,50 @@ main(int argc, char** argv)
             channelModel->SetAttribute("UpdatePeriod", TimeValue(MilliSeconds(50)));
         }
         Simulator::Schedule(MilliSeconds(100 * t), [&]() {
-            for (uint32_t s = 0; s < kNumSites; ++s)
+            // Outer loop: M slots per tick, all at the same simulation time.
+            // First slot triggers EnsureBatchFresh -> UpdateChannel (once).
+            // Slots 2..M hit the same GPU spec cache: EBF dedup fires and
+            // returns immediately; PRX cost is just the TryGenSpecHit lookup.
+            for (uint32_t slot = 0; slot < args.slotsPerTick; ++slot)
             {
-                for (uint32_t u = 0; u < args.nUes; ++u)
+                for (uint32_t s = 0; s < kNumSites; ++s)
                 {
-                    auto txMob = mobs[s];
-                    auto rxMob = mobs[kNumSites + u];
-                    auto txAnt = ants[s];
-                    auto rxAnt = ants[kNumSites + u];
-                    if (args.runPrx)
+                    for (uint32_t u = 0; u < args.nUes; ++u)
                     {
-                        // Build a per-call SpectrumSignalParameters so the PRX
-                        // model can do its long-term + Doppler chain.
-                        Ptr<SpectrumSignalParameters> sig =
-                            Create<SpectrumSignalParameters>();
-                        sig->psd = Create<SpectrumValue>(*txPsd);
-                        sig->duration = MilliSeconds(1);
-                        auto rxSig = prxModel->CalcRxPowerSpectralDensity(
-                            sig, txMob, rxMob, txAnt, rxAnt);
-                        // Dump first dumpLinks links per tick (always
-                        // the same links across runs since site/ue
-                        // order is fixed).
-                        if (args.dumpPsd && (s * args.nUes + u) < args.dumpLinks)
+                        auto txMob = mobs[s];
+                        auto rxMob = mobs[kNumSites + u];
+                        auto txAnt = ants[s];
+                        auto rxAnt = ants[kNumSites + u];
+                        if (args.runPrx)
                         {
-                            dump << t << ' ' << s << ' ' << u;
-                            for (auto it = rxSig->psd->ValuesBegin();
-                                 it != rxSig->psd->ValuesEnd();
-                                 ++it)
+                            // Build a per-call SpectrumSignalParameters so the PRX
+                            // model can do its long-term + Doppler chain.
+                            Ptr<SpectrumSignalParameters> sig =
+                                Create<SpectrumSignalParameters>();
+                            sig->psd = Create<SpectrumValue>(*txPsd);
+                            sig->duration = MilliSeconds(1);
+                            auto rxSig = prxModel->CalcRxPowerSpectralDensity(
+                                sig, txMob, rxMob, txAnt, rxAnt);
+                            // Dump first dumpLinks links per tick, first slot only.
+                            if (slot == 0 && args.dumpPsd &&
+                                (s * args.nUes + u) < args.dumpLinks)
                             {
-                                dump << ' ' << *it;
+                                dump << t << ' ' << s << ' ' << u;
+                                for (auto it = rxSig->psd->ValuesBegin();
+                                     it != rxSig->psd->ValuesEnd();
+                                     ++it)
+                                {
+                                    dump << ' ' << *it;
+                                }
+                                dump << '\n';
                             }
-                            dump << '\n';
                         }
+                        else
+                        {
+                            channelModel->GetChannel(txMob, rxMob, txAnt, rxAnt);
+                        }
+                        ++totalLinks;
                     }
-                    else
-                    {
-                        channelModel->GetChannel(txMob, rxMob, txAnt, rxAnt);
-                    }
-                    ++totalLinks;
                 }
             }
         });
@@ -379,6 +495,11 @@ main(int argc, char** argv)
                     t,
                     tickMs,
                     kNumSites * args.nUes);
+        {
+            char label[32];
+            std::snprintf(label, sizeof(label), "after-tick-%u", t);
+            printMemMB(label);
+        }
     }
     Simulator::Destroy();
 

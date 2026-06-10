@@ -3,17 +3,19 @@
 // https://github.com/NVIDIA/aerial-cuda-accelerated-ran/blob/main/testBenches/chanModels/src/sls_chan_src/sls_chan_large_scale_GPU.cu
 
 // ===========================================================================
-// sls_chan.wgsl — WGSL port of sls_chan.cu (wgpu 0.20+)
+// sls_chan.wgsl â€” WGSL port of sls_chan.cu (wgpu 0.20+)
 // ===========================================================================
 // Struct field order/padding MUST match your sls_chan.cuh exactly.
 // All uint8_t fields are widened to u32 for alignment.
 // ===========================================================================
 
-// ── Constants ──────────────────────────────────────────────────────────────
+// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const PI:           f32 = 3.14159265358979323846;
 const SCENARIO_UMA: u32 = 0u;
 const SCENARIO_UMI: u32 = 1u;
 const SCENARIO_RMA: u32 = 2u;
+const SCENARIO_INH_MIXED: u32 = 3u;  // InH-OfficeMixed
+const SCENARIO_INH_OPEN:  u32 = 4u;  // InH-OfficeOpen
 
 const SF_IDX:  u32 = 0u;
 const K_IDX:   u32 = 1u;
@@ -28,10 +30,10 @@ const LOS_MATRIX_SIZE:  u32 = 7u;
 const NLOS_MATRIX_SIZE: u32 = 6u;
 const O2I_MATRIX_SIZE:  u32 = 6u;
 
-// Max filter length = 2·floor(3·120)+1 = 721
+// Max filter length = 2Â·floor(3Â·120)+1 = 721
 const MAX_FILTER_LEN: u32 = 721u;
 
-// ── Structs ────────────────────────────────────────────────────────────────
+// â”€â”€ Structs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Pad every struct to 16-byte multiples so std430 layout matches host-side.
 
 struct Vec3f { x: f32, y: f32, z: f32, _p: f32 }
@@ -139,10 +141,10 @@ struct NormUniforms {
     _pad0: u32, _pad1: u32,
 }
 
-// RNG state — xoshiro128** (replaces curandState)
+// RNG state â€” xoshiro128** (replaces curandState)
 struct RngState { s0: u32, s1: u32, s2: u32, s3: u32 }
 
-// ── RNG helpers ────────────────────────────────────────────────────────────
+// â”€â”€ RNG helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fn rotl32(x: u32, k: u32) -> u32 { return (x << k) | (x >> (32u - k)); }
 
 fn rng_next(s: ptr<function, RngState>) -> u32 {
@@ -168,7 +170,7 @@ fn rand_normal(s: ptr<function, RngState>) -> f32 {
     return sqrt(-2.0 * log(u1)) * cos(2.0 * PI * u2);
 }
 
-// ── Device-equivalent math helpers ────────────────────────────────────────
+// â”€â”€ Device-equivalent math helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fn log10(x: f32) -> f32 { return log(x) / log(10.0); }
 
 fn cal_los_prob(scenario: u32, d_2d_out: f32, h_ut: f32,
@@ -190,6 +192,18 @@ fn cal_los_prob(scenario: u32, d_2d_out: f32, h_ut: f32,
         case SCENARIO_RMA: {
             if d_2d_out <= 10.0 { return 1.0; }
             return exp(-(d_2d_out - 10.0) / 1000.0);
+        }
+        case SCENARIO_INH_MIXED: {
+            // TR 38.901 Table 7.4.2-1, InH-Office Mixed
+            if d_2d_out <= 1.2 { return 1.0; }
+            if d_2d_out < 6.5 { return exp(-(d_2d_out - 1.2) / 4.7); }
+            return exp(-(d_2d_out - 6.5) / 32.6) * 0.32;
+        }
+        case SCENARIO_INH_OPEN: {
+            // TR 38.901 Table 7.4.2-1, InH-Office Open
+            if d_2d_out <= 5.0 { return 1.0; }
+            if d_2d_out <= 49.0 { return exp(-(d_2d_out - 5.0) / 70.8); }
+            return exp(-(d_2d_out - 49.0) / 211.7) * 0.54;
         }
         default: { return 0.0; }
     }
@@ -321,7 +335,7 @@ fn cal_sf_std(scenario: u32, is_los: bool, is_indoor: bool,
     }
 }
 
-// ── fill_crn_kernel: group 0 ──────────────────────────────────────────────
+// â”€â”€ fill_crn_kernel: group 0 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @group(0) @binding(0) var<uniform>             fill_uni:    CRNGenUniforms;
 @group(0) @binding(1) var<storage, read_write> fill_temp:   array<f32>;
 @group(0) @binding(2) var<storage, read_write> fill_rng:    array<RngState>;
@@ -367,10 +381,10 @@ fn fill_crn_kernel(
     fill_rng[rng_id] = rng;
 }
 
-// ── convolve_crn_kernel: group 1 ──────────────────────────────────────────
+// â”€â”€ convolve_crn_kernel: group 1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @group(0) @binding(3) var<storage, read_write> conv_output: array<f32>;
 
-// ── Entry point 2: convolve fill_temp → conv_output ────────────────────────
+// â”€â”€ Entry point 2: convolve fill_temp â†’ conv_output â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @compute @workgroup_size(256, 1, 1)
 fn convolve_crn_kernel(
     @builtin(global_invocation_id) gid: vec3<u32>,
@@ -384,16 +398,16 @@ fn convolve_crn_kernel(
     let D        = 3.0 * corr_px;
     let iD       = u32(D);
     let L        = select(2u * iD + 1u, 1u, corr_px == 0.0);
-    // final grid = round(bound/step + 1 + 2*D) — valid pixels per channel.
+    // final grid = round(bound/step + 1 + 2*D) â€” valid pixels per channel.
     let final_nx = select(u32(0u), u32(uni.boundX / step + 1.0 + 2.0 * D), iD > 0u);
     let final_ny = select(u32(0u), u32(uni.boundY / step + 1.0 + 2.0 * D), iD > 0u);
     let padded_nx = final_nx + L - 1u;
     let padded_ny = final_ny + L - 1u;
-    // Each per-(site, LSP) slot in conv_output is sized uni.nX × uni.nY (the
+    // Each per-(site, LSP) slot in conv_output is sized uni.nX Ã— uni.nY (the
     // maximum corrDist's final grid). The reader (lsp_at_loc_*) indexes
     // cells at stride uni.nX, so we write at the same stride and only emit
-    // the channel's `final_nx × final_ny` valid sub-rectangle. Cells past
-    // (final_nx-1, final_ny-1) stay zero — they're outside the UE deployment
+    // the channel's `final_nx Ã— final_ny` valid sub-rectangle. Cells past
+    // (final_nx-1, final_ny-1) stay zero â€” they're outside the UE deployment
     // disk anyway and would never be sampled.
     let stride_nx = uni.nX;
     let chunk_ny  = select(final_ny, uni.chunkY, uni.chunkY > 0u);
@@ -440,12 +454,12 @@ fn convolve_crn_kernel(
             }
         }
         // Write at the slot's stride (uni.nX), not the channel's packed
-        // stride — this is what `lsp_at_loc_*` indexes with.
+        // stride â€” this is what `lsp_at_loc_*` indexes with.
         conv_output[uni.outputGridOffset + ci * stride_nx + cj] = s;
     }
 }
 
-// ── Bindings — normalize_crn_kernel  (4, 5) ────────────────────────────
+// â”€â”€ Bindings â€” normalize_crn_kernel  (4, 5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @group(0) @binding(4) var<uniform>             norm_uni:    NormUniforms;
 @group(0) @binding(5) var<storage, read_write> norm_buffer: array<f32>;
 
@@ -500,7 +514,7 @@ fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
     }
 }
 
-// ── Bindings — calLinkParamKernel ──────────────────────────────────────────
+// â”€â”€ Bindings â€” calLinkParamKernel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @group(0) @binding(6)  var<uniform>            link_uni:         LinkParamUniforms;
 @group(0) @binding(7)  var<storage, read>       cell_params:      array<CellParam>;
 @group(0) @binding(8)  var<storage, read>       ut_params:        array<UtParam>;
@@ -511,7 +525,7 @@ fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
 @group(0) @binding(13)  var<storage, read_write> rng_states_lp:    array<RngState>;
 // Combined CRN buffer: concat(LOS data | NLOS data | O2I data) along the
 // element axis. `crn_offsets` is similarly concat(losOffs | nlosOffs |
-// o2iOffs) — losOffs has nSite*8 entries pointing into the LOS region,
+// o2iOffs) â€” losOffs has nSite*8 entries pointing into the LOS region,
 // nlosOffs has nSite*7 pointing into the NLOS region, etc. The host
 // pre-bakes the per-section base offset into the values so a single
 // indexed lookup `crn_data[crn_offsets[idx] + xy]` finds the right
@@ -519,7 +533,7 @@ fn normalize_crn_kernel(@builtin(local_invocation_id) lid: vec3<u32>) {
 //
 // Why: the previous layout used 6 separate storage bindings
 // (3 data + 3 offsets), which together with the other LSP inputs put
-// cal_link_param_kernel at 13 storage buffers per stage — over the
+// cal_link_param_kernel at 13 storage buffers per stage â€” over the
 // WebGPU spec default of 10. Folding to 2 bindings (1 data + 1
 // offsets) brings the kernel to 9 SSBOs/stage, which is the limit
 // Dawn enforces by default.
@@ -580,7 +594,7 @@ fn lsp_at_loc_o2i(grid_idx: u32, x: f32, y: f32, n_x: i32, n_y: i32) -> f32 {
     return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
 }
 
-// ── calLinkParamKernel ─────────────────────────────────────────────────────
+// â”€â”€ calLinkParamKernel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Dispatch: grid = (nSite, ceil(nUT/256), 1), workgroup = (256, 1, 1)
 @compute @workgroup_size(256, 1, 1)
 fn cal_link_param_kernel(
@@ -598,7 +612,7 @@ fn cal_link_param_kernel(
     let cell      = cell_params[first_sec];
     let ut        = ut_params[ue_idx];
 
-    // ── Distances ────────────────────────────────────────────────────────
+    // â”€â”€ Distances â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let dx = cell.loc.x - ut.loc.x;  let dy = cell.loc.y - ut.loc.y;
     let d2d     = sqrt(dx*dx + dy*dy);
     let d2d_in  = ut.d_2d_in;
@@ -615,7 +629,7 @@ fn cal_link_param_kernel(
     link_params[link_idx].d3d_in  = d3d_in;
     link_params[link_idx].d3d_out = d3d_out;
 
-    // ── LOS angles ───────────────────────────────────────────────────────
+    // â”€â”€ LOS angles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let phi_aod = atan2(ut.loc.y - cell.loc.y, ut.loc.x - cell.loc.x) * (180.0 / PI);
     var phi_aoa = phi_aod + 180.0;
     if phi_aoa > 180.0 { phi_aoa -= 360.0; }
@@ -627,7 +641,7 @@ fn cal_link_param_kernel(
     link_params[link_idx].theta_LOS_ZOD = theta_zod;
     link_params[link_idx].theta_LOS_ZOA = 180.0 - theta_zod;
 
-    // ── RNG state ────────────────────────────────────────────────────────
+    // â”€â”€ RNG state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     //let global_tid = wg_id.x * n_wg.y * 256u + wg_id.y * 256u + li_id.x;
     //var rng = rng_states_lp[global_tid];
     var rng = rng_states_lp[link_idx];
@@ -635,7 +649,7 @@ fn cal_link_param_kernel(
     let sc = sys_config[0];
     let fc = sim_config[0].center_freq_hz;
 
-    // ── LOS indicator ────────────────────────────────────────────────────
+    // â”€â”€ LOS indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if uni.updateLosState != 0u {
         let p = cal_los_prob(sc.scenario, d2d_out, ut.loc.z,
                              sc.force_los_prob_indoor, sc.force_los_prob_outdoor,
@@ -647,7 +661,7 @@ fn cal_link_param_kernel(
     let is_indoor = ut.outdoor_ind == 0u;
     let lsp_idx   = select(select(1u, 0u, is_los), 2u, is_indoor); // LOS=0,NLOS=1,O2I=2
 
-    // ── Path loss ────────────────────────────────────────────────────────
+    // â”€â”€ Path loss â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if uni.updatePLAndPenetrationLoss != 0u || uni.updateAllLSPs != 0u {
         var pl = cal_pl(Vec3f(cell.loc.x, cell.loc.y, cell.loc.z, 0.0),
                         Vec3f(ut.loc.x, ut.loc.y, ut.loc.z, 0.0), sc.scenario,
@@ -658,12 +672,12 @@ fn cal_link_param_kernel(
         link_params[link_idx].pathloss = pl;
     }
 
-    // ── LSPs ─────────────────────────────────────────────────────────────
+    // â”€â”€ LSPs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if uni.updateAllLSPs != 0u || uni.updatePLAndPenetrationLoss != 0u {
         let cl = cmn_link[0];
         let nx = uni.nX;  let ny = uni.nY;
         let ux = ut.loc.x;  let uy = ut.loc.y;
-        // The dispatch is (nSite, ceil(nUT/256), 1) — wg_id.x is already a
+        // The dispatch is (nSite, ceil(nUT/256), 1) â€” wg_id.x is already a
         // site index, not a cell index. Dividing by nSectorPerSite was a bug
         // left over from a per-cell dispatch: it (a) made sites 0/1/2 all
         // read CRN-site-0, sites 3/4/5 share CRN-site-1, etc., and (b) had
@@ -676,7 +690,7 @@ fn cal_link_param_kernel(
 
         var ucv: array<f32, 8>;  // uncorrelated vars [SF,K,DS,ASD,ASA,ZSD,ZSA,DT]
         if is_indoor {
-            // O2I grid: nSite * 7 cols (stride-7 contiguous) — cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA.
+            // O2I grid: nSite * 7 cols (stride-7 contiguous) â€” cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA.
             // The O2I LSP set in TR 38.901 covers SF/DS/ASD/ASA/ZSD/ZSA (no K), so we draw those
             // from the O2I grid. The K-factor on indoor-LOS links comes from the OUTDOOR LOS path
             // that penetrates the building -- draw cv[K_IDX] from the LOS grid when is_los, and
@@ -698,10 +712,10 @@ fn cal_link_param_kernel(
             ucv[ASA_IDX] = lsp_at_loc_los(s8+4u, ux, uy, nx, ny);
             ucv[ZSD_IDX] = lsp_at_loc_los(s8+5u, ux, uy, nx, ny);
             ucv[ZSA_IDX] = lsp_at_loc_los(s8+6u, ux, uy, nx, ny);
-            // delta_tau CRN (LOS col 7) — contiguous stride 8 grid
+            // delta_tau CRN (LOS col 7) â€” contiguous stride 8 grid
             ucv[D_T_IDX] = lsp_at_loc_los(s8+7u, ux, uy, nx, ny);
         } else {
-            // NLOS grid: nSite * 7 cols (stride-7 contiguous) — cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA
+            // NLOS grid: nSite * 7 cols (stride-7 contiguous) â€” cols 0-5 are SF/DS/ASD/ASA/ZSD/ZSA
             ucv[SF_IDX]  = lsp_at_loc_nlos(s7+0u, ux, uy, nx, ny);
             ucv[K_IDX]   = 0.0;
             ucv[DS_IDX]  = lsp_at_loc_nlos(s7+1u, ux, uy, nx, ny);
@@ -712,7 +726,7 @@ fn cal_link_param_kernel(
             ucv[D_T_IDX] = lsp_at_loc_nlos(s7+6u, ux, uy, nx, ny);   // delta_tau CRN (NLOS col 6)
         }
 
-        // Cholesky multiply: corr_px = sqrtCorrMat · uncorr  (lower-triangular)
+        // Cholesky multiply: corr_px = sqrtCorrMat Â· uncorr  (lower-triangular)
         var cv: array<f32, 7>;
         if is_indoor {
             for (var i = 0u; i < O2I_MATRIX_SIZE; i++) {
@@ -773,7 +787,7 @@ fn cal_link_param_kernel(
                 link_params[link_idx].K = 0.0;
             }
 
-            // DS (convert s → ns via +9)
+            // DS (convert s â†’ ns via +9)
             link_params[link_idx].DS = pow(10.0,
                 cv[DS_IDX] * cl.sigma_lgDS[lsp_idx] + cl.mu_lgDS[lsp_idx] + 9.0);
 
@@ -783,7 +797,7 @@ fn cal_link_param_kernel(
             link_params[link_idx].ASA = min(
                 pow(10.0, cv[ASA_IDX]*cl.sigma_lgASA[lsp_idx] + cl.mu_lgASA[lsp_idx]), 104.0);
 
-            // ZSD — scenario-specific mu/sigma
+            // ZSD â€” scenario-specific mu/sigma
             let h_ut = ut.loc.z;
             let h_bs = cell.loc.z;
             var mu_zsd: f32;  var sigma_zsd: f32;  var mu_off: f32;
@@ -818,6 +832,20 @@ fn cal_link_param_kernel(
                         mu_zsd    = max(-1.0, -0.19*(d2d/1000.0) - 0.01*(h_ut-1.5) + 0.28);
                         sigma_zsd = 0.30;
                         mu_off    = atan((35.0-3.5)/d2d) - atan((35.0-1.5)/d2d);
+                    }
+                }
+                case SCENARIO_INH_MIXED, SCENARIO_INH_OPEN: {
+                    // TR 38.901 Table 7.5-10 (InH-Office). Frequency term
+                    // needs log10(1 + fc_GHz); cl.lgfc carries log10(fc_GHz).
+                    let lg1fc = log(1.0 + pow(10.0, cl.lgfc)) / log(10.0);
+                    if is_los {
+                        mu_zsd    = -1.43 * lg1fc + 2.228;
+                        sigma_zsd = 0.13 * lg1fc + 0.30;
+                        mu_off    = 0.0;
+                    } else {
+                        mu_zsd    = 1.08;
+                        sigma_zsd = 0.36;
+                        mu_off    = 0.0;
                     }
                 }
                 default: { mu_zsd = 0.0; sigma_zsd = 0.5; mu_off = 0.0; }
@@ -862,7 +890,7 @@ fn cal_link_param_kernel(
 // =============================================================================
 // sls_small_scale.wgsl
 // Port of NVIDIA sls_chan_small_scale_GPU-10.cu  (Apache-2.0)
-// Kernels: cal_cluster_ray_kernel · generate_cir_kernel · generate_cfr_kernel_mode1
+// Kernels: cal_cluster_ray_kernel Â· generate_cir_kernel Â· generate_cfr_kernel_mode1
 // Constants: MAX_CLUSTERS=20  MAX_RAYS=20  NMAXTAPS=24  MAX_UE_ANT_ELEMENTS=8
 // =============================================================================
 
@@ -908,7 +936,7 @@ struct SmallScaleSysConfig {
     _pad0 : u32,
 }
 
-// Antenna panel config – pattern tables are in separate bindings (arrays too large for inline struct)
+// Antenna panel config â€“ pattern tables are in separate bindings (arrays too large for inline struct)
 struct AntPanelConfig {
     nAnt          : u32,
     antModel      : u32,
@@ -918,7 +946,7 @@ struct AntPanelConfig {
     // offsets into the flat antTheta / antPhi texture arrays
     thetaOffset   : u32,
     phiOffset     : u32,
-    _pad0         : u32,
+    bearing_deg   : f32,             // panel bearing (alpha); azimuth rotation
 }
 
 // SspCellParam: tail-padded to 32 B to match the C++ host struct's 16-byte
@@ -992,7 +1020,7 @@ struct SsCmnParams {
     RayOffsetAngles      : array<f32, 20>,
 }
 
-// Cluster parameters – one per link
+// Cluster parameters â€“ one per link
 struct ClusterParams {
     nCluster       : u32,
     nRayPerCluster : u32,
@@ -1034,7 +1062,7 @@ struct DispatchUniforms {
     _pad0        : u32,
 }
 
-// ── group 1: cal_cluster_ray_kernel ──────────────────────────────────────
+// â”€â”€ group 1: cal_cluster_ray_kernel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @group(1) @binding(0) var<storage, read>       cray_buf_link    : array<LinkParams>;
 @group(1) @binding(1) var<storage, read>       cray_buf_ut      : array<SspUtParam>;
 @group(1) @binding(2) var<storage, read>       cray_buf_cmn     : SsCmnParams;
@@ -1058,8 +1086,27 @@ const PACKED_OFF_AOA     : u32 = 2000u;
 const PACKED_OFF_AOD     : u32 = 2400u;
 const PACKED_OFF_ZOA     : u32 = 2800u;
 const PACKED_OFF_ZOD     : u32 = 3200u;
+// Spatial-consistency (TR 38.901 7.6.3.2 procedure A) support:
+// cray_skip[link] = 1 preserves that link's cluster/ray realization in
+// place (no redraw, no RNG advance); the host drifts its cluster-level
+// values and then shifts the preserved per-ray angles by per-cluster
+// deltas via drift_packed_angles_kernel below.
+@group(1) @binding(7) var<storage, read> cray_skip : array<u32>;
 
-// ── group 2: generate_cir_kernel ─────────────────────────────────────────
+struct DriftEntry {
+    linkIdx : u32,
+    _p0 : u32,
+    _p1 : u32,
+    _p2 : u32,
+    dAOA : array<f32, 20>,
+    dAOD : array<f32, 20>,
+    dZOA : array<f32, 20>,
+    dZOD : array<f32, 20>,
+}
+
+@group(1) @binding(8) var<storage, read> cray_drift : array<DriftEntry>;
+
+// â”€â”€ group 2: generate_cir_kernel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Small uniform-layout struct holding ONLY the SsCmnParams fields the
 // CIR kernel actually reads. Moving cir_buf_cmn from a full storage
 // SsCmnParams binding (binding 2) to this tiny uniform frees one
@@ -1104,7 +1151,7 @@ struct CirCmn {
 // cir_dbg removed to fit Dawn's 10 SSBO/stage limit -- was a
 // diagnostic-only read_write storage buffer.
 
-// ── group 3: generate_cfr_kernel_mode1 ───────────────────────────────────
+// â”€â”€ group 3: generate_cfr_kernel_mode1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @group(3) @binding(0) var<uniform>             cfr_uni_sim          : SmallScaleSimConfig;
 @group(3) @binding(1) var<storage, read>       cfr_buf_cell         : array<SspCellParam>;
 @group(3) @binding(2) var<storage, read>       cfr_buf_ut           : array<SspUtParam>;
@@ -1168,9 +1215,14 @@ fn cexp_j(phase: f32) -> vec2f {
 // Antenna field pattern
 // ---------------------------------------------------------------------------
 fn calc_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) -> vec2f {
-    // theta_idx in [0,180], phi_idx in [0,359]
+    // theta_idx in [0,180], phi_idx in [0,359]. The azimuth is rotated by
+    // the panel bearing first so the directional pattern is evaluated in
+    // the panel local frame (downtilt assumed 0; full TR 38.901 7.1 rotation
+    // is a follow-up). NOTE: the GPU pipeline azimuth convention is mirrored
+    // vs ns-3? NO - the earlier plus-sign 'validation' measured a DEAD GPU
+    // module (BOM-broken WGSL, CPU fallback). Minus is the live-GPU state.
     var ti = i32(round(theta));
-    var pi_ = i32(round(phi));
+    var pi_ = i32(round(phi - cfg.bearing_deg));
     if ti < 0 || ti >= 360 {
         ti = ti % 360;
         if ti < 0 { ti += 360; }
@@ -1180,9 +1232,13 @@ fn calc_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) -
         pi_ = pi_ % 360;
         if pi_ < 0 { pi_ += 360; }
     }
-    let A_db = cir_buf_antTheta[cfg.thetaOffset + u32(ti)]
-             + cir_buf_antPhi  [cfg.phiOffset   + u32(pi_)]
-             + select(0.0, GMAX, cfg.antModel == 1u);
+    // TR 38.901 Table 7.3-1: A(theta,phi) = -min(-(A_v + A_h), A_max) with
+    // A_max = 30 dB â€” the COMBINED attenuation is clamped, otherwise far
+    // off-axis links get up to -60 dB and interference is underestimated.
+    let att  = min(-(cir_buf_antTheta[cfg.thetaOffset + u32(ti)] +
+                     cir_buf_antPhi[cfg.phiOffset + u32(pi_)]),
+                   30.0);
+    let A_db = -att + select(0.0, GMAX, cfg.antModel == 1u);
     let A_sqrt = pow(10.0, A_db / 20.0);
     let z_rad  = zeta * DEG2RAD;
     return vec2f(A_sqrt * cos(z_rad), A_sqrt * sin(z_rad));   // {F_theta, F_phi}
@@ -1357,6 +1413,12 @@ fn cal_cluster_ray_kernel(
     if ue_idx >= cray_disp.nUT { return; }
 
     let link_idx = site_idx * cray_disp.nUT + ue_idx;
+    // Spatial-consistency drift: preserve this link's realization (cluster
+    // params, packed rays, RNG stream position) — the host applies the
+    // procedure-A update instead of a redraw.
+    if (link_idx < arrayLength(&cray_skip) && cray_skip[link_idx] != 0u) {
+        return;
+    }
     let lk       = cray_buf_link[link_idx];
     let ut       = cray_buf_ut[ue_idx];
 
@@ -1448,7 +1510,15 @@ fn cal_cluster_ray_kernel(
         }
     } else { s0 = 0u; s1 = 0u; }
 
-    // Apply K-factor (LOS) — lk.K is already in linear units from cal_link_param
+    // Apply K-factor (LOS) -- lk.K is already linear from cal_link_param.
+    // TR 38.901 7.5-8: this K-adjustment feeds ANGLE generation (7.5-9..13)
+    // only. The EXPORTED cluster powers stay UN-adjusted: Eq 7.5-29/30 in
+    // the matrix kernel applies the Rician split at coefficient level, and
+    // applying K in both places double-counted it -- cluster 0 carried 99%+
+    // of the power instead of ~K/(K+1), which collapsed in-lobe NLOS
+    // scatter and deepened the same-site interference floor by ~9 dB.
+    var powers_exp : array<f32, 20>;
+    for (var n = 0u; n < n_cluster; n++) { powers_exp[n] = powers[n]; }
     if lk.losInd != 0u {
         let K_lin = lk.K;
         let sc    = 1.0 / (1.0 + K_lin);
@@ -1466,14 +1536,14 @@ fn cal_cluster_ray_kernel(
     let C_ASD = cray_buf_cmn.C_ASD[lsp_idx];
     let C_ZSA = cray_buf_cmn.C_ZSA[lsp_idx];
 
-    // C_ZSD is computed per-link from mu_lgZSD: (3/8) * 10^(mu_lgZSD) — not a cluster array
+    // C_ZSD is computed per-link from mu_lgZSD: (3/8) * 10^(mu_lgZSD) â€” not a cluster array
     let C_ZSD = (3.0 / 8.0) * pow(10.0, lk.mu_lgZSD);
 
     // Select C_phi, C_theta based on scenario
     let C_phi   = select(select(cray_buf_cmn.C_phi_NLOS,   cray_buf_cmn.C_phi_LOS,   lk.losInd != 0u), cray_buf_cmn.C_phi_O2I,   is_o2i != 0u);
     let C_theta = select(select(cray_buf_cmn.C_theta_NLOS, cray_buf_cmn.C_theta_LOS, lk.losInd != 0u), cray_buf_cmn.C_theta_O2I, is_o2i != 0u);
 
-    // Scale C_phi for LOS K-factor (3GPP 38.901 Eq 7.5-10) — lk.K is linear
+    // Scale C_phi for LOS K-factor (3GPP 38.901 Eq 7.5-10) â€” lk.K is linear
     var C_phi_scaled   = C_phi;
     var C_theta_scaled = C_theta;
     if lk.losInd != 0u && is_o2i == 0u {
@@ -1488,9 +1558,20 @@ fn cal_cluster_ray_kernel(
     var max_abs_power = 0.0;
     for (var n = 0u; n < n_cluster; n++) { max_abs_power = max(max_abs_power, abs(powers[n])); }
 
+    // TR 38.901 Eq 7.5-9 (azimuth) / 7.5-14 (zenith). The previous code
+    // computed -ln(r)/(2*C/1.4): it dropped the sqrt, dropped the
+    // ASA/ASD spread factor, inverted the 2/1.4 grouping, and the AoD
+    // branch divided by cASD (the INTRA-cluster ray-offset constant)
+    // instead of C_phi. Net result: cluster angles ~30-60x too narrow,
+    // so NLOS links lost their wide-angle scatter and far-off-axis
+    // interference sat on the element-pattern floor (~16 dB below the
+    // CPU reference).
     for (var n = 0u; n < n_cluster; n++) {
-        // AoA
-        let arg_asa    = -log(powers[n] / max(max_abs_power, 1e-30)) / (2.0 * C_phi_scaled / 1.4);
+        let neg_ln = max(-log(powers[n] / max(max_abs_power, 1e-30)), 0.0);
+        let sqrt_neg_ln = sqrt(neg_ln);
+
+        // AoA: phi'_n = 2*(ASA/1.4)*sqrt(-ln(Pn/max))/C_phi  (Eq 7.5-9)
+        let arg_asa    = 2.0 * (lk.ASA / 1.4) * sqrt_neg_ln / C_phi_scaled;
         let sign_n_asa = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
         let eps_n_asa  = rng_normal(&rng) * lk.ASA / 7.0;
         phi_n_AoA[n]   = wrap_azimuth(sign_n_asa * arg_asa + eps_n_asa + lk.phi_LOS_AOA);
@@ -1498,8 +1579,8 @@ fn cal_cluster_ray_kernel(
             phi_n_AoA[n] = wrap_azimuth(phi_n_AoA[n] - phi_n_AoA[0] + lk.phi_LOS_AOA);
         }
 
-        // AoD
-        let arg_asd    = -log(powers[n] / max(max_abs_power, 1e-30)) / (2.0 * C_ASD / 1.4);
+        // AoD: same with ASD (Eq 7.5-9 applies C_phi to both azimuths)
+        let arg_asd    = 2.0 * (lk.ASD / 1.4) * sqrt_neg_ln / C_phi_scaled;
         let sign_n_asd = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
         let eps_n_asd  = rng_normal(&rng) * lk.ASD / 7.0;
         phi_n_AoD[n]   = wrap_azimuth(sign_n_asd * arg_asd + eps_n_asd + lk.phi_LOS_AOD);
@@ -1507,8 +1588,8 @@ fn cal_cluster_ray_kernel(
             phi_n_AoD[n] = wrap_azimuth(phi_n_AoD[n] - phi_n_AoD[0] + lk.phi_LOS_AOD);
         }
 
-        // ZoA
-        let arg_zsa    = -log(powers[n] / max(max_abs_power, 1e-30)) / (2.0 * C_theta_scaled / 1.4);
+        // ZoA: theta'_n = -ZSA*ln(Pn/max)/C_theta  (Eq 7.5-14, linear in ln)
+        let arg_zsa    = lk.ZSA * neg_ln / C_theta_scaled;
         let sign_n_zsa = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
         let eps_n_zsa  = rng_normal(&rng) * lk.ZSA / 7.0;
         theta_n_ZOA[n] = wrap_zenith(sign_n_zsa * arg_zsa + eps_n_zsa + 90.0);
@@ -1516,8 +1597,8 @@ fn cal_cluster_ray_kernel(
             theta_n_ZOA[n] = wrap_zenith(theta_n_ZOA[n] - theta_n_ZOA[0] + lk.theta_LOS_ZOA);
         }
 
-        // ZoD
-        let arg_zsd    = -log(powers[n] / max(max_abs_power, 1e-30)) / (2.0 * C_ZSD / 1.4);
+        // ZoD: theta'_n = -ZSD*ln(Pn/max)/C_theta (Eq 7.5-14/7.5-19)
+        let arg_zsd    = lk.ZSD * neg_ln / C_theta_scaled;
         let sign_n_zsd = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
         let eps_n_zsd  = rng_normal(&rng) * lk.ZSD / 7.0;
         theta_n_ZOD[n] = wrap_zenith(sign_n_zsd * arg_zsd + eps_n_zsd
@@ -1528,7 +1609,7 @@ fn cal_cluster_ray_kernel(
     }
 
     // --------------- 3. Ray angles (genRayAngleGPU) ---------------
-    // phi_nm_* / theta_nm_* written directly to flat storage — no private staging
+    // phi_nm_* / theta_nm_* written directly to flat storage â€” no private staging
     let alpha_m = cray_buf_cmn.RayOffsetAngles;
 
     for (var c = 0u; c < n_cluster; c++) {
@@ -1554,7 +1635,7 @@ fn cal_cluster_ray_kernel(
     }
 
     // --------------- 4. XPR and random phases ---------------
-    // xpr / randomPhases written directly to flat storage — no private staging
+    // xpr / randomPhases written directly to flat storage â€” no private staging
     for (var c = 0u; c < n_cluster; c++) {
         for (var r = 0u; r < n_ray; r++) {
             let idx = c * n_ray + r;
@@ -1577,7 +1658,10 @@ fn cal_cluster_ray_kernel(
 
     for (var n = 0u; n < n_cluster; n++) {
         cray_buf_cluster[link_idx].delays[n]      = delays[n];
-        cray_buf_cluster[link_idx].powers[n]      = powers[n];
+        // Un-K-adjusted powers (see the K-factor comment above): the
+        // matrix/CIR consumers and the host m_clusterPower expect 7.5-5
+        // powers; the Rician split happens at coefficient level.
+        cray_buf_cluster[link_idx].powers[n]      = powers_exp[n];
         cray_buf_cluster[link_idx].phi_n_AoA[n]   = phi_n_AoA[n];
         cray_buf_cluster[link_idx].phi_n_AoD[n]   = phi_n_AoD[n];
         cray_buf_cluster[link_idx].theta_n_ZOA[n] = theta_n_ZOA[n];
@@ -1587,6 +1671,34 @@ fn cal_cluster_ray_kernel(
 
     // Persist RNG state
     cray_buf_rng[link_idx] = rng;
+}
+
+// ---------------------------------------------------------------------------
+// drift_packed_angles_kernel
+//
+// Spatial-consistency procedure A (TR 38.901 7.6.3.2): rays move WITH their
+// cluster — intra-cluster offsets, coupling, XPR and initial phases are
+// preserved. The host computes per-cluster mean-angle deltas (drifted minus
+// previous, degrees) and this kernel shifts the preserved packed per-ray
+// angles in place. One thread per (driftLink, cluster, ray).
+// ---------------------------------------------------------------------------
+@compute @workgroup_size(64)
+fn drift_packed_angles_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let total = arrayLength(&cray_drift) * 400u;
+    if (gid.x >= total) { return; }
+    let d    = gid.x / 400u;
+    let cr   = gid.x % 400u;
+    let c    = cr / 20u;
+    let link = cray_drift[d].linkIdx;
+    let base = link * PACKED_LINK_STRIDE;
+    cray_packed_out[base + PACKED_OFF_AOA + cr] =
+        wrap_azimuth(cray_packed_out[base + PACKED_OFF_AOA + cr] + cray_drift[d].dAOA[c]);
+    cray_packed_out[base + PACKED_OFF_AOD + cr] =
+        wrap_azimuth(cray_packed_out[base + PACKED_OFF_AOD + cr] + cray_drift[d].dAOD[c]);
+    cray_packed_out[base + PACKED_OFF_ZOA + cr] =
+        wrap_zenith(cray_packed_out[base + PACKED_OFF_ZOA + cr] + cray_drift[d].dZOA[c]);
+    cray_packed_out[base + PACKED_OFF_ZOD + cr] =
+        wrap_zenith(cray_packed_out[base + PACKED_OFF_ZOD + cr] + cray_drift[d].dZOD[c]);
 }
 
 // ---------------------------------------------------------------------------
@@ -1998,7 +2110,7 @@ fn generate_cfr_kernel_mode1(
 
     let prbg_idx = li.x;
 
-    // Read CIR tap count and build normalised delay (2π * delay_us) in shared memory
+    // Read CIR tap count and build normalised delay (2Ï€ * delay_us) in shared memory
     let cir_ntaps = min(cfr_buf_cirNtaps[al.cirNtapsOffset], NMAXTAPS);
     if (cir_ntaps == 0u || cir_ntaps > 1000u) { return; }  // sanity cap
 
@@ -2112,10 +2224,11 @@ struct ChanMatDispatch {
 @group(0) @binding(39) var<storage, read>       mat_buf_antPhi  : array<f32>;
 @group(0) @binding(40) var<storage, read_write> mat_buf_out     : array<vec2f>;
 
-// Chunk (e): field-pattern eval. Reads mat_buf_antTheta/Phi.
+// Chunk (e): field-pattern eval. Reads mat_buf_antTheta/Phi. Azimuth is
+// rotated into the panel's local frame by the bearing (downtilt assumed 0).
 fn mat_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) -> vec2f {
     var ti = i32(round(theta));
-    var pi_ = i32(round(phi));
+    var pi_ = i32(round(phi - cfg.bearing_deg));
     if ti < 0 || ti >= 360 {
         ti = ti % 360;
         if ti < 0 { ti += 360; }
@@ -2125,9 +2238,11 @@ fn mat_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) ->
         pi_ = pi_ % 360;
         if pi_ < 0 { pi_ += 360; }
     }
-    let A_db = mat_buf_antTheta[cfg.thetaOffset + u32(ti)]
-             + mat_buf_antPhi  [cfg.phiOffset   + u32(pi_)]
-             + select(0.0, GMAX, cfg.antModel == 1u);
+    // Combined attenuation clamp per TR 38.901 Table 7.3-1 (A_max = 30 dB).
+    let att  = min(-(mat_buf_antTheta[cfg.thetaOffset + u32(ti)] +
+                     mat_buf_antPhi[cfg.phiOffset + u32(pi_)]),
+                   30.0);
+    let A_db = -att + select(0.0, GMAX, cfg.antModel == 1u);
     let A_sqrt = pow(10.0, A_db / 20.0);
     let z_rad  = zeta * DEG2RAD;
     return vec2f(A_sqrt * cos(z_rad), A_sqrt * sin(z_rad));
@@ -2216,7 +2331,7 @@ fn gen_channel_matrix_kernel(
     let lk = mat_buf_link[al.lspReadIdx];
     let cp = mat_buf_cluster[al.lspReadIdx];
 
-    // ── Per-link page bounds: skip work for output pages past the link's
+    // â”€â”€ Per-link page bounds: skip work for output pages past the link's
     // actual numOverallCluster (n_red + 2|4 depending on whether the two
     // strongest cluster indices differ).
     let n_red = cp.nCluster;
@@ -2333,7 +2448,7 @@ fn gen_channel_matrix_kernel(
     }
     var cell_val = vec2f(rays_re * cluster_scale, rays_im * cluster_scale);
 
-    // ── LOS Rician term (3GPP TR 38.901 Eq 7.5-29/30) ───────────────
+    // â”€â”€ LOS Rician term (3GPP TR 38.901 Eq 7.5-29/30) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // For LOS links every page is scaled by atten1 = sqrt(1/(K+1));
     // page 0 additionally gets sqrt(K/(K+1)) * LOS_ray. lk.K is in
     // linear units (cal_link_param_kernel converted from dB before
@@ -2413,7 +2528,7 @@ struct LongTermDispatch {
 }
 
 @group(0) @binding(50) var<uniform>             lt_disp     : LongTermDispatch;
-// lt_chan_in is the same backing buffer as mat_buf_out — the channel
+// lt_chan_in is the same backing buffer as mat_buf_out â€” the channel
 // matrix that gen_channel_matrix_kernel just produced.
 @group(0) @binding(51) var<storage, read>       lt_chan_in  : array<vec2f>;
 @group(0) @binding(52) var<storage, read>       lt_s_w      : array<vec2f>;  // per-link [s_port_elems]
@@ -2606,6 +2721,8 @@ struct SpecBatchDispatch {
     lt_u_ports         : u32,
     lt_s_ports         : u32,
     lt_n_pages         : u32,
+    out_offset         : u32,   // flat float offset into rb_pow_out for this slot
+    out_offset_rev     : u32,   // flat float offset for the reverse-orientation power
 }
 
 @group(0) @binding(70) var<uniform>             sb_disp      : SpecBatchDispatch;
@@ -2619,14 +2736,14 @@ const SB_NEG_TWO_PI: f32 = -6.28318530717958647692;
 
 @compute @workgroup_size(64)
 fn gen_spec_batch_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let tid = gid.x;
+    // 2D dispatch: x covers (rx, tx, rb) within a link, y = link index.
+    // Each link needs ceil(n_rx * n_tx * n_rb / 64) workgroups in x.
+    let link_idx = gid.y;
+    if (link_idx >= sb_disp.n_links) { return; }
+    let in_link = gid.x;
     let per_page = sb_disp.n_rx_ports * sb_disp.n_tx_ports;
     let per_link_out = per_page * sb_disp.n_rb;
-    let total = sb_disp.n_links * per_link_out;
-    if (tid >= total) { return; }
-
-    let link_idx = tid / per_link_out;
-    let in_link  = tid % per_link_out;
+    if (in_link >= per_link_out) { return; }
     let rb = in_link / per_page;
     let pp = in_link % per_page;
     let rx = pp % sb_disp.n_rx_ports;
@@ -2665,4 +2782,273 @@ fn gen_spec_batch_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
     let out_idx = link_idx * per_link_out + rb * per_page
                 + tx * sb_disp.n_rx_ports + rx;
     sb_chan_out[out_idx] = acc;
+}
+
+// ---------------------------------------------------------------------------
+// reduce_spec_batch_kernel
+//
+// Reduces the per-tick chanSpct_unscaled (produced by gen_spec_batch_kernel)
+// to a scalar isotropic-precoding power per (link, rb):
+//
+//   pow[link, rb] = sum_rx |sum_tx chanSpct_unscaled[link, rx, tx, rb]|^2
+//
+// This matches the no-precoding formula in PRX::CBG::PsdReduction:
+//   psd[rb] = (1 / numTx) * inPsd[rb] * pow[link, rb]
+//
+// Reading back only this float32 buffer (1900 * 273 * 4 B = 2.1 MB) instead
+// of the full chanSpct_unscaled (4+ GB) eliminates the dominant readback cost
+// per UpdateChannel call.
+//
+// Bindings reuse sb_chan_out from gen_spec_batch (binding 75), plus new
+// uniforms at 76 and output at 77.
+// ---------------------------------------------------------------------------
+
+struct ReduceBatchDispatch {
+    n_links    : u32,
+    n_rx_ports : u32,
+    n_tx_ports : u32,
+    n_rb       : u32,
+}
+
+@group(0) @binding(76) var<uniform>             rb_disp    : ReduceBatchDispatch;
+@group(0) @binding(77) var<storage, read_write> rb_pow_out : array<f32>;
+
+@compute @workgroup_size(64)
+fn reduce_spec_batch_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    // 1D dispatch: one thread per (link, rb) output element.
+    // Groups = ceil(n_links * n_rb / 64).
+    let total    = rb_disp.n_links * rb_disp.n_rb;
+    let tid      = gid.x;
+    if (tid >= total) { return; }
+    let link_idx = tid / rb_disp.n_rb;
+    let rb       = tid % rb_disp.n_rb;
+
+    // sb_chan_out layout: [link * per_link + rb * per_page + tx * n_rx + rx]
+    let per_page = rb_disp.n_rx_ports * rb_disp.n_tx_ports;
+    let per_link = per_page * rb_disp.n_rb;
+    let base     = link_idx * per_link + rb * per_page;
+
+    // pow[link, rb] = sum_rx |sum_tx H_unscaled[link, rx, tx, rb]|^2
+    var pow_acc: f32 = 0.0;
+    for (var rx: u32 = 0u; rx < rb_disp.n_rx_ports; rx = rx + 1u) {
+        var sum_re: f32 = 0.0;
+        var sum_im: f32 = 0.0;
+        for (var tx: u32 = 0u; tx < rb_disp.n_tx_ports; tx = tx + 1u) {
+            let v = sb_chan_out[base + tx * rb_disp.n_rx_ports + rx];
+            sum_re = sum_re + v.x;
+            sum_im = sum_im + v.y;
+        }
+        pow_acc = pow_acc + sum_re * sum_re + sum_im * sum_im;
+    }
+    rb_pow_out[link_idx * rb_disp.n_rb + rb] = pow_acc;
+}
+
+// ---------------------------------------------------------------------------
+// gen_spec_pow_kernel
+//
+// Fused outer-product + isotropic-power reduction.
+// Computes rb_pow_out[link, rb] = sum_rx |sum_tx H_unscaled[rx,tx,rb]|^2
+// where H_unscaled[rx,tx,rb] = sum_c longTerm[c,rx,tx] * delayT[c,rb]
+// WITHOUT materializing the full (n_links * n_rx * n_tx * n_rb) chanSpct.
+//
+// Avoids the 4+ GB intermediate buffer that would not fit in GPU VRAM and
+// would force PCIe readback instead of on-chip accumulation.
+//
+// Bindings: reuses sb_disp (70), sb_long_term (71), sb_doppler (72),
+//           sb_delays (73), sb_rb_freqs (74) from gen_spec_batch_kernel,
+//           and rb_pow_out (77) from reduce_spec_batch_kernel.
+//           Does NOT use sb_chan_out (75) or rb_disp (76).
+//
+// Dispatch: 1D, ceil(n_links * n_rb / 64) workgroups, one thread per (link, rb).
+// ---------------------------------------------------------------------------
+// Per-port complex output of gen_spec_pow_kernel:
+//   h_out[out_offset + (link*n_rb + rb)*rxtx + tx*n_rx + rx]
+//     = H[rx,tx,rb] = sum_c longTerm[c,rx,tx] * dt[c,rb]
+// (out_offset is in COMPLEX elements and already includes the slot section.)
+// The host caches these matrices and serves PRX evals with the full phased
+// per-port channel, so NrInterference computes the same MIMO interference
+// covariance as the CPU path (a scalar power cache loses the port phase
+// structure and skewed SINR by 16-19 dB while RSRP still matched).
+@group(0) @binding(78) var<storage, read_write> h_out : array<vec2f>;
+
+@compute @workgroup_size(64)
+fn gen_spec_pow_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let total    = sb_disp.n_links * sb_disp.n_rb;
+    let tid      = gid.x;
+    if (tid >= total) { return; }
+    let link_idx = tid / sb_disp.n_rb;
+    let rb       = tid % sb_disp.n_rb;
+
+    let lt_per_page = sb_disp.lt_u_ports * sb_disp.lt_s_ports;
+    let per_link_lt = lt_per_page * sb_disp.lt_n_pages;
+    let lt_base     = link_idx * per_link_lt;
+    let dop_base    = link_idx * sb_disp.n_clusters;
+    let del_base    = link_idx * sb_disp.n_clusters;
+
+    let fc = sb_rb_freqs[rb];
+
+    // Precompute dt[c] = doppler[c] * delay_phase[c] once per thread
+    // (registers; n_clusters <= 24).
+    var dt_priv: array<vec2f, 24u>;
+    for (var c: u32 = 0u; c < sb_disp.n_clusters; c = c + 1u) {
+        let theta  = SB_NEG_TWO_PI * fc * sb_delays[del_base + c];
+        let ds     = vec2f(cos(theta), sin(theta));
+        let dop    = sb_doppler[dop_base + c];
+        dt_priv[c] = vec2f(dop.x * ds.x - dop.y * ds.y,
+                           dop.x * ds.y + dop.y * ds.x);
+    }
+
+    let rxtx     = sb_disp.n_rx_ports * sb_disp.n_tx_ports;
+    let out_base = sb_disp.out_offset + (link_idx * sb_disp.n_rb + rb) * rxtx;
+    // Row sums (per rx, coherent over tx) accumulate the forward scalar
+    // power; column sums build the reverse one. Both are nearly free here
+    // and let 1-rx-port (scalar-covariance) evals skip the per-port copy
+    // entirely on the host.
+    var row_acc: array<vec2f, 32u>;
+    for (var rx: u32 = 0u; rx < sb_disp.n_rx_ports; rx = rx + 1u) {
+        row_acc[rx] = vec2f(0.0, 0.0);
+    }
+    var pow_rev: f32 = 0.0;
+    for (var tx: u32 = 0u; tx < sb_disp.n_tx_ports; tx = tx + 1u) {
+        var col_sum = vec2f(0.0, 0.0);
+        for (var rx: u32 = 0u; rx < sb_disp.n_rx_ports; rx = rx + 1u) {
+            var acc = vec2f(0.0, 0.0);
+            for (var c: u32 = 0u; c < sb_disp.n_clusters; c = c + 1u) {
+                let dt     = dt_priv[c];
+                let lt_idx = lt_base + c * lt_per_page + tx * sb_disp.lt_u_ports + rx;
+                let lt     = sb_long_term[lt_idx];
+                acc = acc + vec2f(lt.x * dt.x - lt.y * dt.y,
+                                  lt.x * dt.y + lt.y * dt.x);
+            }
+            // Column-major page layout (rx fast) -- matches Complex3DVector,
+            // so the host hit path is a contiguous scale-and-copy.
+            h_out[out_base + tx * sb_disp.n_rx_ports + rx] = acc;
+            row_acc[rx] = row_acc[rx] + acc;
+            col_sum = col_sum + acc;
+        }
+        pow_rev = pow_rev + dot(col_sum, col_sum);
+    }
+    var pow_fwd: f32 = 0.0;
+    for (var rx: u32 = 0u; rx < sb_disp.n_rx_ports; rx = rx + 1u) {
+        pow_fwd = pow_fwd + dot(row_acc[rx], row_acc[rx]);
+    }
+    // Scalar power sections share rb_pow_out (binding 77): the forward
+    // offset derives from the complex H offset (out_offset / rxtx); the
+    // reverse section offset arrives via out_offset_rev (float units).
+    let pow_idx = sb_disp.out_offset / rxtx + link_idx * sb_disp.n_rb + rb;
+    rb_pow_out[pow_idx] = pow_fwd;
+    rb_pow_out[sb_disp.out_offset_rev + link_idx * sb_disp.n_rb + rb] = pow_rev;
+}
+
+// ---------------------------------------------------------------------------
+// gen_spec_pow_smem_kernel (kept for reference; see gen_spec_pow_reg_kernel below)
+//
+// Same math as gen_spec_pow_kernel, but eliminates ~1024x redundant trig by
+// precomputing dt[c, rb] in workgroup shared memory before the main loop.
+// NOTE: on D3D12/Intel the workgroupBarrier is expensive; gen_spec_pow_reg_kernel
+//       uses private registers instead and avoids the barrier entirely.
+// ---------------------------------------------------------------------------
+const GSP_WG_SIZE: u32      = 64u;
+const GSP_MAX_CLUSTERS: u32 = 24u;
+var<workgroup> wg_dt: array<vec2f, 1536u>; // 64 * 24
+
+@compute @workgroup_size(64)
+fn gen_spec_pow_smem_kernel(@builtin(global_invocation_id) gid: vec3<u32>,
+                             @builtin(local_invocation_id) lid: vec3<u32>) {
+    let link_idx = gid.y;
+    let rb       = gid.x;
+    let del_base = link_idx * sb_disp.n_clusters;
+    let dop_base = link_idx * sb_disp.n_clusters;
+    if (rb < sb_disp.n_rb) {
+        let fc = sb_rb_freqs[rb];
+        for (var c: u32 = 0u; c < sb_disp.n_clusters; c = c + 1u) {
+            let theta = SB_NEG_TWO_PI * fc * sb_delays[del_base + c];
+            let ds    = vec2f(cos(theta), sin(theta));
+            let dop   = sb_doppler[dop_base + c];
+            wg_dt[c * GSP_WG_SIZE + lid.x] = vec2f(dop.x * ds.x - dop.y * ds.y,
+                                                     dop.x * ds.y + dop.y * ds.x);
+        }
+    }
+    workgroupBarrier();
+    if (rb >= sb_disp.n_rb) { return; }
+    let lt_per_page = sb_disp.lt_u_ports * sb_disp.lt_s_ports;
+    let per_link_lt = lt_per_page * sb_disp.lt_n_pages;
+    let lt_base     = link_idx * per_link_lt;
+    var pow_acc: f32 = 0.0;
+    for (var rx: u32 = 0u; rx < sb_disp.n_rx_ports; rx = rx + 1u) {
+        var sum_re: f32 = 0.0;
+        var sum_im: f32 = 0.0;
+        for (var tx: u32 = 0u; tx < sb_disp.n_tx_ports; tx = tx + 1u) {
+            var acc = vec2f(0.0, 0.0);
+            for (var c: u32 = 0u; c < sb_disp.n_clusters; c = c + 1u) {
+                let dt     = wg_dt[c * GSP_WG_SIZE + lid.x];
+                let lt_idx = lt_base + c * lt_per_page + tx * sb_disp.lt_u_ports + rx;
+                let lt     = sb_long_term[lt_idx];
+                acc = acc + vec2f(lt.x * dt.x - lt.y * dt.y,
+                                  lt.x * dt.y + lt.y * dt.x);
+            }
+            sum_re = sum_re + acc.x;
+            sum_im = sum_im + acc.y;
+        }
+        pow_acc = pow_acc + sum_re * sum_re + sum_im * sum_im;
+    }
+    rb_pow_out[sb_disp.out_offset + link_idx * sb_disp.n_rb + rb] = pow_acc;
+}
+
+// ---------------------------------------------------------------------------
+// gen_spec_pow_reg_kernel
+//
+// Same computation as gen_spec_pow_kernel but precomputes dt[c] in private
+// (register) memory per thread. Eliminates 20*32*32 = 20480 trig ops per
+// thread in favour of 20 trig ops + 20480 register reads (1024x reduction).
+//
+// No shared memory, no workgroupBarrier -- avoids D3D12 SLM barrier overhead.
+// 1D dispatch (same shape as gen_spec_pow_kernel): ceil(n_links * n_rb / 64).
+// ---------------------------------------------------------------------------
+@compute @workgroup_size(64)
+fn gen_spec_pow_reg_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let total    = sb_disp.n_links * sb_disp.n_rb;
+    let tid      = gid.x;
+    if (tid >= total) { return; }
+    let link_idx = tid / sb_disp.n_rb;
+    let rb       = tid % sb_disp.n_rb;
+
+    let del_base = link_idx * sb_disp.n_clusters;
+    let dop_base = link_idx * sb_disp.n_clusters;
+    let fc       = sb_rb_freqs[rb];
+
+    // Precompute dt[c] for this (rb) into private registers.
+    // 24 vec2f = 48 f32 registers; typically avoids spilling on modern GPUs.
+    var dt_priv: array<vec2f, 24u>;
+    for (var c: u32 = 0u; c < sb_disp.n_clusters; c = c + 1u) {
+        let theta  = SB_NEG_TWO_PI * fc * sb_delays[del_base + c];
+        let ds     = vec2f(cos(theta), sin(theta));
+        let dop    = sb_doppler[dop_base + c];
+        dt_priv[c] = vec2f(dop.x * ds.x - dop.y * ds.y,
+                           dop.x * ds.y + dop.y * ds.x);
+    }
+
+    let lt_per_page = sb_disp.lt_u_ports * sb_disp.lt_s_ports;
+    let per_link_lt = lt_per_page * sb_disp.lt_n_pages;
+    let lt_base     = link_idx * per_link_lt;
+
+    var pow_acc: f32 = 0.0;
+    for (var rx: u32 = 0u; rx < sb_disp.n_rx_ports; rx = rx + 1u) {
+        var sum_re: f32 = 0.0;
+        var sum_im: f32 = 0.0;
+        for (var tx: u32 = 0u; tx < sb_disp.n_tx_ports; tx = tx + 1u) {
+            var acc = vec2f(0.0, 0.0);
+            for (var c: u32 = 0u; c < sb_disp.n_clusters; c = c + 1u) {
+                let dt     = dt_priv[c];
+                let lt_idx = lt_base + c * lt_per_page + tx * sb_disp.lt_u_ports + rx;
+                let lt     = sb_long_term[lt_idx];
+                acc = acc + vec2f(lt.x * dt.x - lt.y * dt.y,
+                                  lt.x * dt.y + lt.y * dt.x);
+            }
+            sum_re = sum_re + acc.x;
+            sum_im = sum_im + acc.y;
+        }
+        pow_acc = pow_acc + sum_re * sum_re + sum_im * sum_im;
+    }
+    rb_pow_out[sb_disp.out_offset + link_idx * sb_disp.n_rb + rb] = pow_acc;
 }

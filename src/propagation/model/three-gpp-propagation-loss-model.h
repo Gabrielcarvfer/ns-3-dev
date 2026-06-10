@@ -314,6 +314,31 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     bool m_shadowingEnabled;                            //!< enable/disable shadowing
     bool m_enforceRanges;            //!< strictly enforce TR 38.901 parameter ranges
     bool m_buildingPenLossesEnabled; //!< enable/disable building penetration losses
+
+    /** Cached total loss (dB) for a link, valid for LossCacheUpdatePeriod. */
+    struct CachedLoss
+    {
+        double lossDb{0.0}; //!< total loss in dB (pathloss + shadowing + O2I)
+        Time computedAt;    //!< when the loss was computed
+    };
+
+    /// Period for which a computed total loss is served from cache.
+    /// Zero disables caching (default; identical to upstream behaviour).
+    Time m_lossCachePeriod{Seconds(0)};
+
+    /// Exact hash for the (mobility, mobility) pointer-pair cache key.
+    struct LossCacheKeyHash
+    {
+        size_t operator()(const std::pair<uintptr_t, uintptr_t>& k) const
+        {
+            return std::hash<uintptr_t>()(k.first) ^
+                   (std::hash<uintptr_t>()(k.second) * 0x9E3779B97F4A7C15ull);
+        }
+    };
+
+    /// Loss cache keyed by the mobility-model pointer pair (order-independent).
+    mutable std::unordered_map<std::pair<uintptr_t, uintptr_t>, CachedLoss, LossCacheKeyHash>
+        m_lossCache;
     double m_meanVehicleO2iLoss; //!< normal cars (9dB), cars with metal coated glass panels (20dB)
     Ptr<NormalRandomVariable> m_normRandomVariable; //!< normal random variable
 

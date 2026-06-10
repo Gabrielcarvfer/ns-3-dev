@@ -22,6 +22,22 @@
 #include <H5Cpp.h>
 #endif
 
+// Memory diagnostic probe — only compiled when profiling is enabled.
+// Prints Private Bytes so we can track where CRN regeneration allocates.
+#if SLS_PROFILE_INSTRUMENT && defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <psapi.h>
+static void
+slsMemProbe(const char*)
+{
+}
+#else
+static void slsMemProbe(const char*) {}
+#endif
+
 static std::string
 readFile(const char* path)
 {
@@ -179,9 +195,6 @@ createDevice()
         wgpuInstanceRelease(instance);
         exit(1);
     }
-    // Log the winning backend even when SLS_DEBUG is off — useful for
-    // quick "which backend am I on?" diagnostics during testing.
-    std::fprintf(stderr, "[SlsChanWgpu] using %s backend\n", backendName(chosen));
 
     // Query what the adapter actually supports first
     WGPULimits supported{};
@@ -195,7 +208,12 @@ createDevice()
     WGPUDeviceDescriptor ddesc{};
     ddesc.uncapturedErrorCallbackInfo.callback =
         [](const WGPUDevice*, WGPUErrorType t, WGPUStringView msg, void*, void*) {
-            SLS_LOG("[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
+            // ALWAYS print -- never gate behind SLS_DEBUG. A swallowed shader
+            // compile error (e.g. a UTF-8 BOM that invalidated the whole WGSL
+            // module) silently nulls every pipeline; dispatches then no-op and
+            // readbacks return zeros while the simulation self-heals through
+            // CPU fallback paths, masking the failure entirely.
+            std::fprintf(stderr, "[wgpu error %d] %.*s\n", (int)t, (int)msg.length, msg.data);
         };
     // Set unlimited buffer size limit
     WGPULimits limits{};
@@ -243,9 +261,6 @@ createDevice()
 #else
     requiredLimits.maxStorageBuffersPerShaderStage = 30;
 #endif
-    std::fprintf(stderr,
-                 "[SlsChanWgpu] adapter limits: maxStorageBuffersPerShaderStage=%u\n",
-                 (unsigned)supported.maxStorageBuffersPerShaderStage);
     requiredLimits.maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
     requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
@@ -430,6 +445,12 @@ SlsChanWgpu::waitIdle()
     // ...) that may be pending. wgpu-native's poll(wait=true) does
     // both implicitly; Dawn splits them across waitAny + processEvents.
     instance_.processEvents();
+    // Tick the device so Dawn recycles upload staging buffers created by
+    // writeBuffer calls and D3D12 command allocators for completed serials.
+    // Without this, every writeBuffer > ring-buffer threshold keeps its
+    // temporary upload heap allocation alive until the next device_.tick()
+    // call, accumulating ~443 MB/tick (127 writeBuffer * 3.5 MB each).
+    device_.tick();
 #else
     device_.poll(true, nullptr);
 #endif
@@ -722,30 +743,30 @@ SlsChanWgpu::generateCRN(float maxX,
         for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrNlos[i])));
         for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrO2i[i])));
     }
-    // Exact-bounds cache. Previously the cache padded the bounds by
-    // 500 m on every miss to give "future tick" slack -- but the
-    // padding silently changed the grid size, and the caller's
-    // subsequent calLinkParam used the ORIGINAL (un-padded) bounds
-    // for its normalisation. Result: norm_x = (x - minX_caller) /
-    // (maxX_caller - minX_caller) maps to the wrong grid cell
-    // because the grid was sized for a 1000 m wider region. LSPs
-    // (including K-factor) were drawn from neighbouring cells,
-    // producing K=0 dB for every UE and breaking SIR/SINR on the
-    // NVIDIA analyser. Calibration on the minimal coupling-loss
-    // analyser still looked OK because PL has a strong distance
-    // signal that swamped the small per-cell shadow noise, but K
-    // doesn't have that escape hatch.
-    //
-    // Fix: cache exact bounds only. The bench then misses the cache
-    // on any sub-meter UE motion, but the win on stationary
-    // deployments is preserved AND the grid-vs-lookup mapping stays
-    // consistent.
-    if (crnCacheValid_ && nSite_ == crnCacheNSite_ && corrKey == crnCacheCorrKey_ &&
-        maxX == crnCacheMaxX_ && minX == crnCacheMinX_ && maxY == crnCacheMaxY_ &&
-        minY == crnCacheMinY_)
+    // Bounds cache. A change smaller than half a grid step doesn't shift the
+    // bilinear-interpolated pixel address, so the existing CRN is still valid.
+    // The previous "exact match" guard missed every tick in mobile deployments
+    // (UEs move a few cm per 100 ms slot) and wasted ~0.34 GB/tick on Dawn
+    // internal state for the 418 GPU dispatches. Using step_m/2 as tolerance
+    // (typically 5 m) is safe: the grid origin drifts by < 0.5 pixels relative
+    // to the lookup kernel, which is below the bilinear-interpolation resolution.
+    // If the bounds grow beyond the tolerance the CRN is re-generated so the
+    // grid always covers the whole deployment.
+    // The old 500 m padding bug: padded bounds at generation but unpadded at
+    // lookup → 50-pixel index error → K-factor drawn from wrong cells. The
+    // tolerance here is intentionally < step_m (max 5 m) so the index error
+    // is < 0.5 pixels.
     {
-        SLS_LOG("[DEBUG] generateCRN: cache hit; skipping GPU dispatch\n");
-        return;
+        const float crnTol = crnStep_ * 0.5f;
+        if (crnCacheValid_ && nSite_ == crnCacheNSite_ && corrKey == crnCacheCorrKey_ &&
+            std::abs(maxX - crnCacheMaxX_) <= crnTol &&
+            std::abs(minX - crnCacheMinX_) <= crnTol &&
+            std::abs(maxY - crnCacheMaxY_) <= crnTol &&
+            std::abs(minY - crnCacheMinY_) <= crnTol)
+        {
+            SLS_LOG("[DEBUG] generateCRN: cache hit (sub-step motion); skipping GPU dispatch\n");
+            return;
+        }
     }
 
     crnCacheMaxX_ = maxX;
@@ -755,6 +776,7 @@ SlsChanWgpu::generateCRN(float maxX,
     crnCacheNSite_ = nSite_;
     crnCacheCorrKey_ = corrKey;
     crnCacheValid_ = true;
+    slsMemProbe("start-of-full-regen");
 
     // Calculate grid dimensions matching WGSL shader: round(bound + 1 + 2*D) where D=3*corrDist
     float maxCorrDist = 0.0f;
@@ -939,12 +961,14 @@ SlsChanWgpu::generateCRN(float maxX,
     wgpu::Buffer gridBuf =
         makeBuffer(gridSz * sizeof(float),
                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
+    slsMemProbe("crn-after-local-bufs");  // after tempBuf/crnRngBuf/gridBuf created
 
     auto dispatchGrid = [&](wgpu::Buffer& outputBuf,
                             float corrDist,
                             uint32_t gridIndex,
                             uint32_t rowOffset = 0,
-                            uint32_t chunkY = 0) {
+                            uint32_t chunkY = 0,
+                            uint64_t baseDstOffset = 0) {
         // Match WGSL: grid in pixels = round(bound/step + 1 + 2*D)
         // where D = 3 * (corrDist / step).
         const float Dpx = 3.0f * (corrDist / step_m);
@@ -960,9 +984,11 @@ SlsChanWgpu::generateCRN(float maxX,
         const uint64_t fullGridBytes = static_cast<uint64_t>(nX) * nY * sizeof(float);
         // When chunking, write to staging buffer at rowOffset position; otherwise write to output
         // buffer
-        const uint64_t destOffset = (chunkY > 0) ? uint64_t(rowOffset) * nX * sizeof(float)
-                                                 : uint64_t(gridIndex) * fullGridBytes +
-                                                       uint64_t(rowOffset) * nX * sizeof(float);
+        const uint64_t destOffset =
+            baseDstOffset +
+            ((chunkY > 0) ? uint64_t(rowOffset) * nX * sizeof(float)
+                          : uint64_t(gridIndex) * fullGridBytes +
+                                uint64_t(rowOffset) * nX * sizeof(float));
         const uint64_t rngBytes = uint64_t(nCrnRng) * sizeof(RngState);
 
         // Clamp to tempBuf size to avoid OOB
@@ -1109,7 +1135,7 @@ SlsChanWgpu::generateCRN(float maxX,
             pass.dispatchWorkgroups(workgroups, 1u, 1u);
             pass.end();
             queue_.submit(enc1.finish(wgpu::Default));
-            waitIdle();
+            // No waitIdle here: WebGPU queue ordering ensures enc2 sees enc1's writes.
         }
 
         // Pass 2: convolve + normalize + copy
@@ -1138,352 +1164,151 @@ SlsChanWgpu::generateCRN(float maxX,
             }
             enc2.copyBufferToBuffer(gridBuf, 0, outputBuf, destOffset, gridBytes);
             queue_.submit(enc2.finish(wgpu::Default));
-            waitIdle();
+            // No waitIdle: caller is responsible for flushing after all dispatches.
         }
     };
 
-    // ── Chunk the grid along Y axis to keep output buffers under 256MB ──
-    // gridBuf size = chunkY * nX * sizeof(float); must be <= 256MB
-    // Also limit chunk size to stay under WebGPU 65535 workgroup limit:
-    //   maxChunkY <= (65535 * 256) / pnx where pnx ~ boundX + 2*3*corrDist
-    // For pnx=4423: maxChunkY = 16777216/4423 = 3794
-    // Use 128MB to get maxChunkY=7108, nChunksY=1 (reduces iterations from 8360 to 570)
-    const uint64_t maxGridBufBytes = 128ULL * 1024ULL * 1024ULL; // 128MB per chunk
-    const uint64_t maxChunkY = maxGridBufBytes / (static_cast<uint64_t>(nX) * sizeof(float));
-    // Clamp to respect WebGPU 65535 workgroup limit per dimension:
-    // workgroups = (pnx * chunkY + 255) / 256 <= 65535
-    // => pnx * chunkY <= 16776961  (pnx <= nX, so nX is safe upper bound)
+    // ── Chunk the grid along Y axis to stay under WebGPU 65535 workgroup limit ──
     const uint64_t wgLimitChunkY = 16776961u / static_cast<uint64_t>(nX);
-    const uint64_t clampedMaxChunkY =
-        std::min(maxChunkY, std::max(static_cast<uint64_t>(1u), wgLimitChunkY));
+    const uint64_t clampedMaxChunkY = std::max(static_cast<uint64_t>(1u), wgLimitChunkY);
     const uint64_t nChunksY = (static_cast<uint64_t>(nY) + clampedMaxChunkY - 1) / clampedMaxChunkY;
-    SLS_LOG("[DEBUG] CRN chunking: nX=%d nY=%d maxChunkY=%llu nChunksY=%llu\n",
+    SLS_LOG("[DEBUG] CRN chunking: nX=%d nY=%d clampedMaxChunkY=%llu nChunksY=%llu\n",
             nX,
             nY,
             (unsigned long long)clampedMaxChunkY,
             (unsigned long long)nChunksY);
 
-    // Also chunk the output buffers: create them on CPU side to avoid GPU memory limit
-    // LOS: nSite * 8 channels, NLOS: nSite * 7 channels, O2I: nSite * 7 channels
-    const size_t losBufSize = static_cast<size_t>(nSite_) * 8ULL * static_cast<uint64_t>(nX) * nY;
-    const size_t nlosBufSize = static_cast<size_t>(nSite_) * 7ULL * static_cast<uint64_t>(nX) * nY;
-    const size_t o2iBufSize = static_cast<size_t>(nSite_) * 7ULL * static_cast<uint64_t>(nX) * nY;
-    std::vector<float> losOutBuf(losBufSize, 0.0f);
-    std::vector<float> nlosOutBuf(nlosBufSize, 0.0f);
-    std::vector<float> o2iOutBuf(o2iBufSize, 0.0f);
-    SLS_LOG("[DEBUG] CRN: GPU output buffers created (los=%lluMB, nlos=%lluMB, o2i=%lluMB)\n",
-            (unsigned long long)(losOutBuf.size() * sizeof(float)) / (1024 * 1024),
-            (unsigned long long)(nlosOutBuf.size() * sizeof(float)) / (1024 * 1024),
-            (unsigned long long)(o2iOutBuf.size() * sizeof(float)) / (1024 * 1024));
-
-    // Create staging buffers for chunked output (small enough to fit in GPU memory)
-    const uint64_t stagingGridBytes = static_cast<uint64_t>(clampedMaxChunkY) * nX * sizeof(float);
-    wgpu::Buffer stagingBuf =
-        makeBuffer(stagingGridBytes,
-                   WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
-    SLS_LOG("[DEBUG] CRN: stagingBuf created (%llu bytes)\n", (unsigned long long)stagingGridBytes);
-
-    SLS_LOG("[DEBUG] Starting CRN generation loop\n");
-    for (uint32_t s = 0; s < nSite_; s++)
+    // Build the combined CRN buffer layout: [LOS | NLOS | O2I].
+    // crnDataBuf_ is created with CopyDst so GPU dispatches write directly into
+    // it — no CPU readback round-trip required.
+    const uint64_t combinedBytes = losBufSz + nlosBufSz + o2iBufSz;
     {
-        SLS_LOG("[DEBUG] LOS site %u\n", s);
-        for (uint32_t ch = 0; ch < 8; ch++)
+        const uint64_t cap = (m_maxGpuBuffer_ == 0)
+                                 ? (1ULL << 30)
+                                 : std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
+        if (combinedBytes > cap)
         {
-            for (uint32_t c = 0; c < nChunksY; c++)
-            {
-                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
-                const uint32_t yRows = static_cast<uint32_t>(
-                    std::min(static_cast<uint64_t>(clampedMaxChunkY),
-                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
-                const uint32_t gridIdx = static_cast<uint32_t>(s) * 8 + ch;
-                SLS_LOG("[DEBUG]   dispatchGrid LOS s=%u ch=%u c=%u yOff=%u yRows=%u\n",
-                        s,
-                        ch,
-                        c,
-                        yOff,
-                        yRows);
-                // Use stagingBuf as output instead of crnLosBuf_
-                dispatchGrid(stagingBuf, corrLos[ch], gridIdx, yOff, yRows);
-                // Copy staging buffer to CPU output buffer
-                const uint64_t cpuOffset = static_cast<uint64_t>(s) * 8 * nX * nY +
-                                           static_cast<uint64_t>(ch) * nX * nY +
-                                           static_cast<uint64_t>(yOff) * nX;
-                const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
-                std::vector<float> stagingData(chunkBytes / sizeof(float));
-                wgpu::Buffer stagingReadBuf =
-                    makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-                // Copy staging to stagingReadBuf
-                {
-                    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
-                    enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
-                    queue_.submit(enc.finish(wgpu::Default));
-                    waitIdle();
-                }
-                // Map and read using wgpu-native C API
-                static WGPUMapMode g_mapStatus = WGPUMapMode_None;
-                auto g_callback = [](WGPUMapAsyncStatus status,
-                                     WGPUStringView message,
-                                     void* userdata,
-                                     void* /*another*/) {
-                    (void)message;
-                    *(reinterpret_cast<WGPUMapMode*>(userdata)) =
-                        status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
-                };
-                WGPUBufferMapCallbackInfo mapCbInfo = {};
-                mapCbInfo.nextInChain = nullptr;
-                mapCbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
-                mapCbInfo.callback = g_callback;
-                mapCbInfo.userdata1 = &g_mapStatus;
-                mapCbInfo.userdata2 = nullptr;
-                wgpuBufferMapAsync(stagingReadBuf,
-                                   WGPUMapMode_Read,
-                                   0,
-                                   static_cast<uint64_t>(chunkBytes),
-                                   mapCbInfo);
-                waitIdle();
-                if (g_mapStatus != WGPUMapMode_Read)
-                {
-                    SLS_LOG("[ERROR] Failed to map stagingReadBuf\n");
-                    continue;
-                }
-                const void* mapped = wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
-                if (!mapped)
-                {
-                    SLS_LOG("[ERROR] Failed to get mapped range\n");
-                    continue;
-                }
-                memcpy(stagingData.data(), mapped, chunkBytes);
-                wgpuBufferUnmap(stagingReadBuf);
-                // Copy to CPU buffer
-                for (uint64_t i = 0; i < chunkBytes / sizeof(float); i++)
-                {
-                    losOutBuf[cpuOffset + i] = stagingData[i];
-                }
-                SLS_LOG("[DEBUG]   LOS chunk %u copied to CPU buffer\n", c);
-            }
-        }
-    }
-    for (uint32_t s = 0; s < nSite_; s++)
-    {
-        SLS_LOG("[DEBUG] NLOS site %u\n", s);
-        for (uint32_t ch = 0; ch < 7; ch++)
-        {
-            for (uint32_t c = 0; c < nChunksY; c++)
-            {
-                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
-                const uint32_t yRows = static_cast<uint32_t>(
-                    std::min(static_cast<uint64_t>(clampedMaxChunkY),
-                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
-                const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
-                SLS_LOG("[DEBUG]   dispatchGrid NLOS s=%u ch=%u c=%u yOff=%u yRows=%u\n",
-                        s,
-                        ch,
-                        c,
-                        yOff,
-                        yRows);
-                dispatchGrid(stagingBuf, corrNlos[ch], gridIdx, yOff, yRows);
-                const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
-                                           static_cast<uint64_t>(ch) * nX * nY +
-                                           static_cast<uint64_t>(yOff) * nX;
-                const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
-                std::vector<float> stagingData(chunkBytes / sizeof(float));
-                wgpu::Buffer stagingReadBuf =
-                    makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-                {
-                    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
-                    enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
-                    queue_.submit(enc.finish(wgpu::Default));
-                    waitIdle();
-                }
-                // Map and read using wgpu-native C API
-                static WGPUMapMode g_mapStatusNlos = WGPUMapMode_None;
-                auto g_callbackNlos = [](WGPUMapAsyncStatus status,
-                                         WGPUStringView message,
-                                         void* userdata,
-                                         void* /*another*/) {
-                    (void)message;
-                    *(reinterpret_cast<WGPUMapMode*>(userdata)) =
-                        status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
-                };
-                WGPUBufferMapCallbackInfo mapCbInfoNlos = {};
-                mapCbInfoNlos.nextInChain = nullptr;
-                mapCbInfoNlos.mode = WGPUCallbackMode_AllowProcessEvents;
-                mapCbInfoNlos.callback = g_callbackNlos;
-                mapCbInfoNlos.userdata1 = &g_mapStatusNlos;
-                mapCbInfoNlos.userdata2 = nullptr;
-                wgpuBufferMapAsync(stagingReadBuf,
-                                   WGPUMapMode_Read,
-                                   0,
-                                   static_cast<uint64_t>(chunkBytes),
-                                   mapCbInfoNlos);
-                waitIdle();
-                if (g_mapStatusNlos != WGPUMapMode_Read)
-                {
-                    SLS_LOG("[ERROR] Failed to map stagingReadBuf (NLOS)\n");
-                    continue;
-                }
-                const void* mappedNlos =
-                    wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
-                if (!mappedNlos)
-                {
-                    SLS_LOG("[ERROR] Failed to get mapped range (NLOS)\n");
-                    continue;
-                }
-                memcpy(stagingData.data(), mappedNlos, chunkBytes);
-                wgpuBufferUnmap(stagingReadBuf);
-                for (uint64_t i = 0; i < chunkBytes / sizeof(float); i++)
-                {
-                    nlosOutBuf[cpuOffset + i] = stagingData[i];
-                }
-                SLS_LOG("[DEBUG]   NLOS chunk %u copied to CPU buffer\n", c);
-            }
-        }
-    }
-    for (uint32_t s = 0; s < nSite_; s++)
-    {
-        SLS_LOG("[DEBUG] O2I site %u\n", s);
-        for (uint32_t ch = 0; ch < 7; ch++)
-        {
-            for (uint32_t c = 0; c < nChunksY; c++)
-            {
-                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
-                const uint32_t yRows = static_cast<uint32_t>(
-                    std::min(static_cast<uint64_t>(clampedMaxChunkY),
-                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
-                const uint32_t gridIdx = static_cast<uint32_t>(s) * 7 + ch;
-                SLS_LOG("[DEBUG]   dispatchGrid O2I s=%u ch=%u c=%u yOff=%u yRows=%u\n",
-                        s,
-                        ch,
-                        c,
-                        yOff,
-                        yRows);
-                dispatchGrid(stagingBuf, corrO2i[ch], gridIdx, yOff, yRows);
-                const uint64_t cpuOffset = static_cast<uint64_t>(s) * 7 * nX * nY +
-                                           static_cast<uint64_t>(ch) * nX * nY +
-                                           static_cast<uint64_t>(yOff) * nX;
-                const uint64_t chunkBytes = static_cast<uint64_t>(yRows) * nX * sizeof(float);
-                std::vector<float> stagingData(chunkBytes / sizeof(float));
-                wgpu::Buffer stagingReadBuf =
-                    makeBuffer(chunkBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-                {
-                    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
-                    enc.copyBufferToBuffer(stagingBuf, 0, stagingReadBuf, 0, chunkBytes);
-                    queue_.submit(enc.finish(wgpu::Default));
-                    waitIdle();
-                }
-                // Map and read using wgpu-native C API
-                static WGPUMapMode g_mapStatusO2i = WGPUMapMode_None;
-                auto g_callbackO2i = [](WGPUMapAsyncStatus status,
-                                        WGPUStringView message,
-                                        void* userdata,
-                                        void* /*another*/) {
-                    (void)message;
-                    *(reinterpret_cast<WGPUMapMode*>(userdata)) =
-                        status == WGPUMapAsyncStatus_Success ? WGPUMapMode_Read : WGPUMapMode_None;
-                };
-                WGPUBufferMapCallbackInfo mapCbInfoO2i = {};
-                mapCbInfoO2i.nextInChain = nullptr;
-                mapCbInfoO2i.mode = WGPUCallbackMode_AllowProcessEvents;
-                mapCbInfoO2i.callback = g_callbackO2i;
-                mapCbInfoO2i.userdata1 = &g_mapStatusO2i;
-                mapCbInfoO2i.userdata2 = nullptr;
-                wgpuBufferMapAsync(stagingReadBuf,
-                                   WGPUMapMode_Read,
-                                   0,
-                                   static_cast<uint64_t>(chunkBytes),
-                                   mapCbInfoO2i);
-                waitIdle();
-                if (g_mapStatusO2i != WGPUMapMode_Read)
-                {
-                    SLS_LOG("[ERROR] Failed to map stagingReadBuf (O2I)\n");
-                    continue;
-                }
-                const void* mappedO2i =
-                    wgpuBufferGetConstMappedRange(stagingReadBuf, 0, chunkBytes);
-                if (!mappedO2i)
-                {
-                    SLS_LOG("[ERROR] Failed to get mapped range (O2I)\n");
-                    continue;
-                }
-                memcpy(stagingData.data(), mappedO2i, chunkBytes);
-                wgpuBufferUnmap(stagingReadBuf);
-                for (uint64_t i = 0; i < chunkBytes / sizeof(float); i++)
-                {
-                    o2iOutBuf[cpuOffset + i] = stagingData[i];
-                }
-                SLS_LOG("[DEBUG]   O2I chunk %u copied to CPU buffer\n", c);
-            }
-        }
-    }
-    SLS_LOG("[DEBUG] All CRN generation complete\n");
-
-    // Final guard before the large GPU uploads. The earlier guard at the top of
-    // generateCRN already rejects oversized configs, but keep this as a tripwire
-    // so any future code path that gets here with a huge buffer fails loudly.
-    auto guardCrnSize = [&](const char* tag, uint64_t bytes) {
-        const uint64_t cap =
-            (m_maxGpuBuffer_ == 0) ? (1ULL << 30) : std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
-        if (bytes > cap)
-        {
-            SLS_LOG("[FATAL] CRN %s upload %.2f GB > safety cap %.2f GB\n",
-                    tag,
-                    (double)bytes / (1024.0 * 1024.0 * 1024.0),
-                    (double)cap / (1024.0 * 1024.0 * 1024.0));
+            SLS_LOG("[FATAL] CRN combined %.2f GB > safety cap %.2f GB\n",
+                    (double)combinedBytes / 1e9,
+                    (double)cap / 1e9);
             std::fflush(stderr);
             std::abort();
         }
-    };
+    }
 
-    // Build the combined CRN data buffer: concat(LOS | NLOS | O2I).
-    // Build the combined offsets buffer with each section's offsets
-    // PRE-BAKED to address into the concatenated data buffer:
-    //   losOffs[i]  = i*nX*nY                            (no shift)
-    //   nlosOffs[i] = losDataElems + i*nX*nY             (skip LOS region)
-    //   o2iOffs[i]  = losDataElems + nlosDataElems + i*nX*nY
-    // so the kernel can do a single indexed read without per-section
-    // arithmetic.
-    if (!crnDataBuf_)
+    // Reuse crnDataBuf_ when the buffer is already large enough. The grid
+    // dimensions change slightly each regen (bounding box shifts ~1 cell as UEs
+    // move), so combinedBytes oscillates by ~441 KB per regen. Releasing and
+    // reallocating 123 MB each time causes D3D12 heap growth because freed
+    // committed pages are not immediately returned. Only allocate a larger
+    // buffer when truly needed; the dispatch writes are bounded by the current
+    // nX/nY regardless of the buffer's over-allocation.
+    const bool needRebuild = !crnDataBuf_ || (crnDataBuf_.getSize() < combinedBytes);
+    const bool gridChanged = (nX != crnLastNX_) || (nY != crnLastNY_);
+    slsMemProbe("crn-pre-rebuild");
+    if (needRebuild)
     {
-        const uint64_t losBytes = losOutBuf.size() * sizeof(float);
-        const uint64_t nlosBytes = nlosOutBuf.size() * sizeof(float);
-        const uint64_t o2iBytes = o2iOutBuf.size() * sizeof(float);
-        const uint64_t combinedBytes = losBytes + nlosBytes + o2iBytes;
-        guardCrnSize("combined", combinedBytes);
+        crnDataBuf_ = wgpu::Buffer{};
+        crnOffsetsBuf_ = wgpu::Buffer{};
+        // Dawn assigns the zombie to mPendingCommandSerial (the NEXT unsubmitted serial),
+        // not the last submitted one. device_.tick() inside waitIdle() only frees zombies
+        // whose serial has been submitted AND completed by the GPU. Without a submit,
+        // the old buffer's serial is never signaled, so it leaks ~151 MB per regen.
+        // Submitting a no-op command here forces Dawn to assign the zombie to serial S
+        // (this submit), which the GPU completes, allowing tick() to free it.
+        {
+            wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
+            queue_.submit(enc.finish(wgpu::Default));
+        }
+        waitIdle();
+        slsMemProbe("crn-after-release");
+        // Allocate with 25% headroom so subsequent small grid growths (~0.5 MB per regen
+        // as UEs spread) don't trigger another needRebuild and this no-op/waitIdle dance.
+        const uint64_t allocBytes = combinedBytes + combinedBytes / 4;
+        crnDataBuf_ = makeBuffer(allocBytes,
+                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                                     WGPUBufferUsage_CopyDst);
+        slsMemProbe("crn-after-crnDataBuf-alloc");
+    }
+    crnLastNX_ = nX;
+    crnLastNY_ = nY;
 
-        std::vector<float> combinedData;
-        combinedData.reserve(combinedBytes / sizeof(float));
-        combinedData.insert(combinedData.end(), losOutBuf.begin(), losOutBuf.end());
-        combinedData.insert(combinedData.end(), nlosOutBuf.begin(), nlosOutBuf.end());
-        combinedData.insert(combinedData.end(), o2iOutBuf.begin(), o2iOutBuf.end());
-        crnDataBuf_ = makeBuffer(combinedBytes,
-                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                                 combinedData.data());
+    // LOS: nSite_ * 8 channels
+    for (uint32_t s = 0; s < nSite_; s++)
+    {
+        for (uint32_t ch = 0; ch < 8; ch++)
+        {
+            const uint64_t sectionBase = (uint64_t(s) * 8 + ch) * nX * nY * sizeof(float);
+            for (uint32_t c = 0; c < nChunksY; c++)
+            {
+                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
+                const uint32_t yRows = static_cast<uint32_t>(
+                    std::min(clampedMaxChunkY,
+                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                dispatchGrid(crnDataBuf_, corrLos[ch], 0u, yOff, yRows, sectionBase);
+            }
+        }
+    }
 
-        const uint32_t losElems = static_cast<uint32_t>(losOutBuf.size());
-        const uint32_t nlosElems = static_cast<uint32_t>(nlosOutBuf.size());
+    // NLOS: nSite_ * 7 channels
+    for (uint32_t s = 0; s < nSite_; s++)
+    {
+        for (uint32_t ch = 0; ch < 7; ch++)
+        {
+            const uint64_t sectionBase =
+                losBufSz + (uint64_t(s) * 7 + ch) * nX * nY * sizeof(float);
+            for (uint32_t c = 0; c < nChunksY; c++)
+            {
+                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
+                const uint32_t yRows = static_cast<uint32_t>(
+                    std::min(clampedMaxChunkY,
+                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                dispatchGrid(crnDataBuf_, corrNlos[ch], 0u, yOff, yRows, sectionBase);
+            }
+        }
+    }
+
+    // O2I: nSite_ * 7 channels
+    for (uint32_t s = 0; s < nSite_; s++)
+    {
+        for (uint32_t ch = 0; ch < 7; ch++)
+        {
+            const uint64_t sectionBase =
+                losBufSz + nlosBufSz + (uint64_t(s) * 7 + ch) * nX * nY * sizeof(float);
+            for (uint32_t c = 0; c < nChunksY; c++)
+            {
+                const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
+                const uint32_t yRows = static_cast<uint32_t>(
+                    std::min(clampedMaxChunkY,
+                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                dispatchGrid(crnDataBuf_, corrO2i[ch], 0u, yOff, yRows, sectionBase);
+            }
+        }
+    }
+
+    slsMemProbe("crn-after-dispatch-loops");
+    // All dispatches submitted; one sync point flushes the whole pipeline.
+    waitIdle();
+    slsMemProbe("crn-after-waitIdle");
+
+    // (Re)build crnOffsetsBuf_ whenever the grid dimensions changed.
+    if (needRebuild || gridChanged)
+    {
+        const uint32_t gs = uint32_t(nX) * uint32_t(nY);
+        const uint32_t losElems = nSite_ * 8u * gs;
+        const uint32_t nlosElems = nSite_ * 7u * gs;
         const uint32_t losOffsetCount = nSite_ * 8u;
         const uint32_t nlosOffsetCount = nSite_ * 7u;
         const uint32_t o2iOffsetCount = nSite_ * 7u;
         const uint32_t totalOffsets = losOffsetCount + nlosOffsetCount + o2iOffsetCount;
-
         std::vector<uint32_t> combinedOffsets(totalOffsets);
-        const uint32_t gridSz = uint32_t(nX_) * uint32_t(nY_);
-        // LOS section
         for (uint32_t i = 0; i < losOffsetCount; ++i)
-        {
-            combinedOffsets[i] = i * gridSz;
-        }
-        // NLOS section — element offsets shifted past the LOS region.
+            combinedOffsets[i] = i * gs;
         for (uint32_t i = 0; i < nlosOffsetCount; ++i)
-        {
-            combinedOffsets[losOffsetCount + i] = losElems + i * gridSz;
-        }
-        // O2I section — shifted past LOS + NLOS.
+            combinedOffsets[losOffsetCount + i] = losElems + i * gs;
         for (uint32_t i = 0; i < o2iOffsetCount; ++i)
-        {
             combinedOffsets[losOffsetCount + nlosOffsetCount + i] =
-                losElems + nlosElems + i * gridSz;
-        }
+                losElems + nlosElems + i * gs;
         crnOffsetsBuf_ = makeBuffer(totalOffsets * sizeof(uint32_t),
                                     WGPUBufferUsage_Storage,
                                     combinedOffsets.data());
@@ -1573,6 +1398,10 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     }
     if (!cmnLinkBuf_)
     {
+        // Fallback defaults (UMa-ish at 3.5 GHz, identity cross-correlation)
+        // for the standalone validation harness. The ns-3 mezanine path
+        // uploads scenario-correct values via uploadCmnLinkParams() before
+        // dispatch, so this block never runs there.
         CmnLinkParamsGPU cl{};
         for (int i = 0; i < 7; i++)
         {
@@ -1613,8 +1442,10 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
         cl.sigma_lgZSA[1] = 0.35f;
         cl.mu_lgZSA[2] = 1.01f;
         cl.sigma_lgZSA[2] = 0.43f;
-        cmnLinkBuf_ =
-            makeBuffer(sizeof(cl), WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc, &cl);
+        cmnLinkBuf_ = makeBuffer(sizeof(cl),
+                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                                     WGPUBufferUsage_CopyDst,
+                                 &cl);
     }
     if (!rngStatesBuf_)
     {
@@ -1739,6 +1570,22 @@ SlsChanWgpu::uploadCmnLinkParamsSmallScale(const SsCmnParams& cmn)
     ssCmnCacheValid_ = true;
 }
 
+void
+SlsChanWgpu::uploadCmnLinkParams(const CmnLinkParamsGPU& cl)
+{
+    if (!cmnLinkBuf_)
+    {
+        cmnLinkBuf_ = makeBuffer(sizeof(cl),
+                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                                     WGPUBufferUsage_CopyDst,
+                                 &cl);
+    }
+    else
+    {
+        queue_.writeBuffer(cmnLinkBuf_, 0, &cl, sizeof(cl));
+    }
+}
+
 // ── calClusterRay ─────────────────────────────────────────────────────────────
 void
 SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
@@ -1759,7 +1606,9 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     if (!clusterParamsBuf_)
     {
         clusterParamsBuf_ =
-            makeBuffer(clusterSz, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+            makeBuffer(clusterSz,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                           WGPUBufferUsage_CopyDst); // CopyDst: writeClusterParams (drift)
     }
 
     // Build dispatch uniform first — it goes into the single bind group
@@ -1771,7 +1620,9 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     };
 
     DispUni du{nSite, nUT, 0u, 0.0f, 1.0f, 0, 0, 0};
-    ssDispatchBuf_ = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
+    if (!ssDispatchBuf_)
+        ssDispatchBuf_ = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage);
+    queue_.writeBuffer(ssDispatchBuf_, 0, &du, sizeof(du));
 
     // Pack 6 logically-separate per-link f32 arrays (xpr,
     // randomPhases, phi_nm_AoA/AoD, theta_nm_ZOA/ZOD) into one
@@ -1799,14 +1650,27 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     (void)PACKED_OFF_ZOD;
     const uint64_t clusterOutputsSz =
         uint64_t(nSite) * nUT * PACKED_LINK_STRIDE * sizeof(float);
-    clusterOutputsBuf_ =
-        makeBuffer(clusterOutputsSz,
-                   WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    if (!clusterOutputsBuf_ || clusterOutputsBuf_.getSize() < clusterOutputsSz)
+        clusterOutputsBuf_ =
+            makeBuffer(clusterOutputsSz,
+                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+
+    // Spatial-consistency skip mask (binding 7). When the caller didn't
+    // upload a mask for this refresh, bind an all-zero buffer of the right
+    // size so every link redraws (the pre-drift behavior).
+    const uint64_t skipBytes = uint64_t(nSite) * nUT * sizeof(uint32_t);
+    if (!clusterSkipBuf_ || clusterSkipBuf_.getSize() < skipBytes)
+    {
+        std::vector<uint32_t> zeros(size_t(nSite) * nUT, 0u);
+        clusterSkipBuf_ = makeBuffer(skipBytes,
+                                     WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                     zeros.data());
+    }
 
     auto layout1 = clusterRayPipeline_.getBindGroupLayout(1);
     // Was 12 bindings (6 separate output arrays at bindings 6..11);
-    // packed into one at binding 6 -> 7 entries total now.
-    std::vector<wgpu::BindGroupEntry> e0(7, wgpu::Default);
+    // packed into one at binding 6, plus the skip mask at 7 -> 8 entries.
+    std::vector<wgpu::BindGroupEntry> e0(8, wgpu::Default);
     auto E = [](std::vector<wgpu::BindGroupEntry>& v,
                 int i,
                 uint32_t b,
@@ -1823,6 +1687,7 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     E(e0, 4, 4, rngStatesBuf_);                      // cray_buf_rng
     E(e0, 5, 5, ssDispatchBuf_);                     // cray_disp
     E(e0, 6, 6, clusterOutputsBuf_);                 // cray_packed_out
+    E(e0, 7, 7, clusterSkipBuf_);                    // cray_skip
 
     wgpu::BindGroupDescriptor bgd1 = wgpu::Default;
     bgd1.layout = layout1;
@@ -1842,6 +1707,91 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
     assert(!isDead());
+}
+
+// ── spatial-consistency drift support ────────────────────────────────────────
+void
+SlsChanWgpu::uploadClusterSkipMask(const std::vector<uint32_t>& mask)
+{
+    const uint64_t bytes = mask.size() * sizeof(uint32_t);
+    if (!clusterSkipBuf_ || clusterSkipBuf_.getSize() < bytes)
+    {
+        clusterSkipBuf_ =
+            makeBuffer(bytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst, mask.data());
+    }
+    else
+    {
+        queue_.writeBuffer(clusterSkipBuf_, 0, mask.data(), bytes);
+    }
+}
+
+void
+SlsChanWgpu::writeClusterParams(uint32_t linkIdx, const ClusterParamsGpu& cp)
+{
+    assert(clusterParamsBuf_ && "calClusterRay must have run before writeClusterParams");
+    queue_.writeBuffer(clusterParamsBuf_,
+                       uint64_t(linkIdx) * sizeof(ClusterParamsGpu),
+                       &cp,
+                       sizeof(ClusterParamsGpu));
+}
+
+void
+SlsChanWgpu::driftPackedAngles(const std::vector<DriftEntryGpu>& entries)
+{
+    if (entries.empty())
+        return;
+    if (!driftPipeline_)
+    {
+        driftPipeline_ = makePipeline("drift_packed_angles_kernel");
+        assert(driftPipeline_ && "missing drift_packed_angles_kernel in WGSL");
+    }
+    const uint64_t bytes = entries.size() * sizeof(DriftEntryGpu);
+    if (!driftBuf_ || driftBuf_.getSize() != bytes)
+    {
+        // Exact-size buffer: the kernel derives the entry count from
+        // arrayLength(), so a stale larger buffer would over-dispatch.
+        driftBuf_ = makeBuffer(bytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(driftBuf_, 0, entries.data(), bytes);
+
+    auto layout1 = driftPipeline_.getBindGroupLayout(1);
+    std::vector<wgpu::BindGroupEntry> e0(2, wgpu::Default);
+    e0[0].binding = 6;
+    e0[0].buffer = clusterOutputsBuf_;
+    e0[0].size = WGPU_WHOLE_SIZE;
+    e0[1].binding = 8;
+    e0[1].buffer = driftBuf_;
+    e0[1].size = WGPU_WHOLE_SIZE;
+    wgpu::BindGroupDescriptor bgd = wgpu::Default;
+    bgd.layout = layout1;
+    bgd.entryCount = e0.size();
+    bgd.entries = e0.data();
+    auto bg0 = emptyBg(driftPipeline_, 0);
+    auto bg1 = device_.createBindGroup(bgd);
+
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    auto pass = enc.beginComputePass(wgpu::Default);
+    pass.setPipeline(driftPipeline_);
+    pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
+    pass.setBindGroup(1u, bg1, (size_t)0, nullptr);
+    const uint32_t total = static_cast<uint32_t>(entries.size()) * 400u;
+    pass.dispatchWorkgroups((total + 63u) / 64u, 1u, 1u);
+    pass.end();
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+}
+
+// ── uploadActiveLinkBuf ───────────────────────────────────────────────────────
+void
+SlsChanWgpu::uploadActiveLinkBuf(const std::vector<ActiveLink>& activeLinks)
+{
+    const uint64_t activeLinksBytes = activeLinks.size() * sizeof(ActiveLink);
+    if (!activeLinkBuf_ || activeLinkBuf_.getSize() < activeLinksBytes)
+    {
+        activeLinkBuf_ =
+            makeBuffer(activeLinksBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(activeLinkBuf_, 0, activeLinks.data(), activeLinksBytes);
 }
 
 // ── generateCIR ───────────────────────────────────────────────────────────────
@@ -1866,9 +1816,15 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
     assert(ssCmnLinkBuf_ && "call uploadCmnLinkParamsSmallScale before generateCIR");
     assert(!isDead());
 
-    activeLinkBuf_ = makeBuffer(activeLinks.size() * sizeof(ActiveLink),
-                                WGPUBufferUsage_Storage,
-                                activeLinks.data());
+    {
+        const uint64_t activeLinksBytes = activeLinks.size() * sizeof(ActiveLink);
+        if (!activeLinkBuf_ || activeLinkBuf_.getSize() < activeLinksBytes)
+        {
+            activeLinkBuf_ =
+                makeBuffer(activeLinksBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+        }
+        queue_.writeBuffer(activeLinkBuf_, 0, activeLinks.data(), activeLinksBytes);
+    }
 
     // Packed output buffer. Per link u32-stride:
     //   cirCoe (nSnap * nUeAnt * nBsAnt * 24 vec2f, 2 u32 each)
@@ -2367,14 +2323,87 @@ SlsChanWgpu::readClusterParams(uint32_t nSite, uint32_t nUT)
     assert(clusterParamsBuf_ && "call calClusterRay before readClusterParams");
 
     const uint64_t sz = uint64_t(nSite) * nUT * sizeof(ClusterParamsGpu);
-    wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    // Reuse a persistent staging buffer to avoid per-call D3D12 READBACK
+    // heap allocation overhead.
+    if (!clusterParamsStagingBuf_ || clusterParamsStagingBuf_.getSize() < sz)
+    {
+        clusterParamsStagingBuf_ =
+            makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
 
     wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(clusterParamsBuf_, 0, staging, 0, sz);
+    enc.copyBufferToBuffer(clusterParamsBuf_, 0, clusterParamsStagingBuf_, 0, sz);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
 
-    return mapReadBuffer<ClusterParamsGpu>(staging, sz);
+    return mapReadBuffer<ClusterParamsGpu>(clusterParamsStagingBuf_, sz);
+}
+
+// ── downloadClusterOutputsPacked ─────────────────────────────────────────────
+// Download the full clusterOutputsBuf_ in one shot.  The caller slices the
+// five per-ray sub-arrays (XPR, AoA, AoD, ZoA, ZoD) from the returned flat
+// vector using the kPackedOff* / kMaxCr constants — one GPU readback replaces
+// the five that readXpr/readPhiNm*/readTheta* would each issue independently.
+std::vector<float>
+SlsChanWgpu::downloadClusterOutputsPacked()
+{
+    if (!clusterOutputsBuf_)
+        return {};
+
+    const uint64_t totalBytes = clusterOutputsBuf_.getSize();
+    // Reuse persistent staging to avoid per-call D3D12 READBACK heap alloc.
+    if (!clusterOutputsStagingBuf_ || clusterOutputsStagingBuf_.getSize() < totalBytes)
+    {
+        clusterOutputsStagingBuf_ =
+            makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
+
+    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(clusterOutputsBuf_, 0, clusterOutputsStagingBuf_, 0, totalBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+
+    return mapReadBuffer<float>(clusterOutputsStagingBuf_, totalBytes);
+}
+
+// ── readAllClusterData ────────────────────────────────────────────────────────
+// Submit one encoder with both copies (clusterParamsBuf_ and
+// clusterOutputsBuf_), wait once, then map both staging buffers.  Compared to
+// calling readClusterParams() + downloadClusterOutputsPacked() sequentially
+// this saves one GPU submission round-trip (and thus one D3D12 fence wait).
+SlsChanWgpu::AllClusterData
+SlsChanWgpu::readAllClusterData(uint32_t nSite, uint32_t nUT)
+{
+    assert(clusterParamsBuf_ && "call calClusterRay before readAllClusterData");
+
+    const uint64_t cpSz = uint64_t(nSite) * nUT * sizeof(ClusterParamsGpu);
+    const uint64_t coSz = clusterOutputsBuf_ ? clusterOutputsBuf_.getSize() : 0u;
+
+    if (!clusterParamsStagingBuf_ || clusterParamsStagingBuf_.getSize() < cpSz)
+        clusterParamsStagingBuf_ =
+            makeBuffer(cpSz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    if (coSz > 0 && (!clusterOutputsStagingBuf_ || clusterOutputsStagingBuf_.getSize() < coSz))
+        clusterOutputsStagingBuf_ =
+            makeBuffer(coSz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+
+    wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(clusterParamsBuf_, 0, clusterParamsStagingBuf_, 0, cpSz);
+    if (coSz > 0)
+        enc.copyBufferToBuffer(clusterOutputsBuf_, 0, clusterOutputsStagingBuf_, 0, coSz);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+
+    AllClusterData result;
+    {
+        SLS_PHASE_SCOPE("WGPU::MapClusterParams");
+        result.clusterParams = mapReadBuffer<ClusterParamsGpu>(clusterParamsStagingBuf_, cpSz);
+    }
+    if (coSz > 0)
+    {
+        SLS_PHASE_SCOPE("WGPU::MapClusterOutputs");
+        result.packedOutputs = mapReadBuffer<float>(clusterOutputsStagingBuf_, coSz);
+    }
+    return result;
 }
 
 std::vector<uint32_t>
@@ -2496,11 +2525,10 @@ SlsChanWgpu::readThetaNmZOD()
 }
 
 // ── genChannelMatrix ───────────────────────────────────────────────────────────
-// Dispatch gen_channel_matrix_kernel. The kernel currently emits a placeholder
-// (zeros) into the per-link output; the mezanine reads the matrix back and
-// detects all-zero entries to decide whether to fall back to the CPU
-// GetNewChannel. The actual ray-sum / antenna-pattern math will replace the
-// placeholder cell once the kernel body is written.
+// Dispatch gen_channel_matrix_kernel. Reads cluster-ray angles from
+// clusterOutputsBuf_ (written by calClusterRay) and writes the full
+// per-link H[u,s,n] matrix into channelMatrixBuf_ (uSize*sSize*kMatMaxPages
+// complex floats per link). activeLinkBuf_ must be set before calling.
 void
 SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
                               uint32_t nActiveLinks,
@@ -2515,7 +2543,7 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     assert(linkParamsBuf_ && "call calLinkParam before genChannelMatrix");
     assert(clusterParamsBuf_ && "call calClusterRay before genChannelMatrix");
     assert(clusterOutputsBuf_ && "call calClusterRay before genChannelMatrix");
-    assert(activeLinkBuf_ && "call generateCIR (or set activeLinkBuf_) before genChannelMatrix");
+    assert(activeLinkBuf_ && "call uploadActiveLinkBuf before genChannelMatrix");
 
     if (!channelMatrixPipeline_)
     {
@@ -2531,7 +2559,7 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
     const uint64_t totalBytes = perLink * nActiveLinks;
     if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize ||
-        channelMatrixCfgSSize_ != sSize || channelMatrixCfgNLinks_ != nActiveLinks)
+        channelMatrixCfgSSize_ != sSize || channelMatrixCfgNLinks_ < nActiveLinks)
     {
         channelMatrixBuf_ =
             makeBuffer(totalBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -2564,8 +2592,13 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         centerFreqHzCache_ > 0.0f ? 299792458.0f / centerFreqHzCache_ : 0.0f;
     MatDispUni du{nActiveLinks, numOverallCluster, uSize, sSize, nRays,
                   0u, 0u, 0u, lambda0, 0.0f, 0.0f, 0.0f};
-    matrixDispatchBuf_ =
-        makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
+    if (!matrixDispatchBuf_)
+    {
+        matrixDispatchBuf_ = makeBuffer(sizeof(du),
+                                        WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
+                                            WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(matrixDispatchBuf_, 0, &du, sizeof(du));
 
     auto layout0 = channelMatrixPipeline_.getBindGroupLayout(0);
     std::vector<wgpu::BindGroupEntry> entries(11, wgpu::Default);
@@ -2609,7 +2642,7 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     assert(!isDead());
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
-    (void)activeLinks; // bound via activeLinkBuf_ from generateCIR
+    (void)activeLinks; // bound via activeLinkBuf_ from uploadActiveLinkBuf
 }
 
 std::vector<std::complex<float>>
@@ -2638,17 +2671,16 @@ SlsChanWgpu::readChannelMatrixInto(uint32_t nLinks,
     const uint64_t totalBytes =
         uint64_t(nLinks) * uSize * sSize * kMatMaxPages * sizeof(std::complex<float>);
     assert(channelMatrixBuf_.getSize() >= totalBytes);
-    // Fresh staging buffer per read. Reusing a single persistent
-    // staging buffer across chunks let mapAsync return Aborted
-    // (status=4) on the next chunk's read -- Dawn's internal post-
-    // unmap state didn't recycle quickly enough.
-    wgpu::Buffer staging = makeBuffer(totalBytes,
-                                      WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    if (!channelMatrixStagingBuf_ || channelMatrixStagingBuf_.getSize() < totalBytes)
+    {
+        channelMatrixStagingBuf_ =
+            makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
     auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(channelMatrixBuf_, 0, staging, 0, totalBytes);
+    enc.copyBufferToBuffer(channelMatrixBuf_, 0, channelMatrixStagingBuf_, 0, totalBytes);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
-    return mapReadBufferInto(staging, totalBytes, dst);
+    return mapReadBufferInto(channelMatrixStagingBuf_, totalBytes, dst);
 }
 
 // ── gen_long_term_kernel ─────────────────────────────────────────────────
@@ -2712,7 +2744,7 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
     // (Re)alloc output buffer if shape changed.
     const uint64_t outBytes =
         uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages * sizeof(float) * 2;
-    if (!longTermOutBuf_ || longTermCfgNLinks_ != nActiveLinks ||
+    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks ||
         longTermCfgSPorts_ != sPorts || longTermCfgUPorts_ != uPorts)
     {
         // CopyDst is needed so uploadLongTermBatch can writeBuffer into
@@ -2726,12 +2758,30 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
     }
     const uint64_t sWBytes = sWLen * sizeof(float) * 2;
     const uint64_t uWBytes = uWLen * sizeof(float) * 2;
-    longTermSWBuf_ = makeBuffer(sWBytes, WGPUBufferUsage_Storage, sWData);
-    longTermUWBuf_ = makeBuffer(uWBytes, WGPUBufferUsage_Storage, uWData);
-    longTermStartSBuf_ =
-        makeBuffer(startS.size() * sizeof(uint32_t), WGPUBufferUsage_Storage, startS.data());
-    longTermStartUBuf_ =
-        makeBuffer(startU.size() * sizeof(uint32_t), WGPUBufferUsage_Storage, startU.data());
+    if (!longTermSWBuf_ || longTermSWBuf_.getSize() < sWBytes)
+    {
+        longTermSWBuf_ = makeBuffer(sWBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(longTermSWBuf_, 0, sWData, sWBytes);
+    if (!longTermUWBuf_ || longTermUWBuf_.getSize() < uWBytes)
+    {
+        longTermUWBuf_ = makeBuffer(uWBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(longTermUWBuf_, 0, uWData, uWBytes);
+    const uint64_t startSBytes = startS.size() * sizeof(uint32_t);
+    if (!longTermStartSBuf_ || longTermStartSBuf_.getSize() < startSBytes)
+    {
+        longTermStartSBuf_ =
+            makeBuffer(startSBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(longTermStartSBuf_, 0, startS.data(), startSBytes);
+    const uint64_t startUBytes = startU.size() * sizeof(uint32_t);
+    if (!longTermStartUBuf_ || longTermStartUBuf_.getSize() < startUBytes)
+    {
+        longTermStartUBuf_ =
+            makeBuffer(startUBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(longTermStartUBuf_, 0, startU.data(), startUBytes);
 
     struct LongTermDispUni
     {
@@ -2823,13 +2873,265 @@ SlsChanWgpu::readLongTermInto(uint32_t nLinks,
     const uint64_t totalBytes =
         uint64_t(nLinks) * sPorts * uPorts * kMatMaxPages * sizeof(std::complex<float>);
     assert(longTermOutBuf_.getSize() >= totalBytes);
-    wgpu::Buffer staging = makeBuffer(totalBytes,
-                                      WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    if (!longTermStagingBuf_ || longTermStagingBuf_.getSize() < totalBytes)
+    {
+        longTermStagingBuf_ =
+            makeBuffer(totalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
     auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(longTermOutBuf_, 0, staging, 0, totalBytes);
+    enc.copyBufferToBuffer(longTermOutBuf_, 0, longTermStagingBuf_, 0, totalBytes);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
-    return mapReadBufferInto(staging, totalBytes, dst);
+    return mapReadBufferInto(longTermStagingBuf_, totalBytes, dst);
+}
+
+bool
+SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
+                                              uint32_t uSize,
+                                              uint32_t sSize,
+                                              uint32_t numOverallCluster,
+                                              uint32_t nRays,
+                                              uint32_t sPorts,
+                                              uint32_t uPorts,
+                                              uint32_t sPortElems,
+                                              uint32_t uPortElems,
+                                              uint32_t sElemsPerPort,
+                                              uint32_t uElemsPerPort,
+                                              uint32_t sIncVal,
+                                              uint32_t uIncVal,
+                                              const std::complex<float>* sWData,
+                                              size_t sWLen,
+                                              const std::complex<float>* uWData,
+                                              size_t uWLen,
+                                              const std::vector<uint32_t>& startS,
+                                              const std::vector<uint32_t>& startU,
+                                              std::complex<float>* cmDst,
+                                              std::complex<float>* ltDst)
+{
+    // ── Part 1: genChannelMatrix buffer alloc + uniform upload ──────────
+    assert(linkParamsBuf_ && "call calLinkParam before genChannelMatrixAndLongTermFused");
+    assert(clusterParamsBuf_ && "call calClusterRay before genChannelMatrixAndLongTermFused");
+    assert(clusterOutputsBuf_ && "call calClusterRay before genChannelMatrixAndLongTermFused");
+    assert(activeLinkBuf_ && "call uploadActiveLinkBuf before genChannelMatrixAndLongTermFused");
+
+    if (!channelMatrixPipeline_)
+    {
+        channelMatrixPipeline_ = makePipeline("gen_channel_matrix_kernel");
+        assert(channelMatrixPipeline_ && "missing gen_channel_matrix_kernel in WGSL");
+    }
+    if (!longTermPipeline_)
+    {
+        longTermPipeline_ = makePipeline("gen_long_term_kernel");
+        assert(longTermPipeline_ && "missing gen_long_term_kernel in WGSL");
+    }
+
+    // channelMatrixBuf_ alloc
+    const uint64_t cmBytesPerLink = uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
+    const uint64_t cmTotalBytes = cmBytesPerLink * nActiveLinks;
+    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize ||
+        channelMatrixCfgSSize_ != sSize || channelMatrixCfgNLinks_ < nActiveLinks)
+    {
+        channelMatrixBuf_ =
+            makeBuffer(cmTotalBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        channelMatrixCfgUSize_ = uSize;
+        channelMatrixCfgSSize_ = sSize;
+        channelMatrixCfgNLinks_ = nActiveLinks;
+    }
+
+    // genChannelMatrix uniform
+    struct MatDispUni
+    {
+        uint32_t nActiveLinks;
+        uint32_t nOverallCluster;
+        uint32_t uSize;
+        uint32_t sSize;
+        uint32_t nRays;
+        uint32_t _pad0, _pad1, _pad2;
+        float    lambda0;
+        float    _pad3, _pad4, _pad5;
+    };
+    const float lambda0 = centerFreqHzCache_ > 0.0f ? 299792458.0f / centerFreqHzCache_ : 0.0f;
+    MatDispUni mdu{nActiveLinks, numOverallCluster, uSize, sSize, nRays,
+                   0u, 0u, 0u, lambda0, 0.0f, 0.0f, 0.0f};
+    if (!matrixDispatchBuf_)
+    {
+        matrixDispatchBuf_ = makeBuffer(sizeof(mdu),
+                                        WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
+                                            WGPUBufferUsage_CopyDst);
+    }
+    queue_.writeBuffer(matrixDispatchBuf_, 0, &mdu, sizeof(mdu));
+
+    // ── Part 2: genLongTerm buffer alloc + weight uploads ───────────────
+    assert(sWLen == size_t(nActiveLinks) * sPortElems);
+    assert(uWLen == size_t(nActiveLinks) * uPortElems);
+    assert(startS.size() == sPorts);
+    assert(startU.size() == uPorts);
+
+    // longTermOutBuf_ alloc
+    const uint64_t ltTotalBytes =
+        uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages * sizeof(float) * 2;
+    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks ||
+        longTermCfgSPorts_ != sPorts || longTermCfgUPorts_ != uPorts)
+    {
+        longTermOutBuf_ =
+            makeBuffer(ltTotalBytes,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                           WGPUBufferUsage_CopyDst);
+        longTermCfgNLinks_ = nActiveLinks;
+        longTermCfgSPorts_ = sPorts;
+        longTermCfgUPorts_ = uPorts;
+    }
+
+    // weight buffers
+    const uint64_t sWBytes = sWLen * sizeof(float) * 2;
+    const uint64_t uWBytes = uWLen * sizeof(float) * 2;
+    if (!longTermSWBuf_ || longTermSWBuf_.getSize() < sWBytes)
+        longTermSWBuf_ = makeBuffer(sWBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    queue_.writeBuffer(longTermSWBuf_, 0, sWData, sWBytes);
+    if (!longTermUWBuf_ || longTermUWBuf_.getSize() < uWBytes)
+        longTermUWBuf_ = makeBuffer(uWBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    queue_.writeBuffer(longTermUWBuf_, 0, uWData, uWBytes);
+
+    const uint64_t startSBytes = startS.size() * sizeof(uint32_t);
+    if (!longTermStartSBuf_ || longTermStartSBuf_.getSize() < startSBytes)
+        longTermStartSBuf_ =
+            makeBuffer(startSBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    queue_.writeBuffer(longTermStartSBuf_, 0, startS.data(), startSBytes);
+    const uint64_t startUBytes = startU.size() * sizeof(uint32_t);
+    if (!longTermStartUBuf_ || longTermStartUBuf_.getSize() < startUBytes)
+        longTermStartUBuf_ =
+            makeBuffer(startUBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    queue_.writeBuffer(longTermStartUBuf_, 0, startU.data(), startUBytes);
+
+    // longTerm uniform
+    struct LongTermDispUni
+    {
+        uint32_t nActiveLinks;
+        uint32_t uSize;
+        uint32_t sSize;
+        uint32_t nPages;
+        uint32_t sPorts;
+        uint32_t uPorts;
+        uint32_t sPortElems;
+        uint32_t uPortElems;
+        uint32_t sElemsPerPort;
+        uint32_t uElemsPerPort;
+        uint32_t sIncVal;
+        uint32_t uIncVal;
+    } ldu{nActiveLinks, uSize,      sSize,         kMatMaxPages,  sPorts,  uPorts,
+          sPortElems,   uPortElems, sElemsPerPort, uElemsPerPort, sIncVal, uIncVal};
+    if (!longTermDispatchBuf_)
+        longTermDispatchBuf_ = makeBuffer(sizeof(ldu),
+                                          WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
+                                              WGPUBufferUsage_CopyDst);
+    queue_.writeBuffer(longTermDispatchBuf_, 0, &ldu, sizeof(ldu));
+    longTermCfgSPortElems_ = sPortElems;
+    longTermCfgUPortElems_ = uPortElems;
+
+    // ── Part 3: staging buffer alloc ────────────────────────────────────
+    if (!channelMatrixStagingBuf_ || channelMatrixStagingBuf_.getSize() < cmTotalBytes)
+        channelMatrixStagingBuf_ =
+            makeBuffer(cmTotalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    if (!longTermStagingBuf_ || longTermStagingBuf_.getSize() < ltTotalBytes)
+        longTermStagingBuf_ =
+            makeBuffer(ltTotalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+
+    // ── Part 4: build bind groups ────────────────────────────────────────
+    auto cmLayout = channelMatrixPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> cmEntries(11, wgpu::Default);
+    {
+        auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+            cmEntries[i].binding = b;
+            cmEntries[i].buffer = buf;
+            cmEntries[i].offset = 0;
+            cmEntries[i].size = sz;
+        };
+        E(0, 30, matrixDispatchBuf_, sizeof(mdu));
+        E(1, 31, linkParamsBuf_);
+        E(2, 32, clusterParamsBuf_);
+        E(3, 33, clusterOutputsBuf_);
+        E(4, 34, activeLinkBuf_);
+        E(5, 35, ssCellParamsBuf_);
+        E(6, 36, ssUtParamsBuf_);
+        E(7, 37, antPanelConfigBuf_);
+        E(8, 38, antThetaBuf_);
+        E(9, 39, antPhiBuf_);
+        E(10, 40, channelMatrixBuf_);
+    }
+    wgpu::BindGroupDescriptor cmBgd = wgpu::Default;
+    cmBgd.layout = cmLayout;
+    cmBgd.entryCount = static_cast<uint32_t>(cmEntries.size());
+    cmBgd.entries = cmEntries.data();
+    wgpu::BindGroup cmBG = device_.createBindGroup(cmBgd);
+
+    auto ltLayout = longTermPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> ltEntries(7, wgpu::Default);
+    {
+        auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+            ltEntries[i].binding = b;
+            ltEntries[i].buffer = buf;
+            ltEntries[i].offset = 0;
+            ltEntries[i].size = sz;
+        };
+        E(0, 50, longTermDispatchBuf_, sizeof(ldu));
+        E(1, 51, channelMatrixBuf_);
+        E(2, 52, longTermSWBuf_);
+        E(3, 53, longTermUWBuf_);
+        E(4, 54, longTermStartSBuf_);
+        E(5, 55, longTermStartUBuf_);
+        E(6, 56, longTermOutBuf_);
+    }
+    wgpu::BindGroupDescriptor ltBgd = wgpu::Default;
+    ltBgd.layout = ltLayout;
+    ltBgd.entryCount = static_cast<uint32_t>(ltEntries.size());
+    ltBgd.entries = ltEntries.data();
+    wgpu::BindGroup ltBG = device_.createBindGroup(ltBgd);
+
+    // ── Part 5: ONE encoder — compute(CM) + copy(CM) + compute(LT) + copy(LT)
+    // WebGPU guarantees execution order within an encoder; implicit storage
+    // barriers between separate compute passes and copy commands ensure that
+    // genChannelMatrix writes are visible to both the staging copy and to
+    // genLongTerm's reads of channelMatrixBuf_.
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+
+    // Compute pass 1: gen_channel_matrix_kernel
+    {
+        auto pass = enc.beginComputePass(wgpu::Default);
+        pass.setPipeline(channelMatrixPipeline_);
+        pass.setBindGroup(0u, cmBG, (size_t)0, nullptr);
+        const uint32_t usGroups = (uSize * sSize + 63u) / 64u;
+        pass.dispatchWorkgroups(nActiveLinks, numOverallCluster, usGroups);
+        pass.end();
+    }
+
+    // Copy channelMatrixBuf_ to staging (implicit barrier after compute pass
+    // ensures channelMatrix writes are flushed before this copy reads them)
+    enc.copyBufferToBuffer(channelMatrixBuf_, 0, channelMatrixStagingBuf_, 0, cmTotalBytes);
+
+    // Compute pass 2: gen_long_term_kernel (reads channelMatrixBuf_ which was
+    // written by pass 1; implicit barrier before this pass guarantees ordering)
+    {
+        auto pass = enc.beginComputePass(wgpu::Default);
+        pass.setPipeline(longTermPipeline_);
+        pass.setBindGroup(0u, ltBG, (size_t)0, nullptr);
+        const uint64_t ltTotal =
+            uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages;
+        pass.dispatchWorkgroups(static_cast<uint32_t>((ltTotal + 63u) / 64u), 1u, 1u);
+        pass.end();
+    }
+
+    // Copy longTermOutBuf_ to staging
+    enc.copyBufferToBuffer(longTermOutBuf_, 0, longTermStagingBuf_, 0, ltTotalBytes);
+
+    // ONE submit + ONE waitIdle instead of 4
+    assert(!isDead());
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+
+    // Map both staging buffers (uses Dawn waitAny, not counted as WaitIdle)
+    if (!mapReadBufferInto(channelMatrixStagingBuf_, cmTotalBytes, cmDst))
+        return false;
+    return mapReadBufferInto(longTermStagingBuf_, ltTotalBytes, ltDst);
 }
 
 void
@@ -2852,11 +3154,14 @@ SlsChanWgpu::uploadLongTermBatch(const std::complex<float>* hostData,
         longTermOutBuf_ =
             makeBuffer(bytes,
                        WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
+        // Only update capacity tracking when we actually reallocate; keeping
+        // longTermCfgNLinks_ at the high-water mark prevents genLongTerm from
+        // reallocating the buffer again on the next tick's first chunk.
+        longTermCfgNLinks_ = nLinks;
+        longTermCfgSPorts_ = sPorts;
+        longTermCfgUPorts_ = uPorts;
     }
     queue_.writeBuffer(longTermOutBuf_, 0, hostData, bytes);
-    longTermCfgNLinks_ = nLinks;
-    longTermCfgSPorts_ = sPorts;
-    longTermCfgUPorts_ = uPorts;
 }
 
 // ── gen_spec_chan_kernel (per-eval dispatch) ─────────────────────────────
@@ -2992,59 +3297,69 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
                           uint32_t ltSPorts,
                           const std::vector<float>& delays,
                           const std::vector<std::complex<float>>& doppler,
-                          const std::vector<float>& rbFreqs)
+                          const std::vector<float>& rbFreqs,
+                          uint32_t outSlotOffset,
+                          uint32_t totalBatchSlots)
 {
     assert(longTermOutBuf_ && "genSpecBatch requires genLongTerm to have run first");
     assert(delays.size() == size_t(nLinks) * numClusters);
     assert(doppler.size() == size_t(nLinks) * numClusters);
     assert(rbFreqs.size() == numRb);
+    assert(outSlotOffset < totalBatchSlots);
 
-    if (!specBatchPipeline_)
+    // Lazy-init the fused outer-product + reduction pipeline.
+    if (!genSpecPowPipeline_)
     {
-        specBatchPipeline_ = makePipeline("gen_spec_batch_kernel");
-        assert(specBatchPipeline_ &&
-               "missing gen_spec_batch_kernel in WGSL (or backend can't compile it)");
+        genSpecPowPipeline_ = makePipeline("gen_spec_pow_kernel");
+        assert(genSpecPowPipeline_ &&
+               "missing gen_spec_pow_kernel in WGSL");
     }
 
-    // (Re)alloc output + staging buffers if the per-link slab shape changed.
-    const uint64_t outBytes =
-        uint64_t(nLinks) * numRxPorts * numTxPorts * numRb * sizeof(float) * 2;
-    if (!specBatchOutBuf_ || specBatchCfgNLinks_ != nLinks ||
-        specBatchCfgNumRxPorts_ != numRxPorts || specBatchCfgNumTxPorts_ != numTxPorts ||
-        specBatchCfgNumRb_ != numRb)
+    // (Re)alloc the per-port H output + staging buffers. Sized for all M
+    // slots so the caller can submit M dispatches without stalling between
+    // them. The kernel writes the full complex per-port matrix
+    // H[rx,tx,rb] per link: numRxPorts*numTxPorts complex floats per
+    // (link, rb), one slot section after another. It also writes the two
+    // scalar power reductions (fwd + rev sections) into a separate small
+    // buffer so 1-rx-port evals can skip the per-port copy on the host.
+    const uint64_t rxtx = uint64_t(numRxPorts) * numTxPorts;
+    const uint64_t redOutBytes =
+        uint64_t(totalBatchSlots) * nLinks * numRb * rxtx * 2u * sizeof(float);
+    const uint64_t powOutBytes =
+        2ull * totalBatchSlots * nLinks * numRb * sizeof(float);
+    if (!reduceBatchOutBuf_ || reduceBatchOutBuf_.getSize() < redOutBytes ||
+        !powBatchOutBuf_ || powBatchOutBuf_.getSize() < powOutBytes ||
+        reduceBatchCfgNLinks_ != nLinks || reduceBatchCfgNumRb_ != numRb ||
+        reduceBatchCfgNSlots_ != totalBatchSlots)
     {
-        specBatchOutBuf_ =
-            makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-        specBatchStagingBuf_ =
-            makeBuffer(outBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-        specBatchCfgNLinks_ = nLinks;
-        specBatchCfgNumRxPorts_ = numRxPorts;
-        specBatchCfgNumTxPorts_ = numTxPorts;
-        specBatchCfgNumRb_ = numRb;
+        reduceBatchOutBuf_ =
+            makeBuffer(redOutBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        reduceBatchStagingBuf_ =
+            makeBuffer(redOutBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+        powBatchOutBuf_ =
+            makeBuffer(powOutBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        powBatchStagingBuf_ =
+            makeBuffer(powOutBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+        reduceBatchCfgNLinks_  = nLinks;
+        reduceBatchCfgNumRb_   = numRb;
+        reduceBatchCfgNSlots_  = totalBatchSlots;
     }
 
-    // Per-tick inputs vary every dispatch -- realloc on size grow,
-    // re-upload via queue.writeBuffer otherwise.
+    // Per-tick inputs -- realloc on size grow, re-upload otherwise.
     const uint64_t dopplerBytes = doppler.size() * sizeof(float) * 2;
-    const uint64_t delaysBytes = delays.size() * sizeof(float);
+    const uint64_t delaysBytes  = delays.size() * sizeof(float);
     const uint64_t rbFreqsBytes = rbFreqs.size() * sizeof(float);
     if (!specBatchDopplerBuf_ || specBatchDopplerBuf_.getSize() < dopplerBytes)
-    {
         specBatchDopplerBuf_ =
             makeBuffer(dopplerBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
-    }
     queue_.writeBuffer(specBatchDopplerBuf_, 0, doppler.data(), dopplerBytes);
     if (!specBatchDelaysBuf_ || specBatchDelaysBuf_.getSize() < delaysBytes)
-    {
         specBatchDelaysBuf_ =
             makeBuffer(delaysBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
-    }
     queue_.writeBuffer(specBatchDelaysBuf_, 0, delays.data(), delaysBytes);
     if (!specBatchRbFreqsBuf_ || specBatchRbFreqsBuf_.getSize() < rbFreqsBytes)
-    {
         specBatchRbFreqsBuf_ =
             makeBuffer(rbFreqsBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
-    }
     queue_.writeBuffer(specBatchRbFreqsBuf_, 0, rbFreqs.data(), rbFreqsBytes);
 
     struct SpecBatchDispUni
@@ -3057,45 +3372,127 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
         uint32_t ltUPorts;
         uint32_t ltSPorts;
         uint32_t ltNPages;
-    } du{nLinks, numClusters, numRb, numRxPorts, numTxPorts, ltUPorts, ltSPorts, kMatMaxPages};
+        uint32_t outOffset;    // COMPLEX index = outSlotOffset * nLinks * numRb * rxtx
+        uint32_t outOffsetRev; // FLOAT index of the reverse scalar-power section
+    } du{nLinks, numClusters, numRb, numRxPorts, numTxPorts, ltUPorts, ltSPorts, kMatMaxPages,
+        outSlotOffset * nLinks * numRb * numRxPorts * numTxPorts,
+        (totalBatchSlots + outSlotOffset) * nLinks * numRb};
     if (!specBatchDispatchBuf_)
-    {
         specBatchDispatchBuf_ = makeBuffer(
             sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
-    }
     queue_.writeBuffer(specBatchDispatchBuf_, 0, &du, sizeof(du));
+    specBatchCfgNumRb_ = numRb;
 
-    auto layout0 = specBatchPipeline_.getBindGroupLayout(0);
-    std::vector<wgpu::BindGroupEntry> entries(6, wgpu::Default);
+    // Build bind group: {70=dispatch, 71=longTerm, 72=doppler, 73=delays,
+    //                    74=rbFreqs, 77=powOut, 78=hOut}
+    auto layout = genSpecPowPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> entries(7, wgpu::Default);
     auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
         entries[i].binding = b;
-        entries[i].buffer = buf;
-        entries[i].offset = 0;
-        entries[i].size = sz;
+        entries[i].buffer  = buf;
+        entries[i].offset  = 0;
+        entries[i].size    = sz;
     };
     E(0, 70, specBatchDispatchBuf_, sizeof(du));
     E(1, 71, longTermOutBuf_);
     E(2, 72, specBatchDopplerBuf_);
     E(3, 73, specBatchDelaysBuf_);
     E(4, 74, specBatchRbFreqsBuf_);
-    E(5, 75, specBatchOutBuf_);
+    E(5, 77, powBatchOutBuf_);
+    E(6, 78, reduceBatchOutBuf_);
 
     wgpu::BindGroupDescriptor bgd = wgpu::Default;
-    bgd.layout = layout0;
+    bgd.layout     = layout;
     bgd.entryCount = static_cast<uint32_t>(entries.size());
-    bgd.entries = entries.data();
-    wgpu::BindGroup bg0 = device_.createBindGroup(bgd);
+    bgd.entries    = entries.data();
+    wgpu::BindGroup bg = device_.createBindGroup(bgd);
 
+    // Submit compute pass without stalling — caller drives the WaitIdle
+    // once all M slot dispatches are queued (via waitForSpecBatch()).
     auto enc = device_.createCommandEncoder(wgpu::Default);
-    auto pass = enc.beginComputePass(wgpu::Default);
-    pass.setPipeline(specBatchPipeline_);
-    pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
-    const uint64_t total = uint64_t(nLinks) * numRxPorts * numTxPorts * numRb;
-    const uint32_t groups = static_cast<uint32_t>((total + 63u) / 64u);
-    pass.dispatchWorkgroups(groups, 1u, 1u);
-    pass.end();
+    {
+        auto pass = enc.beginComputePass(wgpu::Default);
+        pass.setPipeline(genSpecPowPipeline_);
+        pass.setBindGroup(0u, bg, (size_t)0, nullptr);
+        const uint32_t total = nLinks * numRb;
+        const uint32_t xGrps = (total + 63u) / 64u;
+        pass.dispatchWorkgroups(xGrps, 1u, 1u);
+        pass.end();
+    }
+    queue_.submit(enc.finish(wgpu::Default));
+    // No waitIdle here — batched caller calls waitForSpecBatch() after all M dispatches.
+}
+
+void
+SlsChanWgpu::waitForSpecBatch()
+{
+    waitIdle();
+}
+
+bool
+SlsChanWgpu::readSpecHBatchInto(uint32_t nLinks,
+                                uint32_t numRb,
+                                uint32_t rxtx,
+                                uint32_t nSlots,
+                                std::complex<float>* dst)
+{
+    if (!reduceBatchOutBuf_)
+        return false;
+    // Per-port H sections for all nSlots:
+    // dst[slot][link][rb][tx*nRx+rx], nSlots * nLinks * numRb * rxtx complexes.
+    const uint64_t totalBytes =
+        uint64_t(nSlots) * nLinks * numRb * rxtx * sizeof(std::complex<float>);
+    assert(reduceBatchOutBuf_.getSize() >= totalBytes);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(reduceBatchOutBuf_, 0, reduceBatchStagingBuf_, 0, totalBytes);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
+    return mapReadBufferInto(reduceBatchStagingBuf_, totalBytes, dst);
+}
+
+bool
+SlsChanWgpu::readPowBatchInto(uint32_t nLinks, uint32_t numRb, uint32_t nSlots, float* dst)
+{
+    if (!powBatchOutBuf_)
+        return false;
+    // Forward scalar-power sections for all nSlots, then the mirrored
+    // reverse sections: dst must hold 2 * nSlots * nLinks * numRb floats.
+    const uint64_t totalBytes = 2ull * nSlots * nLinks * numRb * sizeof(float);
+    assert(powBatchOutBuf_.getSize() >= totalBytes);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(powBatchOutBuf_, 0, powBatchStagingBuf_, 0, totalBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    return mapReadBufferInto(powBatchStagingBuf_, totalBytes, dst);
+}
+
+bool
+SlsChanWgpu::readSpecHAndPowBatchInto(uint32_t nLinks,
+                                      uint32_t numRb,
+                                      uint32_t rxtx,
+                                      uint32_t nSlots,
+                                      std::complex<float>* hDst,
+                                      float* powDst)
+{
+    if (!reduceBatchOutBuf_ || !powBatchOutBuf_)
+        return false;
+    // Fused readback: both copies in ONE encoder/submit/waitIdle. The
+    // separate readSpecHBatchInto + readPowBatchInto pair costs two full
+    // GPU round-trips per chunk; the wait dominates (~ms each on D3D12),
+    // so fusing halves the per-chunk readback latency.
+    const uint64_t hBytes =
+        uint64_t(nSlots) * nLinks * numRb * rxtx * sizeof(std::complex<float>);
+    const uint64_t powBytes = 2ull * nSlots * nLinks * numRb * sizeof(float);
+    assert(reduceBatchOutBuf_.getSize() >= hBytes);
+    assert(powBatchOutBuf_.getSize() >= powBytes);
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    enc.copyBufferToBuffer(reduceBatchOutBuf_, 0, reduceBatchStagingBuf_, 0, hBytes);
+    enc.copyBufferToBuffer(powBatchOutBuf_, 0, powBatchStagingBuf_, 0, powBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+    waitIdle();
+    const bool okH = mapReadBufferInto(reduceBatchStagingBuf_, hBytes, hDst);
+    const bool okP = mapReadBufferInto(powBatchStagingBuf_, powBytes, powDst);
+    return okH && okP;
 }
 
 std::vector<std::complex<float>>
@@ -3115,24 +3512,30 @@ SlsChanWgpu::readSpecBatch(uint32_t nLinks,
 }
 
 bool
-SlsChanWgpu::readSpecBatchInto(uint32_t nLinks,
-                                uint32_t numRb,
-                                uint32_t numRxPorts,
-                                uint32_t numTxPorts,
-                                std::complex<float>* dst)
+SlsChanWgpu::readSpecBatchInto(uint32_t /*nLinks*/,
+                                uint32_t /*numRb*/,
+                                uint32_t /*numRxPorts*/,
+                                uint32_t /*numTxPorts*/,
+                                std::complex<float>* /*dst*/)
 {
-    if (!specBatchOutBuf_)
-    {
+    // specBatchOutBuf_ is no longer allocated; gen_spec_pow_kernel replaced
+    // gen_spec_batch + reduce with a fused kernel that outputs rb_pow_out
+    // directly. Use readReducedPowInto() instead.
+    return false;
+}
+
+bool
+SlsChanWgpu::readReducedPowInto(uint32_t nLinks, uint32_t numRb, float* dst)
+{
+    if (!reduceBatchOutBuf_)
         return false;
-    }
-    const uint64_t totalBytes =
-        uint64_t(nLinks) * numRxPorts * numTxPorts * numRb * sizeof(std::complex<float>);
-    assert(specBatchOutBuf_.getSize() >= totalBytes);
+    const uint64_t totalBytes = uint64_t(nLinks) * numRb * sizeof(float);
+    assert(reduceBatchOutBuf_.getSize() >= totalBytes);
     auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(specBatchOutBuf_, 0, specBatchStagingBuf_, 0, totalBytes);
+    enc.copyBufferToBuffer(reduceBatchOutBuf_, 0, reduceBatchStagingBuf_, 0, totalBytes);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
-    return mapReadBufferInto(specBatchStagingBuf_, totalBytes, dst);
+    return mapReadBufferInto(reduceBatchStagingBuf_, totalBytes, dst);
 }
 
 // ── Save all channel metrics to HDF5 (matches NVIDIA slsChan::saveSlsChanToH5File) ──

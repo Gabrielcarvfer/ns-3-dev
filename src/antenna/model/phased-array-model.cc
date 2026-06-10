@@ -59,6 +59,37 @@ PhasedArrayModel::SetBeamformingVector(const ComplexVector& beamformingVector)
                   beamformingVector.GetSize() << " != " << GetNumElems());
     m_beamformingVector = beamformingVector;
     m_isBfVectorValid = true;
+    m_bfHashValid = false;
+}
+
+uint64_t
+PhasedArrayModel::GetBeamformingVectorHash() const
+{
+    NS_ASSERT_MSG(m_isBfVectorValid,
+                  "The beamforming vector should be Set before its hash is requested");
+    if (!m_bfHashValid)
+    {
+        // FNV-1a over the raw complex weights. Cached because beam-aware
+        // spectrum caches request it once per (tx, rx) evaluation —
+        // millions of times per simulated second — while beams change
+        // rarely in comparison.
+        uint64_t h = 1469598103934665603ull;
+        const size_t n = m_beamformingVector.GetSize();
+        for (size_t i = 0; i < n; ++i)
+        {
+            const auto c = m_beamformingVector[i];
+            const double parts[2] = {c.real(), c.imag()};
+            const auto* bytes = reinterpret_cast<const unsigned char*>(parts);
+            for (size_t b = 0; b < sizeof(parts); ++b)
+            {
+                h ^= bytes[b];
+                h *= 1099511628211ull;
+            }
+        }
+        m_bfHash = h;
+        m_bfHashValid = true;
+    }
+    return m_bfHash;
 }
 
 PhasedArrayModel::ComplexVector

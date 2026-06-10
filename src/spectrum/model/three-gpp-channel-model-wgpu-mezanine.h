@@ -94,7 +94,10 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         uint32_t numRb,
         uint8_t numRxPorts,
         uint8_t numTxPorts,
-        bool isReverse) const override;
+        bool isReverse,
+        uint64_t sWBeamHash,
+        uint64_t uWBeamHash,
+        bool scalarPsdOk) const override;
 
     // Pre-seed the RB frequency table from a representative PSD so that
     // the first UpdateChannel call can run GenSpecBatch immediately
@@ -103,6 +106,51 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // but before the first Simulator::Run() tick to eliminate tick-0
     // TryGenSpecCpuMiss calls (Opt C).
     void CaptureRbFreqs(Ptr<const SpectrumValue> psd);
+
+    // Bypass GPU batch dispatch for a phase of the simulation where GPU
+    // pre-computation would create stale cache entries (e.g. maxRSRP initial
+    // UE attachment uses temporary single-port antenna copies that differ from
+    // the user-configured antennas used during real traffic).
+    //
+    // When true:
+    //   - TryGenSpectrumChannelMatrix returns nullptr immediately (CPU fallback).
+    //   - EnsureBatchFresh skips UpdateChannel (no GPU batch dispatch or cache writes).
+    //
+    // NR initial-association code should call SetBypassGpuBatch(true) before the
+    // maxRSRP scan and SetBypassGpuBatch(false) after. The real simulation then
+    // starts with a clean cache that only holds entries for the configured antennas.
+    void SetBypassGpuBatch(bool bypass);
+
+    // --- Parallel uncached batch path for initial attachment and REM maps ----
+    //
+    // Context: NR initial attachment (maxRSRP) and REM-map generation scan
+    // every (gNB, UE) pair through many beam angles.  Going through the normal
+    // per-link DoCalcRxPowerSpectralDensity path serialises these evaluations;
+    // even with the bypass flag above the cost is pure CPU.
+    //
+    // This method accepts a flat list of (link, beam) descriptors, fires ONE
+    // GPU genSpecBatch dispatch covering all of them in parallel, waits for
+    // completion, and returns the per-link isotropic power -- without touching
+    // m_gpuChanSpctMap.  Results are not cached.
+    //
+    // Intended callers:
+    //   - NrInitialAssociation::PopulateRsrps (replace the per-link loop)
+    //   - NrRemHelper (REM map generation)
+    //
+    // TODO: not yet implemented -- returns an empty vector and falls through to
+    // the per-link CPU path.  Implement when profiling shows initial attachment
+    // is a bottleneck (it is currently masked by the real-traffic GPU gain).
+    struct UncachedBatchLink
+    {
+        Ptr<const MobilityModel> sMob;
+        Ptr<const MobilityModel> uMob;
+        Ptr<const PhasedArrayModel> sAnt; ///< may have any beam vector already set
+        Ptr<const PhasedArrayModel> uAnt;
+    };
+    /// @return per-link isotropic received power in the same order as @p links,
+    ///         or an empty vector if the GPU path is unavailable.
+    std::vector<double> ComputeUncachedBatch(const std::vector<UncachedBatchLink>& links,
+                                             Ptr<const SpectrumValue> txPsd);
 
   private:
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
@@ -193,30 +241,92 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // 4+ GB spectrum-channel flat buffer.
     struct GpuChanSpctEntry
     {
-        uint32_t reducedPowBaseIdx{0}; ///< Start index into m_reducedPowFlat for slot 0
+        /// Plain antenna-pair key (un-mixed). The map itself is keyed by
+        /// MixBeamKey(matrixKey, sWHash, uWHash); this field lets the
+        /// eviction sweep and per-link invalidation find a link's entries.
+        uint64_t matrixKey{0};
+        /// Start COMPLEX-element index into the owning flat H array for slot 0.
+        uint32_t specHBaseIdx{0};
         uint32_t numRxPorts{0};
         uint32_t numTxPorts{0};
         uint32_t numRb{0};
         Time generatedTime;
         uint64_t rbFreqsHash{0};
-        /// Pre-allocated (1,1,numRb) fake chanSpct returned by TryGenSpecHit.
-        /// PsdReduction sees shape (1,1,numRb) and computes psd[rb] = |H[0,0,rb]|^2
-        /// where H[0,0,rb] = sqrt((1/numTx) * inPsd[rb] * reducedPow[rb]).
+        /// Pre-allocated (numRxPorts, numTxPorts, numRb) output matrix
+        /// returned by TryGenSpecHit: the cached per-port H scaled by
+        /// sqrt(inPsd[rb]) per eval. Real phased per-port channel — same
+        /// quantity the CPU GenSpec path produces, so NrInterference's
+        /// MIMO covariance matches the CPU model.
         mutable Ptr<Complex3DVector> fakeChanSpct;
+        /// Reverse-orientation twin of fakeChanSpct, shaped with the UL
+        /// caller's (numRxPorts, numTxPorts) = swapped DL ports. Returned
+        /// to isReverse evals (transposed H).
+        mutable Ptr<Complex3DVector> fakeChanSpctRev;
+        /// (1,1,numRb) scalar-power outputs for 1-rx-port, no-precoding
+        /// evals: H[0,0,rb] = sqrt(pow[rb] * inPsd[rb] / numTxCaller).
+        /// The covariance of a 1-rx-port receiver is a scalar, so the
+        /// power statistic is exact and ~3x cheaper per eval than the
+        /// per-port scale-and-copy.
+        mutable Ptr<Complex3DVector> fakeScalar;
+        mutable Ptr<Complex3DVector> fakeScalarRev; ///< reverse twin
+        /// Start FLOAT index of this link's slot-0 scalar-power row in the
+        /// owning pow array (batch: m_specPowFlat/m_specPowRevFlat with
+        /// powPerSlotStride; CPU section: m_specPowCpuFlat/...RevFlat).
+        uint32_t powBaseIdx{0};
+        /// FLOAT elements between consecutive slots in the batch pow
+        /// arrays: nBucketLinks * numRb.
+        uint32_t powPerSlotStride{0};
         /// M>1 batched-slot metadata. batchM=1 means only slot 0 is valid.
         uint32_t batchM{1};
-        /// perSlotStride is the number of float elements between consecutive
-        /// slots in m_reducedPowFlat: stride = nBucketLinks * numRb.
+        /// perSlotStride is the number of COMPLEX elements between
+        /// consecutive slots in m_specHFlat: stride = nBucketLinks * numRb * rxtx.
         uint32_t perSlotStride{0};
         /// Simulation time (seconds) at which slot 0 was computed.
         double batchStartTimeSec{-1.0};
         /// Duration of one slot in seconds (= MezSlotDuration attribute).
         double slotDurationSec{0.0};
+        /// True when specHBaseIdx indexes the CPU-miss (D-3b) flat
+        /// arrays rather than the GPU batch arrays. CPU-miss entries get
+        /// disjoint storage so they can never collide with the batch
+        /// scatter regions (the old shared-array scheme allocated by map
+        /// size and silently corrupted slot 1..M-1 sections when batchM > 1,
+        /// and stale rebucketed entries could overwrite live batch data).
+        bool cpuSection{false};
     };
     mutable std::unordered_map<uint64_t, GpuChanSpctEntry> m_gpuChanSpctMap;
-    /// Per-link isotropic power: reducedPow[link, rb] = sum_rx |sum_tx H_unscaled[rx,tx,rb]|^2.
-    /// Layout: link i -> m_reducedPowFlat[i * m_reducedPowNumRb .. (i+1)*m_reducedPowNumRb).
-    mutable std::vector<float> m_reducedPowFlat;
+    /// Per-link, per-slot complex per-port channel matrices in canonical
+    /// (DL) orientation: H[rx,tx,rb] with the Complex3DVector page layout
+    /// (rb pages, rx-fast columns). One matrix serves both orientations
+    /// (UL is the transpose). Layout: slot s, bucket link bi ->
+    /// m_specHFlat[s*perSlotStride + bi*numRb*rxtx + rb*rxtx + tx*nRx + rx].
+    mutable std::vector<std::complex<float>> m_specHFlat;
+    /// CPU-miss (D-3b) section, disjoint from the batch array above.
+    /// Layout: cpu slot i -> [i*numRb*rxtx .. (i+1)*numRb*rxtx).
+    mutable std::vector<std::complex<float>> m_specHCpuFlat;
+    /// Scalar beamformed power per (link, slot, rb): fwd = sum_rx|sum_tx H|^2,
+    /// rev = sum_tx|sum_rx H|^2. Batch arrays use per-bucket regions
+    /// (m_powBucketBase allocator); CPU arrays use a running offset.
+    mutable std::vector<float> m_specPowFlat;
+    mutable std::vector<float> m_specPowRevFlat;
+    mutable std::vector<float> m_specPowCpuFlat;
+    mutable std::vector<float> m_specPowCpuRevFlat;
+    /// Per-refresh running base offsets (reset alongside m_specHBucketBase).
+    size_t m_powBucketBase{0};
+    /// Running offset for CPU-miss pow rows.
+    mutable size_t m_cpuMissPowOffset{0};
+    /// Spatial consistency: grid slot (lspReadIdx) that produced each
+    /// paramsKey's channel params at the previous refresh. A drift
+    /// (procedure A) is only valid when the slot mapping is unchanged.
+    std::unordered_map<uint64_t, uint32_t> m_prevLspReadIdx;
+    /// Next free element offset in m_specHCpuFlat. Slots vary in size
+    /// (numRb * rxtx differs per antenna bucket), so allocation is a
+    /// running offset rather than fixed-size slots.
+    mutable size_t m_cpuMissNextOffset{0};
+    /// Per-refresh running base offset into m_specHFlat: each antenna
+    /// bucket claims a disjoint region (reset at the top of UpdateChannel's
+    /// bucket loop). Without this, multi-bucket scenarios clobbered each
+    /// other's slabs.
+    size_t m_specHBucketBase{0};
     mutable uint32_t m_reducedPowNumRb{0}; ///< numRb for the current batch
 
     static uint64_t HashFloatVector(const std::vector<float>& v);
@@ -228,6 +338,18 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     uint32_t m_batchM{1};
     /// Duration of one NR slot for M>1 lookahead. Default 0.5 ms (mu=1).
     Time m_slotDuration{MicroSeconds(500)};
+    /// When true, skip GPU batch dispatch and all cache lookups/writes.
+    /// Set during phases (initial attachment, REM maps) that use temporary
+    /// antenna objects so they do not pollute the batch cache.
+    bool m_bypassGpuBatch{false};
+
+    /// True after a full LSP/cluster pipeline run with m_updatePeriod=0
+    /// (static channel). Cleared on topology changes. Enables Path A/B
+    /// fast paths in UpdateChannel that skip expensive re-runs.
+    bool m_gpuClusterParamsFresh{false};
+    /// Number of runtimeLinks at the time m_gpuClusterParamsFresh was set.
+    /// Path A/B are only active when the current link count matches this.
+    uint32_t m_lastRuntimeLinksCount{0};
 };
 
 } // namespace ns3
