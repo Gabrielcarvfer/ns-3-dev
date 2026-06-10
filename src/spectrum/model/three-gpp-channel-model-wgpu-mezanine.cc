@@ -3800,14 +3800,6 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                 // NrInterference's MIMO covariance see the real phased
                 // per-port channel (a scalar power cache skewed SINR by
                 // 16-19 dB while RSRP still matched).
-                Ptr<Complex3DVector>& fakeSlot = revOk ? e.fakeChanSpctRev : e.fakeChanSpct;
-                if (!fakeSlot || fakeSlot->GetNumPages() != numRb ||
-                    fakeSlot->GetNumRows() != numRxPorts ||
-                    fakeSlot->GetNumCols() != numTxPorts)
-                    fakeSlot = Create<Complex3DVector>(numRxPorts, numTxPorts,
-                                                       static_cast<uint16_t>(numRb));
-                Ptr<Complex3DVector> chanSpct = fakeSlot;
-
                 // M>1 slot lookup: find the pre-computed slot whose time
                 // best matches Simulator::Now(). Slot 0 is batchStartTimeSec;
                 // each subsequent slot covers one slotDurationSec window.
@@ -3825,6 +3817,26 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                         slotIdx = raw < e.batchM ? raw : e.batchM - 1u;
                     }
                 }
+                // PSD fingerprint for the identity cache: repeat evals of a
+                // link within a slot carry identical PSDs (full-buffer data
+                // with frozen pathloss), so (batch, slot, fingerprint) hits
+                // return the previous output Ptr untouched.
+                const double* psdVals = &(*inPsd->ConstValuesBegin());
+                const double fp0 = psdVals[0];
+                const double fpm = psdVals[numRb / 2];
+                const double fpl = psdVals[numRb - 1];
+                auto identityHit = [&](GpuChanSpctEntry::HitOutCache& oc) -> bool {
+                    return oc.lastSlot == slotIdx && oc.lastBatch == e.generatedTime &&
+                           oc.p0 == fp0 && oc.pm == fpm && oc.pl == fpl &&
+                           oc.ring[oc.ringIdx];
+                };
+                auto stamp = [&](GpuChanSpctEntry::HitOutCache& oc) {
+                    oc.lastSlot = slotIdx;
+                    oc.lastBatch = e.generatedTime;
+                    oc.p0 = fp0;
+                    oc.pm = fpm;
+                    oc.pl = fpl;
+                };
                 // Scalar fast path: with one RX port and no precoding the
                 // interference covariance is a scalar, so the power-only
                 // (1,1) matrix is exact and skips the per-port copy.
@@ -3832,6 +3844,10 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                 //   psd[rb] = pow[rb] * inPsd[rb] / numTxCaller.
                 if (scalarPsdOk && numRxPorts == 1)
                 {
+                    GpuChanSpctEntry::HitOutCache& oc =
+                        revOk ? e.outScalarRev : e.outScalarFwd;
+                    if (identityHit(oc))
+                        return oc.ring[oc.ringIdx];
                     const float* powBase;
                     if (e.cpuSection)
                     {
@@ -3843,24 +3859,36 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                         powBase = (revOk ? m_specPowRevFlat : m_specPowFlat).data() +
                                   e.powBaseIdx + size_t(slotIdx) * e.powPerSlotStride;
                     }
-                    Ptr<Complex3DVector>& scalarSlot =
-                        revOk ? e.fakeScalarRev : e.fakeScalar;
+                    oc.ringIdx ^= 1u;
+                    Ptr<Complex3DVector>& scalarSlot = oc.ring[oc.ringIdx];
                     if (!scalarSlot || scalarSlot->GetNumPages() != numRb)
                         scalarSlot = Create<Complex3DVector>(
                             1, 1, static_cast<uint16_t>(numRb));
                     const double invTx = 1.0 / static_cast<double>(numTxPorts);
-                    auto psdItS = inPsd->ConstValuesBegin();
                     auto* page0 =
                         reinterpret_cast<double*>(scalarSlot->GetPagePtr(0));
-                    for (size_t rb = 0; rb < numRb; ++rb, ++psdItS)
+                    for (size_t rb = 0; rb < numRb; ++rb)
                     {
                         const double psd =
-                            static_cast<double>(powBase[rb]) * (*psdItS) * invTx;
+                            static_cast<double>(powBase[rb]) * psdVals[rb] * invTx;
                         page0[rb * 2] = psd > 0.0 ? std::sqrt(psd) : 0.0;
                         page0[rb * 2 + 1] = 0.0;
                     }
+                    stamp(oc);
                     return scalarSlot;
                 }
+
+                GpuChanSpctEntry::HitOutCache& ocH = revOk ? e.outRev : e.outFwd;
+                if (identityHit(ocH))
+                    return ocH.ring[ocH.ringIdx];
+                ocH.ringIdx ^= 1u;
+                Ptr<Complex3DVector>& fakeSlot = ocH.ring[ocH.ringIdx];
+                if (!fakeSlot || fakeSlot->GetNumPages() != numRb ||
+                    fakeSlot->GetNumRows() != numRxPorts ||
+                    fakeSlot->GetNumCols() != numTxPorts)
+                    fakeSlot = Create<Complex3DVector>(numRxPorts, numTxPorts,
+                                                       static_cast<uint16_t>(numRb));
+                Ptr<Complex3DVector> chanSpct = fakeSlot;
 
                 const std::complex<float>* hBase;
                 if (e.cpuSection)
@@ -3924,6 +3952,7 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                         }
                     }
                 }
+                stamp(ocH);
                 return chanSpct;
             }
             else if (!longTerm)
@@ -4131,14 +4160,28 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
         eRef.perSlotStride = 0;
         eRef.batchStartTimeSec = -1.0;
 
+        // PSD fingerprint + ring-buffered outputs, mirroring the hit path:
+        // the entry's HitOutCache is stamped so the NEXT eval of this link
+        // with the same (batch, slot, psd) takes the identity-hit return.
+        const double* psdValsM = &(*inPsd->ConstValuesBegin());
+        auto stampM = [&](GpuChanSpctEntry::HitOutCache& oc) {
+            oc.lastSlot = 0;
+            oc.lastBatch = eRef.generatedTime;
+            oc.p0 = psdValsM[0];
+            oc.pm = psdValsM[numRb / 2];
+            oc.pl = psdValsM[numRb - 1];
+        };
+
         // Scalar fast path for this eval too (1 rx port, no precoding).
         if (scalarPsdOk && numRxPorts == 1)
         {
             const float* powBase =
                 (isReverse ? m_specPowCpuRevFlat : m_specPowCpuFlat).data() +
                 eRef.powBaseIdx;
-            Ptr<Complex3DVector>& scalarSlot =
-                isReverse ? eRef.fakeScalarRev : eRef.fakeScalar;
+            GpuChanSpctEntry::HitOutCache& oc =
+                isReverse ? eRef.outScalarRev : eRef.outScalarFwd;
+            oc.ringIdx ^= 1u;
+            Ptr<Complex3DVector>& scalarSlot = oc.ring[oc.ringIdx];
             if (!scalarSlot || scalarSlot->GetNumPages() != numRb)
                 scalarSlot = Create<Complex3DVector>(1, 1, static_cast<uint16_t>(numRb));
             const double invTx = 1.0 / static_cast<double>(numTxPorts);
@@ -4150,12 +4193,15 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                 page0[rb * 2] = psd > 0.0 ? std::sqrt(psd) : 0.0;
                 page0[rb * 2 + 1] = 0.0;
             }
+            stampM(oc);
             return scalarSlot;
         }
 
         // Build the output matrix in the caller's orientation, scaled by
         // sqrt(inPsd[rb]) — same as the hit path above.
-        Ptr<Complex3DVector>& fakeSlot2 = isReverse ? eRef.fakeChanSpctRev : eRef.fakeChanSpct;
+        GpuChanSpctEntry::HitOutCache& ocM = isReverse ? eRef.outRev : eRef.outFwd;
+        ocM.ringIdx ^= 1u;
+        Ptr<Complex3DVector>& fakeSlot2 = ocM.ring[ocM.ringIdx];
         if (!fakeSlot2 || fakeSlot2->GetNumPages() != numRb ||
             fakeSlot2->GetNumRows() != numRxPorts ||
             fakeSlot2->GetNumCols() != numTxPorts)
@@ -4197,6 +4243,7 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                 }
             }
         }
+        stampM(ocM);
         return fakeSlot2;
     }
 

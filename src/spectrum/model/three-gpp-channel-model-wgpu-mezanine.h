@@ -9,6 +9,7 @@
 
 #include "ns3/phased-array-model.h"
 
+#include <array>
 #include <memory>
 #include <optional>
 
@@ -252,23 +253,33 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         uint32_t numRb{0};
         Time generatedTime;
         uint64_t rbFreqsHash{0};
-        /// Pre-allocated (numRxPorts, numTxPorts, numRb) output matrix
-        /// returned by TryGenSpecHit: the cached per-port H scaled by
-        /// sqrt(inPsd[rb]) per eval. Real phased per-port channel — same
-        /// quantity the CPU GenSpec path produces, so NrInterference's
-        /// MIMO covariance matches the CPU model.
-        mutable Ptr<Complex3DVector> fakeChanSpct;
-        /// Reverse-orientation twin of fakeChanSpct, shaped with the UL
-        /// caller's (numRxPorts, numTxPorts) = swapped DL ports. Returned
-        /// to isReverse evals (transposed H).
-        mutable Ptr<Complex3DVector> fakeChanSpctRev;
+        /// Identity-cached output state for one (representation, direction)
+        /// combination of this entry. Repeat evaluations of a link within a
+        /// slot overwhelmingly carry the SAME input PSD (full-buffer data
+        /// with the pathloss frozen for the loss-cache period), so when the
+        /// (batch, slot, psd-fingerprint) triple matches the previous build
+        /// the cached output Ptr is returned untouched — a ~0.05 us pointer
+        /// return instead of a 0.4-6.8 us rebuild. Rebuilds rotate through a
+        /// 2-deep ring so an output Ptr still referenced by a LIVE signal in
+        /// NrInterference (which holds spectrumChannelMatrix for the whole
+        /// signal duration) is not overwritten by the very next rebuild.
+        struct HitOutCache
+        {
+            std::array<Ptr<MatrixBasedChannelModel::Complex3DVector>, 2> ring;
+            uint8_t ringIdx{0};
+            uint32_t lastSlot{0xFFFFFFFFu}; ///< slot of the cached build
+            Time lastBatch;                 ///< entry generatedTime at build
+            double p0{-1.0};                ///< inPsd fingerprint: first RB
+            double pm{-1.0};                ///< inPsd fingerprint: middle RB
+            double pl{-1.0};                ///< inPsd fingerprint: last RB
+        };
+        /// Full per-port H outputs (DL orientation / UL transpose).
+        mutable HitOutCache outFwd;
+        mutable HitOutCache outRev;
         /// (1,1,numRb) scalar-power outputs for 1-rx-port, no-precoding
         /// evals: H[0,0,rb] = sqrt(pow[rb] * inPsd[rb] / numTxCaller).
-        /// The covariance of a 1-rx-port receiver is a scalar, so the
-        /// power statistic is exact and ~3x cheaper per eval than the
-        /// per-port scale-and-copy.
-        mutable Ptr<Complex3DVector> fakeScalar;
-        mutable Ptr<Complex3DVector> fakeScalarRev; ///< reverse twin
+        mutable HitOutCache outScalarFwd;
+        mutable HitOutCache outScalarRev;
         /// Start FLOAT index of this link's slot-0 scalar-power row in the
         /// owning pow array (batch: m_specPowFlat/m_specPowRevFlat with
         /// powPerSlotStride; CPU section: m_specPowCpuFlat/...RevFlat).
