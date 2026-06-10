@@ -1072,7 +1072,7 @@ class WifiPhyCcaIndicationTest : public TestCase
     WifiStandard m_standard; ///< The standard to use for the test
 
     Ptr<SpectrumWifiPhy> m_rxPhy; ///< PHY object of the receiver
-    Ptr<SpectrumWifiPhy> m_uxPhy; ///< PHY object of the transmitter
+    Ptr<SpectrumWifiPhy> m_txPhy; ///< PHY object of the transmitter
 
     std::vector<Ptr<WaveformGenerator>> m_signalGenerators; ///< Generators of non-wifi signals
     std::size_t m_numSignalGenerators; ///< The number of non-wifi signals generators needed for
@@ -1140,7 +1140,7 @@ WifiPhyCcaIndicationTest::SendSuPpdu(dBm_u txPower, MHz_u frequency, MHz_u bandw
     auto channelNum =
         WifiPhyOperatingChannel::FindFirst(0, frequency, bandwidth, m_standard, WIFI_PHY_BAND_6GHZ)
             ->number;
-    m_uxPhy->SetOperatingChannel(
+    m_txPhy->SetOperatingChannel(
         WifiPhy::ChannelTuple{channelNum, bandwidth, WIFI_PHY_BAND_6GHZ, 0});
 
     const auto mcs =
@@ -1155,10 +1155,10 @@ WifiPhyCcaIndicationTest::SendSuPpdu(dBm_u txPower, MHz_u frequency, MHz_u bandw
     hdr.SetQosTid(0);
     Ptr<WifiPsdu> psdu = Create<WifiPsdu>(pkt, hdr);
 
-    m_uxPhy->SetTxPowerStart(txPower);
-    m_uxPhy->SetTxPowerEnd(txPower);
+    m_txPhy->SetTxPowerStart(txPower);
+    m_txPhy->SetTxPowerEnd(txPower);
 
-    m_uxPhy->Send(psdu, txVector);
+    m_txPhy->Send(psdu, txVector);
 }
 
 void
@@ -1509,16 +1509,16 @@ WifiPhyCcaIndicationTest::DoSetup()
 
     Ptr<Node> txNode = CreateObject<Node>();
     Ptr<WifiNetDevice> txDev = CreateObject<WifiNetDevice>();
-    m_uxPhy = CreateObject<SpectrumWifiPhy>();
-    m_uxPhy->SetAttribute("ChannelSwitchDelay", TimeValue(Seconds(0)));
+    m_txPhy = CreateObject<SpectrumWifiPhy>();
+    m_txPhy->SetAttribute("ChannelSwitchDelay", TimeValue(Seconds(0)));
     Ptr<InterferenceHelper> txInterferenceHelper = CreateObject<InterferenceHelper>();
-    m_uxPhy->SetInterferenceHelper(txInterferenceHelper);
+    m_txPhy->SetInterferenceHelper(txInterferenceHelper);
     Ptr<ErrorRateModel> txErrorModel = CreateObject<NistErrorRateModel>();
-    m_uxPhy->SetErrorRateModel(txErrorModel);
-    m_uxPhy->AddChannel(spectrumChannel);
-    m_uxPhy->ConfigureStandard(m_standard);
-    m_uxPhy->SetDevice(txDev);
-    txDev->SetPhy(m_uxPhy);
+    m_txPhy->SetErrorRateModel(txErrorModel);
+    m_txPhy->AddChannel(spectrumChannel);
+    m_txPhy->ConfigureStandard(m_standard);
+    m_txPhy->SetDevice(txDev);
+    txDev->SetPhy(m_txPhy);
     txNode->AddDevice(txDev);
 
     for (std::size_t i = 0; i < m_numSignalGenerators; ++i)
@@ -1542,7 +1542,7 @@ WifiPhyCcaIndicationTest::RunOne()
     RngSeedManager::SetRun(1);
     int64_t streamNumber = 0;
     m_rxPhy->AssignStreams(streamNumber);
-    m_uxPhy->AssignStreams(streamNumber);
+    m_txPhy->AssignStreams(streamNumber);
 
     auto channelNum = WifiPhyOperatingChannel::FindFirst(0,
                                                          m_frequency,
@@ -1553,7 +1553,7 @@ WifiPhyCcaIndicationTest::RunOne()
 
     m_rxPhy->SetOperatingChannel(
         WifiPhy::ChannelTuple{channelNum, m_channelWidth, WIFI_PHY_BAND_6GHZ, 0});
-    m_uxPhy->SetOperatingChannel(
+    m_txPhy->SetOperatingChannel(
         WifiPhy::ChannelTuple{channelNum, m_channelWidth, WIFI_PHY_BAND_6GHZ, 0});
 
     const auto phyHeaderDuration =
@@ -3770,8 +3770,8 @@ WifiPhyCcaIndicationTest::DoTeardown()
 {
     m_rxPhy->Dispose();
     m_rxPhy = nullptr;
-    m_uxPhy->Dispose();
-    m_uxPhy = nullptr;
+    m_txPhy->Dispose();
+    m_txPhy = nullptr;
     for (auto& signalGenerator : m_signalGenerators)
     {
         signalGenerator->Dispose();
