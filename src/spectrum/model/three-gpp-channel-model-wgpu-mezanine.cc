@@ -2064,14 +2064,37 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                               << " matFlat.size()=" << matFlat.size()
                               << " (lspReadIdx=" << ctx.lspReadIdx
                               << " perLinkMatLen=" << perLinkMatLen << ")");
-                const std::complex<float>* __restrict__ src = matFlat.data() + linkBase;
-                std::complex<double>* __restrict__ dst = matrix->m_channel.GetPagePtr(0);
-                for (size_t k = 0; k < linkCells; ++k)
+                // Element-matrix value copy (float GPU output -> the ns-3
+                // double ChannelMatrix). In steady state these VALUES are
+                // rarely consumed: PRX evals are served from the spec/lt
+                // caches and only the entry's m_generatedTime (refreshed
+                // above) gates hit freshness. The copy is however the
+                // single largest CPU cost of a MIMO refresh (~4 GB of
+                // converted writes per refresh at 630 links x 128x4 x 24
+                // pages). MEZ_SKIP_MATCOPY=1 skips it after the entry's
+                // FIRST fill; consumers that DO read values element-wise
+                // (PRX CalcLongTerm fallback on a beam change, the
+                // MEZ_DIAG_H audits) then see the previous refresh's
+                // realization — acceptable when beams are static (the
+                // calibration scenarios) but wrong for beam-sweeping
+                // configs, hence opt-in.
+                static const bool skipMatCopy = []() {
+                    const char* e = std::getenv("MEZ_SKIP_MATCOPY");
+                    return (e && e[0] == '1' && e[1] == '\0');
+                }();
+                const bool firstFill = matrix->m_channel.GetValues().size() == linkCells &&
+                                       matrix->m_channel(0, 0, 0) == std::complex<double>{};
+                if (!skipMatCopy || firstFill)
                 {
-                    const auto* sr = reinterpret_cast<const float*>(src + k);
-                    auto* dr = reinterpret_cast<double*>(dst + k);
-                    dr[0] = static_cast<double>(sr[0]);
-                    dr[1] = static_cast<double>(sr[1]);
+                    const std::complex<float>* __restrict__ src = matFlat.data() + linkBase;
+                    std::complex<double>* __restrict__ dst = matrix->m_channel.GetPagePtr(0);
+                    for (size_t k = 0; k < linkCells; ++k)
+                    {
+                        const auto* sr = reinterpret_cast<const float*>(src + k);
+                        auto* dr = reinterpret_cast<double*>(dst + k);
+                        dr[0] = static_cast<double>(sr[0]);
+                        dr[1] = static_cast<double>(sr[1]);
+                    }
                 }
 
                 // Build per-link LongTerm from GPU output.
