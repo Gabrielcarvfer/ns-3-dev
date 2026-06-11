@@ -537,14 +537,25 @@ SlsChanWgpu::uploadAntPanelConfigs(const std::vector<AntPanelConfigGPU>& configs
                                    const std::vector<float>& antThetaFlat,
                                    const std::vector<float>& antPhiFlat)
 {
-    antPanelConfigBuf_ = makeBuffer(configs.size() * sizeof(AntPanelConfigGPU),
+    // The theta and phi per-degree tables share ONE GPU buffer
+    // ([theta | phi], phi offsets rebased by the theta length): the matrix
+    // kernel sits at the device's 10-storage-buffers-per-stage limit, and
+    // merging the two tables frees the binding needed for the field
+    // precompute buffer. antPhiBuf_ aliases the same buffer so the CIR
+    // kernel's separate phi binding keeps working with the rebased offsets.
+    std::vector<AntPanelConfigGPU> cfgsRebased(configs);
+    for (auto& c : cfgsRebased)
+    {
+        c.phiOffset += static_cast<uint32_t>(antThetaFlat.size());
+    }
+    std::vector<float> combined(antThetaFlat);
+    combined.insert(combined.end(), antPhiFlat.begin(), antPhiFlat.end());
+    antPanelConfigBuf_ = makeBuffer(cfgsRebased.size() * sizeof(AntPanelConfigGPU),
                                     WGPUBufferUsage_Storage,
-                                    configs.data());
-    antThetaBuf_ = makeBuffer(antThetaFlat.size() * sizeof(float),
-                              WGPUBufferUsage_Storage,
-                              antThetaFlat.data());
-    antPhiBuf_ =
-        makeBuffer(antPhiFlat.size() * sizeof(float), WGPUBufferUsage_Storage, antPhiFlat.data());
+                                    cfgsRebased.data());
+    antThetaBuf_ =
+        makeBuffer(combined.size() * sizeof(float), WGPUBufferUsage_Storage, combined.data());
+    antPhiBuf_ = antThetaBuf_;
     // validation uses configs[0] = BS panel, configs[1] = UE panel
     ssNBsAnt_ = configs[0].nAnt;
     ssNUeAnt_ = configs[1].nAnt;
@@ -2583,6 +2594,18 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         assert(channelMatrixPipeline_ &&
                "missing gen_channel_matrix_kernel in WGSL (or backend can't compile it)");
     }
+    if (!matFieldPrePipeline_)
+    {
+        matFieldPrePipeline_ = makePipeline("mat_field_precompute_kernel");
+        assert(matFieldPrePipeline_ && "missing mat_field_precompute_kernel in WGSL");
+    }
+    // Field-precompute buffer: 481 cluster-ray slots x 4 components per link.
+    const uint64_t fpBytes = uint64_t(nActiveLinks) * 481u * 4u * sizeof(float) * 2;
+    if (!matFieldPreBuf_ || matFieldPreCfgNLinks_ < nActiveLinks)
+    {
+        matFieldPreBuf_ = makeBuffer(fpBytes, WGPUBufferUsage_Storage);
+        matFieldPreCfgNLinks_ = nActiveLinks;
+    }
 
     // (Re)alloc output buffer if shape changed. Sized for the maximum page
     // count (kMatMaxPages) so the kernel doesn't have to special-case the
@@ -2632,7 +2655,6 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     }
     queue_.writeBuffer(matrixDispatchBuf_, 0, &du, sizeof(du));
 
-    auto layout0 = channelMatrixPipeline_.getBindGroupLayout(0);
     std::vector<wgpu::BindGroupEntry> entries(11, wgpu::Default);
     auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
         entries[i].binding = b;
@@ -2640,7 +2662,7 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         entries[i].offset = 0;
         entries[i].size = sz;
     };
-    // Bindings 30-40 chosen to avoid clashing with the LSP kernels'
+    // Bindings 30-41 chosen to avoid clashing with the LSP kernels'
     // group(0) bindings (0..15). See sls-chan.wgsl for the matching
     // declarations.
     E(0, 30, matrixDispatchBuf_, sizeof(du));
@@ -2651,17 +2673,31 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     E(5, 35, ssCellParamsBuf_);
     E(6, 36, ssUtParamsBuf_);
     E(7, 37, antPanelConfigBuf_);
-    E(8, 38, antThetaBuf_);
-    E(9, 39, antPhiBuf_);
-    E(10, 40, channelMatrixBuf_);
+    E(8, 38, antThetaBuf_); // combined [theta | phi] table
+    E(9, 40, channelMatrixBuf_);
+    E(10, 41, matFieldPreBuf_);
 
+    // Both kernels statically reference the same binding set, so the same
+    // entry list builds a bind group for each pipeline's auto layout.
     wgpu::BindGroupDescriptor bgd = wgpu::Default;
-    bgd.layout = layout0;
+    bgd.layout = channelMatrixPipeline_.getBindGroupLayout(0);
     bgd.entryCount = static_cast<uint32_t>(entries.size());
     bgd.entries = entries.data();
     wgpu::BindGroup bg0 = device_.createBindGroup(bgd);
+    bgd.layout = matFieldPrePipeline_.getBindGroupLayout(0);
+    wgpu::BindGroup bgFp = device_.createBindGroup(bgd);
 
     auto enc = device_.createCommandEncoder(wgpu::Default);
+    {
+        // Field precompute: one thread per (link, cluster-ray) slot. The
+        // implicit barrier between passes makes the writes visible to the
+        // matrix kernel below.
+        auto pass = enc.beginComputePass(wgpu::Default);
+        pass.setPipeline(matFieldPrePipeline_);
+        pass.setBindGroup(0u, bgFp, (size_t)0, nullptr);
+        pass.dispatchWorkgroups((nActiveLinks * 481u + 63u) / 64u, 1u, 1u);
+        pass.end();
+    }
     auto pass = enc.beginComputePass(wgpu::Default);
     pass.setPipeline(channelMatrixPipeline_);
     pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
@@ -2951,6 +2987,17 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
         channelMatrixPipeline_ = makePipeline("gen_channel_matrix_kernel");
         assert(channelMatrixPipeline_ && "missing gen_channel_matrix_kernel in WGSL");
     }
+    if (!matFieldPrePipeline_)
+    {
+        matFieldPrePipeline_ = makePipeline("mat_field_precompute_kernel");
+        assert(matFieldPrePipeline_ && "missing mat_field_precompute_kernel in WGSL");
+    }
+    if (!matFieldPreBuf_ || matFieldPreCfgNLinks_ < nActiveLinks)
+    {
+        matFieldPreBuf_ = makeBuffer(uint64_t(nActiveLinks) * 481u * 4u * sizeof(float) * 2,
+                                     WGPUBufferUsage_Storage);
+        matFieldPreCfgNLinks_ = nActiveLinks;
+    }
     if (!longTermPipeline_)
     {
         longTermPipeline_ = makePipeline("gen_long_term_kernel");
@@ -3069,7 +3116,6 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
             makeBuffer(ltTotalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
 
     // ── Part 4: build bind groups ────────────────────────────────────────
-    auto cmLayout = channelMatrixPipeline_.getBindGroupLayout(0);
     std::vector<wgpu::BindGroupEntry> cmEntries(11, wgpu::Default);
     {
         auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
@@ -3086,15 +3132,17 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
         E(5, 35, ssCellParamsBuf_);
         E(6, 36, ssUtParamsBuf_);
         E(7, 37, antPanelConfigBuf_);
-        E(8, 38, antThetaBuf_);
-        E(9, 39, antPhiBuf_);
-        E(10, 40, channelMatrixBuf_);
+        E(8, 38, antThetaBuf_); // combined [theta | phi] table
+        E(9, 40, channelMatrixBuf_);
+        E(10, 41, matFieldPreBuf_);
     }
     wgpu::BindGroupDescriptor cmBgd = wgpu::Default;
-    cmBgd.layout = cmLayout;
+    cmBgd.layout = channelMatrixPipeline_.getBindGroupLayout(0);
     cmBgd.entryCount = static_cast<uint32_t>(cmEntries.size());
     cmBgd.entries = cmEntries.data();
     wgpu::BindGroup cmBG = device_.createBindGroup(cmBgd);
+    cmBgd.layout = matFieldPrePipeline_.getBindGroupLayout(0);
+    wgpu::BindGroup fpBG = device_.createBindGroup(cmBgd);
 
     auto ltLayout = longTermPipeline_.getBindGroupLayout(0);
     std::vector<wgpu::BindGroupEntry> ltEntries(7, wgpu::Default);
@@ -3125,6 +3173,16 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     // genChannelMatrix writes are visible to both the staging copy and to
     // genLongTerm's reads of channelMatrixBuf_.
     auto enc = device_.createCommandEncoder(wgpu::Default);
+
+    // Compute pass 0: field precompute (one thread per (link, cluster-ray);
+    // implicit barrier between passes makes the writes visible to pass 1).
+    {
+        auto pass = enc.beginComputePass(wgpu::Default);
+        pass.setPipeline(matFieldPrePipeline_);
+        pass.setBindGroup(0u, fpBG, (size_t)0, nullptr);
+        pass.dispatchWorkgroups((nActiveLinks * 481u + 63u) / 64u, 1u, 1u);
+        pass.end();
+    }
 
     // Compute pass 1: gen_channel_matrix_kernel
     {

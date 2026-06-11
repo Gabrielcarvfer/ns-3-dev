@@ -1015,6 +1015,14 @@ class SlsChanWgpu
     wgpu::Buffer channelMatrixBuf_;
     wgpu::Buffer channelMatrixStagingBuf_; // persistent readback staging for readChannelMatrixInto
     wgpu::ComputePipeline channelMatrixPipeline_;
+    // Per-(link, cluster-ray, pol) field components, precomputed once per
+    // matrix generation by mat_field_precompute_kernel instead of per
+    // (u, s) element pair inside the matrix kernel (the field pattern
+    // depends on angle + polarization only). 481 slots per link
+    // (24 clusters x 20 rays + 1 LOS direction) x 4 components.
+    wgpu::ComputePipeline matFieldPrePipeline_;
+    wgpu::Buffer matFieldPreBuf_;
+    uint32_t matFieldPreCfgNLinks_{0};
     wgpu::Buffer matrixDispatchBuf_;
     uint32_t channelMatrixCfgUSize_{0};
     uint32_t channelMatrixCfgSSize_{0};

@@ -2239,6 +2239,19 @@ struct ChanMatDispatch {
 @group(0) @binding(38) var<storage, read>       mat_buf_antTheta: array<f32>;
 @group(0) @binding(39) var<storage, read>       mat_buf_antPhi  : array<f32>;
 @group(0) @binding(40) var<storage, read_write> mat_buf_out     : array<vec2f>;
+// Precomputed per-(link, cluster-ray) field components, written by
+// mat_field_precompute_kernel and consumed by gen_channel_matrix_kernel.
+// Fields depend only on (ray angles, polarization slant), NOT on the
+// element index, so evaluating them inside the per-(u, s) element loop
+// re-derived the same 4 values (rx pol0/pol1, tx pol0/pol1) up to
+// numElements^2 times per ray. Layout (vec2f = (F_theta, F_phi)):
+//   idx = (link * 481 + cr) * 4 + comp
+//   cr   : cluster * MAX_RAYS + ray for the 480 rays; 480 = the LOS ray
+//   comp : 0/1 = rx field for pol 0/1, 2/3 = tx field for pol 0/1
+@group(0) @binding(41) var<storage, read_write> mat_field_pre   : array<vec2f>;
+
+const MAT_FIELD_PRE_CR    : u32 = 481u; // 24 clusters x 20 rays + 1 LOS slot
+const MAT_FIELD_PRE_LOS   : u32 = 480u;
 
 // Chunk (e): field-pattern eval. Reads mat_buf_antTheta/Phi. Azimuth is
 // rotated into the panel's local frame by the bearing (downtilt assumed 0).
@@ -2255,8 +2268,11 @@ fn mat_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) ->
         if pi_ < 0 { pi_ += 360; }
     }
     // Combined attenuation clamp per TR 38.901 Table 7.3-1 (A_max = 30 dB).
+    // theta and phi tables share one buffer ([theta | phi], phi offsets
+    // rebased at upload) so the matrix kernel stays within the device's
+    // 10-storage-buffer-per-stage limit.
     let att  = min(-(mat_buf_antTheta[cfg.thetaOffset + u32(ti)] +
-                     mat_buf_antPhi[cfg.phiOffset + u32(pi_)]),
+                     mat_buf_antTheta[cfg.phiOffset + u32(pi_)]),
                    30.0);
     let A_db = -att + select(0.0, GMAX, cfg.antModel == 1u);
     let A_sqrt = pow(10.0, A_db / 20.0);
@@ -2338,6 +2354,60 @@ fn mat_ray_passes_filter(m: u32, flt: u32) -> bool {
 // channelParams->m_reducedClusterNumber so unused pages just stay zeroed.
 const MAT_MAX_PAGES : u32 = 24u;
 
+// One thread per (link, cluster-ray): evaluate the 4 element field
+// components (rx pol0/pol1, tx pol0/pol1) for each ray's angles once,
+// instead of once per (u, s) element pair inside gen_channel_matrix_kernel
+// (a ~numElements^2-fold redundancy: the field pattern depends on angle
+// and polarization only). Slot MAT_FIELD_PRE_LOS holds the LOS-direction
+// fields used by the Rician term on page 0.
+@compute @workgroup_size(64)
+fn mat_field_precompute_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let total = mat_disp.n_active_links * MAT_FIELD_PRE_CR;
+    let tid = gid.x;
+    // Dead static reference to mat_buf_out (binding 40): keeps this entry
+    // point's auto bind-group layout identical to gen_channel_matrix_kernel's
+    // so the host can build both bind groups from the same entry list.
+    if tid >= total {
+        if total == 0xffffffffu { mat_buf_out[0] = vec2f(0.0, 0.0); }
+        return;
+    }
+    let link_idx = tid / MAT_FIELD_PRE_CR;
+    let cr = tid % MAT_FIELD_PRE_CR;
+
+    let al = mat_buf_active[link_idx];
+    let lk = mat_buf_link[al.lspReadIdx];
+    let cp = mat_buf_cluster[al.lspReadIdx];
+    let cell = mat_buf_cell[al.cid];
+    let ut   = mat_buf_ut[al.uid];
+    let bsCfg = mat_buf_antCfg[cell.antPanelIdx];
+    let utCfg = mat_buf_antCfg[ut.antPanelIdx];
+
+    var tZOA: f32;
+    var pAOA: f32;
+    var tZOD: f32;
+    var pAOD: f32;
+    if cr == MAT_FIELD_PRE_LOS {
+        tZOA = lk.theta_LOS_ZOA;
+        pAOA = lk.phi_LOS_AOA;
+        tZOD = lk.theta_LOS_ZOD;
+        pAOD = lk.phi_LOS_AOD;
+    } else {
+        let cluster = cr / MAX_RAYS;
+        if cluster >= cp.nCluster { return; } // unused slots stay stale; never read
+        let link_base = al.lspReadIdx * PACKED_LINK_STRIDE;
+        tZOA = mat_packed_in[link_base + PACKED_OFF_ZOA + cr];
+        pAOA = mat_packed_in[link_base + PACKED_OFF_AOA + cr];
+        tZOD = mat_packed_in[link_base + PACKED_OFF_ZOD + cr];
+        pAOD = mat_packed_in[link_base + PACKED_OFF_AOD + cr];
+    }
+
+    let base = (link_idx * MAT_FIELD_PRE_CR + cr) * 4u;
+    mat_field_pre[base + 0u] = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[0]);
+    mat_field_pre[base + 1u] = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[1]);
+    mat_field_pre[base + 2u] = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[0]);
+    mat_field_pre[base + 3u] = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[1]);
+}
+
 @compute @workgroup_size(64, 1, 1)
 fn gen_channel_matrix_kernel(
     @builtin(workgroup_id)       wg : vec3<u32>,
@@ -2347,7 +2417,14 @@ fn gen_channel_matrix_kernel(
     let page_idx = wg.y;
     let us_idx   = wg.z * 64u + li.x;
 
-    if link_idx >= mat_disp.n_active_links { return; }
+    if link_idx >= mat_disp.n_active_links {
+        // Dead static reference to mat_buf_antTheta (binding 38): the field
+        // tables are consumed by mat_field_precompute_kernel now, but keeping
+        // the binding in THIS entry point's auto layout lets the host build
+        // both kernels' bind groups from the same entry list.
+        if mat_disp.n_active_links == 0xffffffffu { mat_buf_out[0].x = mat_buf_antTheta[0]; }
+        return;
+    }
     if page_idx >= mat_disp.n_overall_cluster { return; }
     if us_idx   >= mat_disp.u_size * mat_disp.s_size { return; }
 
@@ -2425,8 +2502,11 @@ fn gen_channel_matrix_kernel(
         let xpr  = mat_packed_in[link_base + PACKED_OFF_XPR + ray_local];
         let rph_off = link_base + PACKED_OFF_RNDP + ray_local * 4u;
 
-        let Frx = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[polU] + zetaUt);
-        let Ftx = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[polS] + zetaBs);
+        // Field components precomputed once per (link, ray, pol) by
+        // mat_field_precompute_kernel; identical for every (u, s) pair.
+        let fp_base = (link_idx * MAT_FIELD_PRE_CR + ray_local) * 4u;
+        let Frx = mat_field_pre[fp_base + polU];
+        let Ftx = mat_field_pre[fp_base + 2u + polS];
 
         let tZOA_r = tZOA * DEG2RAD;
         let pAOA_r = pAOA * DEG2RAD;
@@ -2490,8 +2570,11 @@ fn gen_channel_matrix_kernel(
             let pAOA = lk.phi_LOS_AOA;
             let tZOD = lk.theta_LOS_ZOD;
             let pAOD = lk.phi_LOS_AOD;
-            let Frx = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[polU] + zetaUt);
-            let Ftx = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[polS] + zetaBs);
+            // LOS-direction fields from the precompute slot (same for all
+            // (u, s) pairs of a link, per polarization).
+            let fp_los = (link_idx * MAT_FIELD_PRE_CR + MAT_FIELD_PRE_LOS) * 4u;
+            let Frx = mat_field_pre[fp_los + polU];
+            let Ftx = mat_field_pre[fp_los + 2u + polS];
             let tZOA_r = tZOA * DEG2RAD;
             let pAOA_r = pAOA * DEG2RAD;
             let tZOD_r = tZOD * DEG2RAD;
