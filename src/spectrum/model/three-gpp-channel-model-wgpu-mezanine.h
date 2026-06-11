@@ -154,6 +154,160 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
                                              Ptr<const SpectrumValue> txPsd);
 
   private:
+    // ── UpdateChannel stage pipeline ──────────────────────────────────
+    // UpdateChannel() is an orchestrator over the stage methods below.
+    // Per-refresh state that flows between stages lives in
+    // RefreshWorkspace; per-antenna-bucket state lives in
+    // BucketWorkspace. Both are defined in the .cc so that SlsChanWgpu
+    // internals (CellParam, LinkParams, ActiveLink, ...) stay out of
+    // this header — the whole point of the mezanine is to avoid
+    // exposing WGPU channel model internals.
+
+    /// Per-refresh scratch state shared by the UpdateChannel stages
+    /// (runtime link list, GPU readback vectors, grid dimensions,
+    /// fast-path flags). Defined in the .cc; see note above.
+    struct RefreshWorkspace;
+    /// Per-(sNAnt, uNAnt)-bucket scratch state for the matrix /
+    /// longTerm / spectrum stages (active links, longTerm staging,
+    /// chunk sizes). Defined in the .cc; see note above.
+    struct BucketWorkspace;
+
+    /**
+     * Stage 1: site/UT discovery and runtime-link construction.
+     *
+     * Sweeps m_channelMatrixMap, classifies each node as BS or UE side
+     * by NetDevice type name, builds the GPU cell/UT/antenna-panel
+     * tables and the runtimeLinks vector, evicts stale
+     * m_gpuChanSpctMap entries, groups links into (sNAnt, uNAnt)
+     * buckets and assigns each link its lspReadIdx into the LSP grid.
+     *
+     * @param ws The per-refresh workspace to fill.
+     * @return false when there is nothing to do this refresh (no
+     *         BS->UE runtime links or no usable antenna buckets), in
+     *         which case UpdateChannel returns immediately.
+     */
+    bool CollectRefreshTopology(RefreshWorkspace& ws);
+
+    /**
+     * Stage 2: static-channel (m_updatePeriod=0) fast paths.
+     *
+     * Path A (no beams changed): extend the generatedTime stamps on all
+     * cache entries, zero GPU work. Path B (beams changed): set
+     * ws.skipLspCluster so the orchestrator skips the LSP/cluster
+     * pipeline and only re-runs the matrix/LT/spec stages.
+     *
+     * @param ws The per-refresh workspace.
+     * @return true when Path A fully handled the refresh (UpdateChannel
+     *         returns immediately).
+     */
+    bool RunStaticFastPaths(RefreshWorkspace& ws);
+
+    /**
+     * Stage 3: LSP pipeline (CRN generation + calLinkParam dispatch).
+     *
+     * Uploads cell/UT params and the scenario-correct TR 38.901
+     * Table 7.5-6 LSP marginals + cross-correlations, forces the GPU
+     * LOS state to agree with the CPU ChannelCondition verdict
+     * (LOS-sync, opt out with MEZ_LOSSYNC=0), generates the correlated
+     * random-number grids and dispatches cal_link_param.
+     *
+     * @param ws The per-refresh workspace (fills ws.tLos/tNlos/tO2i).
+     */
+    void RunLspPipeline(RefreshWorkspace& ws);
+
+    /**
+     * Stage 4: small-scale cluster pipeline (calClusterRay dispatch).
+     *
+     * Uploads the small-scale config / antenna panel tables / per-
+     * condition Table 7.5-6 small-scale parameters, builds the spatial
+     * consistency (TR 38.901 7.6.3.2 procedure A) skip mask, runs
+     * calClusterRay for the full grid and applies the host-side
+     * procedure-A drift for preserved links (opt out with MEZ_SC=0).
+     *
+     * @param ws The per-refresh workspace (consumes ws.tLos/tNlos/tO2i).
+     */
+    void RunClusterPipeline(RefreshWorkspace& ws);
+
+    /**
+     * Stage 5: GPU->CPU readback of link and cluster params.
+     *
+     * Compact read of LinkParams + ClusterParamsGpu for the full grid;
+     * under MEZ_DIAG_H=1 additionally fetches the packed per-ray
+     * angles/XPR/initial phases (~8 MB) so the hAB audit can rebuild
+     * the matrix from the complete GPU draw. Marks the GPU cluster
+     * params fresh for the static-channel fast paths.
+     *
+     * @param ws The per-refresh workspace (fills ws.linkParams,
+     *           ws.clusterParams and the per-ray flat vectors).
+     */
+    void ReadbackClusterParams(RefreshWorkspace& ws);
+
+    /**
+     * Stage 6 (per bucket): bucket preparation.
+     *
+     * Builds the bucket's ActiveLink list, assembles the hop-relative
+     * pre-gathered beam-weight staging arrays for the longTerm kernel,
+     * derives the matrix/LT and spec chunk sizes from device limits and
+     * sizes the per-thread matrix/longTerm accumulators.
+     *
+     * @param ws The per-refresh workspace.
+     * @param bw The bucket workspace to fill.
+     */
+    void PrepareBucket(RefreshWorkspace& ws, BucketWorkspace& bw);
+
+    /**
+     * Stage 7 (per bucket): chunked channel-matrix + longTerm dispatch.
+     *
+     * Runs genChannelMatrixAndLongTermFused (or genChannelMatrix alone
+     * when beamforming is disabled) chunk by chunk, reading the element
+     * matrices and longTerm slabs back into the per-thread flat
+     * accumulators.
+     *
+     * @param ws The per-refresh workspace.
+     * @param bw The bucket workspace (consumes the LT staging arrays).
+     */
+    void GenerateMatricesAndLongTerm(RefreshWorkspace& ws, BucketWorkspace& bw);
+
+    /**
+     * Stage 8 (per bucket): write GPU results into the ns-3 caches.
+     *
+     * Full path: rebuild m_channelParamsMap / m_channelMatrixMap /
+     * m_gpuLongTermMap entries from the GPU readbacks and fill the flat
+     * delay + spatial-projection arrays consumed by the spectrum batch.
+     * Path B (ws.skipLspCluster): only refresh matrix timestamps and
+     * rebuild LT entries from the new longTerm output.
+     *
+     * @param ws The per-refresh workspace.
+     * @param bw The bucket workspace.
+     */
+    void PopulateChannelMaps(RefreshWorkspace& ws, BucketWorkspace& bw);
+
+    /**
+     * Stage 9 (per bucket): batched spectrum-channel pre-computation.
+     *
+     * Dispatches genSpecBatch for M lookahead slots per chunk (Doppler
+     * extrapolated per slot), scatters the per-port H and scalar power
+     * readbacks into the bucket's disjoint regions of m_specHFlat /
+     * m_specPowFlat and records per-link GpuChanSpctEntry metadata.
+     *
+     * @param ws The per-refresh workspace.
+     * @param bw The bucket workspace.
+     */
+    void RunSpectrumBatch(RefreshWorkspace& ws, BucketWorkspace& bw);
+
+    /**
+     * Stage 10: MEZ_DIAG_H=1 diagnostic audits (pure instrumentation).
+     *
+     * Per-stage power audits (matrixPower/longTermPower), pattern and
+     * LSP statistics, and the per-link GPU-vs-CPU comparators (ltAB,
+     * hAB/hABel, cohAB, bfAB, angAB, bfPG, clusterPow, geom). No-op
+     * unless the MEZ_DIAG_H environment variable is set to 1.
+     *
+     * @param ws The per-refresh workspace.
+     */
+    void RunDiagnosticAudits(RefreshWorkspace& ws);
+
+    // ── GPU back-end handle ───────────────────────────────────────────
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
     mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
     // Dedup the per-link EnsureBatchFresh calls within the same
