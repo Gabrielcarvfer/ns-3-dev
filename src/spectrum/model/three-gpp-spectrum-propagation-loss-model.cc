@@ -713,6 +713,16 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
                 sqrtVit[rb] = std::sqrt(v);
         }
     }
+    // specAB audit budget (MEZ_DIAG_H=1): while > 0, GPU hits do NOT return
+    // early; the CPU contraction below also runs on the SAME inputs (same
+    // longTerm, same doppler argument, same PSD) and the two spectrum
+    // matrices are compared end-to-end. This is the stage between the
+    // (element-exact) channel matrix / longTerm and the PSD reduction, so a
+    // constant power ratio here pins a scale bug to the spec assembly.
+    static int specAuditBudget = []() {
+        const char* e = std::getenv("MEZ_DIAG_H");
+        return (e && e[0] == '1') ? 24 : 0;
+    }();
     if (channelModel)
     {
         static const std::vector<std::complex<double>> kEmptyDelayT{};
@@ -721,7 +731,10 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
                 kEmptyDelayT, sqrtVit, numRb, numRxPorts, numTxPorts, isReverse,
                 sWBeamHash, uWBeamHash, scalarPsdOk))
         {
-            return quickHit;
+            if (specAuditBudget <= 0)
+            {
+                return quickHit;
+            }
         }
     }
 
@@ -825,6 +838,7 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     // overrides this and dispatches gen_spec_chan_kernel against
     // the longTerm matrix that's already resident on its GPU buffer.
     // On nullptr we fall through to the CPU contraction below.
+    Ptr<MatrixBasedChannelModel::Complex3DVector> specAuditHeld;
     if (channelModel)
     {
         if (auto gpuChanSpct = channelModel->TryGenSpectrumChannelMatrix(
@@ -832,7 +846,13 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
                 delayT, sqrtVit, numRb, numRxPorts, numTxPorts, isReverse,
                 sWBeamHash, uWBeamHash, scalarPsdOk))
         {
-            return gpuChanSpct;
+            if (specAuditBudget <= 0)
+            {
+                return gpuChanSpct;
+            }
+            // Audit mode: hold the GPU result, let the CPU contraction run
+            // on the same inputs, compare at the end of the function.
+            specAuditHeld = gpuChanSpct;
         }
     }
 
@@ -889,6 +909,40 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
         {
             outRow[i] *= s;
         }
+    }
+    if (specAuditHeld)
+    {
+        // specAB comparison: GPU spec entry vs the CPU contraction just
+        // computed from identical inputs. Total power ratio (dB) exposes
+        // any scale divergence; per-element relative Frobenius error
+        // exposes phase/structure divergence.
+        --specAuditBudget;
+        double powG = 0.0;
+        double powC = 0.0;
+        double diff2 = 0.0;
+        const auto& gv = specAuditHeld->GetValues();
+        const auto& cv = chanSpct->GetValues();
+        const size_t nTot = std::min(gv.size(), cv.size());
+        for (size_t i = 0; i < nTot; ++i)
+        {
+            powG += std::norm(gv[i]);
+            powC += std::norm(cv[i]);
+            diff2 += std::norm(gv[i] - cv[i]);
+        }
+        std::fprintf(stderr,
+                     "[MEZ_DIAG_H] specAB rxtx=%zux%u powRatioDb=%.2f relFrob=%.4g "
+                     "dims g(%zux%zux%zu) c(%zux%zux%zu)\n",
+                     size_t(numRxPorts),
+                     numTxPorts,
+                     (powG > 0 && powC > 0) ? 10.0 * std::log10(powG / powC) : -99.0,
+                     (powC > 0) ? std::sqrt(diff2 / powC) : -1.0,
+                     size_t(specAuditHeld->GetNumRows()),
+                     size_t(specAuditHeld->GetNumCols()),
+                     size_t(specAuditHeld->GetNumPages()),
+                     size_t(chanSpct->GetNumRows()),
+                     size_t(chanSpct->GetNumCols()),
+                     size_t(chanSpct->GetNumPages()));
+        return specAuditHeld;
     }
     return chanSpct;
 }
