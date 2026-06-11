@@ -466,17 +466,21 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                         static_cast<float>(ant->GetAntennaHorizontalSpacing()),
                         static_cast<float>(ant->GetAntennaVerticalSpacing())};
         // Polarisation slant angles. CPU UPA stores ONE PolSlantAngle
-        // attribute in radians; the dual-polarised second pol is taken
-        // to be perpendicular (slant + pi/2). The mezanine previously
-        // hardcoded {45, -45} degrees for BS, which mismatched the
-        // CPU side for any antenna whose PolSlantAngle wasn't 45 deg
-        // and broke beam coherency on dual-pol BS arrays.
+        // attribute in radians; the dual-polarised second pol is
+        // slant MINUS 90 degrees (UniformPlanarArray::SetDualPol:
+        // m_cosPolSlant[1] = cos(m_polSlant - pi/2)). The sign matters:
+        // +90 gives the exact NEGATION of the CPU's second-pol field
+        // components (cos(z+90) = -sin z = -cos(z-90) etc.), flipping
+        // the sign of half the matrix elements — per-element energy
+        // unchanged but port/beam contractions against CPU-computed
+        // weights decorrelate (found element-exactly by the hAB audit:
+        // first-pol block matched, overall relFrob ~1.4).
         const double polSlantRad = ant->GetPolSlant();
         const double polSlantDeg = polSlantRad * 180.0 / M_PI;
         p.polarAnglesDeg = ant->IsDualPol()
                                ? std::array<float, 2>{
                                      static_cast<float>(polSlantDeg),
-                                     static_cast<float>(polSlantDeg + 90.0)}
+                                     static_cast<float>(polSlantDeg - 90.0)}
                                : std::array<float, 2>{
                                      static_cast<float>(polSlantDeg), 0.f};
         p.panelOrientation = {static_cast<float>(ant->GetAlpha()),
