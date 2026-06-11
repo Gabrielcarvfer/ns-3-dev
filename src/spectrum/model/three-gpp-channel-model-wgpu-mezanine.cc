@@ -3231,6 +3231,12 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                         cm.GetNumPages() >= 4 ? cm.GetNumPages() - 4 : cm.GetNumPages();
                     const size_t gpuSubStart = nPages >= 4 ? nPages - 4 : nPages;
                     double cpuModelPow = 0.0;
+                    // Per-(cluster, port) complex lt of the CPU realization,
+                    // kept for the COHERENT RB-domain comparison below
+                    // (live RSRP sums clusters coherently per RB through the
+                    // delay phases, unlike the incoherent sums here).
+                    std::vector<std::complex<double>> cpuLtStore(
+                        cm.GetNumPages() * sPorts * uPorts);
                     for (size_t c = 0; c < cm.GetNumPages(); ++c)
                     {
                         for (size_t sp = 0; sp < sPorts; ++sp)
@@ -3263,6 +3269,7 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                                             ctx.sAnt->GetNumColumns() - sElemsPerPort;
                                 }
                                 cpuModelPow += std::norm(txSum);
+                                cpuLtStore[(c * sPorts + sp) * uPorts + up] = txSum;
                                 if (c == 0)
                                 {
                                     bf0Cpu += std::norm(txSum);
@@ -3294,6 +3301,57 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                             }
                         }
                     }
+                    // COHERENT RB-domain power (cohAB): live RSRP is
+                    // psd[rb] ~ sum_ports |sum_c lt(c) * e^{-j2pi f_rb tau_c}|^2
+                    // — clusters combine COHERENTLY through the delay phases,
+                    // unlike the incoherent sum_c |lt|^2 of bfRatio above. If
+                    // the coherent ratio diverges while the incoherent one
+                    // sits at parity, the DELAY structure (e.g. LOS delay
+                    // scaling, subcluster delay offsets) differs between the
+                    // realizations even though per-cluster powers match.
+                    double cohGpu = 0.0;
+                    double cohCpu = 0.0;
+                    {
+                        auto gpPar2 = m_channelParamsMap.count(ctx.paramsKey)
+                                          ? DynamicCast<ThreeGppChannelParams>(
+                                                m_channelParamsMap.at(ctx.paramsKey))
+                                          : nullptr;
+                        const double fc0 = m_frequency;
+                        constexpr double kRbW = 180e3;
+                        constexpr int kNrb = 53;
+                        if (gpPar2 && gpPar2->m_delay.size() >= nPages &&
+                            cpuParams->m_delay.size() >= cm.GetNumPages())
+                        {
+                            for (int rb = 0; rb < kNrb; ++rb)
+                            {
+                                const double f = fc0 + (rb - kNrb / 2) * kRbW;
+                                for (size_t sp = 0; sp < sPorts; ++sp)
+                                {
+                                    for (size_t up = 0; up < uPorts; ++up)
+                                    {
+                                        std::complex<double> aG{0, 0};
+                                        std::complex<double> aC{0, 0};
+                                        for (size_t c = 0; c < nPages; ++c)
+                                        {
+                                            const double th =
+                                                -2.0 * M_PI * f * gpPar2->m_delay[c];
+                                            aG += gpuLt(up, sp, c) *
+                                                  std::complex<double>(cos(th), sin(th));
+                                        }
+                                        for (size_t c = 0; c < cm.GetNumPages(); ++c)
+                                        {
+                                            const double th =
+                                                -2.0 * M_PI * f * cpuParams->m_delay[c];
+                                            aC += cpuLtStore[(c * sPorts + sp) * uPorts + up] *
+                                                  std::complex<double>(cos(th), sin(th));
+                                        }
+                                        cohGpu += std::norm(aG);
+                                        cohCpu += std::norm(aC);
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Condition tag (L=LOS/N=NLOS) lets the analysis split
                     // the ratio distribution by population: a LOS-only
                     // deficit points at the Rician page-0 assembly, an
@@ -3301,6 +3359,14 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                     const bool bfLos = ctx.condition &&
                                        ctx.condition->GetLosCondition() ==
                                            ChannelCondition::LosConditionValue::LOS;
+                    std::fprintf(stderr,
+                                 "[MEZ_DIAG_H] cohAB link(cid=%u,uid=%u,%c) cohRatioDb=%.2f\n",
+                                 ctx.cid,
+                                 ctx.uid,
+                                 bfLos ? 'L' : 'N',
+                                 (cohGpu > 0 && cohCpu > 0)
+                                     ? 10.0 * std::log10(cohGpu / cohCpu)
+                                     : -99.0);
                     std::fprintf(stderr,
                                  "[MEZ_DIAG_H] bfAB link(cid=%u,uid=%u,%c) gpuBf=%.3f "
                                  "cpuModelBf=%.3f ratioDb=%.2f totRatioDb=%.2f "
