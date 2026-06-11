@@ -1134,6 +1134,108 @@ The test suite ``ThreeGppChannelTestSuite`` includes five test cases:
 the model, but it requires some additional features which are not currently
 implemented, thus is left as future work.
 
+GPU-accelerated channel generation
+##################################
+
+The class ``ThreeGppChannelModelWgpuMezanine`` is a drop-in replacement for
+``ThreeGppChannelModel`` that generates the TR 38.901 channel on the GPU.
+It produces results that are element-exact with respect to the CPU model
+(verified by feeding the GPU-drawn channel parameters back through the CPU
+``GetNewChannel`` and comparing the channel matrices element-wise: the
+relative Frobenius error is at single-precision noise level), so it can be
+selected purely as a performance option without changing the modeled physics.
+
+**Capabilities.** The GPU back-end covers the full TR 38.901 generation
+chain:
+
+* Spatially-correlated large-scale parameters (DS, AS, SF, K) via correlated
+  random number grids per site and condition, replacing the per-link
+  independent draws with map-based draws so that nearby UTs observe
+  correlated LSPs.
+* Cluster and ray generation (delays, powers, angles per Eqs. 7.5-1 to
+  7.5-20, XPR, random initial phases), the channel matrix assembly
+  (Eqs. 7.5-22/7.5-28/7.5-29 including the Rician term, dual polarization
+  and the strongest-2 subcluster split), the per-port long-term (beamformed)
+  component, and the frequency-domain spectrum channel matrix used by
+  ``ThreeGppSpectrumPropagationLossModel``.
+* Spatial consistency (procedure A) updates, LOS/NLOS conditions
+  synchronized with the ns-3 channel condition model, and multi-slot
+  Doppler lookahead (see ``MezBatchSlots`` below).
+* Validated scenarios: UMa, RMa, UMi-StreetCanyon and InH-OfficeOpen
+  (system-level SINR and RSRP distributions match the CPU model within
+  fractions of a dB at equal seeds). NTN and V2V scenario tables are not
+  yet wired to the GPU path and fall back to the CPU model.
+
+**How it works.** Instead of regenerating one link at a time inside
+``GetChannel``, the model batches ALL tracked links and refreshes them
+together on a periodic schedule (``MezRefreshPeriod``, default 100 ms,
+matching the typical small-scale update granularity). One refresh runs a
+GPU pipeline of compute kernels -- correlated-grid generation and
+convolution, per-link LSP draws, cluster/ray draws, channel matrix assembly
+(with per-ray antenna field components precomputed once per link), per-port
+long-term contraction, and an M-slot spectrum-matrix batch -- and reads the
+results back into the standard ``ChannelMatrix`` / ``ChannelParams``
+structures, so every downstream consumer (including
+``ThreeGppSpectrumPropagationLossModel``) works unchanged. Between
+refreshes, per-link evaluations are served from caches: repeated
+evaluations of a link within a slot return the previously computed
+spectrum matrix (an identity cache keyed on the batch, slot and a PSD
+fingerprint), and beam changes are filled on demand from the cached
+per-port channel. The implementation lives in
+``three-gpp-channel-model-wgpu-mezanine.{h,cc}`` (the model logic),
+``sls-chan-wgpu.{h,cc}`` (the WebGPU host layer, using Dawn) and
+``sls-chan.wgsl`` (the kernels). The WGSL is loaded at run time, so kernel
+changes do not require recompilation.
+
+**Configuration.** Select the model by aggregating it in place of
+``ThreeGppChannelModel`` (helpers that accept a channel-model TypeId can
+simply be given ``ns3::ThreeGppChannelModelWgpuMezanine``). Attributes:
+
+* ``MezRefreshPeriod`` (default 100 ms): period of the batched GPU refresh.
+  Genuine reconfigurations (antenna reshuffles, new links) are still caught
+  immediately by the evaluation path; the periodic loop only guarantees a
+  maximum staleness. Set 0 to disable the periodic loop.
+* ``MezBatchSlots`` (default 1, up to 64): number of future slots to
+  pre-compute per refresh. With M > 1 the spectrum-matrix batch is
+  dispatched M times with the Doppler phase extrapolated per slot, and the
+  next M slots of evaluations are served without any GPU dispatch. This is
+  physically sound within the channel coherence time: cluster geometry is
+  frozen and only carrier phase rotates.
+* ``MezSlotDuration`` (default 0.5 ms = NR numerology mu=1): slot duration
+  used for the lookahead extrapolation; set to match the simulated
+  numerology.
+
+For best results pair the model with
+``ThreeGppSpectrumPropagationLossModel::InPlaceParams=true`` (avoids a
+per-evaluation deep copy) and a coherent
+``ThreeGppChannelModel::UpdatePeriod`` (e.g. 100 ms). The diagnostic audit
+suite used to verify CPU/GPU parity can be enabled at run time with the
+environment variable ``MEZ_DIAG_H=1``; it prints per-stage A/B comparisons
+(element-wise matrix diffs, beamformed-power ratios) to stderr.
+
+**Performance.** The speedup is the ratio of channel-generation work
+removed to total simulation work, so it grows with the share of channel
+computation in the scenario:
+
+* Large antenna arrays and many ports benefit most: an 8x8 dual-polarized
+  panel with 4x4x2 ports (32 logical ports) measured 7.75x end-to-end at a
+  21-cell NR system-level simulation, while the same deployment with a
+  small 4x8 single-polarized array measures about 2x (the channel is only
+  ~10 percent of the remaining wall time there).
+* Many links amplify the gain: a 57-cell, 570-UE deployment measured 3.75x
+  end-to-end.
+* Frequent updates with multi-slot lookahead are the strongest lever at the
+  channel-model level: in an isolated channel benchmark
+  (``spectrum-profile-bench``), steady-state generation is ~10x faster than
+  the CPU model, and with ``MezBatchSlots=20`` the amortized per-evaluation
+  cost drops by a further order of magnitude (~150x vs. the CPU model),
+  because one refresh serves 20 slots of evaluations.
+
+End-to-end figures are smaller than kernel-level figures because the
+non-channel part of the simulation (PHY/MAC processing, interference
+bookkeeping, event scheduling) is unchanged and bounds the total gain
+(Amdahl's law); profile before assuming the channel is the bottleneck.
+
 References
 ##########
 

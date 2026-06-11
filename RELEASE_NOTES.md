@@ -36,6 +36,7 @@ been tested on Linux. As of this release, the latest known version to work with 
 
 ### New user-visible features
 
+- (spectrum) Added `ThreeGppChannelModelWgpuMezanine`, a GPU-accelerated (WebGPU/Dawn) drop-in replacement for `ThreeGppChannelModel`. It batches the full TR 38.901 generation chain (spatially-correlated LSPs, cluster/ray draws, channel matrix, per-port long term, frequency-domain spectrum matrices with multi-slot Doppler lookahead) on the GPU per refresh period and serves per-link evaluations from caches. Results are element-exact with respect to the CPU model; UMa, RMa, UMi-StreetCanyon and InH-OfficeOpen are validated at system level. Measured end-to-end speedups scale with the channel-work share of the scenario: about 7.75x for a 21-cell NR deployment with 8x8 dual-polarized panels and 32 logical ports, 3.75x at 57 cells / 570 UEs, about 2x for small single-polarized arrays; at the channel level, multi-slot lookahead (`MezBatchSlots=20`) reduces the amortized per-evaluation cost by roughly two orders of magnitude versus the CPU model. See the spectrum module documentation ("GPU-accelerated channel generation") for configuration and tuning guidance.
 - (wifi) Add support for Power Save mode.
 
 ### Bugs fixed

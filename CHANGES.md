@@ -16,6 +16,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### New API
 
+* (spectrum) Added `ThreeGppChannelModelWgpuMezanine`, a GPU-accelerated drop-in replacement for `ThreeGppChannelModel` (element-exact results, WebGPU/Dawn back-end). New attributes: `MezRefreshPeriod` (period of the batched GPU refresh, default 100 ms), `MezBatchSlots` (number of future slots to pre-compute per refresh with Doppler-phase extrapolation, default 1, up to 64) and `MezSlotDuration` (slot duration for the lookahead, default 0.5 ms, set to match the simulated numerology). To get the most out of it, use large antenna arrays / many ports (the speedup scales with the channel-work share), and enable multi-slot lookahead (`MezBatchSlots` > 1) when the channel is refreshed frequently relative to the slot length.
+* (spectrum) Added the `InPlaceParams` attribute to `ThreeGppSpectrumPropagationLossModel`: when true, `CalcBeamformingGain` mutates the input signal parameters in place instead of deep-copying them per evaluation. Only safe when the spectrum channel passes exclusively-owned copies (as `MultiModelSpectrumChannel` does); default false.
 * (wifi) Add the `PsmTimeout` attribute to `DefaultPowerSaveManager` to keep STAs in PS mode awake for extra time before going to sleep
 * (wifi) Add the `ListenAdvance` attribute to `DefaultPowerSaveManager` to make STAs in PS mode wake up some time in advance prior to the TBTT
 
