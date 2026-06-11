@@ -928,6 +928,10 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     std::vector<float> phiNmAodFlat;
     std::vector<float> thetaNmZoaFlat;
     std::vector<float> thetaNmZodFlat;
+    // Per-ray initial phases (4 per ray, degrees), diag-only: lets the hAB
+    // audit rebuild the matrix from the COMPLETE GPU draw via the CPU's
+    // GetNewChannel and diff element-wise (zero statistical noise).
+    std::vector<float> rndpFlat;
 
     // Path B / Path C only: upload and dispatch the LSP + cluster pipeline.
     // Path A never reaches here (it returned early).
@@ -1137,12 +1141,12 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                                 0,
                                 0,
                                 0,
-                                static_cast<float>(299792458.0 / m_frequency));
+                                static_cast<float>(3.0e8 / m_frequency /* 3e8 matches the CPU model's lambda */));
 
     gpu->uploadAntPanelConfigs(antCfgs, antThetaFlat, antPhiFlat);
 
     SsCmnParams ss{};
-    ss.lambda_0 = static_cast<float>(299792458.0 / m_frequency);
+    ss.lambda_0 = static_cast<float>(3.0e8 / m_frequency /* 3e8 matches the CPU model's lambda */);
     ss.lgfc = static_cast<float>(std::log10(m_frequency / 1e9));
 
     // ── Table-driven small-scale parameters ───────────────────────────
@@ -1407,7 +1411,49 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
         SLS_PHASE_SCOPE("Mez::ReadParams");
         linkParams = gpu->readLinkParams(nSite, nUt);
         clusterParams = gpu->readClusterParams(nSite, nUt);
-        // xprFlat, phiNmAoaFlat etc. remain empty — per-ray data not needed.
+        // xprFlat, phiNmAoaFlat etc. remain empty in normal runs — per-ray
+        // data is not needed and the readback costs ~8 MB. Under MEZ_DIAG_H
+        // they ARE fetched so Populate can feed the COMPLETE GPU draw (ray
+        // angles, XPR, initial phases) into the channel params: the hAB
+        // audit then rebuilds the matrix with the CPU's GetNewChannel from
+        // the SAME realization and diffs element-wise — a deterministic
+        // math comparison with zero statistical noise.
+        static const bool diagRays = []() {
+            const char* e = std::getenv("MEZ_DIAG_H");
+            return e && e[0] == '1';
+        }();
+        if (diagRays)
+        {
+            const std::vector<float> packed = gpu->downloadClusterOutputsPacked();
+            const size_t nLinks = size_t(nSite) * nUt;
+            constexpr size_t kCr = size_t(MAX_CLUSTERS) * MAX_RAYS; // 400
+            xprFlat.resize(nLinks * kCr);
+            phiNmAoaFlat.resize(nLinks * kCr);
+            phiNmAodFlat.resize(nLinks * kCr);
+            thetaNmZoaFlat.resize(nLinks * kCr);
+            thetaNmZodFlat.resize(nLinks * kCr);
+            rndpFlat.resize(nLinks * kCr * 4);
+            for (size_t l = 0; l < nLinks; ++l)
+            {
+                const float* base = packed.data() + l * SlsChanWgpu::kPackedLinkStride;
+                std::copy_n(base + SlsChanWgpu::kPackedOffXpr, kCr, xprFlat.data() + l * kCr);
+                std::copy_n(base + SlsChanWgpu::kPackedOffAoA,
+                            kCr,
+                            phiNmAoaFlat.data() + l * kCr);
+                std::copy_n(base + SlsChanWgpu::kPackedOffAoD,
+                            kCr,
+                            phiNmAodFlat.data() + l * kCr);
+                std::copy_n(base + SlsChanWgpu::kPackedOffZoA,
+                            kCr,
+                            thetaNmZoaFlat.data() + l * kCr);
+                std::copy_n(base + SlsChanWgpu::kPackedOffZoD,
+                            kCr,
+                            thetaNmZodFlat.data() + l * kCr);
+                std::copy_n(base + SlsChanWgpu::kPackedOffRndp,
+                            kCr * 4,
+                            rndpFlat.data() + l * kCr * 4);
+            }
+        }
     }
     mezPrintMem("post-ReadParams");
 
@@ -1962,7 +2008,31 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                     }
                 }
 
-                if (prev && SameDims(prev->m_clusterPhase, cp.nCluster, cp.nRayPerCluster))
+                if (!rndpFlat.empty())
+                {
+                    // Diag path: carry the GPU's per-ray initial phases
+                    // (4 per ray, degrees in the packed buffer; the CPU's
+                    // GetNewChannel expects radians). With angles, XPR and
+                    // phases all from the SAME GPU draw, the CPU builder
+                    // reproduces the GPU matrix exactly up to assembly-math
+                    // differences — which is precisely what the hAB audit
+                    // measures.
+                    params->m_clusterPhase.assign(
+                        cp.nCluster, Double2DVector(cp.nRayPerCluster, DoubleVector(4u, 0.0)));
+                    for (uint32_t c = 0; c < cp.nCluster; ++c)
+                    {
+                        for (uint32_t r = 0; r < cp.nRayPerCluster; ++r)
+                        {
+                            const uint32_t flat = FlatClusterRayIndex(ctx.lspReadIdx, c, r);
+                            for (uint32_t p = 0; p < 4u; ++p)
+                            {
+                                params->m_clusterPhase[c][r][p] =
+                                    rndpFlat.at(size_t(flat) * 4u + p) * kDeg2Rad;
+                            }
+                        }
+                    }
+                }
+                else if (prev && SameDims(prev->m_clusterPhase, cp.nCluster, cp.nRayPerCluster))
                     params->m_clusterPhase = prev->m_clusterPhase;
                 else
                     params->m_clusterPhase.assign(
@@ -2992,6 +3062,124 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                 if (ctx.sNodeId > ctx.uNodeId)
                     std::swap(aMobOrd, bMobOrd);
                 auto table = GetThreeGppTable(aMobOrd, bMobOrd, ctx.condition);
+                // hAB: paired-draw ELEMENT-WISE matrix comparison. The link's
+                // own params now carry the complete GPU draw (cluster powers/
+                // delays/angles from ReadParams, per-ray angles + XPR + the 4
+                // initial phases from the packed readback), so the CPU's
+                // GetNewChannel rebuilds the SAME realization. Any element
+                // mismatch beyond float32 noise is therefore a deterministic
+                // assembly-math divergence (fields, element positions,
+                // polarization, scaling) — no statistics involved, unlike the
+                // ensemble-ratio audits below.
+                {
+                    auto habIt = m_channelParamsMap.find(ctx.paramsKey);
+                    auto gpPar = habIt != m_channelParamsMap.end()
+                                     ? DynamicCast<ThreeGppChannelParams>(habIt->second)
+                                     : nullptr;
+                    if (gpPar && !gpPar->m_rayAoaRadian.empty() && !gpPar->m_clusterPhase.empty())
+                    {
+                        auto pairMat = ThreeGppChannelModel::GetNewChannel(gpPar,
+                                                                           table,
+                                                                           ctx.sMob,
+                                                                           ctx.uMob,
+                                                                           ctx.sAnt,
+                                                                           ctx.uAnt);
+                        if (pairMat)
+                        {
+                            const auto& pm = pairMat->m_channel;
+                            if (pm.GetNumRows() == ch.GetNumRows() &&
+                                pm.GetNumCols() == ch.GetNumCols() &&
+                                pm.GetNumPages() == ch.GetNumPages())
+                            {
+                                // Per-page relative Frobenius error pins a
+                                // divergence to LOS page 0, ordinary cluster
+                                // pages, or the appended subcluster pages.
+                                double num = 0.0;
+                                double den = 0.0;
+                                double worstPageErr = 0.0;
+                                size_t worstPage = 0;
+                                for (size_t pg = 0; pg < pm.GetNumPages(); ++pg)
+                                {
+                                    double n2 = 0.0;
+                                    double d2 = 0.0;
+                                    for (size_t rr = 0; rr < pm.GetNumRows(); ++rr)
+                                        for (size_t cc = 0; cc < pm.GetNumCols(); ++cc)
+                                        {
+                                            n2 += std::norm(ch(rr, cc, pg) - pm(rr, cc, pg));
+                                            d2 += std::norm(pm(rr, cc, pg));
+                                        }
+                                    num += n2;
+                                    den += d2;
+                                    const double pgErr = (d2 > 0) ? std::sqrt(n2 / d2) : 0.0;
+                                    if (pgErr > worstPageErr)
+                                    {
+                                        worstPageErr = pgErr;
+                                        worstPage = pg;
+                                    }
+                                }
+                                // Raw element pairs for the first few links:
+                                // page-0 LOS is geometry-dominated, so a
+                                // phase/position bug is visible directly.
+                                static int habDumps = 0;
+                                if (habDumps < 6)
+                                {
+                                    ++habDumps;
+                                    // Walk TX columns: a progressive phase
+                                    // rotation along s with |g|/|c| ~ 1 means
+                                    // the TX element-position phase convention
+                                    // diverges — energy parity, beam deficit.
+                                    for (size_t k = 0; k < 4 && k < pm.GetNumCols(); ++k)
+                                    {
+                                        const auto gv = ch(0, k, 0);
+                                        const auto cv = pm(0, k, 0);
+                                        std::fprintf(
+                                            stderr,
+                                            "[MEZ_DIAG_H] hABel cid=%u uid=%u s=%zu "
+                                            "g=(%.4g,%.4g) c=(%.4g,%.4g) |g|/|c|=%.3f "
+                                            "dPhaseDeg=%.1f\n",
+                                            ctx.cid,
+                                            ctx.uid,
+                                            k,
+                                            gv.real(),
+                                            gv.imag(),
+                                            cv.real(),
+                                            cv.imag(),
+                                            std::abs(cv) > 0 ? std::abs(gv) / std::abs(cv) : -1.0,
+                                            std::arg(gv * std::conj(cv)) * 180.0 / M_PI);
+                                    }
+                                }
+                                std::fprintf(stderr,
+                                             "[MEZ_DIAG_H] hAB link(cid=%u,uid=%u,%c) "
+                                             "relFrob=%.4g worstPage=%zu/%zu worstErr=%.4g\n",
+                                             ctx.cid,
+                                             ctx.uid,
+                                             (ctx.condition &&
+                                              ctx.condition->GetLosCondition() ==
+                                                  ChannelCondition::LosConditionValue::LOS)
+                                                 ? 'L'
+                                                 : 'N',
+                                             (den > 0) ? std::sqrt(num / den) : -1.0,
+                                             worstPage,
+                                             size_t(pm.GetNumPages()),
+                                             worstPageErr);
+                            }
+                            else
+                            {
+                                std::fprintf(stderr,
+                                             "[MEZ_DIAG_H] hAB link(cid=%u,uid=%u) DIM MISMATCH "
+                                             "gpu(%zux%zux%zu) cpu(%zux%zux%zu)\n",
+                                             ctx.cid,
+                                             ctx.uid,
+                                             size_t(ch.GetNumRows()),
+                                             size_t(ch.GetNumCols()),
+                                             size_t(ch.GetNumPages()),
+                                             size_t(pm.GetNumRows()),
+                                             size_t(pm.GetNumCols()),
+                                             size_t(pm.GetNumPages()));
+                            }
+                        }
+                    }
+                }
                 auto cpuParams =
                     GenerateChannelParameters(ctx.condition, table, aMobOrd, bMobOrd);
                 auto cpuMat = ThreeGppChannelModel::GetNewChannel(cpuParams,

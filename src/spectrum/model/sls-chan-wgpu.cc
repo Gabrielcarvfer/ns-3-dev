@@ -2621,7 +2621,7 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     (void)cluster1st;
     (void)cluster2nd;
     const float lambda0 =
-        centerFreqHzCache_ > 0.0f ? 299792458.0f / centerFreqHzCache_ : 0.0f;
+        centerFreqHzCache_ > 0.0f ? 3.0e8f / centerFreqHzCache_ /* 3e8 matches the CPU model's lambda */ : 0.0f;
     MatDispUni du{nActiveLinks, numOverallCluster, uSize, sSize, nRays,
                   0u, 0u, 0u, lambda0, 0.0f, 0.0f, 0.0f};
     if (!matrixDispatchBuf_)
@@ -2982,7 +2982,7 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
         float    lambda0;
         float    _pad3, _pad4, _pad5;
     };
-    const float lambda0 = centerFreqHzCache_ > 0.0f ? 299792458.0f / centerFreqHzCache_ : 0.0f;
+    const float lambda0 = centerFreqHzCache_ > 0.0f ? 3.0e8f / centerFreqHzCache_ /* 3e8 matches the CPU model's lambda */ : 0.0f;
     MatDispUni mdu{nActiveLinks, numOverallCluster, uSize, sSize, nRays,
                    0u, 0u, 0u, lambda0, 0.0f, 0.0f, 0.0f};
     if (!matrixDispatchBuf_)

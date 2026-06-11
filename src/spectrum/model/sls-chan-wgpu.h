@@ -574,6 +574,7 @@ class SlsChanWgpu
     static constexpr uint32_t kPackedLinkStride = 3600u;
     static constexpr uint32_t kMaxCr            = 400u;  // MAX_CLUSTERS * MAX_RAYS
     static constexpr uint32_t kPackedOffXpr     = 0u;
+    static constexpr uint32_t kPackedOffRndp    = 400u;  // 4 phases per ray, idx*4+p
     static constexpr uint32_t kPackedOffAoA     = 2000u;
     static constexpr uint32_t kPackedOffAoD     = 2400u;
     static constexpr uint32_t kPackedOffZoA     = 2800u;

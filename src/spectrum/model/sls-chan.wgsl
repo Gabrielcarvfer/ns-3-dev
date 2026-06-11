@@ -2284,11 +2284,22 @@ fn mat_elem_pos(cfg: AntPanelConfig, elem_idx: u32) -> vec3f {
     let local = select(elem_idx, elem_idx - MN, elem_idx >= MN);
     let row = local / N;
     let col = local % N;
-    return vec3f(
-        0.0,
-        f32(col) * cfg.antSpacing[2], // y = d_h * col
-        f32(row) * cfg.antSpacing[3]  // z = d_v * row
-    );
+    // Local (LCS) element position on the y-z plane, like the CPU model's
+    // UniformPlanarArray: x'=0, y' = d_h * col, z' = d_v * row.
+    let yp = f32(col) * cfg.antSpacing[2];
+    let zp = f32(row) * cfg.antSpacing[3];
+    // Rotate into the GCS by the panel bearing alpha (TR 38.901 rotation
+    // matrix 7.1-4 with x'=0 and downtilt beta=0, matching the CPU's
+    // GetElementLocation). The ray phase term exp(j 2 pi r_hat . d) dots
+    // the GCS ray direction with this GCS position; without the rotation
+    // every element but the origin carried a wrong array phase for any
+    // sector with nonzero bearing - per-element energy was unchanged but
+    // the beamformed sum against the CPU-computed (GCS) weights
+    // decorrelated, which was the long-standing beamforming-gain deficit.
+    let a = cfg.bearing_deg * DEG2RAD;
+    let ca = cos(a);
+    let sa = sin(a);
+    return vec3f(-sa * yp, ca * yp, zp);
 }
 
 fn mat_pol_idx(cfg: AntPanelConfig, elem_idx: u32) -> u32 {
