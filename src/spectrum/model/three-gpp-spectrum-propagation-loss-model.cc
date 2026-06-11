@@ -1104,7 +1104,17 @@ ThreeGppSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(
     if (m_evalCtxMaxAge >= Time(0) && fit != m_evalCtxCache.end() &&
         fit->second.mat->m_generatedTime == fit->second.gen &&
         (m_evalCtxMaxAge.IsZero() ||
-         Simulator::Now() - fit->second.gen <= m_evalCtxMaxAge))
+         Simulator::Now() - fit->second.gen <= m_evalCtxMaxAge) &&
+        // Dimension guard: the NR stack RECONFIGURES antenna arrays in
+        // place at attachment time (panel size / element counts change
+        // while the array object keeps its id), so an id-pair match does
+        // not guarantee the cached matrix still fits the antennas. A
+        // mismatch must fall to the slow path, where GetChannel
+        // regenerates for the new geometry.
+        fit->second.mat->m_channel.GetNumCols() ==
+            (fit->second.isReverse ? bPhasedArrayModel : aPhasedArrayModel)->GetNumElems() &&
+        fit->second.mat->m_channel.GetNumRows() ==
+            (fit->second.isReverse ? aPhasedArrayModel : bPhasedArrayModel)->GetNumElems())
     {
         channelMatrix = fit->second.mat;
         channelParams = fit->second.par;
