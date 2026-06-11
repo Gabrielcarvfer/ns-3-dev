@@ -258,6 +258,28 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
 
     //! map containing the long-term components
     mutable std::unordered_map<uint64_t, Ptr<const LongTerm>> m_longTermMap;
+
+    /// Per-antenna-pair eval-context fast cache (see
+    /// DoCalcRxPowerSpectralDensity): avoids re-deriving the
+    /// (channelMatrix, channelParams, isReverse) triple — node-id
+    /// aggregation walks, key computations and several hash-map
+    /// operations — on every per-link evaluation when the link has not
+    /// refreshed since the previous one.
+    struct FastEvalCtx
+    {
+        Ptr<const MatrixBasedChannelModel::ChannelMatrix> mat; ///< cached matrix
+        Ptr<const MatrixBasedChannelModel::ChannelParams> par; ///< cached params
+        Time gen;       ///< matrix generatedTime at cache-fill time
+        bool isReverse; ///< cached orientation
+    };
+    /// Eval-context cache, keyed by (aAntennaId << 32 | bAntennaId).
+    mutable std::unordered_map<uint64_t, FastEvalCtx> m_evalCtxCache;
+    /// UpdatePeriod of the channel model: the age bound that expires
+    /// entries whose underlying objects the base-class per-link path
+    /// REPLACES on regeneration. -2 = not yet read; -1 = attribute absent
+    /// (fast path disabled).
+    mutable Time m_evalCtxMaxAge{Seconds(-2.0)};
+
     //! the model to generate the channel matrix
     Ptr<MatrixBasedChannelModel> m_channelModel;
     //! mutate input params in place in CalcBeamformingGain instead of deep-copying

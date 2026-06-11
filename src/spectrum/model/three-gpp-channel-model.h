@@ -1277,6 +1277,15 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     /// Last Simulator::Now() at which EnsureBatchFresh() completed a GPU
     /// batch; used to short-circuit duplicate calls within the same tick.
     Time m_lastBatchTime;
+    /// Last Simulator::Now() at which EnsureBatchFresh() ran the
+    /// CollectDirtyLinks() staleness walk. The walk costs O(nLinks)
+    /// condition-model lookups per invocation, but links only go stale on
+    /// update-period boundaries, so running it on every new simulator tick
+    /// (its previous behavior) burned tens of wall-seconds at ring-1
+    /// scale. Gating it to the update period is safe: any staleness the
+    /// batch misses is caught by GetChannel's own per-link check and
+    /// regenerated on the (slower) per-link path.
+    Time m_lastDirtyWalkTime{Seconds(-1.0)};
     /// Owned GPU device + pipeline, lazily constructed on first batch.
     /// SlsChanWgpu is forward-declared above so this header does not pull
     /// in wgpu-native headers. The destructor is defined in the .cc,

@@ -1059,36 +1059,75 @@ ThreeGppSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(
     NS_LOG_FUNCTION(this << spectrumSignalParams << a << b << aPhasedArrayModel
                          << bPhasedArrayModel);
     NS_ASSERT_MSG(m_channelModel != nullptr, "Channel model is not set");
-
-    const uint32_t aId = a->GetObject<Node>()->GetId(); // id of the node a
-    const uint32_t bId = b->GetObject<Node>()->GetId(); // id of the node b
-    NS_ASSERT_MSG(aPhasedArrayModel, "Antenna not found for node " << aId);
-    NS_LOG_DEBUG("a node " << aId << " antenna " << aPhasedArrayModel);
-    NS_ASSERT_MSG(bPhasedArrayModel, "Antenna not found for node " << bId);
-    NS_LOG_DEBUG("b node " << bId << " antenna " << bPhasedArrayModel);
+    NS_ASSERT_MSG(aPhasedArrayModel, "Antenna not found for node a");
+    NS_ASSERT_MSG(bPhasedArrayModel, "Antenna not found for node b");
 
     // If the channel model supports it (currently only ThreeGppChannelModel
     // with `UseGpu=true`), refresh every dirty link in one batch before
     // the per-link `GetChannel` calls start. Default base-class impl is a
     // no-op, so existing back-ends (Friis, two-ray, ...) keep working
-    // unchanged.
+    // unchanged. Must run even on eval-context cache hits below: it drives
+    // the channel model's refresh scheduling.
     {
         SLS_PHASE_SCOPE("PRX::EnsureBatchFresh");
         m_channelModel->EnsureBatchFresh();
     }
 
-    Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix =
-        m_channelModel->GetChannel(a, b, aPhasedArrayModel, bPhasedArrayModel);
-    Ptr<const MatrixBasedChannelModel::ChannelParams> channelParams;
+    // Per-antenna-pair eval-context fast path. GetChannel + GetParams
+    // re-derive (node ids via GetObject<Node> aggregation walks, two key
+    // computations, three-plus hash-map operations) the SAME
+    // (channelMatrix, channelParams, isReverse) triple on every one of the
+    // tens of millions of evaluations per run, although the triple only
+    // changes when the link refreshes. Cache it keyed by the antenna-id
+    // pair, with two freshness guards:
+    //  - generatedTime equality: the mezanine refreshes matrices/params IN
+    //    PLACE (stable Ptrs) and stamps a new m_generatedTime, so a refresh
+    //    forces exactly one slow re-fetch per pair;
+    //  - age bound (UpdatePeriod attribute, read once): the base-class
+    //    per-link path REPLACES objects on regeneration, leaving the cached
+    //    (old) object's stamp frozen — the age check expires those entries
+    //    at exactly the moment GetChannel would have regenerated.
+    if (m_evalCtxMaxAge == Seconds(-2.0))
     {
-        SLS_PHASE_SCOPE("PRX::GetParams");
-        channelParams = m_channelModel->GetParams(a, b);
+        TimeValue t;
+        m_evalCtxMaxAge = m_channelModel->GetAttributeFailSafe("UpdatePeriod", t)
+                              ? t.Get()
+                              : Seconds(-1.0); // attribute absent: fast path disabled
     }
-    NS_ASSERT_MSG(channelMatrix != nullptr, "Channel matrix is null");
-    NS_ASSERT_MSG(channelParams != nullptr, "Channel params are null");
+    const uint64_t ctxKey =
+        (uint64_t(aPhasedArrayModel->GetId()) << 32) | bPhasedArrayModel->GetId();
 
-    const auto isReverse =
-        channelMatrix->IsReverse(aPhasedArrayModel->GetId(), bPhasedArrayModel->GetId());
+    Ptr<const MatrixBasedChannelModel::ChannelMatrix> channelMatrix;
+    Ptr<const MatrixBasedChannelModel::ChannelParams> channelParams;
+    bool isReverse = false;
+    auto fit = m_evalCtxCache.find(ctxKey);
+    if (m_evalCtxMaxAge >= Time(0) && fit != m_evalCtxCache.end() &&
+        fit->second.mat->m_generatedTime == fit->second.gen &&
+        (m_evalCtxMaxAge.IsZero() ||
+         Simulator::Now() - fit->second.gen <= m_evalCtxMaxAge))
+    {
+        channelMatrix = fit->second.mat;
+        channelParams = fit->second.par;
+        isReverse = fit->second.isReverse;
+    }
+    else
+    {
+        channelMatrix = m_channelModel->GetChannel(a, b, aPhasedArrayModel, bPhasedArrayModel);
+        {
+            SLS_PHASE_SCOPE("PRX::GetParams");
+            channelParams = m_channelModel->GetParams(a, b);
+        }
+        NS_ASSERT_MSG(channelMatrix != nullptr, "Channel matrix is null");
+        NS_ASSERT_MSG(channelParams != nullptr, "Channel params are null");
+        isReverse =
+            channelMatrix->IsReverse(aPhasedArrayModel->GetId(), bPhasedArrayModel->GetId());
+        if (m_evalCtxMaxAge >= Time(0))
+        {
+            m_evalCtxCache[ctxKey] =
+                FastEvalCtx{channelMatrix, channelParams, channelMatrix->m_generatedTime,
+                            isReverse};
+        }
+    }
 
     // apply the beamforming gain (longTerm computed lazily inside, skipped on GPU hits)
     return CalcBeamformingGain(spectrumSignalParams,
