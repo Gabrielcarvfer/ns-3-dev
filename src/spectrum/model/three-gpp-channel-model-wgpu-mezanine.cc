@@ -2997,6 +2997,24 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                              ++i)
                             totCpu += std::norm(cvv[i]);
                     }
+                    // Page-0 beamformed power for both realizations: on LOS
+                    // links page 0 carries the Rician (deterministic) ray, so
+                    // a page-0-only ratio deficit pins the bug to the LOS-ray
+                    // assembly while a uniform deficit points at the per-ray
+                    // array-response math shared by all pages.
+                    double bf0Gpu = 0.0;
+                    double bf0Cpu = 0.0;
+                    // Appended-subcluster group: both models append 4 pages
+                    // (sub2/sub3 of the two strongest clusters) AFTER the
+                    // ordinary cluster pages. Page indices don't align
+                    // across independent realizations, but the appended
+                    // GROUP does, so a group-level ratio isolates the
+                    // subcluster assembly from the ordinary-cluster pages.
+                    double bfSubGpu = 0.0;
+                    double bfSubCpu = 0.0;
+                    const size_t cpuSubStart =
+                        cm.GetNumPages() >= 4 ? cm.GetNumPages() - 4 : cm.GetNumPages();
+                    const size_t gpuSubStart = nPages >= 4 ? nPages - 4 : nPages;
                     double cpuModelPow = 0.0;
                     for (size_t c = 0; c < cm.GetNumPages(); ++c)
                     {
@@ -3030,14 +3048,51 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                                             ctx.sAnt->GetNumColumns() - sElemsPerPort;
                                 }
                                 cpuModelPow += std::norm(txSum);
+                                if (c == 0)
+                                {
+                                    bf0Cpu += std::norm(txSum);
+                                }
+                                if (c >= cpuSubStart)
+                                {
+                                    bfSubCpu += std::norm(txSum);
+                                }
                             }
                         }
                     }
+                    // GPU per-page beamformed power groups (page 0 and the
+                    // appended-subcluster tail), from the verified GPU lt.
+                    for (size_t c = 0; c < nPages; ++c)
+                    {
+                        for (size_t sp = 0; sp < sPorts; ++sp)
+                        {
+                            for (size_t up = 0; up < uPorts; ++up)
+                            {
+                                const double n2 = std::norm(gpuLt(up, sp, c));
+                                if (c == 0)
+                                {
+                                    bf0Gpu += n2;
+                                }
+                                if (c >= gpuSubStart)
+                                {
+                                    bfSubGpu += n2;
+                                }
+                            }
+                        }
+                    }
+                    // Condition tag (L=LOS/N=NLOS) lets the analysis split
+                    // the ratio distribution by population: a LOS-only
+                    // deficit points at the Rician page-0 assembly, an
+                    // everywhere deficit at the per-ray array-phase math.
+                    const bool bfLos = ctx.condition &&
+                                       ctx.condition->GetLosCondition() ==
+                                           ChannelCondition::LosConditionValue::LOS;
                     std::fprintf(stderr,
-                                 "[MEZ_DIAG_H] bfAB link(cid=%u,uid=%u) gpuBf=%.3f "
-                                 "cpuModelBf=%.3f ratioDb=%.2f totRatioDb=%.2f\n",
+                                 "[MEZ_DIAG_H] bfAB link(cid=%u,uid=%u,%c) gpuBf=%.3f "
+                                 "cpuModelBf=%.3f ratioDb=%.2f totRatioDb=%.2f "
+                                 "p0RatioDb=%.2f restRatioDb=%.2f\n",
                                  ctx.cid,
                                  ctx.uid,
+                                 bfLos ? 'L' : 'N',
                                  gpuPow,
                                  cpuModelPow,
                                  (gpuPow > 0 && cpuModelPow > 0)
@@ -3045,6 +3100,77 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
                                      : -99.0,
                                  (totGpu > 0 && totCpu > 0)
                                      ? 10.0 * std::log10(totGpu / totCpu)
+                                     : -99.0,
+                                 (bf0Gpu > 0 && bf0Cpu > 0)
+                                     ? 10.0 * std::log10(bf0Gpu / bf0Cpu)
+                                     : -99.0,
+                                 (gpuPow - bf0Gpu > 0 && cpuModelPow - bf0Cpu > 0)
+                                     ? 10.0 * std::log10((gpuPow - bf0Gpu) /
+                                                         (cpuModelPow - bf0Cpu))
+                                     : -99.0);
+                    // Cluster-angle spread comparison for the SAME link:
+                    // std of the AOD offsets from the LOS direction over the
+                    // clusters of each realization. The beamformed gain of
+                    // the non-LOS pages is set by how far the cluster AODs
+                    // sit from the (boresight-ish) beam, so a wider GPU
+                    // spread directly predicts the observed page deficit.
+                    {
+                        auto angStd = [](const std::vector<double>& a, double center) {
+                            if (a.size() < 2)
+                                return -1.0;
+                            double s = 0;
+                            double s2 = 0;
+                            for (double v : a)
+                            {
+                                double d = v - center;
+                                while (d > 180.0)
+                                    d -= 360.0;
+                                while (d < -180.0)
+                                    d += 360.0;
+                                s += d;
+                                s2 += d * d;
+                            }
+                            const double m = s / a.size();
+                            return std::sqrt(std::max(0.0, s2 / a.size() - m * m));
+                        };
+                        auto gp = DynamicCast<ThreeGppChannelParams>(
+                            m_channelParamsMap.count(ctx.paramsKey)
+                                ? m_channelParamsMap.at(ctx.paramsKey)
+                                : nullptr);
+                        if (gp && gp->m_angle.size() > AOD_INDEX &&
+                            cpuParams->m_angle.size() > AOD_INDEX)
+                        {
+                            // Use the first cluster of each as the LOS proxy
+                            // center; both models recenter LOS links there.
+                            const auto& ga = gp->m_angle[AOD_INDEX];
+                            const auto& ca = cpuParams->m_angle[AOD_INDEX];
+                            std::fprintf(stderr,
+                                         "[MEZ_DIAG_H] angAB link(cid=%u,uid=%u,%c) "
+                                         "aodStdGpu=%.1f aodStdCpu=%.1f nG=%zu nC=%zu\n",
+                                         ctx.cid,
+                                         ctx.uid,
+                                         bfLos ? 'L' : 'N',
+                                         angStd(ga, ga.empty() ? 0.0 : ga[0]),
+                                         angStd(ca, ca.empty() ? 0.0 : ca[0]),
+                                         ga.size(),
+                                         ca.size());
+                        }
+                    }
+                    // Appended-subcluster group vs the ordinary middle pages
+                    // (everything that is neither page 0 nor the last 4).
+                    const double midGpu = gpuPow - bf0Gpu - bfSubGpu;
+                    const double midCpu = cpuModelPow - bf0Cpu - bfSubCpu;
+                    std::fprintf(stderr,
+                                 "[MEZ_DIAG_H] bfPG link(cid=%u,uid=%u,%c) "
+                                 "subRatioDb=%.2f midRatioDb=%.2f\n",
+                                 ctx.cid,
+                                 ctx.uid,
+                                 bfLos ? 'L' : 'N',
+                                 (bfSubGpu > 0 && bfSubCpu > 0)
+                                     ? 10.0 * std::log10(bfSubGpu / bfSubCpu)
+                                     : -99.0,
+                                 (midGpu > 0 && midCpu > 0)
+                                     ? 10.0 * std::log10(midGpu / midCpu)
                                      : -99.0);
                 }
             }

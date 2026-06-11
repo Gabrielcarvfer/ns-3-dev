@@ -1575,45 +1575,52 @@ fn cal_cluster_ray_kernel(
     // so NLOS links lost their wide-angle scatter and far-off-axis
     // interference sat on the element-pattern floor (~16 dB below the
     // CPU reference).
+    // Cluster mean angles, matching the ns-3 CPU model's
+    // GenerateClusterAngles (three-gpp-channel-model.cc) exactly:
+    // - ONE magnitude term per cluster (angle = 2*sqrt(-ln r)/1.4/C_phi for
+    //   azimuth, -ln(r)/C_theta for zenith) scales AoA/AoD (resp. ZoA/ZoD)
+    //   jointly, and ONE random sign Xn is SHARED by all four dimensions of
+    //   a cluster (the previous code drew four independent signs, which
+    //   broke the joint departure/arrival angle structure the CPU model
+    //   produces and cost ~5 dB of beamformed gain on multi-cluster pages).
+    // - The per-dimension Y_n jitter (sigma = spread/7) stays independent.
     for (var n = 0u; n < n_cluster; n++) {
         let neg_ln = max(-log(powers[n] / max(max_abs_power, 1e-30)), 0.0);
-        let sqrt_neg_ln = sqrt(neg_ln);
+        let az_mag = 2.0 * sqrt(neg_ln) / (1.4 * C_phi_scaled);
+        let ze_mag = neg_ln / C_theta_scaled;
+        let xn = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5); // shared sign
 
-        // AoA: phi'_n = 2*(ASA/1.4)*sqrt(-ln(Pn/max))/C_phi  (Eq 7.5-9)
-        let arg_asa    = 2.0 * (lk.ASA / 1.4) * sqrt_neg_ln / C_phi_scaled;
-        let sign_n_asa = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
-        let eps_n_asa  = rng_normal(&rng) * lk.ASA / 7.0;
-        phi_n_AoA[n]   = wrap_azimuth(sign_n_asa * arg_asa + eps_n_asa + lk.phi_LOS_AOA);
-        if lk.losInd != 0u {
-            phi_n_AoA[n] = wrap_azimuth(phi_n_AoA[n] - phi_n_AoA[0] + lk.phi_LOS_AOA);
-        }
+        phi_n_AoA[n] = wrap_azimuth(lk.ASA * az_mag * xn +
+                                    rng_normal(&rng) * lk.ASA / 7.0 + lk.phi_LOS_AOA);
+        phi_n_AoD[n] = wrap_azimuth(lk.ASD * az_mag * xn +
+                                    rng_normal(&rng) * lk.ASD / 7.0 + lk.phi_LOS_AOD);
+        // ZoA centers on the LOS inclination for outdoor UEs and on 90 deg
+        // for O2I (Eq 7.5-16), matching the CPU model's branch.
+        let zoa_base = select(lk.theta_LOS_ZOA, 90.0, is_o2i != 0u);
+        theta_n_ZOA[n] = wrap_zenith(lk.ZSA * ze_mag * xn +
+                                     rng_normal(&rng) * lk.ZSA / 7.0 + zoa_base);
+        theta_n_ZOD[n] = wrap_zenith(lk.ZSD * ze_mag * xn +
+                                     rng_normal(&rng) * lk.ZSD / 7.0 +
+                                     lk.theta_LOS_ZOD + lk.mu_offset_ZOD);
+    }
 
-        // AoD: same with ASD (Eq 7.5-9 applies C_phi to both azimuths)
-        let arg_asd    = 2.0 * (lk.ASD / 1.4) * sqrt_neg_ln / C_phi_scaled;
-        let sign_n_asd = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
-        let eps_n_asd  = rng_normal(&rng) * lk.ASD / 7.0;
-        phi_n_AoD[n]   = wrap_azimuth(sign_n_asd * arg_asd + eps_n_asd + lk.phi_LOS_AOD);
-        if lk.losInd != 0u {
-            phi_n_AoD[n] = wrap_azimuth(phi_n_AoD[n] - phi_n_AoD[0] + lk.phi_LOS_AOD);
-        }
-
-        // ZoA: theta'_n = -ZSA*ln(Pn/max)/C_theta  (Eq 7.5-14, linear in ln)
-        let arg_zsa    = lk.ZSA * neg_ln / C_theta_scaled;
-        let sign_n_zsa = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
-        let eps_n_zsa  = rng_normal(&rng) * lk.ZSA / 7.0;
-        theta_n_ZOA[n] = wrap_zenith(sign_n_zsa * arg_zsa + eps_n_zsa + 90.0);
-        if lk.losInd != 0u {
-            theta_n_ZOA[n] = wrap_zenith(theta_n_ZOA[n] - theta_n_ZOA[0] + lk.theta_LOS_ZOA);
-        }
-
-        // ZoD: theta'_n = -ZSD*ln(Pn/max)/C_theta (Eq 7.5-14/7.5-19)
-        let arg_zsd    = lk.ZSD * neg_ln / C_theta_scaled;
-        let sign_n_zsd = select(-1.0, 1.0, rng_uniform(&rng) >= 0.5);
-        let eps_n_zsd  = rng_normal(&rng) * lk.ZSD / 7.0;
-        theta_n_ZOD[n] = wrap_zenith(sign_n_zsd * arg_zsd + eps_n_zsd
-                                     + lk.theta_LOS_ZOD + lk.mu_offset_ZOD);
-        if lk.losInd != 0u {
-            theta_n_ZOD[n] = wrap_zenith(theta_n_ZOD[n] - theta_n_ZOD[0] + lk.theta_LOS_ZOD);
+    // LOS recentering (Eq 7.5-12/7.5-17): rigidly shift ALL clusters by the
+    // offset of cluster 0 from the LOS direction, computed from the ORIGINAL
+    // cluster-0 draw. The previous code overwrote angle[0] first and then
+    // subtracted the already-recentered value for n >= 1, which made the
+    // recentering a NO-OP for every cluster but the first: LOS links' non-c0
+    // clusters stayed scattered around the un-shifted random center, costing
+    // ~7 dB of beamformed gain on those pages vs the CPU model.
+    if lk.losInd != 0u {
+        let d_aoa = phi_n_AoA[0]   - lk.phi_LOS_AOA;
+        let d_aod = phi_n_AoD[0]   - lk.phi_LOS_AOD;
+        let d_zoa = theta_n_ZOA[0] - lk.theta_LOS_ZOA;
+        let d_zod = theta_n_ZOD[0] - lk.theta_LOS_ZOD;
+        for (var n = 0u; n < n_cluster; n++) {
+            phi_n_AoA[n]   = wrap_azimuth(phi_n_AoA[n] - d_aoa);
+            phi_n_AoD[n]   = wrap_azimuth(phi_n_AoD[n] - d_aod);
+            theta_n_ZOA[n] = wrap_zenith(theta_n_ZOA[n] - d_zoa);
+            theta_n_ZOD[n] = wrap_zenith(theta_n_ZOD[n] - d_zod);
         }
     }
 
