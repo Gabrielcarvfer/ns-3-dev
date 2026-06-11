@@ -4570,34 +4570,17 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
 }
 
 Ptr<MatrixBasedChannelModel::Complex3DVector>
-ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
-    Ptr<const ChannelMatrix> channelMatrix,
-    Ptr<const ChannelParams> channelParams,
-    Ptr<const Complex3DVector> longTerm,
-    Ptr<const SpectrumValue> inPsd,
-    const std::vector<std::complex<double>>& delayT,
-    const std::vector<double>& sqrtVit,
-    uint32_t numRb,
-    uint8_t numRxPorts,
-    uint8_t numTxPorts,
-    bool isReverse,
-    uint64_t sWBeamHash,
-    uint64_t uWBeamHash,
-    bool scalarPsdOk) const
+ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> channelMatrix,
+                                                     Ptr<const Complex3DVector> longTerm,
+                                                     Ptr<const SpectrumValue> inPsd,
+                                                     uint32_t numRb,
+                                                     uint8_t numRxPorts,
+                                                     uint8_t numTxPorts,
+                                                     bool isReverse,
+                                                     uint64_t sWBeamHash,
+                                                     uint64_t uWBeamHash,
+                                                     bool scalarPsdOk) const
 {
-    // Initial-attachment / REM-map bypass: skip all GPU cache work and fall
-    // through to the CPU path so temporary antenna objects never pollute the
-    // batch cache with stale entries for dimensions that won't match later.
-    if (m_bypassGpuBatch)
-        return nullptr;
-
-    // Batched per-tick path: if UpdateChannel has already run
-    // gen_spec_batch_kernel for this link with the current rb_freqs,
-    // the chanSpct_unscaled is cached in m_gpuChanSpctMap and the
-    // per-eval cost collapses to a hash lookup + per-PRB
-    // sqrt(PSD[rb]) scale. Otherwise we either capture rb_freqs from
-    // inPsd for the NEXT tick to pre-compute, or fall back to CPU /
-    // the per-eval GPU dispatch below.
     if (channelMatrix)
     {
         // Beam-aware key: entries are valid only for the exact (sW, uW)
@@ -4615,7 +4598,8 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
         {
             GpuChanSpctEntry& e = it->second;
             // m_batchRbFreqsHash is captured atomically with
-            // m_batchRbFreqs (see below) and the array is write-once,
+            // m_batchRbFreqs (see MaybeCaptureBatchRbFreqs) and the array
+            // is write-once,
             // so comparing the stored hash avoids re-running FNV over
             // 273 floats on every PRX eval.
             //
@@ -4683,11 +4667,16 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                 const double fp0 = psdVals[0];
                 const double fpm = psdVals[numRb / 2];
                 const double fpl = psdVals[numRb - 1];
+                // identityHit: the cached build in the CURRENT ring slot was
+                // made from this exact (slot, batch, PSD fingerprint), so it
+                // can be returned untouched.
                 auto identityHit = [&](GpuChanSpctEntry::HitOutCache& oc) -> bool {
                     return oc.lastSlot == slotIdx && oc.lastBatch == e.generatedTime &&
                            oc.p0 == fp0 && oc.pm == fpm && oc.pl == fpl &&
                            oc.ring[oc.ringIdx];
                 };
+                // stamp: record what the build we are about to return was
+                // made from, so the next identical eval identity-hits.
                 auto stamp = [&](GpuChanSpctEntry::HitOutCache& oc) {
                     oc.lastSlot = slotIdx;
                     oc.lastBatch = e.generatedTime;
@@ -4717,6 +4706,9 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                         powBase = (revOk ? m_specPowRevFlat : m_specPowFlat).data() +
                                   e.powBaseIdx + size_t(slotIdx) * e.powPerSlotStride;
                     }
+                    // Rotate the 2-deep output ring: rebuild into the buffer
+                    // NOT returned last time, since a live signal in
+                    // NrInterference may still reference the other Ptr.
                     oc.ringIdx ^= 1u;
                     Ptr<Complex3DVector>& scalarSlot = oc.ring[oc.ringIdx];
                     if (!scalarSlot || scalarSlot->GetNumPages() != numRb)
@@ -4739,6 +4731,7 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
                 GpuChanSpctEntry::HitOutCache& ocH = revOk ? e.outRev : e.outFwd;
                 if (identityHit(ocH))
                     return ocH.ring[ocH.ringIdx];
+                // Same 2-deep ring rotation as the scalar path above.
                 ocH.ringIdx ^= 1u;
                 Ptr<Complex3DVector>& fakeSlot = ocH.ring[ocH.ringIdx];
                 if (!fakeSlot || fakeSlot->GetNumPages() != numRb ||
@@ -4850,7 +4843,13 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
             }
         }
     }
+    return nullptr;
+}
 
+void
+ThreeGppChannelModelWgpuMezanine::MaybeCaptureBatchRbFreqs(Ptr<const SpectrumValue> inPsd,
+                                                           uint32_t numRb) const
+{
     // First-ever eval (or rb_freqs invalidated): capture rb_freqs from
     // inPsd's subband layout. Next tick's UpdateChannel will see the
     // captured array and dispatch gen_spec_batch_kernel; this eval
@@ -4870,15 +4869,32 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
             m_batchRbFreqsHash = HashFloatVector(m_batchRbFreqs);
         }
     }
+}
 
+Ptr<MatrixBasedChannelModel::Complex3DVector>
+ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(
+    Ptr<const ChannelMatrix> channelMatrix,
+    Ptr<const ChannelParams> channelParams,
+    Ptr<const Complex3DVector> longTerm,
+    Ptr<const SpectrumValue> inPsd,
+    const std::vector<std::complex<double>>& delayT,
+    const std::vector<double>& sqrtVit,
+    uint32_t numRb,
+    uint8_t numRxPorts,
+    uint8_t numTxPorts,
+    bool isReverse,
+    uint64_t sWBeamHash,
+    uint64_t uWBeamHash,
+    bool scalarPsdOk) const
+{
     // Phase D-3b: on-demand miss caching. When the batched GenSpec
     // path didn't pre-compute this link (link wasn't dominant in the
     // last UpdateChannel tick, OR the very first eval just captured
     // rb_freqs and no UpdateChannel has run yet, OR shape drift
     // invalidated the cached entry), compute chanSpct_unscaled on CPU
     // once and stash it. Subsequent PRX evals on the same
-    // (matrixKey, generatedTime, rb_freqs, shape) hit the cache above
-    // and skip the contraction entirely.
+    // (matrixKey, generatedTime, rb_freqs, shape) hit the cache in
+    // TryServeBatchEntry and skip the contraction entirely.
     //
     // Without this, ~67% of PRX evals at NR-cali densities fall
     // through to PRX::GenSpec's CPU contraction (~540 us each in
@@ -5056,7 +5072,7 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
         }
 
         // Build the output matrix in the caller's orientation, scaled by
-        // sqrt(inPsd[rb]) — same as the hit path above.
+        // sqrt(inPsd[rb]) — same as the hit path in TryServeBatchEntry.
         GpuChanSpctEntry::HitOutCache& ocM = isReverse ? eRef.outRev : eRef.outFwd;
         ocM.ringIdx ^= 1u;
         Ptr<Complex3DVector>& fakeSlot2 = ocM.ring[ocM.ringIdx];
@@ -5104,7 +5120,20 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
         stampM(ocM);
         return fakeSlot2;
     }
+    return nullptr;
+}
 
+Ptr<MatrixBasedChannelModel::Complex3DVector>
+ThreeGppChannelModelWgpuMezanine::DispatchPerEvalGpuSpec(
+    Ptr<const ChannelMatrix> channelMatrix,
+    Ptr<const ChannelParams> channelParams,
+    const std::vector<std::complex<double>>& delayT,
+    const std::vector<double>& sqrtVit,
+    uint32_t numRb,
+    uint8_t numRxPorts,
+    uint8_t numTxPorts,
+    bool isReverse) const
+{
     // Disabled by default. Per-eval GPU dispatch overhead (~600 us
     // observed via Dawn on D3D12 for the small chanSpct kernel) is
     // ~3x the CPU contraction cost (~190 us in Debug) at
@@ -5202,6 +5231,83 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
         dst[k * 2 + 1] = static_cast<double>(sr[1]);
     }
     return chanSpct;
+}
+
+Ptr<MatrixBasedChannelModel::Complex3DVector>
+ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
+    Ptr<const ChannelMatrix> channelMatrix,
+    Ptr<const ChannelParams> channelParams,
+    Ptr<const Complex3DVector> longTerm,
+    Ptr<const SpectrumValue> inPsd,
+    const std::vector<std::complex<double>>& delayT,
+    const std::vector<double>& sqrtVit,
+    uint32_t numRb,
+    uint8_t numRxPorts,
+    uint8_t numTxPorts,
+    bool isReverse,
+    uint64_t sWBeamHash,
+    uint64_t uWBeamHash,
+    bool scalarPsdOk) const
+{
+    // Initial-attachment / REM-map bypass: skip all GPU cache work and fall
+    // through to the CPU path so temporary antenna objects never pollute the
+    // batch cache with stale entries for dimensions that won't match later.
+    if (m_bypassGpuBatch)
+        return nullptr;
+
+    // Batched per-tick path: if UpdateChannel has already run
+    // gen_spec_batch_kernel for this link with the current rb_freqs,
+    // the chanSpct_unscaled is cached in m_gpuChanSpctMap and the
+    // per-eval cost collapses to a hash lookup + per-PRB
+    // sqrt(PSD[rb]) scale. Otherwise we either capture rb_freqs from
+    // inPsd for the NEXT tick to pre-compute, or fall back to CPU /
+    // the per-eval GPU dispatch below.
+    if (Ptr<Complex3DVector> hit = TryServeBatchEntry(channelMatrix,
+                                                      longTerm,
+                                                      inPsd,
+                                                      numRb,
+                                                      numRxPorts,
+                                                      numTxPorts,
+                                                      isReverse,
+                                                      sWBeamHash,
+                                                      uWBeamHash,
+                                                      scalarPsdOk))
+    {
+        return hit;
+    }
+
+    MaybeCaptureBatchRbFreqs(inPsd, numRb);
+
+    // D-3b CPU-miss fill: compute + cache the contraction once so the
+    // next eval of this (link, beam pair) hits the batch-entry path.
+    if (Ptr<Complex3DVector> missFill = ServeCpuMissEntry(channelMatrix,
+                                                          channelParams,
+                                                          longTerm,
+                                                          inPsd,
+                                                          delayT,
+                                                          sqrtVit,
+                                                          numRb,
+                                                          numRxPorts,
+                                                          numTxPorts,
+                                                          isReverse,
+                                                          sWBeamHash,
+                                                          uWBeamHash,
+                                                          scalarPsdOk))
+    {
+        return missFill;
+    }
+
+    // Env-gated (MEZ_GPU_SPEC=1) per-eval GPU dispatch; returns nullptr
+    // when disabled or unavailable, and PRX then falls back to its CPU
+    // GenSpec contraction.
+    return DispatchPerEvalGpuSpec(channelMatrix,
+                                  channelParams,
+                                  delayT,
+                                  sqrtVit,
+                                  numRb,
+                                  numRxPorts,
+                                  numTxPorts,
+                                  isReverse);
 }
 
 uint64_t

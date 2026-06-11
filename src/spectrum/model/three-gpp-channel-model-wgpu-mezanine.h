@@ -307,6 +307,150 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
      */
     void RunDiagnosticAudits(RefreshWorkspace& ws);
 
+    // ── TryGenSpectrumChannelMatrix serving paths ─────────────────────
+    // TryGenSpectrumChannelMatrix() is an orchestrator over the helpers
+    // below. The early-return order is load-bearing: bypass flag ->
+    // batch-entry hit -> rb_freqs capture -> D-3b CPU-miss fill ->
+    // env-gated per-eval GPU dispatch -> nullptr (PRX CPU GenSpec).
+
+    /**
+     * Serve a PRX eval from the batched spectrum cache (hit path).
+     *
+     * Looks up the beam-aware MixBeamKey(link, sW, uW) entry written by
+     * RunSpectrumBatch (or by a previous ServeCpuMissEntry fill) and
+     * validates it against the caller's generatedTime, port orientation
+     * (forward = stored DL ports, reverse = swapped), numRb and rb-freqs
+     * hash. On a valid hit it selects the M>1 lookahead slot covering
+     * Simulator::Now() and builds the output: either the (1,1,numRb)
+     * scalar amplitude matrix from the reduced power rows (scalarPsdOk
+     * with one rx port) or the caller-oriented per-port
+     * H * sqrt(inPsd[rb]) (reverse evals transpose the canonical DL
+     * matrix). Repeat evals with an identical (batch, slot, PSD
+     * fingerprint) triple return the previously built output Ptr
+     * untouched through the entry's 2-deep HitOutCache ring.
+     *
+     * On an invalid or absent entry, the first probe of the eval (the
+     * longTerm == nullptr call) records the miss reason via
+     * SLS_PHASE_SCOPE (Mez::Miss::*) and nullptr is returned so the
+     * orchestrator falls through to the CPU-miss / CPU GenSpec paths.
+     *
+     * @param channelMatrix The link's channel matrix (may be nullptr,
+     *                      which is an immediate miss).
+     * @param longTerm The caller's longTerm; only used to gate the
+     *                 miss-reason accounting to the first probe per eval.
+     * @param inPsd The transmit power spectral density.
+     * @param numRb Number of resource blocks.
+     * @param numRxPorts Receive ports in the caller's orientation.
+     * @param numTxPorts Transmit ports in the caller's orientation.
+     * @param isReverse True for uplink (reverse-orientation) evals.
+     * @param sWBeamHash Hash of the s-antenna beamforming vector.
+     * @param uWBeamHash Hash of the u-antenna beamforming vector.
+     * @param scalarPsdOk True when the caller accepts the scalar
+     *                    (1,1,numRb) power-only representation.
+     * @return The spectrum channel matrix, or nullptr on cache miss.
+     */
+    Ptr<Complex3DVector> TryServeBatchEntry(Ptr<const ChannelMatrix> channelMatrix,
+                                            Ptr<const Complex3DVector> longTerm,
+                                            Ptr<const SpectrumValue> inPsd,
+                                            uint32_t numRb,
+                                            uint8_t numRxPorts,
+                                            uint8_t numTxPorts,
+                                            bool isReverse,
+                                            uint64_t sWBeamHash,
+                                            uint64_t uWBeamHash,
+                                            bool scalarPsdOk) const;
+
+    /**
+     * Capture the RB subband centre frequencies from the first PSD seen.
+     *
+     * No-op unless m_batchRbFreqs is still empty. Fills m_batchRbFreqs
+     * and m_batchRbFreqsHash from inPsd's band layout so the next
+     * UpdateChannel can dispatch gen_spec_batch_kernel (and the D-3b
+     * miss fill in the SAME eval already qualifies).
+     *
+     * @param inPsd The transmit power spectral density (may be nullptr).
+     * @param numRb Number of resource blocks expected in the layout.
+     */
+    void MaybeCaptureBatchRbFreqs(Ptr<const SpectrumValue> inPsd, uint32_t numRb) const;
+
+    /**
+     * Phase D-3b: on-demand CPU fill of the spectrum cache (miss path).
+     *
+     * When the batched GenSpec path didn't pre-compute this link, run
+     * the canonical contraction H[rx,tx,rb] = sum_c longTerm[c,rx,tx] *
+     * delayT[c,rb] once on CPU, stash it (plus both scalar power
+     * reductions) into the CPU-section flat arrays under the beam-aware
+     * key, and return this eval's output built exactly like the hit
+     * path (scalar or full-H, caller-oriented, HitOutCache stamped so
+     * the next identical eval identity-hits). Wrapped in
+     * SLS_PHASE_SCOPE "Mez::TryGenSpecCpuMiss".
+     *
+     * All shape preconditions (longTerm pages/ports vs channelMatrix
+     * and caller orientation, delayT/sqrtVit sizes, non-empty
+     * m_batchRbFreqs) are checked internally; returns nullptr when any
+     * fails so the orchestrator can fall through.
+     *
+     * @param channelMatrix The link's channel matrix.
+     * @param channelParams The link's channel params.
+     * @param longTerm The longTerm matrix in canonical (DL) orientation.
+     * @param inPsd The transmit power spectral density.
+     * @param delayT Per-(cluster, rb) delay phasors.
+     * @param sqrtVit Per-rb sqrt(Vit) scaling (precondition check only).
+     * @param numRb Number of resource blocks.
+     * @param numRxPorts Receive ports in the caller's orientation.
+     * @param numTxPorts Transmit ports in the caller's orientation.
+     * @param isReverse True for uplink (reverse-orientation) evals.
+     * @param sWBeamHash Hash of the s-antenna beamforming vector.
+     * @param uWBeamHash Hash of the u-antenna beamforming vector.
+     * @param scalarPsdOk True when the caller accepts the scalar
+     *                    (1,1,numRb) power-only representation.
+     * @return The spectrum channel matrix, or nullptr when the
+     *         preconditions don't hold.
+     */
+    Ptr<Complex3DVector> ServeCpuMissEntry(Ptr<const ChannelMatrix> channelMatrix,
+                                           Ptr<const ChannelParams> channelParams,
+                                           Ptr<const Complex3DVector> longTerm,
+                                           Ptr<const SpectrumValue> inPsd,
+                                           const std::vector<std::complex<double>>& delayT,
+                                           const std::vector<double>& sqrtVit,
+                                           uint32_t numRb,
+                                           uint8_t numRxPorts,
+                                           uint8_t numTxPorts,
+                                           bool isReverse,
+                                           uint64_t sWBeamHash,
+                                           uint64_t uWBeamHash,
+                                           bool scalarPsdOk) const;
+
+    /**
+     * Per-eval GPU GenSpec dispatch, disabled unless MEZ_GPU_SPEC=1.
+     *
+     * Kept as scaffolding for a future batched approach (see the
+     * comment in the implementation for the measured per-dispatch
+     * overhead that makes it a net loss today). When enabled, packs
+     * delayT/sqrtVit to f32, dispatches gen_spec_chan_kernel against
+     * the link's GPU longTerm slab and converts the readback to a
+     * Complex3DVector.
+     *
+     * @param channelMatrix The link's channel matrix.
+     * @param channelParams The link's channel params.
+     * @param delayT Per-(cluster, rb) delay phasors.
+     * @param sqrtVit Per-rb sqrt(Vit) scaling.
+     * @param numRb Number of resource blocks.
+     * @param numRxPorts Receive ports in the caller's orientation.
+     * @param numTxPorts Transmit ports in the caller's orientation.
+     * @param isReverse True for uplink (reverse-orientation) evals.
+     * @return The spectrum channel matrix, or nullptr when disabled or
+     *         the GPU entry is unavailable/stale.
+     */
+    Ptr<Complex3DVector> DispatchPerEvalGpuSpec(Ptr<const ChannelMatrix> channelMatrix,
+                                                Ptr<const ChannelParams> channelParams,
+                                                const std::vector<std::complex<double>>& delayT,
+                                                const std::vector<double>& sqrtVit,
+                                                uint32_t numRb,
+                                                uint8_t numRxPorts,
+                                                uint8_t numTxPorts,
+                                                bool isReverse) const;
+
     // ── GPU back-end handle ───────────────────────────────────────────
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
     mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
