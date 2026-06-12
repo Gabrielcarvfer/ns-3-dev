@@ -849,7 +849,14 @@ HtFrameExchangeManager::NotifyReceivedNormalAck(Ptr<WifiMpdu> mpdu)
         uint8_t tid = mpdu->GetHeader().GetQosTid();
         Ptr<QosTxop> edca = m_mac->GetQosTxop(tid);
 
-        if (m_mac->GetBaAgreementEstablishedAsOriginator(mpdu->GetHeader().GetAddr1(), tid))
+        // Only let the BA manager finalize (and dequeue) the MPDU once the whole
+        // MSDU has been acknowledged. For a non-final fragment, NotifyGotAck would
+        // dequeue the item here, and the base ReceivedNormalAck would then call
+        // WifiMacQueue::Replace() on the already-dequeued MPDU, tripping the
+        // IsQueued() assertion (see #1199). Intermediate fragments fall through to
+        // the legacy fragment-replacement path instead.
+        if (m_mac->GetBaAgreementEstablishedAsOriginator(mpdu->GetHeader().GetAddr1(), tid) &&
+            !mpdu->GetHeader().IsMoreFragments())
         {
             // notify the BA manager that the MPDU was acknowledged
             edca->GetBaManager()->NotifyGotAck(m_linkId, mpdu);
@@ -1999,7 +2006,12 @@ HtFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             isGroup ? std::optional{hdr.IsQosAmsdu() ? mpdu->begin()->second.GetDestinationAddr()
                                                      : hdr.GetAddr1()}
                     : std::nullopt);
-        if (agreement)
+        // A fragmented MSDU is not carried under a Block Ack agreement: the BA
+        // reorder buffer is keyed by sequence number and does not reassemble
+        // fragments (which share a sequence number). Route fragments through the
+        // normal QoS path instead, so MacRxMiddle reassembles them (see #1199).
+        const auto isFragment = hdr.IsMoreFragments() || hdr.GetFragmentNumber() > 0;
+        if (agreement && !isFragment)
         {
             // a Block Ack agreement has been established
             NS_LOG_DEBUG("Received from=" << hdr.GetAddr2() << " (" << *mpdu << ")");
