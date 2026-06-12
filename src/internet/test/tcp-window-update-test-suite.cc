@@ -107,6 +107,11 @@ TcpWindowUpdateOnReadTest::ConfigureEnvironment()
     SetMTU(500);
     SetTransmitStart(Seconds(2));
     SetPropagationDelay(MilliSeconds(50));
+    // TcpGeneralTest runs until the event queue empties. With the fix in place,
+    // the window update revives the sender, which then persist-probes the
+    // (still-closed) window forever because the application reads only once;
+    // bound the run well past the window-update deadline so it terminates.
+    Simulator::Stop(Seconds(20));
 }
 
 void
