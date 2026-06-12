@@ -99,17 +99,22 @@ SingleModelSpectrumChannel::StartTx(Ptr<SpectrumSignalParameters> txParams)
                           // underlying DynamicCasts)
     m_txSigParamsTrace(txParamsTrace);
 
-    // just a sanity check routine. We might want to remove it to save some computational load --
-    // one "if" statement  ;-)
     if (!m_spectrumModel)
     {
-        // first pak, record SpectrumModel
+        // first pkt, record SpectrumModel
         m_spectrumModel = txParams->psd->GetSpectrumModel();
     }
-    else
+    else if (!(*(txParams->psd->GetSpectrumModel()) == *m_spectrumModel))
     {
-        // all attached SpectrumPhy instances must use the same SpectrumModel
-        NS_ASSERT(*(txParams->psd->GetSpectrumModel()) == *m_spectrumModel);
+        // Attached PHYs normally all use the same SpectrumModel. However, a
+        // single device may legitimately transmit with more than one model: a
+        // 2.4 GHz 802.11n PHY emits both 20 MHz OFDM and 22 MHz DSSS frames,
+        // which have different spectrum models. Tolerate the mismatch here; each
+        // receiver resamples a signal that does not match its own RX model onto
+        // it (see SpectrumWifiPhy::StartRx and #1090), exactly as
+        // MultiModelSpectrumChannel does at the channel.
+        NS_LOG_LOGIC("Tx SpectrumModel differs from the first one recorded on this channel; "
+                     "receivers will convert as needed");
     }
 
     auto wraparound = GetObject<WraparoundModel>();

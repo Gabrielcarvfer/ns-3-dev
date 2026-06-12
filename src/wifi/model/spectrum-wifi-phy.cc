@@ -27,6 +27,7 @@
 #include "ns3/node.h"
 #include "ns3/simulator.h"
 #include "ns3/spectrum-channel.h"
+#include "ns3/spectrum-converter.h"
 
 #include <algorithm>
 #include <numeric>
@@ -498,10 +499,25 @@ SpectrumWifiPhy::StartRx(Ptr<SpectrumSignalParameters> rxParams,
     Ptr<SpectrumValue> receivedSignalPsd = rxParams->psd;
     if (interface)
     {
+        const auto rxSpectrumModel = interface->GetRxSpectrumModel();
+        // On a SingleModelSpectrumChannel there is no per-receiver spectrum
+        // conversion, so a signal transmitted with a different spectrum model
+        // than this receiver's arrives on a mismatched band grid. This happens
+        // on a 2.4 GHz 802.11n device, which transmits both 20 MHz OFDM and
+        // 22 MHz DSSS frames (different widths/guard bands, hence different
+        // models). Resample the signal onto the RX model -- as
+        // MultiModelSpectrumChannel does at the channel -- so the per-band
+        // indices below are valid (see #1090). Work on a copy: rxParams is
+        // shared across all receivers of this transmission and must not change.
+        if (receivedSignalPsd->GetSpectrumModelUid() != rxSpectrumModel->GetUid())
+        {
+            SpectrumConverter converter(receivedSignalPsd->GetSpectrumModel(), rxSpectrumModel);
+            receivedSignalPsd = converter.Convert(receivedSignalPsd);
+        }
         NS_ASSERT_MSG(
-            receivedSignalPsd->GetValuesN() == interface->GetRxSpectrumModel()->GetNumBands(),
+            receivedSignalPsd->GetValuesN() == rxSpectrumModel->GetNumBands(),
             "Incorrect spectrum conversion or multi model spectrum channel is not used! Expected "
-                << interface->GetRxSpectrumModel()->GetNumBands() << " values, got "
+                << rxSpectrumModel->GetNumBands() << " values, got "
                 << receivedSignalPsd->GetValuesN());
     }
     NS_LOG_DEBUG("Received signal with PSD " << *receivedSignalPsd << " and duration "
