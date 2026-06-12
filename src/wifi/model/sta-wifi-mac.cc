@@ -1270,7 +1270,18 @@ StaWifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     if (hdr->GetAddr1() != myAddr && !hdr->GetAddr1().IsGroup())
     {
         NS_LOG_LOGIC("packet is not for us");
-        NotifyRxDrop(packet);
+        // In promiscuous mode, an overheard data frame addressed to another
+        // station must still be delivered to the promiscuous callback. Forward
+        // it up (WifiNetDevice::ForwardUp classifies it as PACKET_OTHERHOST and
+        // invokes the promiscuous callback) instead of dropping it (see #424).
+        if (hdr->IsData() && GetFrameExchangeManager(linkId)->IsPromisc())
+        {
+            ForwardUp(packet, hdr->GetAddr3(), hdr->GetAddr1());
+        }
+        else
+        {
+            NotifyRxDrop(packet);
+        }
         return;
     }
     if (hdr->IsData())
