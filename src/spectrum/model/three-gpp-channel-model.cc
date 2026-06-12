@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <map>
 #include <random>
 
@@ -1124,6 +1125,11 @@ ThreeGppChannelModel::ThreeGppChannelModel()
     m_normalRv = CreateObject<NormalRandomVariable>();
     m_normalRv->SetAttribute("Mean", DoubleValue(0.0));
     m_normalRv->SetAttribute("Variance", DoubleValue(1.0));
+
+    m_interUeSpatialConsistency = false;
+    m_normalRvSpatCons = CreateObject<NormalRandomVariable>();
+    m_normalRvSpatCons->SetAttribute("Mean", DoubleValue(0.0));
+    m_normalRvSpatCons->SetAttribute("Variance", DoubleValue(1.0));
 }
 
 ThreeGppChannelModel::~ThreeGppChannelModel()
@@ -1141,6 +1147,7 @@ ThreeGppChannelModel::DoDispose()
     }
     m_channelMatrixMap.clear();
     m_channelParamsMap.clear();
+    m_spatConsGrid.clear();
     m_channelConditionModel = nullptr;
 }
 
@@ -1211,6 +1218,16 @@ ThreeGppChannelModel::GetTypeId()
                           DoubleValue(0.0),
                           MakeDoubleAccessor(&ThreeGppChannelModel::m_vScatt),
                           MakeDoubleChecker<double>(0.0))
+            .AddAttribute("InterUeSpatialConsistency",
+                          "Enable inter-UE (drop-based) spatially consistent LSP generation, "
+                          "3GPP TR 38.901 Sec. 7.6.3.1. When enabled, the independent normal "
+                          "variates feeding the LSP cross-correlation are drawn from per-site, "
+                          "per-condition spatially-correlated Gaussian random fields sampled at "
+                          "the terminal position (correlation distances from Table 7.5-6), so "
+                          "links from the same site to nearby terminals obtain correlated LSPs.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&ThreeGppChannelModel::m_interUeSpatialConsistency),
+                          MakeBooleanChecker())
             .AddAttribute("LargeBandwidthArrayModeling",
                           "Enable the intra-cluster angular and delay spread modeling of 3GPP TR "
                           "38.901 Sec. 7.6.2.2 (large bandwidth and large antenna arrays): per-ray "
@@ -2641,19 +2658,150 @@ ThreeGppChannelModel::GetParams(Ptr<const MobilityModel> aMob, Ptr<const Mobilit
     return nullptr;
 }
 
+void
+ThreeGppChannelModel::GetLspCorrelationDistances(std::array<double, 7>& los,
+                                                 std::array<double, 7>& nlos,
+                                                 std::array<double, 7>& o2i) const
+{
+    // TR 38.901 Table 7.5-6 correlation distances in the horizontal plane
+    // (meters), in canonical parameter order [SF,K,DS,ASD,ASA,ZSD,ZSA]. The
+    // K entry of the NLOS/O2I sets is unused (no K column in the table).
+    // Scenarios without a Table 7.5-6 column (V2V, NTN) fall back to the UMa
+    // distances.
+    los = {37, 12, 30, 18, 15, 15, 15};
+    nlos = {50, 0, 40, 50, 50, 50, 50};
+    o2i = {7, 0, 10, 11, 17, 25, 25};
+    if (m_scenario == "UMi-StreetCanyon")
+    {
+        los = {10, 15, 7, 8, 8, 12, 12};
+        nlos = {13, 0, 10, 10, 9, 10, 10};
+        o2i = {7, 0, 10, 11, 17, 25, 25};
+    }
+    else if (m_scenario == "RMa")
+    {
+        los = {37, 40, 50, 25, 35, 15, 15};
+        nlos = {120, 0, 36, 30, 40, 50, 50};
+        o2i = nlos;
+    }
+    else if (m_scenario == "InH-OfficeMixed" || m_scenario == "InH-OfficeOpen")
+    {
+        los = {10, 4, 8, 7, 5, 4, 4};
+        nlos = {6, 0, 5, 3, 3, 4, 4};
+        o2i = nlos;
+    }
+}
+
+double
+ThreeGppChannelModel::SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
+                                                      uint8_t condSlot,
+                                                      uint8_t lspIndex,
+                                                      const Vector& position,
+                                                      double corrDist) const
+{
+    if (corrDist <= 0.0)
+    {
+        return m_normalRvSpatCons->GetValue();
+    }
+
+    // One independent field per (site, condition slot, LSP).
+    const uint64_t fieldKey = (static_cast<uint64_t>(siteNodeId) << 5) |
+                              (static_cast<uint64_t>(condSlot) << 3) |
+                              static_cast<uint64_t>(lspIndex);
+    auto& field = m_spatConsGrid[fieldKey];
+
+    // Grid spacing of half the correlation distance resolves the exponential
+    // kernel shape; the 14-cell window covers the +-3*corrDist filter support
+    // (the truncated tail carries weight exp(-3), absorbed by the L2
+    // normalization below).
+    const double spacing = 0.5 * corrDist;
+    const auto ix = static_cast<int64_t>(std::floor(position.x / spacing));
+    const auto iy = static_cast<int64_t>(std::floor(position.y / spacing));
+
+    double acc = 0.0;
+    double weight2 = 0.0;
+    for (int64_t j = iy - 6; j <= iy + 7; j++)
+    {
+        const double wy = std::exp(-std::abs(j * spacing - position.y) / corrDist);
+        for (int64_t i = ix - 6; i <= ix + 7; i++)
+        {
+            const double wx = std::exp(-std::abs(i * spacing - position.x) / corrDist);
+            const uint64_t cellKey = (static_cast<uint64_t>(static_cast<uint32_t>(i)) << 32) |
+                                     static_cast<uint64_t>(static_cast<uint32_t>(j));
+            auto [it, inserted] = field.try_emplace(cellKey, 0.0);
+            if (inserted)
+            {
+                it->second = m_normalRvSpatCons->GetValue();
+            }
+            const double w = wx * wy;
+            acc += w * it->second;
+            weight2 += w * w;
+        }
+    }
+    // i.i.d. N(0,1) cell values combined with L2-normalized weights yield an
+    // exactly N(0,1) marginal at every position, while two samples of the
+    // same field decorrelate with distance on the scale of corrDist.
+    return acc / std::sqrt(weight2);
+}
+
 ThreeGppChannelModel::LargeScaleParameters
-ThreeGppChannelModel::GenerateLSPs(const ChannelCondition::LosConditionValue losCondition,
-                                   Ptr<const ParamsTable> table3gpp) const
+ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
+                                   Ptr<const ParamsTable> table3gpp,
+                                   Ptr<const MobilityModel> siteMob,
+                                   Ptr<const MobilityModel> termMob) const
 {
     NS_LOG_FUNCTION(this);
+    const ChannelCondition::LosConditionValue losCondition = channelCondition->GetLosCondition();
     DoubleVector lspIndepRandomVar;
     DoubleVector lsp;
     const uint8_t paramNum = losCondition == ChannelCondition::LOS ? 7 : 6;
 
     // Generate paramNum independent LSPs.
-    for (uint8_t iter = 0; iter < paramNum; iter++)
+    if (!m_interUeSpatialConsistency)
     {
-        lspIndepRandomVar.push_back(m_normalRv->GetValue());
+        for (uint8_t iter = 0; iter < paramNum; iter++)
+        {
+            lspIndepRandomVar.push_back(m_normalRv->GetValue());
+        }
+    }
+    else
+    {
+        // Inter-UE spatial consistency (TR 38.901 Sec. 7.6.3.1): replace the
+        // i.i.d. draws with samples of per-site spatially-correlated Gaussian
+        // fields evaluated at the terminal position. The cross-correlation
+        // multiply below is untouched.
+        std::array<double, 7> corrLos;
+        std::array<double, 7> corrNlos;
+        std::array<double, 7> corrO2i;
+        GetLspCorrelationDistances(corrLos, corrNlos, corrO2i);
+
+        // Condition slot selecting the field set: LOS=0, NLOS=1, O2I=2.
+        const bool losOrdering = losCondition == ChannelCondition::LOS;
+        const bool isO2i = channelCondition->GetO2iCondition() == ChannelCondition::O2I;
+        const uint8_t condSlot = isO2i ? 2 : (losOrdering ? 0 : 1);
+        const auto& corrDist = isO2i ? corrO2i : (losOrdering ? corrLos : corrNlos);
+        const uint32_t siteNodeId = siteMob->GetObject<Node>()->GetId();
+        const Vector termPos = termMob->GetPosition();
+        for (uint8_t iter = 0; iter < paramNum; iter++)
+        {
+            // Canonical parameter ids [SF=0,K=1,DS=2,ASD=3,ASA=4,ZSD=5,ZSA=6]
+            // key the fields, so links whose LSP vectors use different
+            // orderings (LOS includes K at index 1, NLOS/O2I do not) still
+            // share the same per-parameter field of their condition slot.
+            const uint8_t paramId = losOrdering ? iter : (iter == 0 ? 0 : iter + 1);
+            uint8_t slot = condSlot;
+            double dist = corrDist[paramId];
+            if (paramId == 1 && isO2i)
+            {
+                // The O2I column of Table 7.5-6 has no K entry; the K-factor
+                // of an indoor LOS link belongs to the outdoor LOS path that
+                // penetrates the building, so its variate comes from the LOS
+                // field.
+                slot = 0;
+                dist = corrLos[1];
+            }
+            lspIndepRandomVar.push_back(
+                SampleSpatiallyCorrelatedNormal(siteNodeId, slot, paramId, termPos, dist));
+        }
     }
     for (uint8_t row = 0; row < paramNum; row++)
     {
@@ -3979,8 +4127,11 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                        &channelParams->m_lastPositionSecond,
                        &channelParams->m_lastRelativePosition2D);
 
-    // Step 4: Generate large-scale parameters. All LSPS are uncorrelated.
-    const LargeScaleParameters lsps = GenerateLSPs(channelParams->m_losCondition, table3gpp);
+    // Step 4: Generate large-scale parameters. LSPs are cross-correlated per the
+    // 3GPP table; when InterUeSpatialConsistency is enabled they are additionally
+    // spatially correlated between links from the same site (TR 38.901 Sec. 7.6.3.1).
+    const LargeScaleParameters lsps =
+        GenerateLSPs(channelCondition, table3gpp, aMobOrdered, bMobOrdered);
 
     channelParams->m_DS = lsps.DS;
     channelParams->m_K_factor = lsps.kFactor;
@@ -5145,7 +5296,8 @@ ThreeGppChannelModel::AssignStreams(int64_t stream)
     m_uniformRv->SetStream(stream + 1);
     m_uniformRvShuffle->SetStream(stream + 2);
     m_uniformRvDoppler->SetStream(stream + 3);
-    return 4;
+    m_normalRvSpatCons->SetStream(stream + 4);
+    return 5;
 }
 
 } // namespace ns3
