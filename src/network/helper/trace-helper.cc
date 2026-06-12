@@ -43,6 +43,15 @@ PcapHelper::CreateFile(std::string filename,
 {
     NS_LOG_FUNCTION(filename << filemode << dataLinkType << snapLen << tzCorrection);
 
+    // If another interface was already given this exact filename, share its
+    // wrapper instead of reopening (and truncating) the file, which would
+    // corrupt it by clobbering the first interface's records (see #1150).
+    if (Ptr<PcapFileWrapper> existing = PcapFileWrapper::FindOpenFile(filename))
+    {
+        NS_LOG_LOGIC("Reusing already-open pcap file " << filename);
+        return existing;
+    }
+
     Ptr<PcapFileWrapper> file = CreateObject<PcapFileWrapper>();
     file->Open(filename, filemode);
     NS_ABORT_MSG_IF(file->Fail(), "Unable to Open " << filename << " for mode " << filemode);
