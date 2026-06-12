@@ -445,7 +445,16 @@ FqCoDelQueueDisc::InitializeParams()
     m_flowFactory.SetTypeId("ns3::FqCoDelFlow");
 
     m_queueDiscFactory.SetTypeId("ns3::CoDelQueueDisc");
-    m_queueDiscFactory.Set("MaxSize", QueueSizeValue(GetMaxSize()));
+    // Each child CoDel flow queue must not impose its own limit: the FqCoDel
+    // root is the sole overflow authority (mirroring Linux fq_codel, where the
+    // global limit governs and per-flow queues are not individually capped).
+    // Capping a child at the parent limit lets the child drop an overflowing
+    // packet first, so the parent's overflow check never fires and no
+    // FqCoDelQueueDisc OVERLIMIT_DROP is recorded (see #332). Make the child
+    // effectively unbounded; the parent enforces the aggregate limit.
+    m_queueDiscFactory.Set(
+        "MaxSize",
+        QueueSizeValue(QueueSize(GetMaxSize().GetUnit(), std::numeric_limits<uint32_t>::max())));
     m_queueDiscFactory.Set("Interval", StringValue(m_interval));
     m_queueDiscFactory.Set("Target", StringValue(m_target));
 }
