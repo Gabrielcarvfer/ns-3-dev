@@ -15,6 +15,7 @@
 
 #include "ns3/channel-condition-model.h"
 
+#include <array>
 #include <memory>
 #include <unordered_map>
 
@@ -462,12 +463,25 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * specified LOS/NLOS condition, including delay spread (DS), angular spreads
      * (ASD/ASA/ZSD/ZSA), and K-factor for LOS.
      *
-     * @param losCondition Line-of-sight condition (LOS or NLOS).
+     * When the `InterUeSpatialConsistency` attribute is enabled, the independent
+     * normal variates feeding the cross-correlation multiply are not drawn i.i.d.
+     * per link; instead they are samples of spatially-correlated Gaussian random
+     * fields (one field per site, channel condition and LSP, see
+     * SampleSpatiallyCorrelatedNormal), evaluated at the terminal position. Links
+     * from the same site to nearby terminals then obtain correlated LSPs, as
+     * required by the drop-based spatial-consistency procedure of 3GPP TR 38.901,
+     * Sec. 7.6.3.1.
+     *
+     * @param channelCondition Channel condition of the link (LOS/NLOS and O2I state).
      * @param table3gpp Pointer to the 3GPP parameters table (means, std-devs, sqrt correlation).
+     * @param siteMob Mobility model of the endpoint with the smallest node id (the "site").
+     * @param termMob Mobility model of the endpoint with the largest node id (the "terminal").
      * @return LargeScaleParameters structure containing the generated LSPs.
      */
-    LargeScaleParameters GenerateLSPs(const ChannelCondition::LosConditionValue losCondition,
-                                      Ptr<const ParamsTable> table3gpp) const;
+    LargeScaleParameters GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
+                                      Ptr<const ParamsTable> table3gpp,
+                                      Ptr<const MobilityModel> siteMob,
+                                      Ptr<const MobilityModel> termMob) const;
 
     /**
      * Generate the cluster delays.
@@ -1229,11 +1243,69 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * consumption — the next regeneration of this link will hit the GPU
      * again on the next tick). Otherwise this method falls back to the
      * normal CPU draw via `GenerateLSPs`.
+     *
+     * @param channelParamsKey Reciprocal link key.
+     * @param channelCondition Channel condition of the link.
+     * @param table3gpp Pointer to the 3GPP parameters table.
+     * @param siteMob Mobility model of the endpoint with the smallest node id.
+     * @param termMob Mobility model of the endpoint with the largest node id.
+     * @return LargeScaleParameters for the link.
      */
-    LargeScaleParameters GenerateOrFetchLSPs(
-        uint64_t channelParamsKey,
-        ChannelCondition::LosConditionValue losCondition,
-        Ptr<const ParamsTable> table3gpp) const;
+    LargeScaleParameters GenerateOrFetchLSPs(uint64_t channelParamsKey,
+                                             Ptr<const ChannelCondition> channelCondition,
+                                             Ptr<const ParamsTable> table3gpp,
+                                             Ptr<const MobilityModel> siteMob,
+                                             Ptr<const MobilityModel> termMob) const;
+
+    /**
+     * @brief Per-LSP spatial correlation distances of TR 38.901 Table 7.5-6.
+     *
+     * Distances are returned in the LSP-vector order used by GenerateLSPs:
+     * LOS slot [SF, K, DS, ASD, ASA, ZSD, ZSA] (7 entries) and NLOS/O2I slots
+     * [SF, DS, ASD, ASA, ZSD, ZSA] (6 entries, last entry unused). Scenarios
+     * without a Table 7.5-6 column (V2V, NTN) fall back to the UMa distances,
+     * mirroring the WebGPU mezanine back-end.
+     *
+     * @param los Output array of LOS correlation distances in meters.
+     * @param nlos Output array of NLOS correlation distances in meters.
+     * @param o2i Output array of O2I correlation distances in meters.
+     */
+    void GetLspCorrelationDistances(std::array<double, 7>& los,
+                                    std::array<double, 7>& nlos,
+                                    std::array<double, 7>& o2i) const;
+
+    /**
+     * @brief Sample a unit-variance, spatially-correlated Gaussian random field.
+     *
+     * This implements the inter-UE (drop-based) spatial consistency of 3GPP
+     * TR 38.901, Sec. 7.6.3.1, equivalently to the WebGPU mezanine CRN grids:
+     * each (site, condition slot, LSP index) triple owns an independent 2D
+     * Gaussian field over the horizontal plane, obtained by filtering i.i.d.
+     * N(0,1) grid values with a separable exponential kernel
+     * exp(-|d|/corrDist). Instead of rasterizing and convolving the whole
+     * deployment up front (the GPU approach), the filter is evaluated lazily
+     * at the requested position over a hash-stored grid with spacing
+     * corrDist/2; the weights are L2-normalized, so the marginal distribution
+     * is exactly N(0,1) while two samples of the same field decorrelate with
+     * horizontal distance on the scale of corrDist.
+     *
+     * Grid values are drawn once from a dedicated random stream and memoized,
+     * so every link evaluated at any time during the simulation observes the
+     * same underlying field (position-based repeatability).
+     *
+     * @param siteNodeId Node id of the site endpoint owning the field.
+     * @param condSlot Channel condition slot (0=LOS, 1=NLOS, 2=O2I).
+     * @param lspIndex Index of the LSP in the LSP-vector ordering.
+     * @param position Sampling position (only x and y are used).
+     * @param corrDist Correlation distance in meters; non-positive values
+     *        degrade to an independent N(0,1) draw.
+     * @return A sample of the field with N(0,1) marginal distribution.
+     */
+    double SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
+                                           uint8_t condSlot,
+                                           uint8_t lspIndex,
+                                           const Vector& position,
+                                           double corrDist) const;
 
     /**
      * map containing the channel realizations per a pair of
@@ -1297,6 +1369,18 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     Ptr<UniformRandomVariable> m_uniformRv;
     /// normal random variable
     Ptr<NormalRandomVariable> m_normalRv;
+    /// enables inter-UE (drop-based) spatially consistent LSP generation
+    bool m_interUeSpatialConsistency;
+    /// normal random variable feeding the spatially-correlated LSP fields
+    Ptr<NormalRandomVariable> m_normalRvSpatCons;
+    /**
+     * Lazily-populated grids of i.i.d. N(0,1) values backing the
+     * spatially-correlated LSP fields. The outer key identifies the field
+     * (site node id, condition slot, LSP index); the inner key packs the
+     * 2D integer grid coordinates. `mutable` because fields are extended
+     * on demand from within the `const` channel-parameter generator.
+     */
+    mutable std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> m_spatConsGrid;
     /// uniform random variable used to shuffle an array in GetNewChannel
     Ptr<UniformRandomVariable> m_uniformRvShuffle;
     /**
