@@ -762,8 +762,11 @@ please have a look at the documentation of the classes
     channel is evaluated and the configured ``UpdatePeriod`` has elapsed; if the
     maximum distance the BS and/or UT traveled between evaluations exceeds
     the 1 m step-size constraint, the model falls back to re-generating channel
-    parameters and thus the channel matrix). Drop-based spatial consistency across
-    multiple initial locations (Sec. 7.6.3.1) and Procedure B are not implemented.
+    parameters and thus the channel matrix). Procedure B is not implemented.
+
+  * Drop-based (inter-UE) spatial consistency across initial locations
+    (Sec. 7.6.3.1) is available for the large-scale parameters through the
+    ``InterUeSpatialConsistency`` attribute (disabled by default); see below.
 
   * The large bandwidth and large antenna array modeling of Sec. 7.6.2.2 is
     available through the ``LargeBandwidthArrayModeling`` attribute (disabled
@@ -980,8 +983,27 @@ changes driven by the channel-condition model) would have to implement a map/fie
 approach (e.g., spatially correlated LSP maps in WINNER-derived frameworks such as
 QuaDRiGa) [WIN2D112]_ [QUADRIGA]_ or an explicitly position-seeded regeneration policy.
 
-Drop-based spatial consistency across multiple initial locations (TR 38.901 Sec. 7.6.3.1)
-and Procedure B (TR 38.901 Sec. 7.6.3.2) are not implemented in this model.
+**Inter-UE (drop-based) spatial consistency:** When the ``InterUeSpatialConsistency``
+attribute is enabled, the large-scale parameters of different links become spatially
+consistent across UEs, per TR 38.901 Sec. 7.6.3.1: the independent normal variates
+that feed the LSP cross-correlation matrix are no longer drawn i.i.d. per link, but
+are samples of spatially-correlated, unit-variance Gaussian random fields evaluated
+at the terminal position. One independent field exists per site (the link endpoint
+with the smallest node id), per channel condition (LOS/NLOS/O2I) and per LSP, with
+the correlation distances of TR 38.901 Table 7.5-6 for the configured scenario
+(scenarios without a Table 7.5-6 column, i.e. V2V and NTN, fall back to the UMa
+distances). Each field is realized by filtering a lazily-evaluated grid of i.i.d.
+normal values with a separable exponential kernel whose weights are L2-normalized,
+so the marginal distribution remains exactly N(0,1) while two samples of the same
+field decorrelate with horizontal distance on the scale of the correlation distance.
+Because grid values are memoized for the
+whole simulation, LSP draws are position-based and repeatable: re-generating the
+channel of a link at the same location reproduces correlated LSPs, which also makes
+the LSPs of a moving UE evolve smoothly across channel re-generations. The
+small-scale (cluster/ray) random variables remain i.i.d. per link; their temporal
+evolution is still governed by Procedure A through ``UpdatePeriod``.
+
+Procedure B (TR 38.901 Sec. 7.6.3.2) is not implemented in this model.
 
 The initial channel realization for a link is generated using the standard 3GPP
 cluster/ray generation procedure (Fig. 7.5-1). Spatial consistency is then introduced
