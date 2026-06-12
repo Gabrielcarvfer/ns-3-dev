@@ -251,7 +251,13 @@ SimpleNetDevice::Receive(Ptr<Packet> packet, uint16_t protocol, Mac48Address to,
 
     if (packetType != NetDevice::PACKET_OTHERHOST)
     {
-        m_rxCallback(this, packet, protocol, from);
+        // The receive callback (Node::NonPromiscReceiveFromDevice) returns false
+        // when no protocol handler consumed the packet. Honor that result and
+        // trace the otherwise-silent drop (see #370).
+        if (!m_rxCallback(this, packet, protocol, from))
+        {
+            m_phyRxDropTrace(packet);
+        }
     }
 
     if (!m_promiscCallback.IsNull())
