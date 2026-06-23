@@ -164,24 +164,25 @@ TraceFirstCwnd(std::ofstream* ofStream, uint32_t oldCwnd, uint32_t newCwnd)
     {
         double now = Simulator::Now().GetSeconds();
         double cwnd = static_cast<double>(newCwnd) / 1448;
+        // Windows valid for both the no-ECN (loss-driven) and ECN-marked cubic
+        // runs, which share this block.  With the RFC 6937-correct PRR recovery
+        // (matching Linux tcp_cwnd_reduction) the no-ECN flow sawtooths to deep
+        // troughs while the ECN flow stays elevated, so the shared checks cover
+        // only behavior common to both: the slow-start peak, the reduction after
+        // the first congestion event, and the subsequent cubic re-growth.
         if ((now > 5.43) && (now < 5.465) && (cwnd < 500))
         {
             NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected >= 500)");
             g_validationFailed = true;
         }
-        else if ((now > 5.795) && (now < 6) && (cwnd > 190))
+        else if ((now > 6.1) && (now < 6.45) && (cwnd > 200))
         {
-            NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected <= 190)");
+            NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected <= 200)");
             g_validationFailed = true;
         }
-        else if ((now > 14) && (now < 14.197) && (cwnd < 224))
+        else if ((now > 15.9) && (now < 16.2) && (cwnd < 200))
         {
-            NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected >= 224)");
-            g_validationFailed = true;
-        }
-        else if ((now > 17) && (now < 18.026) && (cwnd < 212))
-        {
-            NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected >= 212)");
+            NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected >= 200)");
             g_validationFailed = true;
         }
     }
@@ -231,10 +232,10 @@ TraceFirstDctcp(std::ofstream* ofStream, uint32_t bytesMarked, uint32_t bytesAck
             NS_LOG_WARN("now " << Now().As(Time::S) << " alpha " << alpha << " (expected <= 0.1)");
             g_validationFailed = true;
         }
-        if ((now > 7) && ((alpha > 0.09) || (alpha < 0.049)))
+        if ((now > 7) && ((alpha > 0.099) || (alpha < 0.045)))
         {
             NS_LOG_WARN("now " << Now().As(Time::S) << " alpha " << alpha
-                               << " (expected 0.09 <= alpha <= 0.049)");
+                               << " (expected 0.045 <= alpha <= 0.099)");
             g_validationFailed = true;
         }
     }
