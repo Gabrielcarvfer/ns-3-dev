@@ -4344,6 +4344,16 @@ ThreeGppChannelModelWgpuMezanine::RunUncachedGpuBatch(const std::vector<LinkDesc
         ws.gpu->resetBatchScratchCapacities();
     }
 
+    // Drop this batch's channel/cache entries so they do NOT leak into the next
+    // (live-traffic) computation. The params map is keyed by NODE pair, which the
+    // attachment shares with traffic; leaving the attachment's reduced-antenna /
+    // wrapped-geometry entries behind makes the first post-attachment channel
+    // query reuse them and return zero power -- which, under the Kronecker
+    // quasi-omni beamformer, leaves an empty gNB beam (an assert in
+    // BeamformingHelperBase). ClearChannelCaches at the START of this method only
+    // guards the batch's own inputs; clear again here to protect what follows.
+    ClearChannelCaches();
+
     numRbOut = numRb;
     return result;
 }
