@@ -12,10 +12,6 @@
 #include "sls-chan-wgpu.h"
 #include "sls-phase-timer.h"
 
-#include <unordered_set>
-
-#include "ns3/spectrum-value.h"
-
 #include "ns3/abort.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
@@ -25,6 +21,7 @@
 #include "ns3/node.h"
 #include "ns3/phased-array-model.h"
 #include "ns3/simulator.h"
+#include "ns3/spectrum-value.h"
 #include "ns3/three-gpp-antenna-model.h"
 #include "ns3/uinteger.h"
 #include "ns3/uniform-planar-array.h"
@@ -38,14 +35,19 @@
 #include <memory>
 #include <numeric>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #if SLS_PROFILE_INSTRUMENT && defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRA_LEAN
+// clang-format off
+// windows.h MUST precede psapi.h (it defines DWORD/WINBOOL that psapi.h uses);
+// keep clang-format from alphabetising and breaking the build.
 #include <windows.h>
 #include <psapi.h>
+// clang-format on
 #pragma comment(lib, "psapi.lib")
 // windows.h pollutes GetObject, DeleteObject, etc. via macros — undo them
 // so ns3::Object::GetObject<T>() still compiles below.
@@ -55,7 +57,8 @@
 #ifdef DeleteObject
 #undef DeleteObject
 #endif
-namespace {
+namespace
+{
 static void
 mezPrintMem(const char* label)
 {
@@ -63,7 +66,13 @@ mezPrintMem(const char* label)
 }
 } // namespace
 #else
-namespace { static void mezPrintMem(const char*) {} }
+namespace
+{
+static void
+mezPrintMem(const char*)
+{
+}
+} // namespace
 #endif
 
 NS_LOG_COMPONENT_DEFINE("ThreeGppChannelModelWgpuMezanine");
@@ -350,6 +359,14 @@ struct ThreeGppChannelModelWgpuMezanine::RefreshWorkspace
     /// i.e. skip the CRN/LSP/clusterRay/ReadParams/Populate stages.
     bool skipLspCluster{false};
 
+    /// Uncached-batch (REM / attachment) mode. When true the consumer reads
+    /// the per-link power straight out of m_specPowFlat, so PopulateChannelMaps
+    /// skips the (large, otherwise-discarded) float->double ns-3 ChannelMatrix
+    /// and longTerm copies, and GenerateMatricesAndLongTerm skips the matrix
+    /// GPU->CPU readback. Only the delay / spatial-projection arrays the
+    /// spectrum batch needs are still produced.
+    bool liteUncached{false};
+
     /// Scenario tables fetched in RunLspPipeline from the CPU-side
     /// GetThreeGppTable, consumed again by RunClusterPipeline.
     Ptr<const ParamsTable> tLos;
@@ -414,12 +431,23 @@ struct ThreeGppChannelModelWgpuMezanine::BucketWorkspace
     size_t perLinkLT{0};       ///< complex elements per link in longTermFlat
 };
 
-bool
-ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
+/// One BS->UE link for the topology-agnostic workspace builder. Carries
+/// everything the GPU pipeline needs without any prior CPU channel draw.
+struct ThreeGppChannelModelWgpuMezanine::LinkDescriptor
 {
-    using MatrixEntry = Ptr<ChannelMatrix>;
-    using ParamsEntry = Ptr<ThreeGppChannelParams>;
+    Ptr<const MobilityModel> sMob;    ///< BS / site / transmitter mobility
+    Ptr<const MobilityModel> uMob;    ///< UE / UT / receiver mobility
+    Ptr<const PhasedArrayModel> sAnt; ///< BS antenna (beam already set)
+    Ptr<const PhasedArrayModel> uAnt; ///< UE antenna (beam already set)
+    Ptr<ChannelCondition> condition;  ///< LOS/NLOS/O2I verdict for this link
+    Vector uVelocity{0, 0, 0};        ///< UT velocity (m/s) for Doppler
+};
 
+bool
+ThreeGppChannelModelWgpuMezanine::BuildWorkspaceFromDescriptors(
+    RefreshWorkspace& ws,
+    const std::vector<LinkDescriptor>& links)
+{
     std::unordered_map<uint32_t, NodeInfo> nodeInfoById;
     std::unordered_map<uint32_t, PanelInfo> panelInfoByAntId;
     std::unordered_map<uint32_t, SiteRec> siteByNodeId;
@@ -435,7 +463,7 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
     auto& runtimeLinks = ws.runtimeLinks;
 
     antCfgs.reserve(8);
-    runtimeLinks.reserve(m_channelMatrixMap.size());
+    runtimeLinks.reserve(links.size());
 
     double minX = std::numeric_limits<double>::infinity();
     double minY = std::numeric_limits<double>::infinity();
@@ -456,16 +484,8 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         maxY = std::max(maxY, p.y);
     };
 
-    auto getVelocity = [](const Ptr<MobilityModel>& mob) -> Vector {
+    auto getVelocity = [](const Ptr<const MobilityModel>& mob) -> Vector {
         return mob ? mob->GetVelocity() : Vector{0.0, 0.0, 0.0};
-    };
-
-    auto resolveMobilityFromNodeId = [&](uint32_t nodeId) -> Ptr<MobilityModel> {
-        Ptr<Node> node = NodeList::GetNode(nodeId);
-        NS_ABORT_MSG_IF(node == nullptr, "Node not found for nodeId=" << nodeId);
-        Ptr<MobilityModel> mob = node->GetObject<MobilityModel>();
-        NS_ABORT_MSG_IF(mob == nullptr, "MobilityModel not found for nodeId=" << nodeId);
-        return mob;
     };
 
     auto resolveAntennaFromAntennaId = [&](uint32_t antennaId) -> Ptr<const UniformPlanarArray> {
@@ -478,17 +498,30 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         return ant;
     };
 
-    auto buildNodeInfo = [&](uint32_t nodeId) -> const NodeInfo& {
+    // Position/velocity come from the DESCRIPTOR's mobility object, NOT from a
+    // NodeList re-resolution by node id. This is essential for wraparound:
+    // WraparoundModel::GetVirtualMobilityModel returns a Copy() carrying the
+    // WRAPPED (UE-relative) position while unidirectionally aggregating the
+    // real tx Node -- so GetObject<Node>()->GetId() still yields the real node
+    // id (used for cluster-realization keying via cid*nUt+uid) but
+    // GetPosition() is the virtual position the channel geometry must use.
+    // Re-resolving via NodeList would recover the UNWRAPPED position and break
+    // wraparound. For non-wraparound callers (live sim, REM) the descriptor
+    // mobility IS the NodeList mobility, so this is behavior-preserving.
+    auto buildNodeInfo = [&](uint32_t nodeId,
+                             const Ptr<const MobilityModel>& mob) -> const NodeInfo& {
         auto it = nodeInfoById.find(nodeId);
         if (it != nodeInfoById.end())
         {
             return it->second;
         }
 
-        Ptr<MobilityModel> mob = resolveMobilityFromNodeId(nodeId);
+        NS_ABORT_MSG_IF(mob == nullptr, "buildNodeInfo: null mobility for nodeId=" << nodeId);
         NodeInfo info;
         info.nodeId = nodeId;
-        info.mob = mob;
+        // NodeInfo.mob is non-const (feeds RuntimeLinkCtx); the descriptor hands
+        // us a const handle to a non-const object, so ConstCast is safe here.
+        info.mob = ConstCast<MobilityModel>(mob);
         info.pos = mob->GetPosition();
         info.vel = getVelocity(mob);
         updateBounds(info.pos);
@@ -694,14 +727,16 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         return insIt->second;
     };
 
-    auto getOrCreateSite = [&](uint32_t nodeId, uint32_t antId) -> const SiteRec& {
+    auto getOrCreateSite = [&](uint32_t nodeId,
+                               uint32_t antId,
+                               const Ptr<const MobilityModel>& mob) -> const SiteRec& {
         auto it = siteByNodeId.find(nodeId);
         if (it != siteByNodeId.end())
         {
             return it->second;
         }
 
-        const NodeInfo& ni = buildNodeInfo(nodeId);
+        const NodeInfo& ni = buildNodeInfo(nodeId, mob);
         const PanelInfo& pi = buildPanelInfo(antId, true);
 
         CellParam cell{};
@@ -733,20 +768,25 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
 
     auto getOrCreateUt = [&](uint32_t nodeId,
                              uint32_t antId,
-                             const ParamsEntry& params,
-                             bool rxIsSecondInParams) -> const UtRec& {
+                             const Ptr<ChannelCondition>& condition,
+                             const Vector& uVel,
+                             const Ptr<const MobilityModel>& mob) -> const UtRec& {
         auto it = utByNodeId.find(nodeId);
         if (it != utByNodeId.end())
         {
             return it->second;
         }
 
-        const NodeInfo& ni = buildNodeInfo(nodeId);
+        const NodeInfo& ni = buildNodeInfo(nodeId, mob);
         const PanelInfo& pi = buildPanelInfo(antId, false);
 
-        const bool isOutdoor = params->m_o2iCondition == ChannelCondition::O2iConditionValue::O2O;
+        // O2I verdict from the link's ChannelCondition (not from a
+        // pre-existing CPU params draw), so the workspace can be built
+        // with no prior CPU channel generation.
+        const bool isOutdoor =
+            condition->GetO2iCondition() == ChannelCondition::O2iConditionValue::O2O;
         const float o2iLoss = 0.f;
-        Vector vel = rxIsSecondInParams ? params->m_rxSpeed : params->m_txSpeed;
+        const Vector vel = uVel;
 
         UtParam ut{};
         ut.loc = Vec3f{static_cast<float>(ni.pos.x),
@@ -757,8 +797,6 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         ut.outdoor_ind = isOutdoor ? 1u : 0u;
         ut.o2i_penetration_loss = o2iLoss;
         ut._p = 0.f;
-
-        vel = rxIsSecondInParams ? params->m_rxSpeed : params->m_txSpeed;
 
         UtParamSS utSs{};
         utSs.antPanelIdx = pi.panelIdx;
@@ -784,82 +822,42 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         return insIt->second;
     };
 
-    // Base-station classifier, cached per node id. A node is BS-side when
-    // any of its NetDevices' type names mention Gnb/Enb (NR/LTE); works
-    // regardless of UE heights (indoor UEs sit at per-floor z).
-    std::unordered_map<uint32_t, bool> bsByNodeId;
-    auto nodeIsBs = [&bsByNodeId](uint32_t nodeId) {
-        auto it = bsByNodeId.find(nodeId);
-        if (it != bsByNodeId.end())
-        {
-            return it->second;
-        }
-        bool isBs = false;
-        Ptr<Node> node = NodeList::GetNode(nodeId);
-        if (node)
-        {
-            for (uint32_t d = 0; d < node->GetNDevices() && !isBs; ++d)
-            {
-                const std::string tn = node->GetDevice(d)->GetInstanceTypeId().GetName();
-                isBs = tn.find("Gnb") != std::string::npos || tn.find("Enb") != std::string::npos;
-            }
-        }
-        bsByNodeId.emplace(nodeId, isBs);
-        return isBs;
-    };
-
-    for (const auto& kv : m_channelMatrixMap)
+    // Build runtimeLinks from the explicit descriptor list. Each
+    // descriptor is already a BS(s)->UE(u) link with the role assigned
+    // by the caller, so there is no NetDevice classification here -- the
+    // gNB->UE filtering is the caller's responsibility (the sim adapter
+    // CollectRefreshTopology does it; REM only ever supplies RTD->point
+    // links).
+    for (const auto& d : links)
     {
-        const uint64_t matrixKey = kv.first;
-        const MatrixEntry& ch = kv.second;
-        NS_ABORT_MSG_IF(ch == nullptr, "Null ChannelMatrix in m_channelMatrixMap");
-
-        const uint32_t txNodeId = ch->m_nodeIds.first;
-        const uint32_t rxNodeId = ch->m_nodeIds.second;
-        const uint32_t txAntId = ch->m_antennaPair.first;
-        const uint32_t rxAntId = ch->m_antennaPair.second;
-
-        const uint64_t paramsKey = GetKey(txNodeId, rxNodeId);
-        auto pit = m_channelParamsMap.find(paramsKey);
-        NS_ABORT_MSG_IF(pit == m_channelParamsMap.end(),
-                        "Missing channel params for matrix node pair (" << txNodeId << ","
-                                                                        << rxNodeId << ")");
-        const ParamsEntry& params = DynamicCast<ThreeGppChannelParams>(pit->second);
-        NS_ABORT_MSG_IF(params == nullptr, "Cached params are not ThreeGppChannelParams");
-
-        const bool paramsSameDirection =
-            params->m_nodeIds.first == txNodeId && params->m_nodeIds.second == rxNodeId;
-        const bool paramsReverseDirection =
-            params->m_nodeIds.first == rxNodeId && params->m_nodeIds.second == txNodeId;
-        NS_ABORT_MSG_IF(!paramsSameDirection && !paramsReverseDirection,
-                        "Matrix direction and params direction disagree");
-
-        const NodeInfo& sNodeInfo = buildNodeInfo(txNodeId);
-        const NodeInfo& uNodeInfo = buildNodeInfo(rxNodeId);
-
-        // The GPU (site, ut) topology models gNB->UE links only. UE-UE and
-        // gNB-gNB matrices (e.g. from cross-link or attachment evals) must
-        // NOT enter the grid: a UE registered as a "site" corrupts the CRN
-        // dimensions and the cid*nUt+uid LSP indexing for every real link —
-        // observed as cp.nCluster==0 for ALL links (the pipeline then
-        // silently dropped to the CPU fallback paths from refresh 2 on).
-        // Classify by NetDevice type name rather than height: indoor UEs
-        // sit at per-floor heights and defeat a z comparison. Excluded
-        // links keep working through the PRX CPU fallbacks.
-        if (!nodeIsBs(txNodeId) || nodeIsBs(rxNodeId))
+        if (!d.sMob || !d.uMob || !d.sAnt || !d.uAnt)
         {
             continue;
         }
 
-        const SiteRec& site = getOrCreateSite(txNodeId, txAntId);
-        const UtRec& ut = getOrCreateUt(rxNodeId, rxAntId, params, paramsSameDirection);
+        const uint32_t txNodeId = d.sMob->GetObject<Node>()->GetId();
+        const uint32_t rxNodeId = d.uMob->GetObject<Node>()->GetId();
+        const uint32_t txAntId = d.sAnt->GetId();
+        const uint32_t rxAntId = d.uAnt->GetId();
+
+        // Register the antennas so buildPanelInfo's resolveAntennaFromAntennaId
+        // finds them. The sim path registers in GetNewChannel; explicit
+        // callers (e.g. REM) may supply antennas GetChannel never saw.
+        m_antennaIdToObjectMap[txAntId] = d.sAnt;
+        m_antennaIdToObjectMap[rxAntId] = d.uAnt;
+
+        const NodeInfo& sNodeInfo = buildNodeInfo(txNodeId, d.sMob);
+        const NodeInfo& uNodeInfo = buildNodeInfo(rxNodeId, d.uMob);
+
+        const SiteRec& site = getOrCreateSite(txNodeId, txAntId, d.sMob);
+        const UtRec& ut = getOrCreateUt(rxNodeId, rxAntId, d.condition, d.uVelocity, d.uMob);
 
         const PanelInfo& bsPanel = buildPanelInfo(txAntId, true);
         const PanelInfo& uePanel = buildPanelInfo(rxAntId, false);
 
         RuntimeLinkCtx ctx{};
-        ctx.paramsKey = paramsKey;
-        ctx.matrixKey = matrixKey;
+        ctx.paramsKey = GetKey(txNodeId, rxNodeId);
+        ctx.matrixKey = GetKey(txAntId, rxAntId);
         ctx.sNodeId = txNodeId;
         ctx.uNodeId = rxNodeId;
         ctx.sAntId = txAntId;
@@ -872,7 +870,7 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
             ConstCast<PhasedArrayModel>(DynamicCast<const PhasedArrayModel>(bsPanel.antenna));
         ctx.uAnt =
             ConstCast<PhasedArrayModel>(DynamicCast<const PhasedArrayModel>(uePanel.antenna));
-        ctx.condition = m_channelConditionModel->GetChannelCondition(ctx.sMob, ctx.uMob);
+        ctx.condition = d.condition;
         runtimeLinks.push_back(ctx);
     }
 
@@ -953,6 +951,106 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
     ws.minYf = std::isfinite(minY) ? static_cast<float>(minY - margin) : -1000.f;
 
     return true;
+}
+
+bool
+ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
+{
+    // Sim-topology adapter over BuildWorkspaceFromDescriptors: sweep the
+    // cached channel matrices, classify each node BS/UE by NetDevice type,
+    // and resolve every gNB->UE link into a LinkDescriptor. The UT velocity
+    // is taken from the cached params (snapshot at params-generation time)
+    // to preserve the exact pre-refactor behaviour.
+
+    // Base-station classifier, cached per node id. A node is BS-side when
+    // any of its NetDevices' type names mention Gnb/Enb (NR/LTE); works
+    // regardless of UE heights (indoor UEs sit at per-floor z).
+    std::unordered_map<uint32_t, bool> bsByNodeId;
+    auto nodeIsBs = [&bsByNodeId](uint32_t nodeId) {
+        auto it = bsByNodeId.find(nodeId);
+        if (it != bsByNodeId.end())
+        {
+            return it->second;
+        }
+        bool isBs = false;
+        Ptr<Node> node = NodeList::GetNode(nodeId);
+        if (node)
+        {
+            for (uint32_t d = 0; d < node->GetNDevices() && !isBs; ++d)
+            {
+                const std::string tn = node->GetDevice(d)->GetInstanceTypeId().GetName();
+                isBs = tn.find("Gnb") != std::string::npos || tn.find("Enb") != std::string::npos;
+            }
+        }
+        bsByNodeId.emplace(nodeId, isBs);
+        return isBs;
+    };
+
+    std::vector<LinkDescriptor> descriptors;
+    descriptors.reserve(m_channelMatrixMap.size());
+
+    for (const auto& kv : m_channelMatrixMap)
+    {
+        const Ptr<ChannelMatrix>& ch = kv.second;
+        NS_ABORT_MSG_IF(ch == nullptr, "Null ChannelMatrix in m_channelMatrixMap");
+
+        const uint32_t txNodeId = ch->m_nodeIds.first;
+        const uint32_t rxNodeId = ch->m_nodeIds.second;
+        const uint32_t txAntId = ch->m_antennaPair.first;
+        const uint32_t rxAntId = ch->m_antennaPair.second;
+
+        // The GPU (site, ut) topology models gNB->UE links only. UE-UE and
+        // gNB-gNB matrices (e.g. from cross-link or attachment evals) must
+        // NOT enter the grid: a UE registered as a "site" corrupts the CRN
+        // dimensions and the cid*nUt+uid LSP indexing for every real link.
+        // Classify by NetDevice type name rather than height: indoor UEs
+        // sit at per-floor heights and defeat a z comparison. Excluded
+        // links keep working through the PRX CPU fallbacks.
+        if (!nodeIsBs(txNodeId) || nodeIsBs(rxNodeId))
+        {
+            continue;
+        }
+
+        const uint64_t paramsKey = GetKey(txNodeId, rxNodeId);
+        auto pit = m_channelParamsMap.find(paramsKey);
+        NS_ABORT_MSG_IF(pit == m_channelParamsMap.end(),
+                        "Missing channel params for matrix node pair (" << txNodeId << ","
+                                                                        << rxNodeId << ")");
+        const Ptr<ThreeGppChannelParams> params = DynamicCast<ThreeGppChannelParams>(pit->second);
+        NS_ABORT_MSG_IF(params == nullptr, "Cached params are not ThreeGppChannelParams");
+
+        const bool paramsSameDirection =
+            params->m_nodeIds.first == txNodeId && params->m_nodeIds.second == rxNodeId;
+        const bool paramsReverseDirection =
+            params->m_nodeIds.first == rxNodeId && params->m_nodeIds.second == txNodeId;
+        NS_ABORT_MSG_IF(!paramsSameDirection && !paramsReverseDirection,
+                        "Matrix direction and params direction disagree");
+
+        Ptr<Node> sNode = NodeList::GetNode(txNodeId);
+        Ptr<Node> uNode = NodeList::GetNode(rxNodeId);
+        NS_ABORT_MSG_IF(sNode == nullptr || uNode == nullptr,
+                        "Node not found for cached matrix node pair");
+        Ptr<MobilityModel> sMob = sNode->GetObject<MobilityModel>();
+        Ptr<MobilityModel> uMob = uNode->GetObject<MobilityModel>();
+        NS_ABORT_MSG_IF(sMob == nullptr || uMob == nullptr, "MobilityModel not found");
+
+        auto sAntIt = m_antennaIdToObjectMap.find(txAntId);
+        auto uAntIt = m_antennaIdToObjectMap.find(rxAntId);
+        NS_ABORT_MSG_IF(sAntIt == m_antennaIdToObjectMap.end() ||
+                            uAntIt == m_antennaIdToObjectMap.end(),
+                        "Antenna object not registered for cached matrix");
+
+        LinkDescriptor d;
+        d.sMob = sMob;
+        d.uMob = uMob;
+        d.sAnt = sAntIt->second;
+        d.uAnt = uAntIt->second;
+        d.condition = m_channelConditionModel->GetChannelCondition(sMob, uMob);
+        d.uVelocity = paramsSameDirection ? params->m_rxSpeed : params->m_txSpeed;
+        descriptors.push_back(std::move(d));
+    }
+
+    return BuildWorkspaceFromDescriptors(ws, descriptors);
 }
 
 bool
@@ -1740,6 +1838,46 @@ ThreeGppChannelModelWgpuMezanine::PrepareBucket(RefreshWorkspace& ws, BucketWork
             {
                 ltStartU[p] = static_cast<uint32_t>(refCtx.uAnt->ArrayIndexFromPortIndex(p, 0));
             }
+            static const bool ltDbg = []() {
+                const char* e = std::getenv("MEZ_ANT_DBG");
+                return e != nullptr && e[0] == '1';
+            }();
+            if (ltDbg)
+            {
+                static bool once = false;
+                if (!once)
+                {
+                    once = true;
+                    std::fprintf(stderr,
+                                 "MEZ_LT bucket sSize=%u uSize=%u | gNB sPorts=%u sPortElems=%u "
+                                 "sElemsPerPort=%u sIncVal=%u sCols=%u startS=[",
+                                 bSSize,
+                                 bUSize,
+                                 ltSPorts,
+                                 ltSPortElems,
+                                 ltSElemsPerPort,
+                                 ltSIncVal,
+                                 static_cast<uint32_t>(refCtx.sAnt->GetNumColumns()));
+                    for (uint32_t p = 0; p < ltSPorts; ++p)
+                    {
+                        std::fprintf(stderr, "%u%s", ltStartS[p], p + 1 < ltSPorts ? "," : "");
+                    }
+                    std::fprintf(stderr,
+                                 "] | UE uPorts=%u uPortElems=%u uElemsPerPort=%u uIncVal=%u "
+                                 "uCols=%u startU=[",
+                                 ltUPorts,
+                                 ltUPortElems,
+                                 ltUElemsPerPort,
+                                 ltUIncVal,
+                                 static_cast<uint32_t>(refCtx.uAnt->GetNumColumns()));
+                    for (uint32_t p = 0; p < ltUPorts; ++p)
+                    {
+                        std::fprintf(stderr, "%u%s", ltStartU[p], p + 1 < ltUPorts ? "," : "");
+                    }
+                    std::fprintf(stderr, "]\n");
+                    std::fflush(stderr);
+                }
+            }
             ltSWFlat.resize(size_t(nBucketLinks) * ltSPortElems);
             ltUWFlat.resize(size_t(nBucketLinks) * ltUPortElems);
             bool assembleOk = true;
@@ -1953,11 +2091,50 @@ ThreeGppChannelModelWgpuMezanine::GenerateMatricesAndLongTerm(RefreshWorkspace& 
                 SLS_PHASE_SCOPE("Mez::UploadActiveLinks");
                 gpu->uploadActiveLinkBuf(bktChunkLinks);
             }
+            // Decide whether this chunk needs the per-element matrix on the
+            // host. Two cases skip the GPU->CPU matrix readback:
+            //  - REM/uncached lite path (ws.liteUncached): power comes from
+            //    m_specPowFlat, the matrix is never read.
+            //  - Live sim under MEZ_SKIP_MATCOPY once every link in the chunk
+            //    has been materialised at least once: Populate will skip the
+            //    float->double copy anyway (PRX reuses the first realisation),
+            //    so the readback that feeds it is pure waste. genLongTerm still
+            //    reads channelMatrixBuf_ on the GPU, so longTerm is unaffected.
+            static const bool s_skipMatCopy = []() {
+                const char* e = std::getenv("MEZ_SKIP_MATCOPY");
+                return (e && e[0] == '1' && e[1] == '\0');
+            }();
+            bool skipMatReadback = ws.liteUncached;
+            if (!skipMatReadback && s_skipMatCopy && bw.bucketLinkIdxs)
+            {
+                skipMatReadback = true;
+                for (uint32_t i = 0; i < chunkLen; ++i)
+                {
+                    const size_t rl = (*bw.bucketLinkIdxs)[chunkStart + i];
+                    if (!m_matValuesFilled.count(ws.runtimeLinks[rl].matrixKey))
+                    {
+                        skipMatReadback = false; // a first-fill link still needs it
+                        break;
+                    }
+                }
+            }
             if (ltCanDispatch)
             {
                 // Opt E: fuse genChannelMatrix + readChannelMatrix +
-                // genLongTerm + readLongTerm into a single encoder
-                // submission (4 WaitIdle per chunk → 1).
+                // genLongTerm + readLongTerm into a single encoder submission
+                // (4 WaitIdle per chunk -> 1).
+                //
+                // NOTE: a no-matrix fused variant (genChanLongTermFusedNoMatrix /
+                // gen_chan_lt_fused_kernel) that computes the longTerm from
+                // inline H and never writes the per-element matrix was tried for
+                // the REM/lite path to cut the ~800 MB/chunk matrix traffic. It
+                // is correct (bit-parity REM) but ~14x SLOWER on this GPU: the
+                // matrix kernel's 100M small threads hide the write latency,
+                // whereas the fused kernel collapses to ~one big serial thread
+                // per output port (nLinks*pages) and loses that latency hiding.
+                // So the matrix path is kept for ALL configs; the fused kernel
+                // is left in place (unused) for hardware where the trade-off may
+                // flip (abundant cores + scarce memory BW).
                 const size_t chunkSWLen = size_t(chunkLen) * ltSPortElems;
                 const size_t chunkUWLen = size_t(chunkLen) * ltUPortElems;
                 SLS_PHASE_SCOPE("Mez::MatrixAndLTFused");
@@ -1981,15 +2158,8 @@ ThreeGppChannelModelWgpuMezanine::GenerateMatricesAndLongTerm(RefreshWorkspace& 
                     chunkUWLen,
                     ltStartS,
                     ltStartU,
-                    matFlat.data() + size_t(chunkStart) * perLinkMatLen,
+                    skipMatReadback ? nullptr : matFlat.data() + size_t(chunkStart) * perLinkMatLen,
                     longTermFlat.data() + size_t(chunkStart) * perLinkLT);
-                if (chunkStart == 0)
-                {
-                    mezPrintMem("c0-post-genMat");
-                    mezPrintMem("c0-post-readMat");
-                    mezPrintMem("c0-post-genLT");
-                    mezPrintMem("c0-post-readLT");
-                }
             }
             else
             {
@@ -2368,6 +2538,17 @@ ThreeGppChannelModelWgpuMezanine::PopulateChannelMaps(RefreshWorkspace& ws, Buck
                 }
             }
 
+            // Lite uncached (REM / attachment) path: the per-link power is
+            // read straight from m_specPowFlat, so skip the otherwise-
+            // discarded ns-3 ChannelMatrix + longTerm float->double copies
+            // (the single largest CPU cost, and the source of the per-chunk
+            // heap churn). The delay / spatial-projection arrays the spectrum
+            // batch needs were already filled above.
+            if (ws.liteUncached)
+            {
+                continue;
+            }
+
             // Build ChannelMatrix from GPU matrix output.
             const uint8_t numOverallCluster =
                 params->m_cluster1st != params->m_cluster2nd
@@ -2432,6 +2613,11 @@ ThreeGppChannelModelWgpuMezanine::PopulateChannelMaps(RefreshWorkspace& ws, Buck
                     dr[0] = static_cast<double>(sr[0]);
                     dr[1] = static_cast<double>(sr[1]);
                 }
+                // This link's matrix values are now materialised. Once every
+                // link of a chunk is recorded here, GenerateMatricesAndLongTerm
+                // stops reading the matrix back from the GPU under
+                // MEZ_SKIP_MATCOPY (see m_matValuesFilled).
+                m_matValuesFilled.insert(ctx.matrixKey);
             }
 
             // Build per-link LongTerm from GPU output.
@@ -2794,7 +2980,7 @@ ThreeGppChannelModelWgpuMezanine::RunSpectrumBatch(RefreshWorkspace& ws, BucketW
                                 size_t(chunkLen) * numRb * sizeof(float));
                 }
             } // end DelayProj + slot loops scope
-        }     // end chunk loop
+        } // end chunk loop
 
         // Record each link's metadata in the flat buffer index.
         const Time generatedTime = Simulator::Now();
@@ -3165,36 +3351,18 @@ ThreeGppChannelModelWgpuMezanine::RunDiagnosticAudits(RefreshWorkspace& ws)
                 }
             }
             std::fprintf(stderr, "[MEZ_DIAG_H] lspStats LOS:");
-            lspStats(
-                "lgASA",
-                [](const LinkParams& l) { return std::log10(double(l.ASA)); },
-                true);
-            lspStats(
-                "lgASD",
-                [](const LinkParams& l) { return std::log10(double(l.ASD)); },
-                true);
-            lspStats(
-                "lgDSns",
-                [](const LinkParams& l) { return std::log10(double(l.DS)); },
-                true);
+            lspStats("lgASA", [](const LinkParams& l) { return std::log10(double(l.ASA)); }, true);
+            lspStats("lgASD", [](const LinkParams& l) { return std::log10(double(l.ASD)); }, true);
+            lspStats("lgDSns", [](const LinkParams& l) { return std::log10(double(l.DS)); }, true);
             lspStats(
                 "Kdb",
                 [](const LinkParams& l) { return l.K > 0 ? 10.0 * std::log10(double(l.K)) : NAN; },
                 true);
-            lspStats(
-                "lgZSA",
-                [](const LinkParams& l) { return std::log10(double(l.ZSA)); },
-                true);
-            lspStats(
-                "lgZSD",
-                [](const LinkParams& l) { return std::log10(double(l.ZSD)); },
-                true);
+            lspStats("lgZSA", [](const LinkParams& l) { return std::log10(double(l.ZSA)); }, true);
+            lspStats("lgZSD", [](const LinkParams& l) { return std::log10(double(l.ZSD)); }, true);
             // SF (dB): cv[SF] = 1.0 * z0 (identity Cholesky row), so this is a
             // DIRECT variance probe of CRN grid 0. Spec sigma: 4 dB (UMa LOS).
-            lspStats(
-                "SFdb",
-                [](const LinkParams& l) { return double(l.SF); },
-                true);
+            lspStats("SFdb", [](const LinkParams& l) { return double(l.SF); }, true);
             std::fprintf(stderr, "\n");
         }
 
@@ -4002,254 +4170,298 @@ ThreeGppChannelModelWgpuMezanine::SetBypassGpuBatch(bool bypass)
     m_bypassGpuBatch = bypass;
 }
 
-std::vector<double>
-ThreeGppChannelModelWgpuMezanine::ComputeUncachedBatch(
-    const std::vector<UncachedBatchLink>& links,
-    Ptr<const SpectrumValue> txPsd)
+std::vector<float>
+ThreeGppChannelModelWgpuMezanine::RunUncachedGpuBatch(const std::vector<LinkDescriptor>& links,
+                                                      Ptr<const SpectrumValue> txPsd,
+                                                      uint32_t& numRbOut,
+                                                      bool txPort0Only)
 {
+    numRbOut = 0;
     if (links.empty())
+    {
         return {};
+    }
 
-    // Ensure RB frequencies are captured (needed by genSpecBatch).
+    SlsChanWgpu* gpu = m_wgpuChannel.get();
+    if (gpu == nullptr)
+    {
+        // GPU back-end unavailable (e.g. NS3_ENABLE_3GPP_GPU=OFF or adapter
+        // init failed) -- caller falls back to the CPU path.
+        return {};
+    }
+
+    // Capture the RB centre frequencies from the representative PSD.
     CaptureRbFreqs(txPsd);
     if (m_batchRbFreqs.empty())
+    {
         return {};
-
+    }
     const uint32_t numRb = static_cast<uint32_t>(m_batchRbFreqs.size());
-    const uint32_t nLinks = static_cast<uint32_t>(links.size());
 
-    // Step 1: Ensure channel matrices and params are available via base-class
-    // CPU path. GetChannel populates m_channelMatrixMap + m_channelParamsMap
-    // on first call; subsequent calls return the cached entry.
-    for (const auto& lnk : links)
-        ThreeGppChannelModel::GetChannel(lnk.sMob, lnk.uMob, lnk.sAnt, lnk.uAnt);
+    // Fresh caches: every call supplies unique antenna/node pairs, so without
+    // this the base maps would grow without bound and stale entries could
+    // shadow this batch's results.
+    ClearChannelCaches();
 
-    // All links must share the same (sPorts, uPorts) configuration for a
-    // single-bucket genSpecBatch dispatch. Use the first link as reference.
-    const Ptr<const PhasedArrayModel>& refS = links[0].sAnt;
-    const Ptr<const PhasedArrayModel>& refU = links[0].uAnt;
-    if (!refS || !refU)
+    // Evaluate "now" with no Doppler lookahead -- force single-slot batches
+    // for the duration of the call and restore the user setting afterwards.
+    const uint32_t savedBatchM = m_batchM;
+    m_batchM = 1;
+
+    RefreshWorkspace ws;
+    ws.gpu = gpu;
+
+    if (!BuildWorkspaceFromDescriptors(ws, links))
+    {
+        m_batchM = savedBatchM;
         return {};
+    }
 
-    const uint32_t ltSPorts = static_cast<uint32_t>(refS->GetNumPorts());
-    const uint32_t ltUPorts = static_cast<uint32_t>(refU->GetNumPorts());
-    const uint32_t ltSPortElems = static_cast<uint32_t>(refS->GetNumElemsPerPort());
-    const uint32_t ltUPortElems = static_cast<uint32_t>(refU->GetNumElemsPerPort());
-    const uint32_t ltSElemsPerPort = static_cast<uint32_t>(refS->GetHElemsPerPort());
-    const uint32_t ltUElemsPerPort = static_cast<uint32_t>(refU->GetHElemsPerPort());
-    const uint32_t ltSIncVal = (ltSElemsPerPort > 0)
-                                   ? static_cast<uint32_t>(refS->GetNumColumns()) - ltSElemsPerPort
-                                   : 0u;
-    const uint32_t ltUIncVal = (ltUElemsPerPort > 0)
-                                   ? static_cast<uint32_t>(refU->GetNumColumns()) - ltUElemsPerPort
-                                   : 0u;
+    // The result rows are addressed by the runtimeLink index (== bucket link
+    // index). BuildWorkspaceFromDescriptors pushes one runtimeLink per valid
+    // descriptor in input order; the public wrappers reject any null link, so
+    // the mapping is the identity and bucketLinkIdxs[bi] is the input index.
+    NS_ABORT_MSG_IF(ws.runtimeLinks.size() != links.size(),
+                    "RunUncachedGpuBatch expects a 1:1 descriptor->runtimeLink mapping");
 
-    // Step 2: Compute longTerms on CPU for all links and collect per-link delays.
-    // Mirrors PRX::CalcLongTerm exactly (same index arithmetic, same port walk).
-    // Uses float32 throughout for speed since channel matrices are ~12-20 clusters.
-    const uint32_t numClusters = SlsChanWgpu::kMatMaxPages;
-    const size_t perLinkLT = static_cast<size_t>(ltUPorts) * ltSPorts * numClusters;
+    // Full GPU pipeline -- never the static fast paths (always a fresh draw).
+    // Lite mode: the result comes from m_specPowFlat / m_specHFlat, so skip the
+    // per-link ns-3 ChannelMatrix / longTerm CPU copies and the matrix GPU
+    // readback. Under MEZ_DIAG_H, force the NON-lite path so PopulateChannelMaps
+    // fills m_channelMatrixMap / m_channelParamsMap / m_gpuLongTermMap and the
+    // RunDiagnosticAudits (hAB/ltAB/cohAB) below can audit this batch's links.
+    // The spec-batch result is unaffected (it reads m_specPowFlat / m_specHFlat
+    // either way).
+    static const bool diagForceFull = []() {
+        const char* e = std::getenv("MEZ_DIAG_H");
+        return e && e[0] == '1';
+    }();
+    ws.skipLspCluster = false;
+    ws.liteUncached = !diagForceFull;
+    RunLspPipeline(ws);
+    RunClusterPipeline(ws);
+    ReadbackClusterParams(ws);
 
-    static thread_local std::vector<std::complex<float>> ltFlat;
-    static thread_local std::vector<float> delaysFlat;
-    static thread_local std::vector<float> sWRe_buf, sWIm_buf, cuWRe_buf, cuWIm_buf;
-    ltFlat.assign(nLinks * perLinkLT, {0.0f, 0.0f});
-    delaysFlat.assign(nLinks * numClusters, 0.0f);
+    const uint64_t maxBuf = gpu->getMaxStorageBufferBindingSize();
+    ws.effectiveBufCap = maxBuf == 0 ? (1ull << 31) : maxBuf;
+    ws.sbNumRb = numRb;
+    ws.rbFreqsHash = HashFloatVector(m_batchRbFreqs);
 
-    for (uint32_t li = 0; li < nLinks; ++li)
+    std::vector<float> result(static_cast<size_t>(links.size()) * numRb, 0.0f);
+
+    // Per-bucket matrix/longTerm/spectrum pipeline (mirrors UpdateChannel's
+    // bucket loop), reading back the slot-0 forward power per link.
+    m_specHBucketBase = 0;
+    m_powBucketBase = 0;
+    for (const auto& [antKey, bucketLinkIdxs] : ws.bucketMap)
     {
-        const auto& lnk = links[li];
-        const uint64_t matKey = GetKey(lnk.sAnt->GetId(), lnk.uAnt->GetId());
-        auto matIt = m_channelMatrixMap.find(matKey);
-        if (matIt == m_channelMatrixMap.end())
-            continue;
-        const Ptr<const ChannelMatrix>& matrix = matIt->second;
+        BucketWorkspace bw;
+        bw.bSSize = antKey.first;
+        bw.bUSize = antKey.second;
+        bw.nBucketLinks = static_cast<uint32_t>(bucketLinkIdxs.size());
+        bw.bucketLinkIdxs = &bucketLinkIdxs;
 
-        // Collect delays from cached params.
-        const uint64_t paramsKey =
-            GetKey(lnk.sMob->GetObject<Node>()->GetId(),
-                   lnk.uMob->GetObject<Node>()->GetId());
-        if (auto pit = m_channelParamsMap.find(paramsKey); pit != m_channelParamsMap.end())
-        {
-            const auto& p = pit->second;
-            const size_t nc = std::min(static_cast<size_t>(numClusters), p->m_delay.size());
-            float* dBase = delaysFlat.data() + static_cast<size_t>(li) * numClusters;
-            for (size_t c = 0; c < nc; ++c)
-                dBase[c] = static_cast<float>(p->m_delay[c]);
-        }
+        PrepareBucket(ws, bw);
+        GenerateMatricesAndLongTerm(ws, bw);
+        PopulateChannelMaps(ws, bw);
 
-        // Cache per-port element weights as float (re,im) pairs.
-        const auto& sW = lnk.sAnt->GetBeamformingVectorRef();
-        const auto& uW = lnk.uAnt->GetBeamformingVectorRef();
-        sWRe_buf.resize(ltSPortElems);
-        sWIm_buf.resize(ltSPortElems);
-        cuWRe_buf.resize(ltUPortElems);
-        cuWIm_buf.resize(ltUPortElems);
-        for (uint32_t k = 0; k < ltSPortElems; ++k)
-        {
-            sWRe_buf[k] = static_cast<float>(sW[k].real());
-            sWIm_buf[k] = static_cast<float>(sW[k].imag());
-        }
-        for (uint32_t k = 0; k < ltUPortElems; ++k)
-        {
-            cuWRe_buf[k] = static_cast<float>(std::conj(uW[k]).real());
-            cuWIm_buf[k] = static_cast<float>(std::conj(uW[k]).imag());
-        }
+        // RunSpectrumBatch advances m_powBucketBase / m_specHBucketBase, so
+        // capture this bucket's bases first. Layouts (m_batchM==1, slot 0):
+        //   scalar power : m_specPowFlat[powBase + bi*numRb + rb]
+        //   per-port H   : m_specHFlat[hBase + bi*numRb*rxtx + rb*rxtx + tx*nRx + rx]
+        const size_t powBase = m_powBucketBase;
+        const size_t hBase = m_specHBucketBase;
+        RunSpectrumBatch(ws, bw);
 
-        const size_t numRows = matrix->m_channel.GetNumRows();
-        const size_t nC =
-            std::min(static_cast<size_t>(numClusters), matrix->m_channel.GetNumPages());
-        std::complex<float>* ltBase = ltFlat.data() + static_cast<size_t>(li) * perLinkLT;
-        const bool uTrivial = (ltUPortElems == 1);
-        const bool sNeedHop = (ltSElemsPerPort > 0 && ltSIncVal > 0);
-        const bool uNeedHop = (ltUElemsPerPort > 0 && ltUIncVal > 0);
-
-        for (uint32_t spIdx = 0; spIdx < ltSPorts; ++spIdx)
+        if (txPort0Only)
         {
-            const uint32_t startS =
-                static_cast<uint32_t>(lnk.sAnt->ArrayIndexFromPortIndex(spIdx, 0));
-            for (uint32_t upIdx = 0; upIdx < ltUPorts; ++upIdx)
+            // sum_rx |H[rx, txPort0, rb]|^2 -- all UE (rx) ports, gNB (tx) port 0
+            // only. Within each (link, rb) the rxtx block is indexed tx*nRx+rx,
+            // so tx=0 occupies the first nRx entries (rx = 0..nRx-1).
+            const uint32_t nRx = bw.ltUPorts;
+            const size_t rxtx = static_cast<size_t>(nRx) * bw.ltSPorts;
+            const size_t perLinkH = static_cast<size_t>(numRb) * rxtx;
+            for (uint32_t bi = 0; rxtx != 0 && bi < bw.nBucketLinks; ++bi)
             {
-                const uint32_t startU =
-                    static_cast<uint32_t>(lnk.uAnt->ArrayIndexFromPortIndex(upIdx, 0));
-                for (size_t c = 0; c < nC; ++c)
+                const size_t inputIdx = bucketLinkIdxs[bi];
+                const size_t srcBase = hBase + static_cast<size_t>(bi) * perLinkH;
+                const size_t dstBase = inputIdx * numRb;
+                if (srcBase + perLinkH > m_specHFlat.size())
                 {
-                    const auto* pageD =
-                        reinterpret_cast<const double*>(matrix->m_channel.GetPagePtr(c));
-                    float txRe = 0.0f, txIm = 0.0f;
-                    uint32_t sIdx = startS;
-                    if (uTrivial)
+                    continue;
+                }
+                for (uint32_t rb = 0; rb < numRb; ++rb)
+                {
+                    const size_t rbBase = srcBase + static_cast<size_t>(rb) * rxtx;
+                    float acc = 0.0f;
+                    for (uint32_t rx = 0; rx < nRx; ++rx)
                     {
-                        const float cu0Re = cuWRe_buf[0];
-                        const float cu0Im = cuWIm_buf[0];
-                        for (uint32_t tI = 0; tI < ltSPortElems; ++tI, ++sIdx)
-                        {
-                            const size_t cell = (startU + numRows * sIdx) * 2;
-                            const float pR = static_cast<float>(pageD[cell]);
-                            const float pI = static_cast<float>(pageD[cell + 1]);
-                            const float rxR = cu0Re * pR - cu0Im * pI;
-                            const float rxI = cu0Re * pI + cu0Im * pR;
-                            txRe += sWRe_buf[tI] * rxR - sWIm_buf[tI] * rxI;
-                            txIm += sWRe_buf[tI] * rxI + sWIm_buf[tI] * rxR;
-                            if (sNeedHop && tI % ltSElemsPerPort == ltSElemsPerPort - 1)
-                                sIdx += ltSIncVal;
-                        }
+                        acc += std::norm(m_specHFlat[rbBase + rx]); // tx=0 -> offset rx
                     }
-                    else
-                    {
-                        for (uint32_t tI = 0; tI < ltSPortElems; ++tI, ++sIdx)
-                        {
-                            float rxRe = 0.0f, rxIm = 0.0f;
-                            uint32_t uIdx = startU;
-                            for (uint32_t rI = 0; rI < ltUPortElems; ++rI, ++uIdx)
-                            {
-                                const size_t cell = (uIdx + numRows * sIdx) * 2;
-                                const float pR = static_cast<float>(pageD[cell]);
-                                const float pI = static_cast<float>(pageD[cell + 1]);
-                                rxRe += cuWRe_buf[rI] * pR - cuWIm_buf[rI] * pI;
-                                rxIm += cuWRe_buf[rI] * pI + cuWIm_buf[rI] * pR;
-                                if (uNeedHop && rI % ltUElemsPerPort == ltUElemsPerPort - 1)
-                                    uIdx += ltUIncVal;
-                            }
-                            txRe += sWRe_buf[tI] * rxRe - sWIm_buf[tI] * rxIm;
-                            txIm += sWRe_buf[tI] * rxIm + sWIm_buf[tI] * rxRe;
-                            if (sNeedHop && tI % ltSElemsPerPort == ltSElemsPerPort - 1)
-                                sIdx += ltSIncVal;
-                        }
-                    }
-                    // Column-major layout: (uPort, sPort, c) at
-                    //   uPort + ltUPorts*sPort + ltUPorts*ltSPorts*c
-                    ltBase[upIdx + ltUPorts * spIdx + ltUPorts * ltSPorts * c] = {txRe, txIm};
+                    result[dstBase + rb] = acc;
+                }
+            }
+        }
+        else
+        {
+            for (uint32_t bi = 0; bi < bw.nBucketLinks; ++bi)
+            {
+                const size_t inputIdx = bucketLinkIdxs[bi];
+                const size_t srcBase = powBase + static_cast<size_t>(bi) * numRb;
+                const size_t dstBase = inputIdx * numRb;
+                if (srcBase + numRb <= m_specPowFlat.size())
+                {
+                    std::copy_n(m_specPowFlat.data() + srcBase, numRb, result.data() + dstBase);
                 }
             }
         }
     }
 
-    // Step 3: Upload longTerms to GPU and run genSpecBatch in chunks.
-    // Each chunk is bounded by kMaxStagingReadbackBytes to keep MapAsync fast.
-    SlsChanWgpu* gpu = m_wgpuChannel.get();
-    static constexpr uint64_t kMaxReadbackBytes = 786432ull; // 768 KB
-    const uint64_t sbBytesPerLink = static_cast<uint64_t>(numRb) * sizeof(float);
-    const uint32_t chunkSz = static_cast<uint32_t>(
-        std::max(1ull,
-                 std::min<uint64_t>(static_cast<uint64_t>(nLinks),
-                                    kMaxReadbackBytes / sbBytesPerLink)));
-
-    static thread_local std::vector<float> reducedPowFlat;
-    static thread_local std::vector<float> chunkDelays;
-    static thread_local std::vector<std::complex<float>> chunkDoppler;
-    reducedPowFlat.resize(static_cast<size_t>(nLinks) * numRb, 0.0f);
-
-    for (uint32_t cs = 0; cs < nLinks; cs += chunkSz)
+    // MEZ_DIAG_H: run the same-realization hAB/ltAB/cohAB audits on the
+    // attachment's RECONFIGURED antennas. The live UpdateChannel audit only
+    // covers the unmodified live arrays; the attachment reconfigures the gNB
+    // (ExtractGnbParameters) to a different port/element geometry, so audit it
+    // here to localize any port-offset / element-ordering divergence.
+    static const bool diagAudit = []() {
+        const char* e = std::getenv("MEZ_DIAG_H");
+        return e && e[0] == '1';
+    }();
+    if (diagAudit)
     {
-        const uint32_t cl = std::min(chunkSz, nLinks - cs);
-
-        gpu->uploadLongTermBatch(ltFlat.data() + static_cast<size_t>(cs) * perLinkLT,
-                                 cl, ltSPorts, ltUPorts);
-
-        chunkDelays.assign(static_cast<size_t>(cl) * numClusters, 0.0f);
-        std::memcpy(chunkDelays.data(),
-                    delaysFlat.data() + static_cast<size_t>(cs) * numClusters,
-                    static_cast<size_t>(cl) * numClusters * sizeof(float));
-        // No Doppler shift assumed (initial attachment or static channel).
-        chunkDoppler.assign(static_cast<size_t>(cl) * numClusters, {1.0f, 0.0f});
-
-        gpu->genSpecBatch(cl, numClusters, numRb,
-                          ltUPorts, ltSPorts, ltUPorts, ltSPorts,
-                          chunkDelays, chunkDoppler, m_batchRbFreqs,
-                          /*outSlotOffset=*/0, /*totalBatchSlots=*/1);
-        gpu->waitForSpecBatch();
-        // The kernel now outputs the per-port complex H; reduce it to the
-        // forward beamformed power sum_rx |sum_tx H|^2 on the CPU.
-        const uint32_t rxtxUb = ltUPorts * ltSPorts;
-        static thread_local std::vector<std::complex<float>> hScratch;
-        hScratch.resize(static_cast<size_t>(cl) * numRb * rxtxUb);
-        gpu->readSpecHBatchInto(cl, numRb, rxtxUb, /*nSlots=*/1, hScratch.data());
-        for (uint32_t li = 0; li < cl; ++li)
-        {
-            for (uint32_t rb = 0; rb < numRb; ++rb)
-            {
-                const std::complex<float>* src =
-                    hScratch.data() + (static_cast<size_t>(li) * numRb + rb) * rxtxUb;
-                float acc = 0.0f;
-                for (uint32_t rx = 0; rx < ltUPorts; ++rx)
-                {
-                    std::complex<float> rowSum{0.0f, 0.0f};
-                    for (uint32_t tx = 0; tx < ltSPorts; ++tx)
-                    {
-                        rowSum += src[tx * ltUPorts + rx];
-                    }
-                    acc += std::norm(rowSum);
-                }
-                reducedPowFlat[(static_cast<size_t>(cs) + li) * numRb + rb] = acc;
-            }
-        }
+        RunDiagnosticAudits(ws);
     }
 
-    // Step 4: Sum reducedPow across RBs → isotropic received power per link.
+    m_batchM = savedBatchM;
+    numRbOut = numRb;
+    return result;
+}
+
+std::vector<float>
+ThreeGppChannelModelWgpuMezanine::ComputeUncachedBatchPerRb(
+    const std::vector<UncachedBatchLink>& links,
+    Ptr<const SpectrumValue> txPsd,
+    uint32_t& numRbOut)
+{
+    numRbOut = 0;
+    if (links.empty())
+    {
+        return {};
+    }
+    NS_ABORT_MSG_IF(m_channelConditionModel == nullptr,
+                    "ComputeUncachedBatchPerRb requires a ChannelConditionModel to be set");
+
+    std::vector<LinkDescriptor> descriptors;
+    descriptors.reserve(links.size());
+    for (const auto& lnk : links)
+    {
+        if (!lnk.sMob || !lnk.uMob || !lnk.sAnt || !lnk.uAnt)
+        {
+            // A null link would break the identity result mapping; bail out
+            // so the caller falls back to the CPU path for the whole batch.
+            return {};
+        }
+        LinkDescriptor d;
+        d.sMob = lnk.sMob;
+        d.uMob = lnk.uMob;
+        d.sAnt = lnk.sAnt;
+        d.uAnt = lnk.uAnt;
+        d.condition = m_channelConditionModel->GetChannelCondition(lnk.sMob, lnk.uMob);
+        d.uVelocity = lnk.uMob->GetVelocity();
+        descriptors.push_back(std::move(d));
+    }
+    return RunUncachedGpuBatch(descriptors, txPsd, numRbOut);
+}
+
+std::vector<float>
+ThreeGppChannelModelWgpuMezanine::ComputeBeamSweepTxPort0PerRb(
+    const std::vector<UncachedBatchLink>& links,
+    Ptr<const SpectrumValue> txPsd,
+    uint32_t& numRbOut)
+{
+    numRbOut = 0;
+    if (links.empty())
+    {
+        return {};
+    }
+    NS_ABORT_MSG_IF(m_channelConditionModel == nullptr,
+                    "ComputeBeamSweepTxPort0PerRb requires a ChannelConditionModel to be set");
+
+    std::vector<LinkDescriptor> descriptors;
+    descriptors.reserve(links.size());
+    for (const auto& lnk : links)
+    {
+        if (!lnk.sMob || !lnk.uMob || !lnk.sAnt || !lnk.uAnt)
+        {
+            return {};
+        }
+        LinkDescriptor d;
+        d.sMob = lnk.sMob;
+        d.uMob = lnk.uMob;
+        d.sAnt = lnk.sAnt;
+        d.uAnt = lnk.uAnt;
+        d.condition = m_channelConditionModel->GetChannelCondition(lnk.sMob, lnk.uMob);
+        d.uVelocity = lnk.uMob->GetVelocity();
+        descriptors.push_back(std::move(d));
+    }
+    return RunUncachedGpuBatch(descriptors, txPsd, numRbOut, /*txPort0Only=*/true);
+}
+
+std::vector<double>
+ThreeGppChannelModelWgpuMezanine::ComputeUncachedBatch(const std::vector<UncachedBatchLink>& links,
+                                                       Ptr<const SpectrumValue> txPsd)
+{
+    uint32_t numRb = 0;
+    const std::vector<float> perRb = ComputeUncachedBatchPerRb(links, txPsd, numRb);
+    if (perRb.empty() || numRb == 0)
+    {
+        return {};
+    }
+    const size_t nLinks = links.size();
     std::vector<double> result(nLinks, 0.0);
-    for (uint32_t li = 0; li < nLinks; ++li)
+    for (size_t li = 0; li < nLinks; ++li)
     {
-        const float* rp = reducedPowFlat.data() + static_cast<size_t>(li) * numRb;
+        const float* rp = perRb.data() + li * numRb;
         double s = 0.0;
         for (uint32_t rb = 0; rb < numRb; ++rb)
+        {
             s += static_cast<double>(rp[rb]);
+        }
         result[li] = s;
     }
     return result;
 }
 
 void
+ThreeGppChannelModelWgpuMezanine::ClearChannelCaches()
+{
+    // Base-class channel caches.
+    m_channelMatrixMap.clear();
+    m_channelParamsMap.clear();
+    m_linkEndpoints.clear();
+    m_gpuLspCache.clear();
+    // Mezanine GPU-side caches.
+    m_gpuChanSpctMap.clear();
+    m_gpuLongTermMap.clear();
+    m_antennaIdToObjectMap.clear();
+    m_prevLspReadIdx.clear();
+    m_matValuesFilled.clear();
+}
+
+void
 ThreeGppChannelModelWgpuMezanine::CaptureRbFreqs(Ptr<const SpectrumValue> psd)
 {
     if (!psd || !m_batchRbFreqs.empty())
+    {
         return;
+    }
     const size_t numRb =
         static_cast<size_t>(std::distance(psd->ConstBandsBegin(), psd->ConstBandsEnd()));
     std::vector<float> freqs;
     freqs.reserve(numRb);
     for (auto it = psd->ConstBandsBegin(); it != psd->ConstBandsEnd(); ++it)
+    {
         freqs.push_back(static_cast<float>(it->fc));
+    }
     if (freqs.size() == numRb)
     {
         m_batchRbFreqs = std::move(freqs);
@@ -4281,7 +4493,9 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
     // Bypass GPU batch dispatch during initial-attachment / REM-map phases.
     // Base-class LSP draw above still runs so GetChannel stays functional.
     if (m_bypassGpuBatch)
+    {
         return;
+    }
     // 2. Small-scale (calClusterRay + generateCIR) on GPU, then write
     //    cluster delays / ray angles / XPR / cluster powers into
     //    m_channelParamsMap so the per-link GetNewChannel skips the
@@ -4325,11 +4539,9 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
         //
         // effectivePeriod: use m_updatePeriod when >0, else 100 ms (matches the
         // default m_refreshPeriod so the handoff to PeriodicRefresh is seamless).
-        const Time effectivePeriod =
-            m_updatePeriod.IsZero() ? MilliSeconds(100) : m_updatePeriod;
+        const Time effectivePeriod = m_updatePeriod.IsZero() ? MilliSeconds(100) : m_updatePeriod;
         const bool timeToUpdate =
-            (m_lastUCSimTime < Seconds(0.0)) ||
-            ((now - m_lastUCSimTime) >= effectivePeriod);
+            (m_lastUCSimTime < Seconds(0.0)) || ((now - m_lastUCSimTime) >= effectivePeriod);
         // Opt H compatibility: m_ucPeriod still gates within the time window.
         const bool periodicOk = (m_ucPeriod <= 1) || ((m_ucTickCount % m_ucPeriod) == 0);
         if (timeToUpdate && periodicOk && !m_periodicRefreshScheduled)
@@ -4343,8 +4555,7 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
     // EnsureBatchFresh fires. At sim start the channel maps are empty
     // so we have nothing to refresh; once the first PRX call populates
     // them, mez owns the channel-update cadence from then on.
-    if (!m_periodicRefreshScheduled && !m_refreshPeriod.IsZero() &&
-        !m_channelMatrixMap.empty())
+    if (!m_periodicRefreshScheduled && !m_refreshPeriod.IsZero() && !m_channelMatrixMap.empty())
     {
         m_periodicRefreshScheduled = true;
         Simulator::Schedule(m_refreshPeriod,
@@ -4366,9 +4577,8 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
     // critical with UpdatePeriod=0 (NR calibration default), where
     // the base would otherwise regenerate channel params on every
     // eval and break the cached matrix's cluster-count alignment.
-    const uint64_t paramsKey =
-        MatrixBasedChannelModel::GetKey(aMob->GetObject<Node>()->GetId(),
-                                        bMob->GetObject<Node>()->GetId());
+    const uint64_t paramsKey = MatrixBasedChannelModel::GetKey(aMob->GetObject<Node>()->GetId(),
+                                                               bMob->GetObject<Node>()->GetId());
     const uint64_t matrixKey =
         MatrixBasedChannelModel::GetKey(aAntenna->GetId(), bAntenna->GetId());
     m_linkEndpoints[paramsKey] = {aMob, bMob, aAntenna, bAntenna};
@@ -4396,16 +4606,24 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
                            cas[MatrixBasedChannelModel::AOD_INDEX].size() == pages;
         const bool aligned = pages > 0 && pages == alphaSize && pages == dSize && casOk;
         const bool sameTime = cachedMatrix->m_generatedTime == cachedParams->m_generatedTime;
-        const bool antennaOk =
-            !AntennaSetupChanged(aAntenna, bAntenna, cachedMatrix);
+        const bool antennaOk = !AntennaSetupChanged(aAntenna, bAntenna, cachedMatrix);
         if (aligned && sameTime && antennaOk)
         {
             ++hit_total;
             return cachedMatrix;
         }
-        if (!aligned) ++miss_unaligned;
-        else if (!sameTime) ++miss_time;
-        else if (!antennaOk) ++miss_antenna;
+        if (!aligned)
+        {
+            ++miss_unaligned;
+        }
+        else if (!sameTime)
+        {
+            ++miss_time;
+        }
+        else if (!antennaOk)
+        {
+            ++miss_antenna;
+        }
     }
     else
     {
@@ -4413,7 +4631,10 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
         {
             ++miss_no_mat_entry;
         }
-        else ++miss_no_par_entry;
+        else
+        {
+            ++miss_no_par_entry;
+        }
     }
 
     // Cache miss / shape mismatch / antenna change -- fall through to
@@ -4442,8 +4663,8 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
     // per-eval budget at DenseAmimoIntel scale) to a hash hit.
     const uint64_t matrixKey =
         MatrixBasedChannelModel::GetKey(sAntenna->GetId(), uAntenna->GetId());
-    static thread_local uint64_t gnc_gpu_hit      = 0;
-    static thread_local uint64_t gnc_stale_erase  = 0;
+    static thread_local uint64_t gnc_gpu_hit = 0;
+    static thread_local uint64_t gnc_stale_erase = 0;
     static thread_local uint64_t gnc_cpu_fallback = 0;
 
     if (auto it = m_channelMatrixMap.find(matrixKey); it != m_channelMatrixMap.end())
@@ -4486,14 +4707,18 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
         // virtual is const-qualified; const_cast is the only way
         // to invalidate without an intrusive base-class change.
         ++gnc_stale_erase;
-        const_cast<ThreeGppChannelModelWgpuMezanine*>(this)
-            ->m_channelMatrixMap.erase(matrixKey);
+        const_cast<ThreeGppChannelModelWgpuMezanine*>(this)->m_channelMatrixMap.erase(matrixKey);
         m_gpuLongTermMap.erase(matrixKey);
+        // The matrix entry is gone; force a fresh GPU->CPU readback on its
+        // next fill (otherwise the MEZ_SKIP_MATCOPY readback-elision would
+        // leave the rebuilt entry with stale/zero values).
+        m_matValuesFilled.erase(matrixKey);
         // Spec entries are keyed per (link, beam pair); erase every beam
         // variant of this link. Rare path (stale-matrix invalidation).
         for (auto it = m_gpuChanSpctMap.begin(); it != m_gpuChanSpctMap.end();)
-            it = (it->second.matrixKey == matrixKey) ? m_gpuChanSpctMap.erase(it)
-                                                     : std::next(it);
+        {
+            it = (it->second.matrixKey == matrixKey) ? m_gpuChanSpctMap.erase(it) : std::next(it);
+        }
     }
 
     // Fallback: CPU build (first tick before UpdateChannel has run,
@@ -4508,17 +4733,100 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
 }
 
 Ptr<const MatrixBasedChannelModel::Complex3DVector>
-ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
-    Ptr<const ChannelMatrix> channelMatrix,
-    Ptr<const PhasedArrayModel> sAnt,
-    Ptr<const PhasedArrayModel> uAnt,
-    const PhasedArrayModel::ComplexVector& sW,
-    const PhasedArrayModel::ComplexVector& uW) const
+ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(Ptr<const ChannelMatrix> channelMatrix,
+                                                    Ptr<const PhasedArrayModel> sAnt,
+                                                    Ptr<const PhasedArrayModel> uAnt,
+                                                    const PhasedArrayModel::ComplexVector& sW,
+                                                    const PhasedArrayModel::ComplexVector& uW) const
 {
     const uint64_t key = MatrixBasedChannelModel::GetKey(sAnt->GetId(), uAnt->GetId());
+
+    // ── A1 proof-of-concept instrumentation (SLS_LT_STATS=1) ─────────────
+    // Pure measurement, zero overhead when off. Quantifies the ceiling of a
+    // predictive cross-tick multi-beam longTerm cache WITHOUT building the GPU
+    // warmup: of the GetCachedLongTerm calls that miss the single snapshot-beam
+    // cache (-> CPU CalcLongTerm today), how many request a (link, beam) that
+    // was seen on a PRIOR tick (a predictive cache populated last tick WOULD
+    // serve it = "recurring") vs a brand-new beam (it could not = "new").
+    // potential-hit% = (snapshot hits + recurring misses) / calls is the best
+    // a predictive cache could achieve.
+    static const bool s_ltStats = []() {
+        const char* e = std::getenv("SLS_LT_STATS");
+        return e && e[0] == '1';
+    }();
+    static thread_local uint64_t s_calls = 0, s_hits = 0, s_missRec = 0, s_missNew = 0;
+    // Miss-reason breakdown: [1]=noEntry [2]=genTime [3]=pages [4]=sizes
+    // [5]=ports [6]=hash. Diagnoses WHY the GPU longTerm cache misses, which
+    // determines the right A1 fix (no-entry -> link not batched; hash -> beam
+    // genuinely differs; genTime -> staleness).
+    static thread_local uint64_t s_reason[7] = {0};
+    static thread_local std::unordered_set<uint64_t> s_seenBeams; // MixBeamKey, prior-tick set
+    static thread_local Time s_statTick = Time::Min();
+    static thread_local std::unordered_set<uint64_t> s_thisTickBeams;
+    auto ltRecord = [&](int reason) {
+        if (!s_ltStats)
+        {
+            return;
+        }
+        ++s_calls;
+        if (reason == 0)
+        {
+            ++s_hits;
+        }
+        else
+        {
+            ++s_reason[reason];
+            const uint64_t mbk = MixBeamKey(key, HashComplexVector(sW), HashComplexVector(uW));
+            // A predictive cache is filled at the tick boundary, so only beams
+            // first seen on an EARLIER tick count as "would-have-hit".
+            const Time now = Simulator::Now();
+            if (now != s_statTick)
+            {
+                for (uint64_t b : s_thisTickBeams)
+                {
+                    s_seenBeams.insert(b);
+                }
+                s_thisTickBeams.clear();
+                s_statTick = now;
+            }
+            if (s_seenBeams.count(mbk))
+            {
+                ++s_missRec;
+            }
+            else
+            {
+                ++s_missNew;
+            }
+            s_thisTickBeams.insert(mbk);
+        }
+        if ((s_calls % 2000) == 0)
+        {
+            std::fprintf(stderr,
+                         "[SLS_LT_STATS] miss reasons: noEntry=%llu genTime=%llu pages=%llu "
+                         "sizes=%llu ports=%llu hash=%llu\n",
+                         (unsigned long long)s_reason[1],
+                         (unsigned long long)s_reason[2],
+                         (unsigned long long)s_reason[3],
+                         (unsigned long long)s_reason[4],
+                         (unsigned long long)s_reason[5],
+                         (unsigned long long)s_reason[6]);
+            const double miss = double(s_missRec + s_missNew);
+            std::fprintf(stderr,
+                         "[SLS_LT_STATS] calls=%llu snapHit=%.1f%% miss=%.1f%% "
+                         "(recurring=%.1f%% new=%.1f%% of miss) -> predictive ceiling=%.1f%%\n",
+                         (unsigned long long)s_calls,
+                         100.0 * double(s_hits) / double(s_calls),
+                         100.0 * miss / double(s_calls),
+                         miss > 0 ? 100.0 * double(s_missRec) / miss : 0.0,
+                         miss > 0 ? 100.0 * double(s_missNew) / miss : 0.0,
+                         100.0 * double(s_hits + s_missRec) / double(s_calls));
+        }
+    };
+
     auto it = m_gpuLongTermMap.find(key);
     if (it == m_gpuLongTermMap.end())
     {
+        ltRecord(1);
         return nullptr;
     }
     const GpuLongTermEntry& entry = it->second;
@@ -4529,6 +4837,7 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
     // is ~1 in 1.8e19 -- fine for any realistic sim.
     if (!channelMatrix || entry.generatedTime != channelMatrix->m_generatedTime)
     {
+        ltRecord(2);
         return nullptr;
     }
     // PRX::CalcBeamformingGain iterates the doppler loop up to
@@ -4538,13 +4847,14 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
     // count from the one our mezanine cached (cluster-count drift), the
     // mismatch crashes the assert. Reject the cached longTerm in that
     // case so PRX falls back to CalcLongTerm.
-    if (!entry.longTerm ||
-        entry.longTerm->GetNumPages() < channelMatrix->m_channel.GetNumPages())
+    if (!entry.longTerm || entry.longTerm->GetNumPages() < channelMatrix->m_channel.GetNumPages())
     {
+        ltRecord(3);
         return nullptr;
     }
     if (entry.sWSize != sW.GetSize() || entry.uWSize != uW.GetSize())
     {
+        ltRecord(4);
         return nullptr;
     }
     // Validate port-count dimensions against the CURRENT antenna model.
@@ -4560,12 +4870,15 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(
     const auto curUPorts = static_cast<uint16_t>(uAnt->GetNumPorts());
     if (entry.ltSPorts != curSPorts || entry.ltUPorts != curUPorts)
     {
+        ltRecord(5);
         return nullptr;
     }
     if (entry.sWHash != HashComplexVector(sW) || entry.uWHash != HashComplexVector(uW))
     {
+        ltRecord(6);
         return nullptr;
     }
+    ltRecord(0);
     return entry.longTerm;
 }
 
@@ -4588,11 +4901,11 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
         // scheduled UE within an update period; serving a refresh-time
         // beam to all evals silently destroyed the beamforming gain
         // structure (serving links lost gain, interference gained).
-        const uint64_t key = MixBeamKey(
-            MatrixBasedChannelModel::GetKey(channelMatrix->m_antennaPair.first,
-                                            channelMatrix->m_antennaPair.second),
-            sWBeamHash,
-            uWBeamHash);
+        const uint64_t key =
+            MixBeamKey(MatrixBasedChannelModel::GetKey(channelMatrix->m_antennaPair.first,
+                                                       channelMatrix->m_antennaPair.second),
+                       sWBeamHash,
+                       uWBeamHash);
         auto it = m_gpuChanSpctMap.find(key);
         if (it != m_gpuChanSpctMap.end())
         {
@@ -4609,12 +4922,11 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
             // forward reduction; a reverse (UL) eval arrives with the
             // ports swapped and reads the reverse reduction
             // sum_tx |sum_rx H|^2 computed by the same kernel pass.
-            const bool fwdOk = !isReverse && e.numRxPorts == numRxPorts &&
-                               e.numTxPorts == numTxPorts;
-            const bool revOk = isReverse && e.numRxPorts == numTxPorts &&
-                               e.numTxPorts == numRxPorts;
-            if (e.generatedTime == channelMatrix->m_generatedTime &&
-                (fwdOk || revOk) &&
+            const bool fwdOk =
+                !isReverse && e.numRxPorts == numRxPorts && e.numTxPorts == numTxPorts;
+            const bool revOk =
+                isReverse && e.numRxPorts == numTxPorts && e.numTxPorts == numRxPorts;
+            if (e.generatedTime == channelMatrix->m_generatedTime && (fwdOk || revOk) &&
                 e.numRb == numRb && e.rbFreqsHash == m_batchRbFreqsHash)
             {
                 SLS_PHASE_SCOPE("Mez::TryGenSpecHit");
@@ -4647,15 +4959,12 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
                 // each subsequent slot covers one slotDurationSec window.
                 // CPU-miss (D-3b) entries always have batchM == 1.
                 uint32_t slotIdx = 0;
-                if (e.batchM > 1 && e.slotDurationSec > 0.0 &&
-                    e.batchStartTimeSec >= 0.0)
+                if (e.batchM > 1 && e.slotDurationSec > 0.0 && e.batchStartTimeSec >= 0.0)
                 {
-                    const double elapsed =
-                        Simulator::Now().GetSeconds() - e.batchStartTimeSec;
+                    const double elapsed = Simulator::Now().GetSeconds() - e.batchStartTimeSec;
                     if (elapsed >= 0.0)
                     {
-                        const auto raw =
-                            static_cast<uint32_t>(elapsed / e.slotDurationSec);
+                        const auto raw = static_cast<uint32_t>(elapsed / e.slotDurationSec);
                         slotIdx = raw < e.batchM ? raw : e.batchM - 1u;
                     }
                 }
@@ -4672,8 +4981,7 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
                 // can be returned untouched.
                 auto identityHit = [&](GpuChanSpctEntry::HitOutCache& oc) -> bool {
                     return oc.lastSlot == slotIdx && oc.lastBatch == e.generatedTime &&
-                           oc.p0 == fp0 && oc.pm == fpm && oc.pl == fpl &&
-                           oc.ring[oc.ringIdx];
+                           oc.p0 == fp0 && oc.pm == fpm && oc.pl == fpl && oc.ring[oc.ringIdx];
                 };
                 // stamp: record what the build we are about to return was
                 // made from, so the next identical eval identity-hits.
@@ -4691,20 +4999,21 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
                 //   psd[rb] = pow[rb] * inPsd[rb] / numTxCaller.
                 if (scalarPsdOk && numRxPorts == 1)
                 {
-                    GpuChanSpctEntry::HitOutCache& oc =
-                        revOk ? e.outScalarRev : e.outScalarFwd;
+                    GpuChanSpctEntry::HitOutCache& oc = revOk ? e.outScalarRev : e.outScalarFwd;
                     if (identityHit(oc))
+                    {
                         return oc.ring[oc.ringIdx];
+                    }
                     const float* powBase;
                     if (e.cpuSection)
                     {
-                        powBase = (revOk ? m_specPowCpuRevFlat : m_specPowCpuFlat).data() +
-                                  e.powBaseIdx;
+                        powBase =
+                            (revOk ? m_specPowCpuRevFlat : m_specPowCpuFlat).data() + e.powBaseIdx;
                     }
                     else
                     {
-                        powBase = (revOk ? m_specPowRevFlat : m_specPowFlat).data() +
-                                  e.powBaseIdx + size_t(slotIdx) * e.powPerSlotStride;
+                        powBase = (revOk ? m_specPowRevFlat : m_specPowFlat).data() + e.powBaseIdx +
+                                  size_t(slotIdx) * e.powPerSlotStride;
                     }
                     // Rotate the 2-deep output ring: rebuild into the buffer
                     // NOT returned last time, since a live signal in
@@ -4712,15 +5021,14 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
                     oc.ringIdx ^= 1u;
                     Ptr<Complex3DVector>& scalarSlot = oc.ring[oc.ringIdx];
                     if (!scalarSlot || scalarSlot->GetNumPages() != numRb)
-                        scalarSlot = Create<Complex3DVector>(
-                            1, 1, static_cast<uint16_t>(numRb));
+                    {
+                        scalarSlot = Create<Complex3DVector>(1, 1, static_cast<uint16_t>(numRb));
+                    }
                     const double invTx = 1.0 / static_cast<double>(numTxPorts);
-                    auto* page0 =
-                        reinterpret_cast<double*>(scalarSlot->GetPagePtr(0));
+                    auto* page0 = reinterpret_cast<double*>(scalarSlot->GetPagePtr(0));
                     for (size_t rb = 0; rb < numRb; ++rb)
                     {
-                        const double psd =
-                            static_cast<double>(powBase[rb]) * psdVals[rb] * invTx;
+                        const double psd = static_cast<double>(powBase[rb]) * psdVals[rb] * invTx;
                         page0[rb * 2] = psd > 0.0 ? std::sqrt(psd) : 0.0;
                         page0[rb * 2 + 1] = 0.0;
                     }
@@ -4730,15 +5038,19 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
 
                 GpuChanSpctEntry::HitOutCache& ocH = revOk ? e.outRev : e.outFwd;
                 if (identityHit(ocH))
+                {
                     return ocH.ring[ocH.ringIdx];
+                }
                 // Same 2-deep ring rotation as the scalar path above.
                 ocH.ringIdx ^= 1u;
                 Ptr<Complex3DVector>& fakeSlot = ocH.ring[ocH.ringIdx];
                 if (!fakeSlot || fakeSlot->GetNumPages() != numRb ||
-                    fakeSlot->GetNumRows() != numRxPorts ||
-                    fakeSlot->GetNumCols() != numTxPorts)
-                    fakeSlot = Create<Complex3DVector>(numRxPorts, numTxPorts,
+                    fakeSlot->GetNumRows() != numRxPorts || fakeSlot->GetNumCols() != numTxPorts)
+                {
+                    fakeSlot = Create<Complex3DVector>(numRxPorts,
+                                                       numTxPorts,
                                                        static_cast<uint16_t>(numRb));
+                }
                 Ptr<Complex3DVector> chanSpct = fakeSlot;
 
                 const std::complex<float>* hBase;
@@ -4748,8 +5060,7 @@ ThreeGppChannelModelWgpuMezanine::TryServeBatchEntry(Ptr<const ChannelMatrix> ch
                 }
                 else
                 {
-                    hBase = m_specHFlat.data() + e.specHBaseIdx +
-                            size_t(slotIdx) * e.perSlotStride;
+                    hBase = m_specHFlat.data() + e.specHBaseIdx + size_t(slotIdx) * e.perSlotStride;
                 }
                 // Deliver exactly H * sqrt(inPsd[rb]) -- the same quantity
                 // the CPU GenSpec contraction returns -- and let
@@ -4872,20 +5183,19 @@ ThreeGppChannelModelWgpuMezanine::MaybeCaptureBatchRbFreqs(Ptr<const SpectrumVal
 }
 
 Ptr<MatrixBasedChannelModel::Complex3DVector>
-ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(
-    Ptr<const ChannelMatrix> channelMatrix,
-    Ptr<const ChannelParams> channelParams,
-    Ptr<const Complex3DVector> longTerm,
-    Ptr<const SpectrumValue> inPsd,
-    const std::vector<std::complex<double>>& delayT,
-    const std::vector<double>& sqrtVit,
-    uint32_t numRb,
-    uint8_t numRxPorts,
-    uint8_t numTxPorts,
-    bool isReverse,
-    uint64_t sWBeamHash,
-    uint64_t uWBeamHash,
-    bool scalarPsdOk) const
+ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(Ptr<const ChannelMatrix> channelMatrix,
+                                                    Ptr<const ChannelParams> channelParams,
+                                                    Ptr<const Complex3DVector> longTerm,
+                                                    Ptr<const SpectrumValue> inPsd,
+                                                    const std::vector<std::complex<double>>& delayT,
+                                                    const std::vector<double>& sqrtVit,
+                                                    uint32_t numRb,
+                                                    uint8_t numRxPorts,
+                                                    uint8_t numTxPorts,
+                                                    bool isReverse,
+                                                    uint64_t sWBeamHash,
+                                                    uint64_t uWBeamHash,
+                                                    bool scalarPsdOk) const
 {
     // Phase D-3b: on-demand miss caching. When the batched GenSpec
     // path didn't pre-compute this link (link wasn't dominant in the
@@ -4907,15 +5217,12 @@ ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(
     // is canonical and both reductions (fwd + rev) are derived from it.
     // The entry stores canonical ports; the returned fake matrix is
     // shaped in the caller's orientation.
-    if (channelMatrix && channelParams && longTerm &&
-        !m_batchRbFreqs.empty() &&
+    if (channelMatrix && channelParams && longTerm && !m_batchRbFreqs.empty() &&
         longTerm->GetNumPages() == channelMatrix->m_channel.GetNumPages() &&
-        (isReverse ? (longTerm->GetNumRows() == numTxPorts &&
-                      longTerm->GetNumCols() == numRxPorts)
-                   : (longTerm->GetNumRows() == numRxPorts &&
-                      longTerm->GetNumCols() == numTxPorts)) &&
-        delayT.size() == size_t(longTerm->GetNumPages()) * numRb &&
-        sqrtVit.size() == numRb)
+        (isReverse
+             ? (longTerm->GetNumRows() == numTxPorts && longTerm->GetNumCols() == numRxPorts)
+             : (longTerm->GetNumRows() == numRxPorts && longTerm->GetNumCols() == numTxPorts)) &&
+        delayT.size() == size_t(longTerm->GetNumPages()) * numRb && sqrtVit.size() == numRb)
     {
         SLS_PHASE_SCOPE("Mez::TryGenSpecCpuMiss");
         const size_t numCluster = channelMatrix->m_channel.GetNumPages();
@@ -5004,7 +5311,9 @@ ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(
                 {
                     std::complex<float> rs{0.0f, 0.0f};
                     for (size_t tx = 0; tx < canTx; ++tx)
+                    {
                         rs += slice[tx * canRx + rx];
+                    }
                     fwdAcc += std::norm(rs);
                 }
                 powF[rb] = fwdAcc;
@@ -5013,7 +5322,9 @@ ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(
                 {
                     std::complex<float> cs{0.0f, 0.0f};
                     for (size_t rx = 0; rx < canRx; ++rx)
+                    {
                         cs += slice[tx * canRx + rx];
+                    }
                     revAcc += std::norm(cs);
                 }
                 powR[rb] = revAcc;
@@ -5050,14 +5361,14 @@ ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(
         if (scalarPsdOk && numRxPorts == 1)
         {
             const float* powBase =
-                (isReverse ? m_specPowCpuRevFlat : m_specPowCpuFlat).data() +
-                eRef.powBaseIdx;
-            GpuChanSpctEntry::HitOutCache& oc =
-                isReverse ? eRef.outScalarRev : eRef.outScalarFwd;
+                (isReverse ? m_specPowCpuRevFlat : m_specPowCpuFlat).data() + eRef.powBaseIdx;
+            GpuChanSpctEntry::HitOutCache& oc = isReverse ? eRef.outScalarRev : eRef.outScalarFwd;
             oc.ringIdx ^= 1u;
             Ptr<Complex3DVector>& scalarSlot = oc.ring[oc.ringIdx];
             if (!scalarSlot || scalarSlot->GetNumPages() != numRb)
+            {
                 scalarSlot = Create<Complex3DVector>(1, 1, static_cast<uint16_t>(numRb));
+            }
             const double invTx = 1.0 / static_cast<double>(numTxPorts);
             auto psdItSc = inPsd->ConstValuesBegin();
             auto* page0 = reinterpret_cast<double*>(scalarSlot->GetPagePtr(0));
@@ -5077,10 +5388,11 @@ ThreeGppChannelModelWgpuMezanine::ServeCpuMissEntry(
         ocM.ringIdx ^= 1u;
         Ptr<Complex3DVector>& fakeSlot2 = ocM.ring[ocM.ringIdx];
         if (!fakeSlot2 || fakeSlot2->GetNumPages() != numRb ||
-            fakeSlot2->GetNumRows() != numRxPorts ||
-            fakeSlot2->GetNumCols() != numTxPorts)
+            fakeSlot2->GetNumRows() != numRxPorts || fakeSlot2->GetNumCols() != numTxPorts)
+        {
             fakeSlot2 =
                 Create<Complex3DVector>(numRxPorts, numTxPorts, static_cast<uint16_t>(numRb));
+        }
         auto psdIt2 = inPsd->ConstValuesBegin();
         if (!isReverse)
         {
@@ -5162,8 +5474,8 @@ ThreeGppChannelModelWgpuMezanine::DispatchPerEvalGpuSpec(
     // channelMatrix->m_antennaPair = (sAntId, uAntId) -- the GetKey
     // pair is symmetric (min/max) so the lookup works regardless of
     // PRX's isReverse orientation.
-    const uint64_t key = MatrixBasedChannelModel::GetKey(
-        channelMatrix->m_antennaPair.first, channelMatrix->m_antennaPair.second);
+    const uint64_t key = MatrixBasedChannelModel::GetKey(channelMatrix->m_antennaPair.first,
+                                                         channelMatrix->m_antennaPair.second);
     auto it = m_gpuLongTermMap.find(key);
     if (it == m_gpuLongTermMap.end())
     {
@@ -5215,10 +5527,9 @@ ThreeGppChannelModelWgpuMezanine::DispatchPerEvalGpuSpec(
     {
         return nullptr;
     }
-    Ptr<Complex3DVector> chanSpct = Create<Complex3DVector>(
-        static_cast<uint16_t>(numRxPorts),
-        static_cast<uint16_t>(numTxPorts),
-        static_cast<uint16_t>(numRb));
+    Ptr<Complex3DVector> chanSpct = Create<Complex3DVector>(static_cast<uint16_t>(numRxPorts),
+                                                            static_cast<uint16_t>(numTxPorts),
+                                                            static_cast<uint16_t>(numRb));
     // chanSpct column-major: (rx, tx, rb) at rx + numRxPorts*tx + per_page*rb,
     // which matches the kernel's output layout. Single contiguous f32 -> f64
     // conversion.
@@ -5253,7 +5564,9 @@ ThreeGppChannelModelWgpuMezanine::TryGenSpectrumChannelMatrix(
     // through to the CPU path so temporary antenna objects never pollute the
     // batch cache with stale entries for dimensions that won't match later.
     if (m_bypassGpuBatch)
+    {
         return nullptr;
+    }
 
     // Batched per-tick path: if UpdateChannel has already run
     // gen_spec_batch_kernel for this link with the current rb_freqs,

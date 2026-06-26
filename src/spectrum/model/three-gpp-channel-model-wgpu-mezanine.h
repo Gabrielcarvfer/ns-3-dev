@@ -12,6 +12,7 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <unordered_set>
 
 class SlsChanWgpu; // forward declaration because we use an opaque pointer here
 
@@ -56,11 +57,10 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // numCluster <= m_alpha.size(). We short-circuit when the
     // mezanine has populated both maps with a matching (params,
     // matrix) pair this tick.
-    Ptr<const ChannelMatrix> GetChannel(
-        Ptr<const MobilityModel> aMob,
-        Ptr<const MobilityModel> bMob,
-        Ptr<const PhasedArrayModel> aAntenna,
-        Ptr<const PhasedArrayModel> bAntenna) override;
+    Ptr<const ChannelMatrix> GetChannel(Ptr<const MobilityModel> aMob,
+                                        Ptr<const MobilityModel> bMob,
+                                        Ptr<const PhasedArrayModel> aAntenna,
+                                        Ptr<const PhasedArrayModel> bAntenna) override;
     Ptr<MatrixBasedChannelModel::ChannelMatrix> GetNewChannel(
         Ptr<const ThreeGppChannelParams> channelParams,
         Ptr<const ParamsTable> table3gpp,
@@ -136,11 +136,13 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     //
     // Intended callers:
     //   - NrInitialAssociation::PopulateRsrps (replace the per-link loop)
-    //   - NrRemHelper (REM map generation)
+    //   - NrRadioEnvironmentMapHelper (REM map generation, COVERAGE_AREA path)
     //
-    // TODO: not yet implemented -- returns an empty vector and falls through to
-    // the per-link CPU path.  Implement when profiling shows initial attachment
-    // is a bottleneck (it is currently masked by the real-traffic GPU gain).
+    // Implemented: the channel matrices/params are still drawn on the CPU via
+    // ThreeGppChannelModel::GetChannel, but the per-RB spectrum/fading stage
+    // (genSpecBatch) runs on the GPU for the whole batch at once.  Results are
+    // not cached in m_gpuChanSpctMap.  Returns an empty vector when the GPU
+    // back-end is unavailable, so callers transparently fall back to CPU.
     struct UncachedBatchLink
     {
         Ptr<const MobilityModel> sMob;
@@ -148,10 +150,45 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         Ptr<const PhasedArrayModel> sAnt; ///< may have any beam vector already set
         Ptr<const PhasedArrayModel> uAnt;
     };
+
     /// @return per-link isotropic received power in the same order as @p links,
     ///         or an empty vector if the GPU path is unavailable.
     std::vector<double> ComputeUncachedBatch(const std::vector<UncachedBatchLink>& links,
                                              Ptr<const SpectrumValue> txPsd);
+
+    // Per-RB variant of ComputeUncachedBatch.  Returns the beamformed power
+    // sum_rx |sum_tx H[rx,tx,rb]|^2 for every (link, rb) pair as a flat,
+    // link-major vector of length nLinks * numRbOut (so element [li*numRb + rb]
+    // is link li's power on resource block rb).  numRbOut is set to the number
+    // of RBs captured from @p txPsd.  This preserves the per-RB resolution the
+    // scalar ComputeUncachedBatch collapses, which REM SINR/SNR math needs to
+    // stay bit-identical to the per-point CPU path.  Empty (and numRbOut = 0)
+    // when the GPU back-end is unavailable.
+    std::vector<float> ComputeUncachedBatchPerRb(const std::vector<UncachedBatchLink>& links,
+                                                 Ptr<const SpectrumValue> txPsd,
+                                                 uint32_t& numRbOut);
+
+    // Tx-port-0 variant for the initial-attachment maxRSRP sweep. Returns
+    // sum_rx |H[rx, txPort0, rb]|^2 per (link, rb) -- all UE (rx) ports but only
+    // the first gNB (tx) port -- NOT the all-tx-port sum sum_rx|sum_tx H|^2 that
+    // ComputeUncachedBatchPerRb returns. This matches
+    // NrInitialAssociation::ComputeRxPsd, which uses Elem(uePort, 0, rb) (tx
+    // port 0 only) summed over UE ports. The all-tx-port sum is wrong for the
+    // attachment's reconfigured dual-pol gNB: it coherently adds both
+    // polarisation tx ports (which largely cancel, ~ -9 dB). REM gNB antennas
+    // are single-tx-port so the two reductions coincide there.
+    // Empty (and numRbOut = 0) when the GPU back-end is unavailable.
+    std::vector<float> ComputeBeamSweepTxPort0PerRb(const std::vector<UncachedBatchLink>& links,
+                                                    Ptr<const SpectrumValue> txPsd,
+                                                    uint32_t& numRbOut);
+
+    // Drop every cached channel matrix / channel params / link-endpoint / LSP
+    // entry accumulated by ComputeUncachedBatch (via the base-class GetChannel).
+    // The uncached batch path keeps reusing one mezanine instance across many
+    // grid-point chunks; without this the base maps would grow without bound
+    // (one entry per unique antenna/node pair) and stale entries would suppress
+    // the fresh per-chunk realizations.  Cheap: just clears the unordered_maps.
+    void ClearChannelCaches();
 
   private:
     // ── UpdateChannel stage pipeline ──────────────────────────────────
@@ -172,14 +209,67 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     /// chunk sizes). Defined in the .cc; see note above.
     struct BucketWorkspace;
 
+    /// Topology-agnostic description of one BS->UE link to feed the GPU
+    /// pipeline. Carries everything BuildWorkspaceFromDescriptors needs
+    /// WITHOUT any pre-existing CPU channel matrix/params: the two
+    /// mobilities, the two antennas (with whatever beam vectors are
+    /// already set), the link's ChannelCondition (LOS/NLOS/O2I) and the
+    /// UT velocity for Doppler. `s` is the BS/site/transmitter side,
+    /// `u` the UE/UT/receiver side. Defined in the .cc; see note above.
+    struct LinkDescriptor;
+
     /**
-     * Stage 1: site/UT discovery and runtime-link construction.
+     * Build the GPU RefreshWorkspace from an explicit list of link
+     * descriptors (topology-agnostic core extracted from
+     * CollectRefreshTopology).
+     *
+     * Constructs the GPU cell/UT/antenna-panel tables and the
+     * runtimeLinks vector, groups links into (sNAnt, uNAnt) buckets,
+     * assigns each link its lspReadIdx and computes the CRN grid bounds.
+     * Unlike CollectRefreshTopology it does NOT read m_channelMatrixMap /
+     * m_channelParamsMap: O2I comes from each descriptor's
+     * ChannelCondition and velocity from the descriptor, so it can run
+     * with no prior CPU channel draw. This is what lets REM (and any
+     * future caller) generate channels entirely on the GPU.
+     *
+     * @param ws The per-refresh workspace to fill.
+     * @param links The BS->UE links to model (s=BS side, u=UE side).
+     * @return false when there are no usable links / antenna buckets.
+     */
+    bool BuildWorkspaceFromDescriptors(RefreshWorkspace& ws,
+                                       const std::vector<LinkDescriptor>& links);
+
+    /**
+     * Run the full GPU channel pipeline (LSP -> cluster -> matrix ->
+     * longTerm -> spectrum) for an explicit, uncached list of links and
+     * return the per-link, per-RB beamformed forward power
+     * (sum_rx |sum_tx H[rx,tx,rb]|^2). No per-link CPU channel draw is
+     * performed: BuildWorkspaceFromDescriptors + PopulateChannelMaps
+     * create all CPU cache entries from GPU output. The power is read
+     * back from m_specPowFlat (slot 0; m_batchM is forced to 1 for the
+     * duration of the call). Channel caches are cleared on entry.
+     *
+     * @param links The BS->UE links to evaluate.
+     * @param txPsd Representative PSD providing the RB centre frequencies.
+     * @param numRbOut Set to the number of RBs (0 on failure).
+     * @return flat [nLinks * numRbOut] power, link-major; empty when the
+     *         GPU back-end is unavailable.
+     */
+    std::vector<float> RunUncachedGpuBatch(const std::vector<LinkDescriptor>& links,
+                                           Ptr<const SpectrumValue> txPsd,
+                                           uint32_t& numRbOut,
+                                           bool txPort0Only = false);
+
+    /**
+     * Stage 1: site/UT discovery and runtime-link construction
+     * (sim-topology adapter over BuildWorkspaceFromDescriptors).
      *
      * Sweeps m_channelMatrixMap, classifies each node as BS or UE side
-     * by NetDevice type name, builds the GPU cell/UT/antenna-panel
-     * tables and the runtimeLinks vector, evicts stale
-     * m_gpuChanSpctMap entries, groups links into (sNAnt, uNAnt)
-     * buckets and assigns each link its lspReadIdx into the LSP grid.
+     * by NetDevice type name, resolves the per-link mobility/antenna/
+     * condition/velocity into LinkDescriptors (UT velocity taken from the
+     * cached params to preserve exact legacy behaviour), evicts stale
+     * m_gpuChanSpctMap entries, then delegates the workspace build to
+     * BuildWorkspaceFromDescriptors.
      *
      * @param ws The per-refresh workspace to fill.
      * @return false when there is nothing to do this refresh (no
@@ -519,6 +609,7 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         uint32_t ltUPorts{0};
         uint32_t ltSPorts{0};
     };
+
     mutable std::unordered_map<uint64_t, GpuLongTermEntry> m_gpuLongTermMap;
 
     static uint64_t HashComplexVector(const PhasedArrayModel::ComplexVector& v);
@@ -534,6 +625,7 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // every cache lookup -- mismatch -> fall back to CPU.
     mutable std::vector<float> m_batchRbFreqs;
     mutable uint64_t m_batchRbFreqsHash{0};
+
     // Per-link chanSpct_unscaled metadata indexed by matrixKey.
     // The actual float data lives in m_specBatchFlat[batchIdx * m_specBatchPerLink].
     // Storing only the index (not the data) avoids a full second copy of the
@@ -551,6 +643,7 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         uint32_t numRb{0};
         Time generatedTime;
         uint64_t rbFreqsHash{0};
+
         /// Identity-cached output state for one (representation, direction)
         /// combination of this entry. Repeat evaluations of a link within a
         /// slot overwhelmingly carry the SAME input PSD (full-buffer data
@@ -571,6 +664,7 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
             double pm{-1.0};                ///< inPsd fingerprint: middle RB
             double pl{-1.0};                ///< inPsd fingerprint: last RB
         };
+
         /// Full per-port H outputs (DL orientation / UL transpose).
         mutable HitOutCache outFwd;
         mutable HitOutCache outRev;
@@ -602,6 +696,7 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         /// and stale rebucketed entries could overwrite live batch data).
         bool cpuSection{false};
     };
+
     mutable std::unordered_map<uint64_t, GpuChanSpctEntry> m_gpuChanSpctMap;
     /// Per-link, per-slot complex per-port channel matrices in canonical
     /// (DL) orientation: H[rx,tx,rb] with the Complex3DVector page layout
@@ -627,6 +722,15 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     /// paramsKey's channel params at the previous refresh. A drift
     /// (procedure A) is only valid when the slot mapping is unchanged.
     std::unordered_map<uint64_t, uint32_t> m_prevLspReadIdx;
+    /// Matrix keys whose ns-3 ChannelMatrix VALUES have been materialised
+    /// (float->double copied) at least once. Under MEZ_SKIP_MATCOPY the
+    /// per-element matrix is only needed for the very first fill of each
+    /// link (after that PRX's CalcLongTerm reuses the first realisation);
+    /// once every link in a chunk is in here, the GPU->CPU matrix readback
+    /// that feeds the copy is also skipped (cmDst=nullptr) -- the same
+    /// readback elision the REM/uncached lite path uses. genLongTerm still
+    /// reads channelMatrixBuf_ on the GPU, so longTerm is unaffected.
+    mutable std::unordered_set<uint64_t> m_matValuesFilled;
     /// Next free element offset in m_specHCpuFlat. Slots vary in size
     /// (numRb * rxtx differs per antenna bucket), so allocation is a
     /// running offset rather than fixed-size slots.
