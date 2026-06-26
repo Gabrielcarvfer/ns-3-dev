@@ -4740,10 +4740,17 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
             const std::complex<double> ph2 = std::polar(1.0, initialPhase[2]) * sqrtInvK;
             const std::complex<double> ph3 = std::polar(1.0, initialPhase[3]);
 
-            const double rxAoa = channelParams->m_rayAoaRadian[nIndex][mIndex];
-            const double rxZoa = channelParams->m_rayZoaRadian[nIndex][mIndex];
-            const double txAod = channelParams->m_rayAodRadian[nIndex][mIndex];
-            const double txZod = channelParams->m_rayZodRadian[nIndex][mIndex];
+            // Use the direction-corrected local refs (the same ones used by the
+            // phase-term math below), NOT the raw channelParams->m_ray* arrays.
+            // On a reversed-direction link (!isSameDirection) the stored
+            // departure/arrival angles are swapped; the element field pattern
+            // (TR 38.901 7.5-22 F_tx/F_rx) must see the same swap as the array
+            // phase geometry, otherwise a directional element applies its
+            // back-null gain to the NLOS clusters and collapses their power.
+            const double rxAoa = rayAoaRadian[nIndex][mIndex];
+            const double rxZoa = rayZoaRadian[nIndex][mIndex];
+            const double txAod = rayAodRadian[nIndex][mIndex];
+            const double txZod = rayZodRadian[nIndex][mIndex];
 
             for (uint8_t polUa = 0; polUa < numPolU; ++polUa)
             {
