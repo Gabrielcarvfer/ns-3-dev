@@ -4332,6 +4332,18 @@ ThreeGppChannelModelWgpuMezanine::RunUncachedGpuBatch(const std::vector<LinkDesc
     }
 
     m_batchM = savedBatchM;
+
+    // This batch may have sized the GPU scratch buffers for MANY links with TINY
+    // (reduced-antenna, 1-port) matrices. A following dispatch with FEWER but
+    // LARGER matrices -- notably live traffic right after the maxRSRP attachment
+    // sweep, or the next attachment chunk -- must not inherit those link-count
+    // capacity trackers, or it would bind a too-small buffer. Reset them so the
+    // next dispatch reallocates to its own dimensions.
+    if (ws.gpu)
+    {
+        ws.gpu->resetBatchScratchCapacities();
+    }
+
     numRbOut = numRb;
     return result;
 }

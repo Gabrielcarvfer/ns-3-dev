@@ -554,6 +554,16 @@ class SlsChanWgpu
                             uint32_t nActiveLinks,
                             uint32_t nSnapshots);
     void invalidateOutputBuffers();
+    /// Reset the persistent scratch-buffer capacity trackers (matFieldPre /
+    /// channelMatrix / longTerm / specChan / specBatch / reduceBatch) to zero so
+    /// the next dispatch reallocates every scratch buffer to its own dimensions.
+    /// Several of these buffers grow-only on link COUNT while their byte size
+    /// also depends on per-link element/port counts; an uncached batch with MANY
+    /// links but TINY (reduced-antenna) matrices would otherwise leave the
+    /// trackers high and make a following dispatch with FEWER but LARGER matrices
+    /// (e.g. live traffic after the maxRSRP attachment sweep) skip the realloc
+    /// and bind a too-small buffer. Call this after an uncached batch.
+    void resetBatchScratchCapacities();
     void readFreqChanPrbgBatched(std::vector<std::complex<float>>& outBuf);
     wgpu::BindGroup emptyBg(wgpu::ComputePipeline& pip, uint32_t slot);
     template <typename T>

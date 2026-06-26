@@ -1399,7 +1399,10 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
     const uint64_t linkParamsSz = uint64_t(nSite) * nUT * sizeof(LinkParams);
     const uint64_t rngStatesSz = uint64_t(nSite) * nUT * sizeof(RngState);
 
-    if (!linkParamsBuf_)
+    // Grow-on-demand (nSite*nUT-dependent): see the rngStatesBuf_ comment below.
+    // linkParamsBuf_ holds no cross-call state (it is the per-dispatch LSP output),
+    // so a plain grow is safe.
+    if (!linkParamsBuf_ || linkParamsBuf_.getSize() < linkParamsSz)
     {
         linkParamsBuf_ = makeBuffer(linkParamsSz,
                                     WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
@@ -1480,7 +1483,15 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
                        WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst,
                        &cl);
     }
-    if (!rngStatesBuf_)
+    // Grow-on-demand (not just allocate-if-null): the per-link RNG state buffer
+    // is sized nSite*nUT. An earlier caller with a SMALLER grid (e.g. the maxRSRP
+    // attachment sweep, which batches UEs in chunks of ~nUT<<live-traffic-nUT)
+    // would otherwise leave this buffer too small and the next, larger-grid
+    // dispatch (live traffic) would bind past its end. The seeds are a pure
+    // function of the linear (site,ut) index, so reseeding on growth reproduces
+    // EXACTLY the state a fresh allocation at the larger grid would have had --
+    // i.e. growth makes the prior small-grid use transparent to the larger grid.
+    if (!rngStatesBuf_ || rngStatesBuf_.getSize() < rngStatesSz)
     {
         std::vector<RngState> seeds(nSite * nUT);
         for (uint32_t i = 0; i < nSite * nUT; ++i)
@@ -1496,7 +1507,7 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
                                    seeds.data());
     }
 
-    if (!stagingBuf_)
+    if (!stagingBuf_ || stagingBuf_.getSize() < linkParamsSz)
     {
         stagingBuf_ = makeBuffer(linkParamsSz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     }
@@ -1636,7 +1647,12 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     }
 
     const uint64_t clusterSz = uint64_t(nSite) * nUT * sizeof(ClusterParamsGpu);
-    if (!clusterParamsBuf_)
+    // Grow-on-demand (nSite*nUT-dependent): a prior smaller-grid caller (the
+    // chunked maxRSRP attachment sweep) would otherwise leave this output buffer
+    // too small, and readAllClusterData's copyBufferToBuffer would then read past
+    // its end on the next, larger-grid dispatch (live traffic). No cross-call
+    // state to preserve here -- calClusterRay rewrites it every dispatch.
+    if (!clusterParamsBuf_ || clusterParamsBuf_.getSize() < clusterSz)
     {
         clusterParamsBuf_ =
             makeBuffer(clusterSz,
@@ -2359,6 +2375,31 @@ SlsChanWgpu::invalidateOutputBuffers()
     freqChanPrbgBuf_ = {};
     cirStagingBuf_ = {};
     cfrStagingBuf_ = {};
+}
+
+void
+SlsChanWgpu::resetBatchScratchCapacities()
+{
+    // Zeroing the trackers makes every "cfg < n" / "cfg != dim" realloc guard
+    // fire on the next dispatch, so the scratch buffers are rebuilt to that
+    // dispatch's true byte size regardless of what the previous (uncached batch)
+    // dispatch sized them to. See the header for the underlying hazard.
+    matFieldPreCfgNLinks_ = 0;
+    channelMatrixCfgUSize_ = 0;
+    channelMatrixCfgSSize_ = 0;
+    channelMatrixCfgNLinks_ = 0;
+    longTermCfgNLinks_ = 0;
+    longTermCfgSPorts_ = 0;
+    longTermCfgUPorts_ = 0;
+    longTermCfgSPortElems_ = 0;
+    longTermCfgUPortElems_ = 0;
+    specChanCfgNumRxPorts_ = 0;
+    specChanCfgNumTxPorts_ = 0;
+    specChanCfgNumRb_ = 0;
+    specBatchCfgNumRb_ = 0;
+    reduceBatchCfgNLinks_ = 0;
+    reduceBatchCfgNumRb_ = 0;
+    reduceBatchCfgNSlots_ = 0;
 }
 
 wgpu::BindGroup
