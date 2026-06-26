@@ -956,6 +956,10 @@ struct AntPanelConfig {
     thetaOffset   : u32,
     phiOffset     : u32,
     bearing_deg   : f32,             // panel bearing (alpha); azimuth rotation
+    gMax          : f32,             // element boresight gain G_E,max (dBi)
+    aMaxCombined  : f32,             // combined-attenuation clamp A_max (dB)
+    pad0          : f32,             // pad to 80 B (16-byte array stride)
+    pad1          : f32,
 }
 
 // SspCellParam: tail-padded to 32 B to match the C++ host struct's 16-byte
@@ -1246,8 +1250,8 @@ fn calc_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) -
     // off-axis links get up to -60 dB and interference is underestimated.
     let att  = min(-(cir_buf_antTheta[cfg.thetaOffset + u32(ti)] +
                      cir_buf_antPhi[cfg.phiOffset + u32(pi_)]),
-                   30.0);
-    let A_db = -att + select(0.0, GMAX, cfg.antModel == 1u);
+                   cfg.aMaxCombined);
+    let A_db = -att + select(0.0, cfg.gMax, cfg.antModel == 1u);
     let A_sqrt = pow(10.0, A_db / 20.0);
     let z_rad  = zeta * DEG2RAD;
     return vec2f(A_sqrt * cos(z_rad), A_sqrt * sin(z_rad));   // {F_theta, F_phi}
@@ -2288,8 +2292,8 @@ fn mat_field_components(cfg: AntPanelConfig, theta: f32, phi: f32, zeta: f32) ->
     // 10-storage-buffer-per-stage limit.
     let att  = min(-(mat_buf_antTheta[cfg.thetaOffset + u32(ti)] +
                      mat_buf_antTheta[cfg.phiOffset + u32(pi_)]),
-                   30.0);
-    let A_db = -att + select(0.0, GMAX, cfg.antModel == 1u);
+                   cfg.aMaxCombined);
+    let A_db = -att + select(0.0, cfg.gMax, cfg.antModel == 1u);
     let A_sqrt = pow(10.0, A_db / 20.0);
     let z_rad  = zeta * DEG2RAD;
     return vec2f(A_sqrt * cos(z_rad), A_sqrt * sin(z_rad));

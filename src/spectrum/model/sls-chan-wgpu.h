@@ -363,9 +363,16 @@ struct AntPanelConfigGPU
     uint32_t phiOffset;      // offset into flat antPhi buffer   (360 entries per panel)
     float bearingDeg;        // panel bearing (alpha) in degrees; rotates the
                              // azimuth before the directional pattern lookup
+    float gMax;              // element boresight gain G_E,max (dBi) per TR 38.901
+                             // Table 7.3-1 (OUTDOOR 8 / INDOOR 5). Replaces the
+                             // WGSL's formerly hardcoded GMAX const.
+    float aMaxCombined;      // combined-attenuation clamp A_max (dB) (OUTDOOR 30 /
+                             // INDOOR 25). Replaces the WGSL's hardcoded 30.
+    float pad0;              // pad to 80 B (16-byte WGSL array stride)
+    float pad1;              // padding
 };
 
-static_assert(sizeof(AntPanelConfigGPU) == 64, "AntPanelConfigGPU must be 64 B (WGSL stride)");
+static_assert(sizeof(AntPanelConfigGPU) == 80, "AntPanelConfigGPU must be 80 B (WGSL stride)");
 
 // Spatial-consistency drift entry (WGSL DriftEntry): per-cluster mean-angle
 // deltas (degrees) applied to the preserved packed per-ray angles of one

@@ -23,6 +23,7 @@
 #include "ns3/string.h"
 #include "ns3/test.h"
 #include "ns3/three-gpp-antenna-model.h"
+#include "ns3/three-gpp-channel-model-wgpu-mezanine.h"
 #include "ns3/three-gpp-channel-model.h"
 #include "ns3/three-gpp-spectrum-propagation-loss-model.h"
 #include "ns3/uinteger.h"
@@ -2249,6 +2250,111 @@ ThreeGppReversedDirectionFieldPatternTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * Unit test for the GPU mezzanine's element field-pattern tables. Verifies that
+ * ThreeGppChannelModelWgpuMezanine::BuildElementPatternTables reproduces
+ * ThreeGppAntennaModel::GetGainDb (TR 38.901 Table 7.3-1) for BOTH the OUTDOOR
+ * (65deg/65deg, SLA_V 30, A_max 30, 8 dBi) and INDOOR (90deg/90deg, 25, 25,
+ * 5 dBi) radiation patterns. Guards against the GPU hardcoding the OUTDOOR
+ * element (the historical defect) and against any future divergence between the
+ * GPU per-element pattern and the CPU antenna model.
+ */
+class ThreeGppGpuElementPatternTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     */
+    ThreeGppGpuElementPatternTest();
+
+    /**
+     * Destructor
+     */
+    ~ThreeGppGpuElementPatternTest() override;
+
+  private:
+    /**
+     * Build the test scenario
+     */
+    void DoRun() override;
+
+    /**
+     * Check that the GPU tables reproduce GetGainDb for one radiation pattern.
+     * @param patternName the RadiationPattern attribute value ("Outdoor" or "Indoor")
+     */
+    void CheckPattern(const std::string& patternName);
+};
+
+ThreeGppGpuElementPatternTest::ThreeGppGpuElementPatternTest()
+    : TestCase("GPU mezzanine element pattern matches ThreeGppAntennaModel::GetGainDb")
+{
+}
+
+ThreeGppGpuElementPatternTest::~ThreeGppGpuElementPatternTest()
+{
+}
+
+void
+ThreeGppGpuElementPatternTest::CheckPattern(const std::string& patternName)
+{
+    Ptr<ThreeGppAntennaModel> elem = CreateObject<ThreeGppAntennaModel>();
+    elem->SetAttribute("RadiationPattern", StringValue(patternName));
+
+    std::vector<float> thetaDb;
+    std::vector<float> phiDb;
+    float geMaxDb = 0;
+    float aMaxDb = 0;
+    ThreeGppChannelModelWgpuMezanine::BuildElementPatternTables(*elem,
+                                                                thetaDb,
+                                                                phiDb,
+                                                                geMaxDb,
+                                                                aMaxDb);
+
+    NS_TEST_ASSERT_MSG_EQ(thetaDb.size(), 181, "Vertical cut table must have 181 entries");
+    NS_TEST_ASSERT_MSG_EQ(phiDb.size(), 360, "Horizontal cut table must have 360 entries");
+
+    // The boresight (theta=90, phi=0) gain must equal the element gain.
+    NS_TEST_ASSERT_MSG_EQ_TOL(static_cast<double>(geMaxDb),
+                              elem->GetAntennaElementGain(),
+                              1e-3,
+                              "Boresight element gain mismatch (" << patternName << ")");
+
+    // Sweep the (theta, phi) plane (avoiding the +-180 deg boundary where the
+    // GetGainDb angle assertion could trip on float rounding) and confirm the
+    // kernel reconstruction A_db = geMax - min(aMax, -(A_v + A_h)) equals
+    // GetGainDb everywhere.
+    for (int thetaDeg : {0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 179})
+    {
+        for (int phiDeg : {-179, -135, -90, -60, -45, -30, -15, 0, 15, 30, 45, 60, 90, 135, 179})
+        {
+            const int t = thetaDeg;                             // table theta index 0..180
+            const int f = (phiDeg < 0) ? phiDeg + 360 : phiDeg; // signed-phi index 0..359
+            const double aTable =
+                static_cast<double>(geMaxDb) -
+                std::min(static_cast<double>(aMaxDb),
+                         -(static_cast<double>(thetaDb[t]) + static_cast<double>(phiDb[f])));
+            const double aRef =
+                elem->GetGainDb(Angles(DegreesToRadians(static_cast<double>(phiDeg)),
+                                       DegreesToRadians(static_cast<double>(thetaDeg))));
+            NS_TEST_ASSERT_MSG_EQ_TOL(aTable,
+                                      aRef,
+                                      0.05,
+                                      "GPU element pattern (" << patternName
+                                          << ") must match GetGainDb at theta=" << thetaDeg
+                                          << " phi=" << phiDeg);
+        }
+    }
+}
+
+void
+ThreeGppGpuElementPatternTest::DoRun()
+{
+    CheckPattern("Outdoor");
+    CheckPattern("Indoor");
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test suite for the ThreeGppChannelModel class
  */
 class ThreeGppChannelTestSuite : public TestSuite
@@ -2312,6 +2418,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(new ThreeGppCalcLongTermMultiPortTest(), TestCase::Duration::QUICK);
 
     AddTestCase(new ThreeGppReversedDirectionFieldPatternTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppGpuElementPatternTest(), TestCase::Duration::QUICK);
 
     /**
      *  The TX and RX antennas are configured face-to-face.

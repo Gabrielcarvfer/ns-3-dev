@@ -13,11 +13,13 @@
 #include <memory>
 #include <optional>
 #include <unordered_set>
+#include <vector>
 
 class SlsChanWgpu; // forward declaration because we use an opaque pointer here
 
 namespace ns3
 {
+class ThreeGppAntennaModel; // for BuildElementPatternTables()
 /***
  * @ingroup spectrum
  *
@@ -32,6 +34,27 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     ThreeGppChannelModelWgpuMezanine();
     ~ThreeGppChannelModelWgpuMezanine();
     static TypeId GetTypeId();
+
+    /**
+     * Build the per-degree element field-pattern attenuation tables that the GPU
+     * panel config uploads, matching ThreeGppAntennaModel::GetGainDb (TR 38.901
+     * Table 7.3-1) for the element's actual radiation pattern (OUTDOOR / INDOOR /
+     * custom). Exposed (static, GPU-independent) so the GPU element pattern can
+     * be unit-tested directly against the CPU antenna model. The kernel
+     * reconstructs the 3D gain as geMax - min(aMax, -(thetaDb[t] + phiDb[f])).
+     *
+     * @param elem the 3GPP directional antenna element
+     * @param thetaDb [out] 181 entries: vertical cut A_v(theta) in dB, theta 0..180
+     * @param phiDb [out] 360 entries: horizontal cut A_h(phi) in dB, phi index 0..359 (signed)
+     * @param geMaxDb [out] boresight element gain G_E,max (dBi)
+     * @param aMaxDb [out] front-back / combined-attenuation clamp A_max (dB)
+     */
+    static void BuildElementPatternTables(const ThreeGppAntennaModel& elem,
+                                          std::vector<float>& thetaDb,
+                                          std::vector<float>& phiDb,
+                                          float& geMaxDb,
+                                          float& aMaxDb);
+
     void UpdateChannel();
     // Phase D: decouple channel-state advancement from PRX events.
     // The mez schedules itself on a periodic NS-3 timer and refreshes

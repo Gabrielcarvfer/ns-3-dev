@@ -251,6 +251,8 @@ struct PanelInfo
     uint32_t antModel = 0;
     std::vector<float> thetaDeg;
     std::vector<float> phiDeg;
+    float gMax = 8.f;          ///< element boresight gain (dBi); OUTDOOR default
+    float aMaxCombined = 30.f; ///< combined-attenuation clamp (dB); OUTDOOR default
 };
 
 struct SiteRec
@@ -443,6 +445,40 @@ struct ThreeGppChannelModelWgpuMezanine::LinkDescriptor
     Vector uVelocity{0, 0, 0};        ///< UT velocity (m/s) for Doppler
 };
 
+void
+ThreeGppChannelModelWgpuMezanine::BuildElementPatternTables(const ThreeGppAntennaModel& elem,
+                                                            std::vector<float>& thetaDb,
+                                                            std::vector<float>& phiDb,
+                                                            float& geMaxDb,
+                                                            float& aMaxDb)
+{
+    // Mirror ThreeGppAntennaModel::GetGainDb (TR 38.901 Table 7.3-1) exactly so
+    // the GPU per-element pattern equals the CPU model for any radiation pattern
+    // (OUTDOOR / INDOOR / custom). The kernel reconstructs the 3D pattern as
+    //   A_db = geMax - min(aMax, -(A_v + A_h))
+    // from these per-degree vertical (A_v) and horizontal (A_h) cuts.
+    const double bwV = elem.GetVerticalBeamwidth();
+    const double bwH = elem.GetHorizontalBeamwidth();
+    const double slaV = elem.GetSlaV();
+    const double aMax = elem.GetMaxAttenuation();
+    geMaxDb = static_cast<float>(elem.GetAntennaElementGain());
+    aMaxDb = static_cast<float>(aMax);
+
+    thetaDb.assign(181, 0.f);
+    phiDb.assign(360, 0.f);
+    for (int t = 0; t <= 180; ++t)
+    {
+        // A_v(theta) = -min(SLA_V, 12 ((theta - 90) / bw_v)^2)
+        thetaDb[t] = static_cast<float>(-std::min(slaV, 12.0 * std::pow((t - 90.0) / bwV, 2.0)));
+    }
+    for (int f = 0; f < 360; ++f)
+    {
+        // A_h(phi) = -min(A_max, 12 (phi / bw_h)^2), phi in [-180, 180)
+        const double sf = (f > 180) ? f - 360.0 : f;
+        phiDb[f] = static_cast<float>(-std::min(aMax, 12.0 * std::pow(sf / bwH, 2.0)));
+    }
+}
+
 bool
 ThreeGppChannelModelWgpuMezanine::BuildWorkspaceFromDescriptors(
     RefreshWorkspace& ws,
@@ -552,6 +588,12 @@ ThreeGppChannelModelWgpuMezanine::BuildWorkspaceFromDescriptors(
         // lookup. Without it all three sectors of a site evaluated the
         // pattern in the global frame.
         cfg.bearingDeg = p.panelOrientation[0] * 180.0f / static_cast<float>(M_PI);
+        // Per-panel element gain + combined-attenuation clamp (TR 38.901
+        // Table 7.3-1). These replace the WGSL's previously hardcoded GMAX=8
+        // and A_max=30, so INDOOR (5 dBi / 25 dB) and custom elements are
+        // rendered with their own parameters instead of OUTDOOR's.
+        cfg.gMax = p.gMax;
+        cfg.aMaxCombined = p.aMaxCombined;
 
         p.panelIdx = static_cast<uint32_t>(antCfgs.size());
         antThetaFlat.insert(antThetaFlat.end(), p.thetaDeg.begin(), p.thetaDeg.end());
@@ -614,34 +656,34 @@ ThreeGppChannelModelWgpuMezanine::BuildWorkspaceFromDescriptors(
         p.panelOrientation = {static_cast<float>(ant->GetAlpha()),
                               static_cast<float>(ant->GetBeta()),
                               0.f};
-        // Element field-pattern tables (per-degree dB attenuation; the
-        // kernel computes A_db = theta[ti] + phi[pi] + (antModel==1 ? GMAX : 0)).
-        // These were previously left at ZERO with antModel=0 — i.e. every
-        // element forced isotropic — while the CPU model applied the 3GPP
-        // directive element (8 dBi boresight, 30 dB floors). Serving
-        // in-sector links lost ~8 dB of element gain and off-boresight
-        // interference gained relatively, collapsing the serving-vs-
-        // interference separation (measured 4.0 dB vs the CPU's 20.6 dB)
-        // and producing the 16-19 dB SINR deficit.
-        const bool is3gppElem =
-            DynamicCast<const ThreeGppAntennaModel>(ant->GetAntennaElement()) != nullptr;
+        // Element field-pattern tables (per-degree dB attenuation). The kernel
+        // computes A_db = -min(-(A_v + A_h), aMaxCombined) + (antModel==1 ?
+        // gMax : 0). These were previously left at ZERO with antModel=0 -- i.e.
+        // every element forced isotropic -- while the CPU model applied the 3GPP
+        // directive element. Serving in-sector links lost ~8 dB of element gain
+        // and off-boresight interference gained relatively, collapsing the
+        // serving-vs-interference separation (measured 4.0 dB vs the CPU's
+        // 20.6 dB) and producing the 16-19 dB SINR deficit.
+        const auto threeGppElem =
+            DynamicCast<const ThreeGppAntennaModel>(ant->GetAntennaElement());
+        const bool is3gppElem = (threeGppElem != nullptr);
         p.antModel = is3gppElem ? 1u : 0u;
-        p.thetaDeg.assign(181, 0.f);
-        p.phiDeg.assign(360, 0.f);
         if (is3gppElem)
         {
-            // TR 38.901 Table 7.3-1: A_v(theta) = -min(12((theta-90)/65)^2, 30),
-            // A_h(phi) = -min(12(phi/65)^2, 30); GMAX (8 dBi) added in-kernel.
-            for (int t = 0; t <= 180; ++t)
-            {
-                p.thetaDeg[t] =
-                    static_cast<float>(-std::min(12.0 * std::pow((t - 90.0) / 65.0, 2.0), 30.0));
-            }
-            for (int f = 0; f < 360; ++f)
-            {
-                const double sf = (f > 180) ? f - 360.0 : f;
-                p.phiDeg[f] = static_cast<float>(-std::min(12.0 * std::pow(sf / 65.0, 2.0), 30.0));
-            }
+            // Read the element's ACTUAL TR 38.901 Table 7.3-1 parameters
+            // (OUTDOOR 65deg/65deg, SLA_V 30, A_max 30, 8 dBi vs INDOOR
+            // 90deg/90deg, 25, 25, 5 dBi) instead of hardcoding OUTDOOR, so
+            // INDOOR and custom elements match ThreeGppAntennaModel::GetGainDb.
+            BuildElementPatternTables(*threeGppElem,
+                                      p.thetaDeg,
+                                      p.phiDeg,
+                                      p.gMax,
+                                      p.aMaxCombined);
+        }
+        else
+        {
+            p.thetaDeg.assign(181, 0.f);
+            p.phiDeg.assign(360, 0.f);
         }
 
         // Bucket-by-dominant-geometry: the GPU pipeline dispatches the
