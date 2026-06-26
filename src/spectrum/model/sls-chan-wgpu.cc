@@ -28,14 +28,21 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+// clang-format off
+// windows.h MUST precede psapi.h (DWORD/WINBOOL); keep clang-format from sorting.
 #include <windows.h>
 #include <psapi.h>
+// clang-format on
+
 static void
 slsMemProbe(const char*)
 {
 }
 #else
-static void slsMemProbe(const char*) {}
+static void
+slsMemProbe(const char*)
+{
+}
 #endif
 
 static std::string
@@ -52,16 +59,26 @@ backendName(WGPUBackendType b)
 {
     switch (b)
     {
-    case WGPUBackendType_D3D12: return "D3D12";
-    case WGPUBackendType_D3D11: return "D3D11";
-    case WGPUBackendType_Vulkan: return "Vulkan";
-    case WGPUBackendType_Metal: return "Metal";
-    case WGPUBackendType_OpenGL: return "OpenGL";
-    case WGPUBackendType_OpenGLES: return "OpenGLES";
-    case WGPUBackendType_Undefined: return "Auto";
-    case WGPUBackendType_WebGPU: return "WebGPU";
-    case WGPUBackendType_Null: return "Null";
-    default: return "Unknown";
+    case WGPUBackendType_D3D12:
+        return "D3D12";
+    case WGPUBackendType_D3D11:
+        return "D3D11";
+    case WGPUBackendType_Vulkan:
+        return "Vulkan";
+    case WGPUBackendType_Metal:
+        return "Metal";
+    case WGPUBackendType_OpenGL:
+        return "OpenGL";
+    case WGPUBackendType_OpenGLES:
+        return "OpenGLES";
+    case WGPUBackendType_Undefined:
+        return "Auto";
+    case WGPUBackendType_WebGPU:
+        return "WebGPU";
+    case WGPUBackendType_Null:
+        return "Null";
+    default:
+        return "Unknown";
     }
 }
 
@@ -76,20 +93,19 @@ tryAdapter(WGPUInstance instance, WGPUBackendType backend)
     wgpuInstanceRequestAdapter(
         instance,
         &aopts,
-        WGPURequestAdapterCallbackInfo{
-            .mode = WGPUCallbackMode_AllowSpontaneous,
-            .callback =
-                [](WGPURequestAdapterStatus status,
-                   WGPUAdapter a,
-                   WGPUStringView,
-                   void* ud1,
-                   void*) {
-                    if (status == WGPURequestAdapterStatus_Success)
-                    {
-                        *static_cast<WGPUAdapter*>(ud1) = a;
-                    }
-                },
-            .userdata1 = &adapter});
+        WGPURequestAdapterCallbackInfo{.mode = WGPUCallbackMode_AllowSpontaneous,
+                                       .callback =
+                                           [](WGPURequestAdapterStatus status,
+                                              WGPUAdapter a,
+                                              WGPUStringView,
+                                              void* ud1,
+                                              void*) {
+                                               if (status == WGPURequestAdapterStatus_Success)
+                                               {
+                                                   *static_cast<WGPUAdapter*>(ud1) = a;
+                                               }
+                                           },
+                                       .userdata1 = &adapter});
     wgpuInstanceProcessEvents(instance);
     if (adapter)
     {
@@ -149,8 +165,7 @@ resolveBackendOrder()
         {
             return {WGPUBackendType_Undefined};
         }
-        SLS_LOG("[WARN] SLS_BACKEND=%s not recognised; falling through to default chain\n",
-                env);
+        SLS_LOG("[WARN] SLS_BACKEND=%s not recognised; falling through to default chain\n", env);
     }
     // Default chain — best on Windows, falls back for headless / non-D3D12 systems.
     return {WGPUBackendType_D3D12, WGPUBackendType_Vulkan, WGPUBackendType_Undefined};
@@ -256,8 +271,7 @@ createDevice()
     // 30; Dawn callers should refactor the shader to fewer SSBOs per
     // stage or enable the relevant adapter feature.
 #ifdef WEBGPU_BACKEND_DAWN
-    requiredLimits.maxStorageBuffersPerShaderStage =
-        supported.maxStorageBuffersPerShaderStage;
+    requiredLimits.maxStorageBuffersPerShaderStage = supported.maxStorageBuffersPerShaderStage;
 #else
     requiredLimits.maxStorageBuffersPerShaderStage = 30;
 #endif
@@ -434,9 +448,8 @@ SlsChanWgpu::waitIdle()
     // Wait for any submitted work to finish. We use waitAny on a
     // queue.onSubmittedWorkDone future with WaitAnyOnly mode — this is
     // the synchronous equivalent of wgpu-native's poll(wait=true).
-    auto fut = queue_.onSubmittedWorkDone(
-        wgpu::CallbackMode::WaitAnyOnly,
-        [](wgpu::QueueWorkDoneStatus) {});
+    auto fut = queue_.onSubmittedWorkDone(wgpu::CallbackMode::WaitAnyOnly,
+                                          [](wgpu::QueueWorkDoneStatus) {});
     wgpu::FutureWaitInfo waitInfo{};
     waitInfo.future = fut;
     waitInfo.completed = false;
@@ -509,9 +522,8 @@ SlsChanWgpu::setCenterFrequencyHz(float centerFreqHz)
 {
     centerFreqHzCache_ = centerFreqHz;
     SimConfigGPU sc{centerFreqHz, 0.0f, 0.0f, 0.0f};
-    simConfigBuf_ = makeBuffer(sizeof(SimConfigGPU),
-                               WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-                               &sc);
+    simConfigBuf_ =
+        makeBuffer(sizeof(SimConfigGPU), WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc, &sc);
 }
 
 // ── Small-scale topology uploads ─────────────────────────────────────────────
@@ -585,12 +597,12 @@ SlsChanWgpu::mapReadBuffer(wgpu::Buffer& staging, uint64_t byteSize)
     // submit's onSubmittedWorkDone callback (different future);
     // WaitAnyOnly is the synchronous primitive Dawn provides for this
     // exact pattern.
-    auto fut = staging.mapAsync(
-        wgpu::MapMode::Read,
-        0,
-        byteSize,
-        wgpu::CallbackMode::WaitAnyOnly,
-        [&ctx](wgpu::MapAsyncStatus, wgpu::StringView) { ctx.done = true; });
+    auto fut =
+        staging.mapAsync(wgpu::MapMode::Read,
+                         0,
+                         byteSize,
+                         wgpu::CallbackMode::WaitAnyOnly,
+                         [&ctx](wgpu::MapAsyncStatus, wgpu::StringView) { ctx.done = true; });
     wgpu::FutureWaitInfo waitInfo{};
     waitInfo.future = fut;
     waitInfo.completed = false;
@@ -642,38 +654,38 @@ SlsChanWgpu::mapReadBufferInto(wgpu::Buffer& staging, uint64_t byteSize, void* d
     wgpu::MapAsyncStatus mapStatus = wgpu::MapAsyncStatus::Force32;
     wgpu::StringView mapMsg;
     {
-    SLS_PHASE_SCOPE("WGPU::MapReadBufferInto::MapAsyncWait");
-    auto fut = staging.mapAsync(
-        wgpu::MapMode::Read,
-        0,
-        byteSize,
-        wgpu::CallbackMode::WaitAnyOnly,
-        [&ctx, &mapStatus, &mapMsg](wgpu::MapAsyncStatus s, wgpu::StringView m) {
-            mapStatus = s;
-            mapMsg = m;
-            ctx.done = true;
-        });
-    wgpu::FutureWaitInfo waitInfo{};
-    waitInfo.future = fut;
-    waitInfo.completed = false;
-    auto waitStatus = instance_.waitAny(1, &waitInfo, UINT64_MAX);
-    if (waitStatus != wgpu::WaitStatus::Success)
-    {
-        std::fprintf(stderr,
-                     "[ERROR] mapReadBufferInto: waitAny returned %d (not Success)\n",
-                     (int)waitStatus);
-        std::fflush(stderr);
-    }
-    if (mapStatus != wgpu::MapAsyncStatus::Success)
-    {
-        std::fprintf(stderr,
-                     "[ERROR] mapReadBufferInto: mapAsync status=%d msg='%.*s'\n",
-                     (int)mapStatus,
-                     (int)mapMsg.length,
-                     mapMsg.data ? mapMsg.data : "");
-        std::fflush(stderr);
-    }
-    }  // end MapAsyncWait scope
+        SLS_PHASE_SCOPE("WGPU::MapReadBufferInto::MapAsyncWait");
+        auto fut = staging.mapAsync(
+            wgpu::MapMode::Read,
+            0,
+            byteSize,
+            wgpu::CallbackMode::WaitAnyOnly,
+            [&ctx, &mapStatus, &mapMsg](wgpu::MapAsyncStatus s, wgpu::StringView m) {
+                mapStatus = s;
+                mapMsg = m;
+                ctx.done = true;
+            });
+        wgpu::FutureWaitInfo waitInfo{};
+        waitInfo.future = fut;
+        waitInfo.completed = false;
+        auto waitStatus = instance_.waitAny(1, &waitInfo, UINT64_MAX);
+        if (waitStatus != wgpu::WaitStatus::Success)
+        {
+            std::fprintf(stderr,
+                         "[ERROR] mapReadBufferInto: waitAny returned %d (not Success)\n",
+                         (int)waitStatus);
+            std::fflush(stderr);
+        }
+        if (mapStatus != wgpu::MapAsyncStatus::Success)
+        {
+            std::fprintf(stderr,
+                         "[ERROR] mapReadBufferInto: mapAsync status=%d msg='%.*s'\n",
+                         (int)mapStatus,
+                         (int)mapMsg.length,
+                         mapMsg.data ? mapMsg.data : "");
+            std::fflush(stderr);
+        }
+    } // end MapAsyncWait scope
 #else
     wgpu::BufferMapCallbackInfo cbInfo = wgpu::Default;
     cbInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
@@ -699,7 +711,8 @@ SlsChanWgpu::mapReadBufferInto(wgpu::Buffer& staging, uint64_t byteSize, void* d
     else
     {
         std::fprintf(stderr,
-                     "[ERROR] mapReadBufferInto: getConstMappedRange returned null, mapStatus=%d, byteSize=%llu, stagingSize=%llu\n",
+                     "[ERROR] mapReadBufferInto: getConstMappedRange returned null, mapStatus=%d, "
+                     "byteSize=%llu, stagingSize=%llu\n",
                      (int)mapStatus,
                      (unsigned long long)byteSize,
                      (unsigned long long)staging.getSize());
@@ -741,18 +754,25 @@ SlsChanWgpu::generateCRN(float maxX,
     // GPU between calls.
     uint64_t corrKey = 0;
     {
-        const auto qf = [](float x) {
-            return static_cast<int32_t>(std::round(x * 10.0f));
-        };
+        const auto qf = [](float x) { return static_cast<int32_t>(std::round(x * 10.0f)); };
         corrKey = 1469598103934665603ull;
         auto mix = [&](uint64_t v) {
             corrKey ^= v;
             corrKey *= 1099511628211ull;
         };
         mix(static_cast<uint32_t>(qf(crnStep_)));
-        for (int i = 0; i < 8; ++i) mix(static_cast<uint32_t>(qf(corrLos[i])));
-        for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrNlos[i])));
-        for (int i = 0; i < 7; ++i) mix(static_cast<uint32_t>(qf(corrO2i[i])));
+        for (int i = 0; i < 8; ++i)
+        {
+            mix(static_cast<uint32_t>(qf(corrLos[i])));
+        }
+        for (int i = 0; i < 7; ++i)
+        {
+            mix(static_cast<uint32_t>(qf(corrNlos[i])));
+        }
+        for (int i = 0; i < 7; ++i)
+        {
+            mix(static_cast<uint32_t>(qf(corrO2i[i])));
+        }
     }
     // Bounds cache. A change smaller than half a grid step doesn't shift the
     // bilinear-interpolated pixel address, so the existing CRN is still valid.
@@ -770,10 +790,8 @@ SlsChanWgpu::generateCRN(float maxX,
     {
         const float crnTol = crnStep_ * 0.5f;
         if (crnCacheValid_ && nSite_ == crnCacheNSite_ && corrKey == crnCacheCorrKey_ &&
-            std::abs(maxX - crnCacheMaxX_) <= crnTol &&
-            std::abs(minX - crnCacheMinX_) <= crnTol &&
-            std::abs(maxY - crnCacheMaxY_) <= crnTol &&
-            std::abs(minY - crnCacheMinY_) <= crnTol)
+            std::abs(maxX - crnCacheMaxX_) <= crnTol && std::abs(minX - crnCacheMinX_) <= crnTol &&
+            std::abs(maxY - crnCacheMaxY_) <= crnTol && std::abs(minY - crnCacheMinY_) <= crnTol)
         {
             SLS_LOG("[DEBUG] generateCRN: cache hit (sub-step motion); skipping GPU dispatch\n");
             return;
@@ -838,7 +856,9 @@ SlsChanWgpu::generateCRN(float maxX,
             const double pxX = double(xSpan) / step_m + 1.0 + 2.0 * D_px;
             const double pxY = double(ySpan) / step_m + 1.0 + 2.0 * D_px;
             if (pxX * pxY <= maxPixels)
+            {
                 break;
+            }
             // Scale step by the required pixel reduction. nX*nY scales
             // ~ 1/step^2 so step *= sqrt(pxX*pxY/maxPixels).
             const float scale = static_cast<float>(std::sqrt(pxX * pxY / maxPixels));
@@ -847,7 +867,8 @@ SlsChanWgpu::generateCRN(float maxX,
         if (step_m != crnStep_)
         {
             SLS_LOG("[INFO] generateCRN: auto-coarsened step from %.1f to %.1f m to fit CRN cap\n",
-                    (double)crnStep_, (double)step_m);
+                    (double)crnStep_,
+                    (double)step_m);
             crnStep_ = step_m;
         }
     }
@@ -972,7 +993,7 @@ SlsChanWgpu::generateCRN(float maxX,
     wgpu::Buffer gridBuf =
         makeBuffer(gridSz * sizeof(float),
                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
-    slsMemProbe("crn-after-local-bufs");  // after tempBuf/crnRngBuf/gridBuf created
+    slsMemProbe("crn-after-local-bufs"); // after tempBuf/crnRngBuf/gridBuf created
 
     auto dispatchGrid = [&](wgpu::Buffer& outputBuf,
                             float corrDist,
@@ -996,10 +1017,9 @@ SlsChanWgpu::generateCRN(float maxX,
         // When chunking, write to staging buffer at rowOffset position; otherwise write to output
         // buffer
         const uint64_t destOffset =
-            baseDstOffset +
-            ((chunkY > 0) ? uint64_t(rowOffset) * nX * sizeof(float)
-                          : uint64_t(gridIndex) * fullGridBytes +
-                                uint64_t(rowOffset) * nX * sizeof(float));
+            baseDstOffset + ((chunkY > 0) ? uint64_t(rowOffset) * nX * sizeof(float)
+                                          : uint64_t(gridIndex) * fullGridBytes +
+                                                uint64_t(rowOffset) * nX * sizeof(float));
         const uint64_t rngBytes = uint64_t(nCrnRng) * sizeof(RngState);
 
         // Clamp to tempBuf size to avoid OOB
@@ -1194,9 +1214,8 @@ SlsChanWgpu::generateCRN(float maxX,
     // it — no CPU readback round-trip required.
     const uint64_t combinedBytes = losBufSz + nlosBufSz + o2iBufSz;
     {
-        const uint64_t cap = (m_maxGpuBuffer_ == 0)
-                                 ? (1ULL << 30)
-                                 : std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
+        const uint64_t cap =
+            (m_maxGpuBuffer_ == 0) ? (1ULL << 30) : std::min<uint64_t>(1ULL << 30, m_maxGpuBuffer_);
         if (combinedBytes > cap)
         {
             SLS_LOG("[FATAL] CRN combined %.2f GB > safety cap %.2f GB\n",
@@ -1236,9 +1255,9 @@ SlsChanWgpu::generateCRN(float maxX,
         // Allocate with 25% headroom so subsequent small grid growths (~0.5 MB per regen
         // as UEs spread) don't trigger another needRebuild and this no-op/waitIdle dance.
         const uint64_t allocBytes = combinedBytes + combinedBytes / 4;
-        crnDataBuf_ = makeBuffer(allocBytes,
-                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
-                                     WGPUBufferUsage_CopyDst);
+        crnDataBuf_ =
+            makeBuffer(allocBytes,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
         slsMemProbe("crn-after-crnDataBuf-alloc");
     }
     crnLastNX_ = nX;
@@ -1254,8 +1273,7 @@ SlsChanWgpu::generateCRN(float maxX,
             {
                 const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
                 const uint32_t yRows = static_cast<uint32_t>(
-                    std::min(clampedMaxChunkY,
-                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                    std::min(clampedMaxChunkY, static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 dispatchGrid(crnDataBuf_, corrLos[ch], 0u, yOff, yRows, sectionBase);
             }
         }
@@ -1272,8 +1290,7 @@ SlsChanWgpu::generateCRN(float maxX,
             {
                 const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
                 const uint32_t yRows = static_cast<uint32_t>(
-                    std::min(clampedMaxChunkY,
-                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                    std::min(clampedMaxChunkY, static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 dispatchGrid(crnDataBuf_, corrNlos[ch], 0u, yOff, yRows, sectionBase);
             }
         }
@@ -1290,8 +1307,7 @@ SlsChanWgpu::generateCRN(float maxX,
             {
                 const uint32_t yOff = static_cast<uint32_t>(c * clampedMaxChunkY);
                 const uint32_t yRows = static_cast<uint32_t>(
-                    std::min(clampedMaxChunkY,
-                             static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
+                    std::min(clampedMaxChunkY, static_cast<uint64_t>(nY) - c * clampedMaxChunkY));
                 dispatchGrid(crnDataBuf_, corrO2i[ch], 0u, yOff, yRows, sectionBase);
             }
         }
@@ -1314,12 +1330,17 @@ SlsChanWgpu::generateCRN(float maxX,
         const uint32_t totalOffsets = losOffsetCount + nlosOffsetCount + o2iOffsetCount;
         std::vector<uint32_t> combinedOffsets(totalOffsets);
         for (uint32_t i = 0; i < losOffsetCount; ++i)
+        {
             combinedOffsets[i] = i * gs;
+        }
         for (uint32_t i = 0; i < nlosOffsetCount; ++i)
+        {
             combinedOffsets[losOffsetCount + i] = losElems + i * gs;
+        }
         for (uint32_t i = 0; i < o2iOffsetCount; ++i)
-            combinedOffsets[losOffsetCount + nlosOffsetCount + i] =
-                losElems + nlosElems + i * gs;
+        {
+            combinedOffsets[losOffsetCount + nlosOffsetCount + i] = losElems + nlosElems + i * gs;
+        }
         crnOffsetsBuf_ = makeBuffer(totalOffsets * sizeof(uint32_t),
                                     WGPUBufferUsage_Storage,
                                     combinedOffsets.data());
@@ -1380,10 +1401,9 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
 
     if (!linkParamsBuf_)
     {
-        linkParamsBuf_ =
-            makeBuffer(linkParamsSz,
-                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
-                           WGPUBufferUsage_CopyDst); // CopyDst: uploadLosOverride
+        linkParamsBuf_ = makeBuffer(linkParamsSz,
+                                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
+                                        WGPUBufferUsage_CopyDst); // CopyDst: uploadLosOverride
     }
     if (!cellParamsBuf_)
     {
@@ -1455,10 +1475,10 @@ SlsChanWgpu::calLinkParam(uint32_t nSite,
         cl.sigma_lgZSA[1] = 0.35f;
         cl.mu_lgZSA[2] = 1.01f;
         cl.sigma_lgZSA[2] = 0.43f;
-        cmnLinkBuf_ = makeBuffer(sizeof(cl),
-                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
-                                     WGPUBufferUsage_CopyDst,
-                                 &cl);
+        cmnLinkBuf_ =
+            makeBuffer(sizeof(cl),
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst,
+                       &cl);
     }
     if (!rngStatesBuf_)
     {
@@ -1588,10 +1608,10 @@ SlsChanWgpu::uploadCmnLinkParams(const CmnLinkParamsGPU& cl)
 {
     if (!cmnLinkBuf_)
     {
-        cmnLinkBuf_ = makeBuffer(sizeof(cl),
-                                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
-                                     WGPUBufferUsage_CopyDst,
-                                 &cl);
+        cmnLinkBuf_ =
+            makeBuffer(sizeof(cl),
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst,
+                       &cl);
     }
     else
     {
@@ -1634,7 +1654,9 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
 
     DispUni du{nSite, nUT, 0u, 0.0f, 1.0f, 0, 0, 0};
     if (!ssDispatchBuf_)
+    {
         ssDispatchBuf_ = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage);
+    }
     queue_.writeBuffer(ssDispatchBuf_, 0, &du, sizeof(du));
 
     // Pack 6 logically-separate per-link f32 arrays (xpr,
@@ -1661,12 +1683,13 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     (void)PACKED_OFF_AOD;
     (void)PACKED_OFF_ZOA;
     (void)PACKED_OFF_ZOD;
-    const uint64_t clusterOutputsSz =
-        uint64_t(nSite) * nUT * PACKED_LINK_STRIDE * sizeof(float);
+    const uint64_t clusterOutputsSz = uint64_t(nSite) * nUT * PACKED_LINK_STRIDE * sizeof(float);
     if (!clusterOutputsBuf_ || clusterOutputsBuf_.getSize() < clusterOutputsSz)
+    {
         clusterOutputsBuf_ =
             makeBuffer(clusterOutputsSz,
                        WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    }
 
     // Spatial-consistency skip mask (binding 7). When the caller didn't
     // upload a mask for this refresh, bind an all-zero buffer of the right
@@ -1675,9 +1698,8 @@ SlsChanWgpu::calClusterRay(uint32_t nSite, uint32_t nUT)
     if (!clusterSkipBuf_ || clusterSkipBuf_.getSize() < skipBytes)
     {
         std::vector<uint32_t> zeros(size_t(nSite) * nUT, 0u);
-        clusterSkipBuf_ = makeBuffer(skipBytes,
-                                     WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
-                                     zeros.data());
+        clusterSkipBuf_ =
+            makeBuffer(skipBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst, zeros.data());
     }
 
     auto layout1 = clusterRayPipeline_.getBindGroupLayout(1);
@@ -1738,10 +1760,10 @@ SlsChanWgpu::uploadLosOverride(const std::vector<uint32_t>& losInd)
     {
         std::vector<LinkParams> zeros(losInd.size());
         std::memset(zeros.data(), 0, losInd.size() * sizeof(LinkParams));
-        linkParamsBuf_ = makeBuffer(sz,
-                                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
-                                        WGPUBufferUsage_CopyDst,
-                                    zeros.data());
+        linkParamsBuf_ =
+            makeBuffer(sz,
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst,
+                       zeros.data());
     }
     for (size_t i = 0; i < losInd.size(); ++i)
     {
@@ -1782,7 +1804,9 @@ void
 SlsChanWgpu::driftPackedAngles(const std::vector<DriftEntryGpu>& entries)
 {
     if (entries.empty())
+    {
         return;
+    }
     if (!driftPipeline_)
     {
         driftPipeline_ = makePipeline("drift_packed_angles_kernel");
@@ -1873,14 +1897,13 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
     //   cirCoe (nSnap * nUeAnt * nBsAnt * 24 vec2f, 2 u32 each)
     //   cirNormDelay (24 u32)
     //   cirNtaps (1 u32)
-    const uint32_t cirCoeU32PerLink =
-        nSnapshots * ssNBsAnt_ * ssNUeAnt_ * 24u * 2u;
+    const uint32_t cirCoeU32PerLink = nSnapshots * ssNBsAnt_ * ssNUeAnt_ * 24u * 2u;
     cirPackedStrideU32_ = cirCoeU32PerLink + 24u + 1u;
     if (!cirOutputsPackedBuf_ || cirPackedNLinks_ != nActiveLinks)
     {
-        cirOutputsPackedBuf_ = makeBuffer(
-            uint64_t(nActiveLinks) * cirPackedStrideU32_ * sizeof(uint32_t),
-            WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        cirOutputsPackedBuf_ =
+            makeBuffer(uint64_t(nActiveLinks) * cirPackedStrideU32_ * sizeof(uint32_t),
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
         cirPackedNLinks_ = nActiveLinks;
     }
 
@@ -1898,9 +1921,8 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
     //   cirNormDelay region:  offset nLinks * cirCoeU32PerLink
     //   cirNtaps region:      offset prev + nLinks * 24
     const uint32_t cirNormDelayRegionBase = nActiveLinks * cirCoeU32PerLink;
-    const uint32_t cirNtapsRegionBase     = cirNormDelayRegionBase + nActiveLinks * 24u;
-    DispUni du{0u, 0u, nActiveLinks, refTime, 1.0f,
-               cirNormDelayRegionBase, cirNtapsRegionBase, 0u};
+    const uint32_t cirNtapsRegionBase = cirNormDelayRegionBase + nActiveLinks * 24u;
+    DispUni du{0u, 0u, nActiveLinks, refTime, 1.0f, cirNormDelayRegionBase, cirNtapsRegionBase, 0u};
     ssDispatchBuf_ = makeBuffer(sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &du);
 
     // Build the small CIR uniform from the cached SsCmnParams data.
@@ -1914,26 +1936,33 @@ SlsChanWgpu::generateCIR(const std::vector<ActiveLink>& activeLinks,
             uint32_t _pad1;
             float C_DS[4];                     // .xyz used
             uint32_t raysInSubClusterSizes[4]; // .xyz used
-            uint32_t raysInSubCluster[3][3][4]; // [subcluster][vec4_idx][lane] -- 12 lanes hold 10 values
+            uint32_t raysInSubCluster[3][3]
+                                     [4]; // [subcluster][vec4_idx][lane] -- 12 lanes hold 10 values
         };
+
         static_assert(sizeof(CirCmnUni) == 192, "CirCmnUni size must match WGSL CirCmn");
         CirCmnUni cu{};
         cu.lambda_0 = ssCmnCache_.lambda_0;
         cu.nSubCluster = ssCmnCache_.nSubCluster;
-        for (int i = 0; i < 3; ++i) cu.C_DS[i] = ssCmnCache_.C_DS[i];
         for (int i = 0; i < 3; ++i)
+        {
+            cu.C_DS[i] = ssCmnCache_.C_DS[i];
+        }
+        for (int i = 0; i < 3; ++i)
+        {
             cu.raysInSubClusterSizes[i] = ssCmnCache_.raysInSubClusterSizes[i];
+        }
         for (int sc = 0; sc < 3; ++sc)
         {
             const uint32_t* src = (sc == 0)   ? ssCmnCache_.raysInSubCluster0
-                                : (sc == 1) ? ssCmnCache_.raysInSubCluster1
-                                            : ssCmnCache_.raysInSubCluster2;
+                                  : (sc == 1) ? ssCmnCache_.raysInSubCluster1
+                                              : ssCmnCache_.raysInSubCluster2;
             for (int ri = 0; ri < 10; ++ri)
             {
                 cu.raysInSubCluster[sc][ri / 4][ri % 4] = src[ri];
             }
         }
-            cirCmnUniformBuf_ = makeBuffer(sizeof(cu), WGPUBufferUsage_Uniform, &cu);
+        cirCmnUniformBuf_ = makeBuffer(sizeof(cu), WGPUBufferUsage_Uniform, &cu);
     }
 
     auto layout2 = generateCIRPipeline_.getBindGroupLayout(2);
@@ -2053,25 +2082,27 @@ SlsChanWgpu::generateCFR(const std::vector<ActiveLink>& activeLinks,
     //   cirCoe region:        offset 0,                            size = nLinks * cirCoeU32 * 4
     //   cirNormDelay region:  offset cirNormDelayRegionBase * 4,   size = nLinks * 24 * 4
     //   cirNtaps region:      offset cirNtapsRegionBase     * 4,   size = nLinks * 4
-    const uint32_t cirCoeU32 =
-        nSnapshots * ssNBsAnt_ * ssNUeAnt_ * 24u * 2u;
-    const uint64_t cirCoeRegionBytes  = uint64_t(nActiveLinks) * cirCoeU32 * 4u;
-    const uint64_t cirNormDelayBytes  = uint64_t(nActiveLinks) * 24u * 4u;
-    const uint64_t cirNtapsBytes      = uint64_t(nActiveLinks) * 4u;
-    E(e0, 0, 0, ssSimConfigBuf_);            // cfr_uni_sim
-    E(e0, 1, 1, ssCellParamsBuf_);           // cfr_buf_cell
-    E(e0, 2, 2, ssUtParamsBuf_);             // cfr_buf_ut
-    E(e0, 3, 3, antPanelConfigBuf_);         // cfr_buf_antCfg
-    E(e0, 4, 4, activeLinkBuf_);             // cfr_buf_activeLink
-    e0[5].binding = 5; e0[5].buffer = cirOutputsPackedBuf_;
+    const uint32_t cirCoeU32 = nSnapshots * ssNBsAnt_ * ssNUeAnt_ * 24u * 2u;
+    const uint64_t cirCoeRegionBytes = uint64_t(nActiveLinks) * cirCoeU32 * 4u;
+    const uint64_t cirNormDelayBytes = uint64_t(nActiveLinks) * 24u * 4u;
+    const uint64_t cirNtapsBytes = uint64_t(nActiveLinks) * 4u;
+    E(e0, 0, 0, ssSimConfigBuf_);    // cfr_uni_sim
+    E(e0, 1, 1, ssCellParamsBuf_);   // cfr_buf_cell
+    E(e0, 2, 2, ssUtParamsBuf_);     // cfr_buf_ut
+    E(e0, 3, 3, antPanelConfigBuf_); // cfr_buf_antCfg
+    E(e0, 4, 4, activeLinkBuf_);     // cfr_buf_activeLink
+    e0[5].binding = 5;
+    e0[5].buffer = cirOutputsPackedBuf_;
     e0[5].offset = 0;
-    e0[5].size   = cirCoeRegionBytes;        // cfr_buf_cirCoe
-    e0[6].binding = 6; e0[6].buffer = cirOutputsPackedBuf_;
+    e0[5].size = cirCoeRegionBytes; // cfr_buf_cirCoe
+    e0[6].binding = 6;
+    e0[6].buffer = cirOutputsPackedBuf_;
     e0[6].offset = cirCoeRegionBytes;
-    e0[6].size   = cirNormDelayBytes;        // cfr_buf_cirNormDelay
-    e0[7].binding = 7; e0[7].buffer = cirOutputsPackedBuf_;
+    e0[6].size = cirNormDelayBytes; // cfr_buf_cirNormDelay
+    e0[7].binding = 7;
+    e0[7].buffer = cirOutputsPackedBuf_;
     e0[7].offset = cirCoeRegionBytes + cirNormDelayBytes;
-    e0[7].size   = cirNtapsBytes;            // cfr_buf_cirNtaps
+    e0[7].size = cirNtapsBytes;              // cfr_buf_cirNtaps
     E(e0, 8, 8, freqChanPrbgBuf_);           // cfr_buf_freqChanPrbg
     E(e0, 9, 9, ssDispatchBuf_, sizeof(du)); // cfr_disp
 
@@ -2142,10 +2173,10 @@ SlsChanWgpu::generateCFRBatched(const std::vector<ActiveLink>& activeLinks,
         const uint64_t batchBufBytes = batchElems * sizeof(float) * 2;
 
         // Check if device is healthy before allocating
-    #ifdef WEBGPU_BACKEND_DAWN
-    dawnPumpEvents();
+#ifdef WEBGPU_BACKEND_DAWN
+        dawnPumpEvents();
 #else
-    wgpuDevicePoll(device_, false, nullptr);
+        wgpuDevicePoll(device_, false, nullptr);
 #endif
         if (isDead())
         {
@@ -2391,7 +2422,9 @@ std::vector<float>
 SlsChanWgpu::downloadClusterOutputsPacked()
 {
     if (!clusterOutputsBuf_)
+    {
         return {};
+    }
 
     const uint64_t totalBytes = clusterOutputsBuf_.getSize();
     // Reuse persistent staging to avoid per-call D3D12 READBACK heap alloc.
@@ -2423,16 +2456,22 @@ SlsChanWgpu::readAllClusterData(uint32_t nSite, uint32_t nUT)
     const uint64_t coSz = clusterOutputsBuf_ ? clusterOutputsBuf_.getSize() : 0u;
 
     if (!clusterParamsStagingBuf_ || clusterParamsStagingBuf_.getSize() < cpSz)
+    {
         clusterParamsStagingBuf_ =
             makeBuffer(cpSz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
     if (coSz > 0 && (!clusterOutputsStagingBuf_ || clusterOutputsStagingBuf_.getSize() < coSz))
+    {
         clusterOutputsStagingBuf_ =
             makeBuffer(coSz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
 
     wgpu::CommandEncoder enc = device_.createCommandEncoder(wgpu::Default);
     enc.copyBufferToBuffer(clusterParamsBuf_, 0, clusterParamsStagingBuf_, 0, cpSz);
     if (coSz > 0)
+    {
         enc.copyBufferToBuffer(clusterOutputsBuf_, 0, clusterOutputsStagingBuf_, 0, coSz);
+    }
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
 
@@ -2456,15 +2495,13 @@ SlsChanWgpu::readCirNtaps()
     // cirNtaps region starts at (cirCoe + cirNormDelay) bytes; size is
     // nActiveLinks * 4 (one u32 per link). cirPackedNLinks_ snapshots
     // the active-link count from the last generateCIR call.
-    const uint64_t cirCoeU32PerLink =
-        cirPackedStrideU32_ > 25u ? (cirPackedStrideU32_ - 25u) : 0u;
-    const uint64_t cirCoeBytes  = uint64_t(cirPackedNLinks_) * cirCoeU32PerLink * 4u;
+    const uint64_t cirCoeU32PerLink = cirPackedStrideU32_ > 25u ? (cirPackedStrideU32_ - 25u) : 0u;
+    const uint64_t cirCoeBytes = uint64_t(cirPackedNLinks_) * cirCoeU32PerLink * 4u;
     const uint64_t normDelayBytes = uint64_t(cirPackedNLinks_) * 24u * 4u;
     const uint64_t sz = uint64_t(cirPackedNLinks_) * 4u;
     wgpu::Buffer staging = makeBuffer(sz, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
     auto enc = device_.createCommandEncoder(wgpu::Default);
-    enc.copyBufferToBuffer(cirOutputsPackedBuf_, cirCoeBytes + normDelayBytes,
-                           staging, 0, sz);
+    enc.copyBufferToBuffer(cirOutputsPackedBuf_, cirCoeBytes + normDelayBytes, staging, 0, sz);
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
     return mapReadBuffer<uint32_t>(staging, sz);
@@ -2512,8 +2549,8 @@ SlsChanWgpu::sliceClusterOutput(uint32_t linkOffF32, uint32_t perLinkLenF32)
     }
     const uint64_t totalBytes = clusterOutputsBuf_.getSize();
     const uint64_t totalF32 = totalBytes / sizeof(float);
-    assert(totalF32 % kPackedLinkStride == 0u
-           && "clusterOutputsBuf_ size is not a multiple of kPackedLinkStride");
+    assert(totalF32 % kPackedLinkStride == 0u &&
+           "clusterOutputsBuf_ size is not a multiple of kPackedLinkStride");
     const uint64_t nLinks = totalF32 / kPackedLinkStride;
 
     // Copy the whole buffer to host (one mapAsync round-trip) and
@@ -2599,8 +2636,9 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         matFieldPrePipeline_ = makePipeline("mat_field_precompute_kernel");
         assert(matFieldPrePipeline_ && "missing mat_field_precompute_kernel in WGSL");
     }
-    // Field-precompute buffer: 481 cluster-ray slots x 4 components per link.
-    const uint64_t fpBytes = uint64_t(nActiveLinks) * 481u * 4u * sizeof(float) * 2;
+    // Field-precompute buffer: 481 cluster-ray slots x MAT_FIELD_PRE_STRIDE(=11)
+    // vec2f per link (4 field components + 7 ray-invariant geometry/polarisation).
+    const uint64_t fpBytes = uint64_t(nActiveLinks) * 481u * 11u * sizeof(float) * 2;
     if (!matFieldPreBuf_ || matFieldPreCfgNLinks_ < nActiveLinks)
     {
         matFieldPreBuf_ = makeBuffer(fpBytes, WGPUBufferUsage_Storage);
@@ -2610,11 +2648,10 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     // (Re)alloc output buffer if shape changed. Sized for the maximum page
     // count (kMatMaxPages) so the kernel doesn't have to special-case the
     // strongest-2 subcluster split.
-    const uint64_t perLink =
-        uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
+    const uint64_t perLink = uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
     const uint64_t totalBytes = perLink * nActiveLinks;
-    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize ||
-        channelMatrixCfgSSize_ != sSize || channelMatrixCfgNLinks_ < nActiveLinks)
+    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize || channelMatrixCfgSSize_ != sSize ||
+        channelMatrixCfgNLinks_ < nActiveLinks)
     {
         channelMatrixBuf_ =
             makeBuffer(totalBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -2633,25 +2670,37 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
         uint32_t _pad0;
         uint32_t _pad1;
         uint32_t _pad2;
-        float    lambda0;
-        float    _pad3;
-        float    _pad4;
-        float    _pad5;
+        float lambda0;
+        float _pad3;
+        float _pad4;
+        float _pad5;
     };
+
     // cluster1st/cluster2nd/numReducedCluster are no longer carried in the
     // uniform -- the kernel reads them per-link from ClusterParams.
     (void)numReducedCluster;
     (void)cluster1st;
     (void)cluster2nd;
-    const float lambda0 =
-        centerFreqHzCache_ > 0.0f ? 3.0e8f / centerFreqHzCache_ /* 3e8 matches the CPU model's lambda */ : 0.0f;
-    MatDispUni du{nActiveLinks, numOverallCluster, uSize, sSize, nRays,
-                  0u, 0u, 0u, lambda0, 0.0f, 0.0f, 0.0f};
+    const float lambda0 = centerFreqHzCache_ > 0.0f
+                              ? 3.0e8f / centerFreqHzCache_ /* 3e8 matches the CPU model's lambda */
+                              : 0.0f;
+    MatDispUni du{nActiveLinks,
+                  numOverallCluster,
+                  uSize,
+                  sSize,
+                  nRays,
+                  0u,
+                  0u,
+                  0u,
+                  lambda0,
+                  0.0f,
+                  0.0f,
+                  0.0f};
     if (!matrixDispatchBuf_)
     {
-        matrixDispatchBuf_ = makeBuffer(sizeof(du),
-                                        WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
-                                            WGPUBufferUsage_CopyDst);
+        matrixDispatchBuf_ =
+            makeBuffer(sizeof(du),
+                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
     }
     queue_.writeBuffer(matrixDispatchBuf_, 0, &du, sizeof(du));
 
@@ -2769,12 +2818,23 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
                          const std::vector<uint32_t>& startS,
                          const std::vector<uint32_t>& startU)
 {
-    genLongTerm(nActiveLinks, uSize, sSize, sPorts, uPorts,
-                sPortElems, uPortElems, sElemsPerPort, uElemsPerPort,
-                sIncVal, uIncVal,
-                sWFlat.data(), sWFlat.size(),
-                uWFlat.data(), uWFlat.size(),
-                startS, startU);
+    genLongTerm(nActiveLinks,
+                uSize,
+                sSize,
+                sPorts,
+                uPorts,
+                sPortElems,
+                uPortElems,
+                sElemsPerPort,
+                uElemsPerPort,
+                sIncVal,
+                uIncVal,
+                sWFlat.data(),
+                sWFlat.size(),
+                uWFlat.data(),
+                uWFlat.size(),
+                startS,
+                startU);
 }
 
 void
@@ -2812,8 +2872,8 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
     // (Re)alloc output buffer if shape changed.
     const uint64_t outBytes =
         uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages * sizeof(float) * 2;
-    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks ||
-        longTermCfgSPorts_ != sPorts || longTermCfgUPorts_ != uPorts)
+    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks || longTermCfgSPorts_ != sPorts ||
+        longTermCfgUPorts_ != uPorts)
     {
         // CopyDst is needed so uploadLongTermBatch can writeBuffer into
         // this same buffer for the chunked spec-batch pass.
@@ -2865,13 +2925,24 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
         uint32_t uElemsPerPort;
         uint32_t sIncVal;
         uint32_t uIncVal;
-    } du{nActiveLinks, uSize,    sSize,         kMatMaxPages,    sPorts,  uPorts,
-         sPortElems,   uPortElems, sElemsPerPort, uElemsPerPort, sIncVal, uIncVal};
+    } du{nActiveLinks,
+         uSize,
+         sSize,
+         kMatMaxPages,
+         sPorts,
+         uPorts,
+         sPortElems,
+         uPortElems,
+         sElemsPerPort,
+         uElemsPerPort,
+         sIncVal,
+         uIncVal};
+
     if (!longTermDispatchBuf_)
     {
-        longTermDispatchBuf_ = makeBuffer(sizeof(du),
-                                          WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
-                                              WGPUBufferUsage_CopyDst);
+        longTermDispatchBuf_ =
+            makeBuffer(sizeof(du),
+                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
     }
     queue_.writeBuffer(longTermDispatchBuf_, 0, &du, sizeof(du));
 
@@ -2903,8 +2974,7 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
     pass.setBindGroup(0u, bg0, (size_t)0, nullptr);
     // workgroup_size = (64, 1, 1)
     // total threads = nActiveLinks * uPorts * sPorts * kMatMaxPages
-    const uint64_t total =
-        uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages;
+    const uint64_t total = uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages;
     const uint32_t groups = static_cast<uint32_t>((total + 63u) / 64u);
     pass.dispatchWorkgroups(groups, 1u, 1u);
     pass.end();
@@ -2994,7 +3064,8 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     }
     if (!matFieldPreBuf_ || matFieldPreCfgNLinks_ < nActiveLinks)
     {
-        matFieldPreBuf_ = makeBuffer(uint64_t(nActiveLinks) * 481u * 4u * sizeof(float) * 2,
+        // 481 cluster-ray slots x MAT_FIELD_PRE_STRIDE(=11) vec2f per link.
+        matFieldPreBuf_ = makeBuffer(uint64_t(nActiveLinks) * 481u * 11u * sizeof(float) * 2,
                                      WGPUBufferUsage_Storage);
         matFieldPreCfgNLinks_ = nActiveLinks;
     }
@@ -3007,8 +3078,8 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     // channelMatrixBuf_ alloc
     const uint64_t cmBytesPerLink = uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
     const uint64_t cmTotalBytes = cmBytesPerLink * nActiveLinks;
-    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize ||
-        channelMatrixCfgSSize_ != sSize || channelMatrixCfgNLinks_ < nActiveLinks)
+    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize || channelMatrixCfgSSize_ != sSize ||
+        channelMatrixCfgNLinks_ < nActiveLinks)
     {
         channelMatrixBuf_ =
             makeBuffer(cmTotalBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -3026,17 +3097,30 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
         uint32_t sSize;
         uint32_t nRays;
         uint32_t _pad0, _pad1, _pad2;
-        float    lambda0;
-        float    _pad3, _pad4, _pad5;
+        float lambda0;
+        float _pad3, _pad4, _pad5;
     };
-    const float lambda0 = centerFreqHzCache_ > 0.0f ? 3.0e8f / centerFreqHzCache_ /* 3e8 matches the CPU model's lambda */ : 0.0f;
-    MatDispUni mdu{nActiveLinks, numOverallCluster, uSize, sSize, nRays,
-                   0u, 0u, 0u, lambda0, 0.0f, 0.0f, 0.0f};
+
+    const float lambda0 = centerFreqHzCache_ > 0.0f
+                              ? 3.0e8f / centerFreqHzCache_ /* 3e8 matches the CPU model's lambda */
+                              : 0.0f;
+    MatDispUni mdu{nActiveLinks,
+                   numOverallCluster,
+                   uSize,
+                   sSize,
+                   nRays,
+                   0u,
+                   0u,
+                   0u,
+                   lambda0,
+                   0.0f,
+                   0.0f,
+                   0.0f};
     if (!matrixDispatchBuf_)
     {
-        matrixDispatchBuf_ = makeBuffer(sizeof(mdu),
-                                        WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
-                                            WGPUBufferUsage_CopyDst);
+        matrixDispatchBuf_ =
+            makeBuffer(sizeof(mdu),
+                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
     }
     queue_.writeBuffer(matrixDispatchBuf_, 0, &mdu, sizeof(mdu));
 
@@ -3049,13 +3133,12 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     // longTermOutBuf_ alloc
     const uint64_t ltTotalBytes =
         uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages * sizeof(float) * 2;
-    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks ||
-        longTermCfgSPorts_ != sPorts || longTermCfgUPorts_ != uPorts)
+    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks || longTermCfgSPorts_ != sPorts ||
+        longTermCfgUPorts_ != uPorts)
     {
         longTermOutBuf_ =
             makeBuffer(ltTotalBytes,
-                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
-                           WGPUBufferUsage_CopyDst);
+                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
         longTermCfgNLinks_ = nActiveLinks;
         longTermCfgSPorts_ = sPorts;
         longTermCfgUPorts_ = uPorts;
@@ -3065,21 +3148,29 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     const uint64_t sWBytes = sWLen * sizeof(float) * 2;
     const uint64_t uWBytes = uWLen * sizeof(float) * 2;
     if (!longTermSWBuf_ || longTermSWBuf_.getSize() < sWBytes)
+    {
         longTermSWBuf_ = makeBuffer(sWBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(longTermSWBuf_, 0, sWData, sWBytes);
     if (!longTermUWBuf_ || longTermUWBuf_.getSize() < uWBytes)
+    {
         longTermUWBuf_ = makeBuffer(uWBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(longTermUWBuf_, 0, uWData, uWBytes);
 
     const uint64_t startSBytes = startS.size() * sizeof(uint32_t);
     if (!longTermStartSBuf_ || longTermStartSBuf_.getSize() < startSBytes)
+    {
         longTermStartSBuf_ =
             makeBuffer(startSBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(longTermStartSBuf_, 0, startS.data(), startSBytes);
     const uint64_t startUBytes = startU.size() * sizeof(uint32_t);
     if (!longTermStartUBuf_ || longTermStartUBuf_.getSize() < startUBytes)
+    {
         longTermStartUBuf_ =
             makeBuffer(startUBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(longTermStartUBuf_, 0, startU.data(), startUBytes);
 
     // longTerm uniform
@@ -3097,23 +3188,44 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
         uint32_t uElemsPerPort;
         uint32_t sIncVal;
         uint32_t uIncVal;
-    } ldu{nActiveLinks, uSize,      sSize,         kMatMaxPages,  sPorts,  uPorts,
-          sPortElems,   uPortElems, sElemsPerPort, uElemsPerPort, sIncVal, uIncVal};
+    } ldu{nActiveLinks,
+          uSize,
+          sSize,
+          kMatMaxPages,
+          sPorts,
+          uPorts,
+          sPortElems,
+          uPortElems,
+          sElemsPerPort,
+          uElemsPerPort,
+          sIncVal,
+          uIncVal};
+
     if (!longTermDispatchBuf_)
-        longTermDispatchBuf_ = makeBuffer(sizeof(ldu),
-                                          WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage |
-                                              WGPUBufferUsage_CopyDst);
+    {
+        longTermDispatchBuf_ =
+            makeBuffer(sizeof(ldu),
+                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(longTermDispatchBuf_, 0, &ldu, sizeof(ldu));
     longTermCfgSPortElems_ = sPortElems;
     longTermCfgUPortElems_ = uPortElems;
 
     // ── Part 3: staging buffer alloc ────────────────────────────────────
-    if (!channelMatrixStagingBuf_ || channelMatrixStagingBuf_.getSize() < cmTotalBytes)
+    // The channel-matrix staging buffer + readback are only needed when the
+    // caller wants the per-element matrix (cmDst != nullptr). The lite
+    // uncached/REM path passes cmDst == nullptr: channelMatrixBuf_ is still
+    // generated on the GPU (genLongTerm reads it) but never copied to the host.
+    if (cmDst && (!channelMatrixStagingBuf_ || channelMatrixStagingBuf_.getSize() < cmTotalBytes))
+    {
         channelMatrixStagingBuf_ =
             makeBuffer(cmTotalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
     if (!longTermStagingBuf_ || longTermStagingBuf_.getSize() < ltTotalBytes)
+    {
         longTermStagingBuf_ =
             makeBuffer(ltTotalBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
+    }
 
     // ── Part 4: build bind groups ────────────────────────────────────────
     std::vector<wgpu::BindGroupEntry> cmEntries(11, wgpu::Default);
@@ -3195,8 +3307,13 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     }
 
     // Copy channelMatrixBuf_ to staging (implicit barrier after compute pass
-    // ensures channelMatrix writes are flushed before this copy reads them)
-    enc.copyBufferToBuffer(channelMatrixBuf_, 0, channelMatrixStagingBuf_, 0, cmTotalBytes);
+    // ensures channelMatrix writes are flushed before this copy reads them).
+    // Skipped when cmDst == nullptr (lite uncached/REM path) -- genLongTerm
+    // below still reads channelMatrixBuf_ directly on the GPU.
+    if (cmDst)
+    {
+        enc.copyBufferToBuffer(channelMatrixBuf_, 0, channelMatrixStagingBuf_, 0, cmTotalBytes);
+    }
 
     // Compute pass 2: gen_long_term_kernel (reads channelMatrixBuf_ which was
     // written by pass 1; implicit barrier before this pass guarantees ordering)
@@ -3204,8 +3321,7 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
         auto pass = enc.beginComputePass(wgpu::Default);
         pass.setPipeline(longTermPipeline_);
         pass.setBindGroup(0u, ltBG, (size_t)0, nullptr);
-        const uint64_t ltTotal =
-            uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages;
+        const uint64_t ltTotal = uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages;
         pass.dispatchWorkgroups(static_cast<uint32_t>((ltTotal + 63u) / 64u), 1u, 1u);
         pass.end();
     }
@@ -3218,9 +3334,12 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     queue_.submit(enc.finish(wgpu::Default));
     waitIdle();
 
-    // Map both staging buffers (uses Dawn waitAny, not counted as WaitIdle)
-    if (!mapReadBufferInto(channelMatrixStagingBuf_, cmTotalBytes, cmDst))
+    // Map both staging buffers (uses Dawn waitAny, not counted as WaitIdle).
+    // The channel-matrix readback is skipped when cmDst == nullptr.
+    if (cmDst && !mapReadBufferInto(channelMatrixStagingBuf_, cmTotalBytes, cmDst))
+    {
         return false;
+    }
     return mapReadBufferInto(longTermStagingBuf_, ltTotalBytes, ltDst);
 }
 
@@ -3280,13 +3399,11 @@ SlsChanWgpu::genSpecChan(uint32_t linkIdx,
 
     // (Re)alloc output buffer if shape changed. Sized for one eval --
     // we readback per call so it doesn't need to fit a whole batch.
-    const uint64_t outBytes =
-        uint64_t(numRxPorts) * numTxPorts * numRb * sizeof(float) * 2;
+    const uint64_t outBytes = uint64_t(numRxPorts) * numTxPorts * numRb * sizeof(float) * 2;
     if (!specChanOutBuf_ || specChanCfgNumRxPorts_ != numRxPorts ||
         specChanCfgNumTxPorts_ != numTxPorts || specChanCfgNumRb_ != numRb)
     {
-        specChanOutBuf_ =
-            makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+        specChanOutBuf_ = makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
         specChanStagingBuf_ =
             makeBuffer(outBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
         specChanCfgNumRxPorts_ = numRxPorts;
@@ -3327,12 +3444,24 @@ SlsChanWgpu::genSpecChan(uint32_t linkIdx,
         uint32_t _pad0;
         uint32_t _pad1;
         uint32_t _pad2;
-    } du{numClusters, numRb,    numRxPorts, numTxPorts, isReverse ? 1u : 0u, linkIdx,
-         ltUPorts,    ltSPorts, kMatMaxPages, 0u,         0u,                  0u};
+    } du{numClusters,
+         numRb,
+         numRxPorts,
+         numTxPorts,
+         isReverse ? 1u : 0u,
+         linkIdx,
+         ltUPorts,
+         ltSPorts,
+         kMatMaxPages,
+         0u,
+         0u,
+         0u};
+
     if (!specChanDispatchBuf_)
     {
-        specChanDispatchBuf_ = makeBuffer(
-            sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+        specChanDispatchBuf_ =
+            makeBuffer(sizeof(du),
+                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
     }
     queue_.writeBuffer(specChanDispatchBuf_, 0, &du, sizeof(du));
 
@@ -3401,8 +3530,7 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
     if (!genSpecPowPipeline_)
     {
         genSpecPowPipeline_ = makePipeline("gen_spec_pow_kernel");
-        assert(genSpecPowPipeline_ &&
-               "missing gen_spec_pow_kernel in WGSL");
+        assert(genSpecPowPipeline_ && "missing gen_spec_pow_kernel in WGSL");
     }
 
     // (Re)alloc the per-port H output + staging buffers. Sized for all M
@@ -3415,12 +3543,10 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
     const uint64_t rxtx = uint64_t(numRxPorts) * numTxPorts;
     const uint64_t redOutBytes =
         uint64_t(totalBatchSlots) * nLinks * numRb * rxtx * 2u * sizeof(float);
-    const uint64_t powOutBytes =
-        2ull * totalBatchSlots * nLinks * numRb * sizeof(float);
-    if (!reduceBatchOutBuf_ || reduceBatchOutBuf_.getSize() < redOutBytes ||
-        !powBatchOutBuf_ || powBatchOutBuf_.getSize() < powOutBytes ||
-        reduceBatchCfgNLinks_ != nLinks || reduceBatchCfgNumRb_ != numRb ||
-        reduceBatchCfgNSlots_ != totalBatchSlots)
+    const uint64_t powOutBytes = 2ull * totalBatchSlots * nLinks * numRb * sizeof(float);
+    if (!reduceBatchOutBuf_ || reduceBatchOutBuf_.getSize() < redOutBytes || !powBatchOutBuf_ ||
+        powBatchOutBuf_.getSize() < powOutBytes || reduceBatchCfgNLinks_ != nLinks ||
+        reduceBatchCfgNumRb_ != numRb || reduceBatchCfgNSlots_ != totalBatchSlots)
     {
         reduceBatchOutBuf_ =
             makeBuffer(redOutBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -3430,26 +3556,32 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
             makeBuffer(powOutBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
         powBatchStagingBuf_ =
             makeBuffer(powOutBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-        reduceBatchCfgNLinks_  = nLinks;
-        reduceBatchCfgNumRb_   = numRb;
-        reduceBatchCfgNSlots_  = totalBatchSlots;
+        reduceBatchCfgNLinks_ = nLinks;
+        reduceBatchCfgNumRb_ = numRb;
+        reduceBatchCfgNSlots_ = totalBatchSlots;
     }
 
     // Per-tick inputs -- realloc on size grow, re-upload otherwise.
     const uint64_t dopplerBytes = doppler.size() * sizeof(float) * 2;
-    const uint64_t delaysBytes  = delays.size() * sizeof(float);
+    const uint64_t delaysBytes = delays.size() * sizeof(float);
     const uint64_t rbFreqsBytes = rbFreqs.size() * sizeof(float);
     if (!specBatchDopplerBuf_ || specBatchDopplerBuf_.getSize() < dopplerBytes)
+    {
         specBatchDopplerBuf_ =
             makeBuffer(dopplerBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(specBatchDopplerBuf_, 0, doppler.data(), dopplerBytes);
     if (!specBatchDelaysBuf_ || specBatchDelaysBuf_.getSize() < delaysBytes)
+    {
         specBatchDelaysBuf_ =
             makeBuffer(delaysBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(specBatchDelaysBuf_, 0, delays.data(), delaysBytes);
     if (!specBatchRbFreqsBuf_ || specBatchRbFreqsBuf_.getSize() < rbFreqsBytes)
+    {
         specBatchRbFreqsBuf_ =
             makeBuffer(rbFreqsBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(specBatchRbFreqsBuf_, 0, rbFreqs.data(), rbFreqsBytes);
 
     struct SpecBatchDispUni
@@ -3464,12 +3596,23 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
         uint32_t ltNPages;
         uint32_t outOffset;    // COMPLEX index = outSlotOffset * nLinks * numRb * rxtx
         uint32_t outOffsetRev; // FLOAT index of the reverse scalar-power section
-    } du{nLinks, numClusters, numRb, numRxPorts, numTxPorts, ltUPorts, ltSPorts, kMatMaxPages,
-        outSlotOffset * nLinks * numRb * numRxPorts * numTxPorts,
-        (totalBatchSlots + outSlotOffset) * nLinks * numRb};
+    } du{nLinks,
+         numClusters,
+         numRb,
+         numRxPorts,
+         numTxPorts,
+         ltUPorts,
+         ltSPorts,
+         kMatMaxPages,
+         outSlotOffset * nLinks * numRb * numRxPorts * numTxPorts,
+         (totalBatchSlots + outSlotOffset) * nLinks * numRb};
+
     if (!specBatchDispatchBuf_)
-        specBatchDispatchBuf_ = makeBuffer(
-            sizeof(du), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    {
+        specBatchDispatchBuf_ =
+            makeBuffer(sizeof(du),
+                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    }
     queue_.writeBuffer(specBatchDispatchBuf_, 0, &du, sizeof(du));
     specBatchCfgNumRb_ = numRb;
 
@@ -3479,9 +3622,9 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
     std::vector<wgpu::BindGroupEntry> entries(7, wgpu::Default);
     auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
         entries[i].binding = b;
-        entries[i].buffer  = buf;
-        entries[i].offset  = 0;
-        entries[i].size    = sz;
+        entries[i].buffer = buf;
+        entries[i].offset = 0;
+        entries[i].size = sz;
     };
     E(0, 70, specBatchDispatchBuf_, sizeof(du));
     E(1, 71, longTermOutBuf_);
@@ -3492,9 +3635,9 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
     E(6, 78, reduceBatchOutBuf_);
 
     wgpu::BindGroupDescriptor bgd = wgpu::Default;
-    bgd.layout     = layout;
+    bgd.layout = layout;
     bgd.entryCount = static_cast<uint32_t>(entries.size());
-    bgd.entries    = entries.data();
+    bgd.entries = entries.data();
     wgpu::BindGroup bg = device_.createBindGroup(bgd);
 
     // Submit compute pass without stalling — caller drives the WaitIdle
@@ -3527,7 +3670,9 @@ SlsChanWgpu::readSpecHBatchInto(uint32_t nLinks,
                                 std::complex<float>* dst)
 {
     if (!reduceBatchOutBuf_)
+    {
         return false;
+    }
     // Per-port H sections for all nSlots:
     // dst[slot][link][rb][tx*nRx+rx], nSlots * nLinks * numRb * rxtx complexes.
     const uint64_t totalBytes =
@@ -3544,7 +3689,9 @@ bool
 SlsChanWgpu::readPowBatchInto(uint32_t nLinks, uint32_t numRb, uint32_t nSlots, float* dst)
 {
     if (!powBatchOutBuf_)
+    {
         return false;
+    }
     // Forward scalar-power sections for all nSlots, then the mirrored
     // reverse sections: dst must hold 2 * nSlots * nLinks * numRb floats.
     const uint64_t totalBytes = 2ull * nSlots * nLinks * numRb * sizeof(float);
@@ -3565,13 +3712,14 @@ SlsChanWgpu::readSpecHAndPowBatchInto(uint32_t nLinks,
                                       float* powDst)
 {
     if (!reduceBatchOutBuf_ || !powBatchOutBuf_)
+    {
         return false;
+    }
     // Fused readback: both copies in ONE encoder/submit/waitIdle. The
     // separate readSpecHBatchInto + readPowBatchInto pair costs two full
     // GPU round-trips per chunk; the wait dominates (~ms each on D3D12),
     // so fusing halves the per-chunk readback latency.
-    const uint64_t hBytes =
-        uint64_t(nSlots) * nLinks * numRb * rxtx * sizeof(std::complex<float>);
+    const uint64_t hBytes = uint64_t(nSlots) * nLinks * numRb * rxtx * sizeof(std::complex<float>);
     const uint64_t powBytes = 2ull * nSlots * nLinks * numRb * sizeof(float);
     assert(reduceBatchOutBuf_.getSize() >= hBytes);
     assert(powBatchOutBuf_.getSize() >= powBytes);
@@ -3603,10 +3751,10 @@ SlsChanWgpu::readSpecBatch(uint32_t nLinks,
 
 bool
 SlsChanWgpu::readSpecBatchInto(uint32_t /*nLinks*/,
-                                uint32_t /*numRb*/,
-                                uint32_t /*numRxPorts*/,
-                                uint32_t /*numTxPorts*/,
-                                std::complex<float>* /*dst*/)
+                               uint32_t /*numRb*/,
+                               uint32_t /*numRxPorts*/,
+                               uint32_t /*numTxPorts*/,
+                               std::complex<float>* /*dst*/)
 {
     // specBatchOutBuf_ is no longer allocated; gen_spec_pow_kernel replaced
     // gen_spec_batch + reduce with a fused kernel that outputs rb_pow_out
@@ -3618,7 +3766,9 @@ bool
 SlsChanWgpu::readReducedPowInto(uint32_t nLinks, uint32_t numRb, float* dst)
 {
     if (!reduceBatchOutBuf_)
+    {
         return false;
+    }
     const uint64_t totalBytes = uint64_t(nLinks) * numRb * sizeof(float);
     assert(reduceBatchOutBuf_.getSize() >= totalBytes);
     auto enc = device_.createCommandEncoder(wgpu::Default);
@@ -3667,41 +3817,40 @@ writeDatasetUint32(hid_t loc, const char* name, const uint32_t* data, hsize_t co
     H5Tclose(dset);
 }
 
-static void
-writeSlsChanHdf5File(const std::string& filename,
-                     const std::vector<LinkParams>& links,
-                     uint32_t nSite,
-                     uint32_t nUT,
-                     const std::vector<ClusterParamsGpu>& clusterParams,
-                     const std::vector<ActiveLink>& activeLinks,
-                     const std::vector<std::complex<float>>& cirCoe,
-                     const std::vector<uint32_t>& cirNormDelay,
-                     const std::vector<uint32_t>& cirNtaps,
-                     const std::vector<std::complex<float>>& cfrPrbg,
-                     uint32_t nPrbg,
-                     const std::vector<float>& xpr,
-                     const std::vector<float>& phiNmAoA,
-                     const std::vector<float>& phiNmAoD,
-                     const std::vector<float>& thetaNmZOA,
-                     const std::vector<float>& thetaNmZOD,
-                     float scSpacingHz,
-                     uint32_t fftSize,
-                     uint32_t nPrb,
-                     uint32_t nSnapshotPerSlot,
-                     float centerFreqHz,
-                     float bandwidthHz,
-                     uint32_t nUeAnt,
-                     uint32_t nBsAnt,
-                     const SsCmnParams& ssCmn,
-                     const std::vector<CellParam>& cells,
-                     const std::vector<CellParamSS>& cellsSS,
-                     const std::vector<UtParam>& uts,
-                     float isd,
-                     float bsHeight,
-                     float minBsUeDist2d,
-                     float maxBsUeDist2dIndoor,
-                     float indoorUtPercent,
-                     uint32_t nSectorPerSite);
+static void writeSlsChanHdf5File(const std::string& filename,
+                                 const std::vector<LinkParams>& links,
+                                 uint32_t nSite,
+                                 uint32_t nUT,
+                                 const std::vector<ClusterParamsGpu>& clusterParams,
+                                 const std::vector<ActiveLink>& activeLinks,
+                                 const std::vector<std::complex<float>>& cirCoe,
+                                 const std::vector<uint32_t>& cirNormDelay,
+                                 const std::vector<uint32_t>& cirNtaps,
+                                 const std::vector<std::complex<float>>& cfrPrbg,
+                                 uint32_t nPrbg,
+                                 const std::vector<float>& xpr,
+                                 const std::vector<float>& phiNmAoA,
+                                 const std::vector<float>& phiNmAoD,
+                                 const std::vector<float>& thetaNmZOA,
+                                 const std::vector<float>& thetaNmZOD,
+                                 float scSpacingHz,
+                                 uint32_t fftSize,
+                                 uint32_t nPrb,
+                                 uint32_t nSnapshotPerSlot,
+                                 float centerFreqHz,
+                                 float bandwidthHz,
+                                 uint32_t nUeAnt,
+                                 uint32_t nBsAnt,
+                                 const SsCmnParams& ssCmn,
+                                 const std::vector<CellParam>& cells,
+                                 const std::vector<CellParamSS>& cellsSS,
+                                 const std::vector<UtParam>& uts,
+                                 float isd,
+                                 float bsHeight,
+                                 float minBsUeDist2d,
+                                 float maxBsUeDist2dIndoor,
+                                 float indoorUtPercent,
+                                 uint32_t nSectorPerSite);
 
 } // namespace
 
@@ -3774,10 +3923,7 @@ writeLspOnlyHdf5(const std::string& filename,
         H5Tinsert(compoundType, "DS", offsetof(LinkParamsHdf5, DS), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ASD", offsetof(LinkParamsHdf5, ASD), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ASA", offsetof(LinkParamsHdf5, ASA), H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType,
-                  "mu_lgZSD",
-                  offsetof(LinkParamsHdf5, mu_lgZSD),
-                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "mu_lgZSD", offsetof(LinkParamsHdf5, mu_lgZSD), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType,
                   "sigma_lgZSD",
                   offsetof(LinkParamsHdf5, sigma_lgZSD),
@@ -3788,10 +3934,7 @@ writeLspOnlyHdf5(const std::string& filename,
                   H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ZSD", offsetof(LinkParamsHdf5, ZSD), H5T_NATIVE_FLOAT);
         H5Tinsert(compoundType, "ZSA", offsetof(LinkParamsHdf5, ZSA), H5T_NATIVE_FLOAT);
-        H5Tinsert(compoundType,
-                  "delta_tau",
-                  offsetof(LinkParamsHdf5, delta_tau),
-                  H5T_NATIVE_FLOAT);
+        H5Tinsert(compoundType, "delta_tau", offsetof(LinkParamsHdf5, delta_tau), H5T_NATIVE_FLOAT);
 
         std::vector<LinkParamsHdf5> h5(nLinks);
         for (uint32_t i = 0; i < nLinks && i < links.size(); ++i)
@@ -3848,14 +3991,12 @@ writeLspOnlyHdf5(const std::string& filename,
         {
             uint32_t cid, uid, linkIdx, lspReadIdx;
         };
+
         hid_t compoundType = H5Tcreate(H5T_COMPOUND, sizeof(ActiveRec));
         H5Tinsert(compoundType, "cid", offsetof(ActiveRec, cid), H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "uid", offsetof(ActiveRec, uid), H5T_NATIVE_UINT32);
         H5Tinsert(compoundType, "linkIdx", offsetof(ActiveRec, linkIdx), H5T_NATIVE_UINT32);
-        H5Tinsert(compoundType,
-                  "lspReadIdx",
-                  offsetof(ActiveRec, lspReadIdx),
-                  H5T_NATIVE_UINT32);
+        H5Tinsert(compoundType, "lspReadIdx", offsetof(ActiveRec, lspReadIdx), H5T_NATIVE_UINT32);
 
         std::vector<ActiveRec> rec(nLinks);
         for (uint32_t i = 0; i < nLinks; ++i)
@@ -3914,16 +4055,14 @@ writeLspOnlyHdf5(const std::string& filename,
                 uint32_t antPanelIdx;
                 float antPanelOrientation[3];
             };
+
             const hsize_t arr3Dims[1] = {3};
             hid_t arr3 = H5Tarray_create(H5T_NATIVE_FLOAT, 1, arr3Dims);
             hid_t cellType = H5Tcreate(H5T_COMPOUND, sizeof(CellRec));
             H5Tinsert(cellType, "cid", offsetof(CellRec, cid), H5T_NATIVE_UINT32);
             H5Tinsert(cellType, "siteId", offsetof(CellRec, siteId), H5T_NATIVE_UINT32);
             H5Tinsert(cellType, "loc", offsetof(CellRec, loc), arr3);
-            H5Tinsert(cellType,
-                      "antPanelIdx",
-                      offsetof(CellRec, antPanelIdx),
-                      H5T_NATIVE_UINT32);
+            H5Tinsert(cellType, "antPanelIdx", offsetof(CellRec, antPanelIdx), H5T_NATIVE_UINT32);
             H5Tinsert(cellType,
                       "antPanelOrientation",
                       offsetof(CellRec, antPanelOrientation),
@@ -3983,13 +4122,8 @@ writeLspOnlyHdf5(const std::string& filename,
             auto writeArr = [&](const char* name, hid_t dtype, const void* data) {
                 hsize_t dims = n;
                 hid_t space = H5Screate_simple(1, &dims, nullptr);
-                hid_t dset = H5Dcreate2(utg,
-                                        name,
-                                        dtype,
-                                        space,
-                                        H5P_DEFAULT,
-                                        H5P_DEFAULT,
-                                        H5P_DEFAULT);
+                hid_t dset =
+                    H5Dcreate2(utg, name, dtype, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
                 H5Dwrite(dset, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
                 H5Dclose(dset);
                 H5Sclose(space);
@@ -4032,6 +4166,7 @@ writeLspOnlyHdf5(const std::string& filename,
             uint32_t enable_per_tti_lsp;
             uint32_t enable_propagation_delay;
         };
+
         SysRec rec{};
         rec.scenario = gpuScenario;
         rec.isd = 0.0f;
@@ -4055,10 +4190,7 @@ writeLspOnlyHdf5(const std::string& filename,
                   offsetof(SysRec, n_sector_per_site),
                   H5T_NATIVE_UINT32);
         H5Tinsert(sysType, "n_ut", offsetof(SysRec, n_ut), H5T_NATIVE_UINT32);
-        H5Tinsert(sysType,
-                  "optional_pl_ind",
-                  offsetof(SysRec, optional_pl_ind),
-                  H5T_NATIVE_UINT32);
+        H5Tinsert(sysType, "optional_pl_ind", offsetof(SysRec, optional_pl_ind), H5T_NATIVE_UINT32);
         H5Tinsert(sysType,
                   "o2i_building_penetr_loss_ind",
                   offsetof(SysRec, o2i_building_penetr_loss_ind),
@@ -4134,25 +4266,14 @@ writeLspOnlyHdf5(const std::string& filename,
             uint32_t sc_sampling;
             uint32_t proc_sig_freq;
         };
+
         SimRec r{};
         r.center_freq_hz = centerFreqHz;
         hid_t simType = H5Tcreate(H5T_COMPOUND, sizeof(SimRec));
-        H5Tinsert(simType,
-                  "link_sim_ind",
-                  offsetof(SimRec, link_sim_ind),
-                  H5T_NATIVE_UINT32);
-        H5Tinsert(simType,
-                  "center_freq_hz",
-                  offsetof(SimRec, center_freq_hz),
-                  H5T_NATIVE_FLOAT);
-        H5Tinsert(simType,
-                  "bandwidth_hz",
-                  offsetof(SimRec, bandwidth_hz),
-                  H5T_NATIVE_FLOAT);
-        H5Tinsert(simType,
-                  "sc_spacing_hz",
-                  offsetof(SimRec, sc_spacing_hz),
-                  H5T_NATIVE_FLOAT);
+        H5Tinsert(simType, "link_sim_ind", offsetof(SimRec, link_sim_ind), H5T_NATIVE_UINT32);
+        H5Tinsert(simType, "center_freq_hz", offsetof(SimRec, center_freq_hz), H5T_NATIVE_FLOAT);
+        H5Tinsert(simType, "bandwidth_hz", offsetof(SimRec, bandwidth_hz), H5T_NATIVE_FLOAT);
+        H5Tinsert(simType, "sc_spacing_hz", offsetof(SimRec, sc_spacing_hz), H5T_NATIVE_FLOAT);
         H5Tinsert(simType, "fft_size", offsetof(SimRec, fft_size), H5T_NATIVE_UINT32);
         H5Tinsert(simType, "n_prb", offsetof(SimRec, n_prb), H5T_NATIVE_UINT32);
         H5Tinsert(simType, "n_prbg", offsetof(SimRec, n_prbg), H5T_NATIVE_UINT32);
@@ -4169,23 +4290,12 @@ writeLspOnlyHdf5(const std::string& filename,
                   "freq_convert_type",
                   offsetof(SimRec, freq_convert_type),
                   H5T_NATIVE_UINT32);
-        H5Tinsert(simType,
-                  "sc_sampling",
-                  offsetof(SimRec, sc_sampling),
-                  H5T_NATIVE_UINT32);
-        H5Tinsert(simType,
-                  "proc_sig_freq",
-                  offsetof(SimRec, proc_sig_freq),
-                  H5T_NATIVE_UINT32);
+        H5Tinsert(simType, "sc_sampling", offsetof(SimRec, sc_sampling), H5T_NATIVE_UINT32);
+        H5Tinsert(simType, "proc_sig_freq", offsetof(SimRec, proc_sig_freq), H5T_NATIVE_UINT32);
         hsize_t one = 1;
         hid_t space = H5Screate_simple(1, &one, nullptr);
-        hid_t dset = H5Dcreate2(file,
-                                "simConfig",
-                                simType,
-                                space,
-                                H5P_DEFAULT,
-                                H5P_DEFAULT,
-                                H5P_DEFAULT);
+        hid_t dset =
+            H5Dcreate2(file, "simConfig", simType, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         H5Dwrite(dset, simType, H5S_ALL, H5S_ALL, H5P_DEFAULT, &r);
         H5Dclose(dset);
         H5Sclose(space);
@@ -4596,9 +4706,7 @@ writeSlsChanHdf5File(const std::string& filename,
             // LSP-only callers (e.g. the ns-3 batch path) don't populate
             // activeLinks. Fall back to deriving the serving cell ID
             // from the link's site-major index: cid = i / nUT.
-            hdf5Links[i].cid = haveActiveLinks
-                                   ? activeLinks[i].cid
-                                   : (nUT > 0 ? i / nUT : 0u);
+            hdf5Links[i].cid = haveActiveLinks ? activeLinks[i].cid : (nUT > 0 ? i / nUT : 0u);
             hdf5Links[i].d2d = lk.d2d;
             hdf5Links[i].d2d_in = lk.d2d_in;
             hdf5Links[i].d2d_out = lk.d2d_out;

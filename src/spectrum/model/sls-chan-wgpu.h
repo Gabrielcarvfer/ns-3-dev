@@ -572,13 +572,13 @@ class SlsChanWgpu
     // calClusterRay. Each link occupies kPackedLinkStride f32 values;
     // per-ray sub-arrays start at the offsets below.
     static constexpr uint32_t kPackedLinkStride = 3600u;
-    static constexpr uint32_t kMaxCr            = 400u;  // MAX_CLUSTERS * MAX_RAYS
-    static constexpr uint32_t kPackedOffXpr     = 0u;
-    static constexpr uint32_t kPackedOffRndp    = 400u;  // 4 phases per ray, idx*4+p
-    static constexpr uint32_t kPackedOffAoA     = 2000u;
-    static constexpr uint32_t kPackedOffAoD     = 2400u;
-    static constexpr uint32_t kPackedOffZoA     = 2800u;
-    static constexpr uint32_t kPackedOffZoD     = 3200u;
+    static constexpr uint32_t kMaxCr = 400u; // MAX_CLUSTERS * MAX_RAYS
+    static constexpr uint32_t kPackedOffXpr = 0u;
+    static constexpr uint32_t kPackedOffRndp = 400u; // 4 phases per ray, idx*4+p
+    static constexpr uint32_t kPackedOffAoA = 2000u;
+    static constexpr uint32_t kPackedOffAoD = 2400u;
+    static constexpr uint32_t kPackedOffZoA = 2800u;
+    static constexpr uint32_t kPackedOffZoD = 3200u;
 
     // Download the entire clusterOutputsBuf_ in a single GPU-to-CPU
     // transfer.  The caller can then slice the five per-ray sub-arrays
@@ -594,9 +594,10 @@ class SlsChanWgpu
     // GPU submission.
     struct AllClusterData
     {
-        std::vector<ClusterParamsGpu> clusterParams;  ///< per-link cluster params
-        std::vector<float>            packedOutputs;  ///< raw kPackedLinkStride*nLinks floats
+        std::vector<ClusterParamsGpu> clusterParams; ///< per-link cluster params
+        std::vector<float> packedOutputs;            ///< raw kPackedLinkStride*nLinks floats
     };
+
     AllClusterData readAllClusterData(uint32_t nSite, uint32_t nUT);
 
     // Dispatch gen_channel_matrix_kernel. Reads cluster-ray angles from
@@ -759,7 +760,10 @@ class SlsChanWgpu
      * adapter init. Returns 0 if the adapter limit query failed.
      * Used by chunked-batch callers to size per-chunk dispatches.
      */
-    uint64_t getMaxStorageBufferBindingSize() const { return m_maxGpuBuffer_; }
+    uint64_t getMaxStorageBufferBindingSize() const
+    {
+        return m_maxGpuBuffer_;
+    }
 
     /**
      * Repopulate longTermOutBuf_ from a host vector. Used by chunked
@@ -968,9 +972,9 @@ class SlsChanWgpu
 
     wgpu::Buffer clusterParamsBuf_;
     wgpu::Buffer activeLinkBuf_;
-    wgpu::Buffer cirCoeBuf_;          // (legacy, unused after pack refactor)
-    wgpu::Buffer cirNormDelayBuf_;    // (legacy)
-    wgpu::Buffer cirNtapsBuf_;        // (legacy)
+    wgpu::Buffer cirCoeBuf_;       // (legacy, unused after pack refactor)
+    wgpu::Buffer cirNormDelayBuf_; // (legacy)
+    wgpu::Buffer cirNtapsBuf_;     // (legacy)
     // Packed CIR output buffer holding cirCoe + cirNormDelay + cirNtaps
     // per link in one storage allocation (Dawn caps storage bindings
     // per stage at 10, so the three separate output buffers had to
@@ -1021,6 +1025,9 @@ class SlsChanWgpu
     // depends on angle + polarization only). 481 slots per link
     // (24 clusters x 20 rays + 1 LOS direction) x 4 components.
     wgpu::ComputePipeline matFieldPrePipeline_;
+    // matFieldPreBuf_ holds, per (link, cluster-ray) slot, both the field-pattern
+    // components AND the ray-invariant geometry/polarisation hoisted out of the
+    // matrix kernel's per-element loop. MAT_FIELD_PRE_STRIDE (=11) vec2f/slot.
     wgpu::Buffer matFieldPreBuf_;
     uint32_t matFieldPreCfgNLinks_{0};
     wgpu::Buffer matrixDispatchBuf_;
@@ -1031,11 +1038,11 @@ class SlsChanWgpu
     // gen_long_term_kernel scratch. Bindings live in @group(0) at 50..56.
     wgpu::ComputePipeline longTermPipeline_;
     wgpu::Buffer longTermDispatchBuf_;
-    wgpu::Buffer longTermSWBuf_;     // per-link [sPortElems] vec2f
-    wgpu::Buffer longTermUWBuf_;     // per-link [uPortElems] vec2f
-    wgpu::Buffer longTermStartSBuf_; // [sPorts] u32
-    wgpu::Buffer longTermStartUBuf_; // [uPorts] u32
-    wgpu::Buffer longTermOutBuf_;    // per-link [uPorts*sPorts*kMatMaxPages] vec2f
+    wgpu::Buffer longTermSWBuf_;      // per-link [sPortElems] vec2f
+    wgpu::Buffer longTermUWBuf_;      // per-link [uPortElems] vec2f
+    wgpu::Buffer longTermStartSBuf_;  // [sPorts] u32
+    wgpu::Buffer longTermStartUBuf_;  // [uPorts] u32
+    wgpu::Buffer longTermOutBuf_;     // per-link [uPorts*sPorts*kMatMaxPages] vec2f
     wgpu::Buffer longTermStagingBuf_; // persistent readback staging for readLongTermInto
     uint32_t longTermCfgNLinks_{0};
     uint32_t longTermCfgSPorts_{0};

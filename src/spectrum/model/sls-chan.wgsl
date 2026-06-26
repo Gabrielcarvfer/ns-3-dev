@@ -2248,10 +2248,25 @@ struct ChanMatDispatch {
 //   idx = (link * 481 + cr) * 4 + comp
 //   cr   : cluster * MAX_RAYS + ray for the 480 rays; 480 = the LOS ray
 //   comp : 0/1 = rx field for pol 0/1, 2/3 = tx field for pol 0/1
+// Per-(link, cluster-ray) precompute buffer, written by
+// mat_field_precompute_kernel and consumed by gen_channel_matrix_kernel. Holds
+// BOTH the field-pattern components AND the ray-invariant geometry +
+// polarisation that the per-(u, s) element loop previously re-derived (the ray-
+// direction unit vectors and the 2x2 polarisation phase matrix depend only on
+// the ray, not the element pair, so the inner loop recomputed ~16
+// transcendentals per ray up to numElements^2 times). Folding the new data into
+// this existing binding keeps the matrix kernel within the device's
+// 10-storage-buffer-per-stage limit. Layout per slot (MAT_FIELD_PRE_STRIDE
+// vec2f), all vec2f:
+//   [0..3]  field: Frx pol0, Frx pol1, Ftx pol0, Ftx pol1 (F_theta, F_phi)
+//   [4]     (rRx.x, rRx.y)   [5] (rRx.z, rTx.x)   [6] (rTx.y, rTx.z)
+//   [7] t200  [8] t201  [9] t210  [10] t211   (polarisation; LOS slot leaves
+//           [7..10] unwritten -- the Rician term uses a fixed [1 0; 0 -1]).
 @group(0) @binding(41) var<storage, read_write> mat_field_pre   : array<vec2f>;
 
-const MAT_FIELD_PRE_CR    : u32 = 481u; // 24 clusters x 20 rays + 1 LOS slot
-const MAT_FIELD_PRE_LOS   : u32 = 480u;
+const MAT_FIELD_PRE_CR     : u32 = 481u; // 24 clusters x 20 rays + 1 LOS slot
+const MAT_FIELD_PRE_LOS    : u32 = 480u;
+const MAT_FIELD_PRE_STRIDE : u32 = 11u;  // vec2f per slot (4 field + 7 ray/pol)
 
 // Chunk (e): field-pattern eval. Reads mat_buf_antTheta/Phi. Azimuth is
 // rotated into the panel's local frame by the bearing (downtilt assumed 0).
@@ -2401,11 +2416,41 @@ fn mat_field_precompute_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
         pAOD = mat_packed_in[link_base + PACKED_OFF_AOD + cr];
     }
 
-    let base = (link_idx * MAT_FIELD_PRE_CR + cr) * 4u;
+    let base = (link_idx * MAT_FIELD_PRE_CR + cr) * MAT_FIELD_PRE_STRIDE;
     mat_field_pre[base + 0u] = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[0]);
     mat_field_pre[base + 1u] = mat_field_components(utCfg, tZOA, pAOA, utCfg.antPolarAngles[1]);
     mat_field_pre[base + 2u] = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[0]);
     mat_field_pre[base + 3u] = mat_field_components(bsCfg, tZOD, pAOD, bsCfg.antPolarAngles[1]);
+
+    // Ray-invariant geometry, hoisted out of the per-element ray loop in
+    // gen_channel_matrix_kernel. Packed into slots [4..6] (see binding comment).
+    let tZOA_r = tZOA * DEG2RAD;
+    let pAOA_r = pAOA * DEG2RAD;
+    let tZOD_r = tZOD * DEG2RAD;
+    let pAOD_r = pAOD * DEG2RAD;
+    let rRx = vec3f(sin(tZOA_r)*cos(pAOA_r), sin(tZOA_r)*sin(pAOA_r), cos(tZOA_r));
+    let rTx = vec3f(sin(tZOD_r)*cos(pAOD_r), sin(tZOD_r)*sin(pAOD_r), cos(tZOD_r));
+    mat_field_pre[base + 4u] = vec2f(rRx.x, rRx.y);
+    mat_field_pre[base + 5u] = vec2f(rRx.z, rTx.x);
+    mat_field_pre[base + 6u] = vec2f(rTx.y, rTx.z);
+    if cr != MAT_FIELD_PRE_LOS {
+        // cr indexes a real cluster-ray here (= ray_local), so the packed
+        // XPR / random-phase tables are valid. The LOS slot has no per-ray
+        // polarisation (the Rician term uses a fixed [1 0; 0 -1]), so [7..10]
+        // stay unwritten there and are never read by the LOS branch.
+        let pol_link_base = al.lspReadIdx * PACKED_LINK_STRIDE;
+        let xpr  = mat_packed_in[pol_link_base + PACKED_OFF_XPR + cr];
+        let rph_off = pol_link_base + PACKED_OFF_RNDP + cr * 4u;
+        let sqrt_kappa = sqrt(max(xpr, 1e-10));
+        let ph0 = mat_packed_in[rph_off    ] * DEG2RAD;
+        let ph1 = mat_packed_in[rph_off + 1u] * DEG2RAD;
+        let ph2 = mat_packed_in[rph_off + 2u] * DEG2RAD;
+        let ph3 = mat_packed_in[rph_off + 3u] * DEG2RAD;
+        mat_field_pre[base + 7u]  = cexp_j(ph0);
+        mat_field_pre[base + 8u]  = vec2f(cos(ph1)/sqrt_kappa, sin(ph1)/sqrt_kappa);
+        mat_field_pre[base + 9u]  = vec2f(cos(ph2)/sqrt_kappa, sin(ph2)/sqrt_kappa);
+        mat_field_pre[base + 10u] = cexp_j(ph3);
+    }
 }
 
 @compute @workgroup_size(64, 1, 1)
@@ -2418,11 +2463,16 @@ fn gen_channel_matrix_kernel(
     let us_idx   = wg.z * 64u + li.x;
 
     if link_idx >= mat_disp.n_active_links {
-        // Dead static reference to mat_buf_antTheta (binding 38): the field
-        // tables are consumed by mat_field_precompute_kernel now, but keeping
-        // the binding in THIS entry point's auto layout lets the host build
-        // both kernels' bind groups from the same entry list.
-        if mat_disp.n_active_links == 0xffffffffu { mat_buf_out[0].x = mat_buf_antTheta[0]; }
+        // Dead static references to mat_buf_antTheta (38) and mat_packed_in
+        // (33): both are now consumed only by mat_field_precompute_kernel (the
+        // field tables and, since the ray-term precompute, the packed ray
+        // angles / XPR / phases), but keeping them in THIS entry point's auto
+        // layout lets the host build both kernels' bind groups from the same
+        // 11-entry list. (Without the mat_packed_in ref the matrix kernel's
+        // layout drops binding 33 -> "11 entries vs 10 expected" at bind time.)
+        if mat_disp.n_active_links == 0xffffffffu {
+            mat_buf_out[0].x = mat_buf_antTheta[0] + mat_packed_in[0];
+        }
         return;
     }
     if page_idx >= mat_disp.n_overall_cluster { return; }
@@ -2487,7 +2537,6 @@ fn gen_channel_matrix_kernel(
     let n_rays = mat_disp.n_rays;
     let cluster_scale = sqrt(cp.powers[src_cluster] / f32(n_rays));
 
-    let link_base = al.lspReadIdx * PACKED_LINK_STRIDE;
     let ray_local_base = src_cluster * MAX_RAYS;
 
     var rays_re = 0.0;
@@ -2495,39 +2544,28 @@ fn gen_channel_matrix_kernel(
     for (var m = 0u; m < n_rays; m++) {
         if !mat_ray_passes_filter(m, ray_flt) { continue; }
         let ray_local = ray_local_base + m;
-        let pAOA = mat_packed_in[link_base + PACKED_OFF_AOA + ray_local];
-        let pAOD = mat_packed_in[link_base + PACKED_OFF_AOD + ray_local];
-        let tZOA = mat_packed_in[link_base + PACKED_OFF_ZOA + ray_local];
-        let tZOD = mat_packed_in[link_base + PACKED_OFF_ZOD + ray_local];
-        let xpr  = mat_packed_in[link_base + PACKED_OFF_XPR + ray_local];
-        let rph_off = link_base + PACKED_OFF_RNDP + ray_local * 4u;
 
-        // Field components precomputed once per (link, ray, pol) by
-        // mat_field_precompute_kernel; identical for every (u, s) pair.
-        let fp_base = (link_idx * MAT_FIELD_PRE_CR + ray_local) * 4u;
+        // Field components + ray-invariant geometry/polarisation precomputed
+        // once per (link, ray) by mat_field_precompute_kernel; identical for
+        // every (u, s) pair. Only the per-element steering (term4/term5) is
+        // left to compute here.
+        let fp_base = (link_idx * MAT_FIELD_PRE_CR + ray_local) * MAT_FIELD_PRE_STRIDE;
         let Frx = mat_field_pre[fp_base + polU];
         let Ftx = mat_field_pre[fp_base + 2u + polS];
+        let g0 = mat_field_pre[fp_base + 4u];
+        let g1 = mat_field_pre[fp_base + 5u];
+        let g2 = mat_field_pre[fp_base + 6u];
+        let rRx = vec3f(g0.x, g0.y, g1.x);
+        let rTx = vec3f(g1.y, g2.x, g2.y);
+        let t200 = mat_field_pre[fp_base + 7u];
+        let t201 = mat_field_pre[fp_base + 8u];
+        let t210 = mat_field_pre[fp_base + 9u];
+        let t211 = mat_field_pre[fp_base + 10u];
 
-        let tZOA_r = tZOA * DEG2RAD;
-        let pAOA_r = pAOA * DEG2RAD;
-        let tZOD_r = tZOD * DEG2RAD;
-        let pAOD_r = pAOD * DEG2RAD;
-        let rRx = vec3f(sin(tZOA_r)*cos(pAOA_r), sin(tZOA_r)*sin(pAOA_r), cos(tZOA_r));
-        let rTx = vec3f(sin(tZOD_r)*cos(pAOD_r), sin(tZOD_r)*sin(pAOD_r), cos(tZOD_r));
         let dot_rx = dot(rRx, d_rx);
         let dot_tx = dot(rTx, d_tx);
         let term4 = cexp_j(TWO_PI * dot_rx);
         let term5 = cexp_j(TWO_PI * dot_tx);
-
-        let sqrt_kappa = sqrt(max(xpr, 1e-10));
-        let ph0 = mat_packed_in[rph_off    ] * DEG2RAD;
-        let ph1 = mat_packed_in[rph_off + 1u] * DEG2RAD;
-        let ph2 = mat_packed_in[rph_off + 2u] * DEG2RAD;
-        let ph3 = mat_packed_in[rph_off + 3u] * DEG2RAD;
-        let t200 = cexp_j(ph0);
-        let t201 = vec2f(cos(ph1)/sqrt_kappa, sin(ph1)/sqrt_kappa);
-        let t210 = vec2f(cos(ph2)/sqrt_kappa, sin(ph2)/sqrt_kappa);
-        let t211 = cexp_j(ph3);
 
         // mat_field_components returns vec2f(F_theta, F_phi) (see
         // its comment). 3GPP TR 38.901 Eq 7.5-22 pairs ph0..ph3
@@ -2566,21 +2604,16 @@ fn gen_channel_matrix_kernel(
         let attenK = sqrt(k_lin / (k_lin + 1.0));
         cell_val = cell_val * atten1;
         if page_idx == 0u && mat_disp.lambda0 > 0.0 {
-            let tZOA = lk.theta_LOS_ZOA;
-            let pAOA = lk.phi_LOS_AOA;
-            let tZOD = lk.theta_LOS_ZOD;
-            let pAOD = lk.phi_LOS_AOD;
-            // LOS-direction fields from the precompute slot (same for all
-            // (u, s) pairs of a link, per polarization).
-            let fp_los = (link_idx * MAT_FIELD_PRE_CR + MAT_FIELD_PRE_LOS) * 4u;
+            // LOS-direction fields + ray vectors from the precompute LOS slot
+            // (same for all (u, s) pairs of a link, per polarization).
+            let fp_los = (link_idx * MAT_FIELD_PRE_CR + MAT_FIELD_PRE_LOS) * MAT_FIELD_PRE_STRIDE;
             let Frx = mat_field_pre[fp_los + polU];
             let Ftx = mat_field_pre[fp_los + 2u + polS];
-            let tZOA_r = tZOA * DEG2RAD;
-            let pAOA_r = pAOA * DEG2RAD;
-            let tZOD_r = tZOD * DEG2RAD;
-            let pAOD_r = pAOD * DEG2RAD;
-            let rRx = vec3f(sin(tZOA_r)*cos(pAOA_r), sin(tZOA_r)*sin(pAOA_r), cos(tZOA_r));
-            let rTx = vec3f(sin(tZOD_r)*cos(pAOD_r), sin(tZOD_r)*sin(pAOD_r), cos(tZOD_r));
+            let g0 = mat_field_pre[fp_los + 4u];
+            let g1 = mat_field_pre[fp_los + 5u];
+            let g2 = mat_field_pre[fp_los + 6u];
+            let rRx = vec3f(g0.x, g0.y, g1.x);
+            let rTx = vec3f(g1.y, g2.x, g2.y);
             let dot_rx = dot(rRx, d_rx);
             let dot_tx = dot(rTx, d_tx);
             let term4 = cexp_j(TWO_PI * dot_rx);
