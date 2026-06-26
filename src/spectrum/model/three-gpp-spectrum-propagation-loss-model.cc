@@ -640,7 +640,17 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
         // are either overwritten when the allocator reuses the address or
         // swept by the size cap below; both are safe because lookups always
         // re-verify the content fingerprint.
-        if (redMemo.size() > 8192)
+        // Cap sized for large multi-cell scenarios. The per-update working set
+        // is the number of distinct active (link,beam) spectrum matrices, each
+        // reduced on every slot within an UpdatePeriod. At ring-3 (~1e5 links)
+        // an 8192 cap clear()ed the whole memo on nearly every slot, defeating
+        // the memo and recomputing the full numRx x numTx x numRb reduction
+        // ~68M times. A generous cap keeps the working set resident; clear()
+        // (now rare) only resets and never alters a replayed result, and every
+        // lookup re-verifies the 3-point content fingerprint, so determinism
+        // and correctness are unchanged. Memory scales with the working set, so
+        // small simulations still hold only a handful of entries.
+        if (redMemo.size() > (1u << 18))
         {
             redMemo.clear();
         }
