@@ -405,6 +405,10 @@ struct RuntimeLinkCtx
     Ptr<PhasedArrayModel> sAnt;
     Ptr<PhasedArrayModel> uAnt;
     Ptr<ChannelCondition> condition;
+    /// s-side beam override (maxRSRP sweep): when non-empty, the GPU pipeline
+    /// uses this beam instead of sAnt->GetBeamformingVectorRef(), so the sweep
+    /// can share one sAnt object across beams. Empty => read sAnt's own beam.
+    PhasedArrayModel::ComplexVector sBeamVec;
 };
 
 struct NodeInfo
@@ -621,6 +625,10 @@ struct ThreeGppChannelModelWgpuMezanine::LinkDescriptor
     Ptr<const PhasedArrayModel> uAnt; ///< UE antenna (beam already set)
     Ptr<ChannelCondition> condition;  ///< LOS/NLOS/O2I verdict for this link
     Vector uVelocity{0, 0, 0};        ///< UT velocity (m/s) for Doppler
+    /// Per-beam sweep override (see UncachedBatchLink): empty/0 => use sAnt's
+    /// own beam + id.
+    PhasedArrayModel::ComplexVector sBeamOverride;
+    uint32_t sKeyOverride{0};
 };
 
 void
@@ -1057,7 +1065,11 @@ ThreeGppChannelModelWgpuMezanine::BuildWorkspaceFromDescriptors(
 
         const uint32_t txNodeId = d.sMob->GetObject<Node>()->GetId();
         const uint32_t rxNodeId = d.uMob->GetObject<Node>()->GetId();
-        const uint32_t txAntId = d.sAnt->GetId();
+        // sKeyOverride (maxRSRP sweep) keys the per-beam slab without a fresh
+        // antenna object; it shares geometry with d.sAnt but stands in for its
+        // id everywhere a distinct id would otherwise be required. Synthetic
+        // keys live in the high id range so they never alias a real antenna id.
+        const uint32_t txAntId = d.sKeyOverride ? d.sKeyOverride : d.sAnt->GetId();
         const uint32_t rxAntId = d.uAnt->GetId();
 
         // Register the antennas so buildPanelInfo's resolveAntennaFromAntennaId
@@ -1091,6 +1103,7 @@ ThreeGppChannelModelWgpuMezanine::BuildWorkspaceFromDescriptors(
         ctx.uAnt =
             ConstCast<PhasedArrayModel>(DynamicCast<const PhasedArrayModel>(uePanel.antenna));
         ctx.condition = d.condition;
+        ctx.sBeamVec = d.sBeamOverride; // empty for normal links => read sAnt's beam
         runtimeLinks.push_back(ctx);
     }
 
@@ -1311,7 +1324,9 @@ ThreeGppChannelModelWgpuMezanine::RunStaticFastPaths(RefreshWorkspace& ws)
             }
             if (rtCtx.sAnt && rtCtx.uAnt)
             {
-                const auto& sBV = rtCtx.sAnt->GetBeamformingVectorRef();
+                const auto& sBV = rtCtx.sBeamVec.GetSize()
+                                      ? rtCtx.sBeamVec
+                                      : rtCtx.sAnt->GetBeamformingVectorRef();
                 const auto& uBV = rtCtx.uAnt->GetBeamformingVectorRef();
                 if (HashComplexVector(sBV) != ltIt->second.sWHash ||
                     HashComplexVector(uBV) != ltIt->second.uWHash ||
@@ -2109,7 +2124,8 @@ ThreeGppChannelModelWgpuMezanine::PrepareBucket(RefreshWorkspace& ws, BucketWork
                     assembleOk = false;
                     break;
                 }
-                const auto& sBV = ctx.sAnt->GetBeamformingVectorRef();
+                const auto& sBV = ctx.sBeamVec.GetSize() ? ctx.sBeamVec
+                                                         : ctx.sAnt->GetBeamformingVectorRef();
                 const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
                 const size_t sBase = bi * ltSPortElems;
                 const size_t uBase = bi * ltUPortElems;
@@ -2533,7 +2549,8 @@ ThreeGppChannelModelWgpuMezanine::PopulateChannelMaps(RefreshWorkspace& ws, Buck
                     dr[0] = static_cast<double>(sr[0]);
                     dr[1] = static_cast<double>(sr[1]);
                 }
-                const auto& sBV = ctx.sAnt->GetBeamformingVectorRef();
+                const auto& sBV = ctx.sBeamVec.GetSize() ? ctx.sBeamVec
+                                                         : ctx.sAnt->GetBeamformingVectorRef();
                 const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
                 entryRef.longTerm = longTerm;
                 entryRef.sWHash = HashComplexVector(sBV);
@@ -2892,7 +2909,8 @@ ThreeGppChannelModelWgpuMezanine::PopulateChannelMaps(RefreshWorkspace& ws, Buck
                     dr[0] = static_cast<double>(sr[0]);
                     dr[1] = static_cast<double>(sr[1]);
                 }
-                const auto& sBV = ctx.sAnt->GetBeamformingVectorRef();
+                const auto& sBV = ctx.sBeamVec.GetSize() ? ctx.sBeamVec
+                                                         : ctx.sAnt->GetBeamformingVectorRef();
                 const auto& uBV = ctx.uAnt->GetBeamformingVectorRef();
                 entryRef.longTerm = longTerm;
                 entryRef.sWHash = HashComplexVector(sBV);
@@ -3677,7 +3695,8 @@ ThreeGppChannelModelWgpuMezanine::RunDiagnosticAudits(RefreshWorkspace& ws)
             }
             const auto& gpuLt = *lit->second.longTerm;
             const auto& ch = mit->second->m_channel;
-            const auto& sW = ctx.sAnt->GetBeamformingVectorRef();
+            const auto& sW =
+                ctx.sBeamVec.GetSize() ? ctx.sBeamVec : ctx.sAnt->GetBeamformingVectorRef();
             const auto& uW = ctx.uAnt->GetBeamformingVectorRef();
             const size_t sPorts = ctx.sAnt->GetNumPorts();
             const size_t uPorts = ctx.uAnt->GetNumPorts();
@@ -4609,6 +4628,8 @@ ThreeGppChannelModelWgpuMezanine::ComputeUncachedBatchPerRb(
         d.uAnt = lnk.uAnt;
         d.condition = m_channelConditionModel->GetChannelCondition(lnk.sMob, lnk.uMob);
         d.uVelocity = lnk.uMob->GetVelocity();
+        d.sBeamOverride = lnk.sBeamOverride;
+        d.sKeyOverride = lnk.sKeyOverride;
         descriptors.push_back(std::move(d));
     }
     return RunUncachedGpuBatch(descriptors, txPsd, numRbOut);
@@ -4643,6 +4664,8 @@ ThreeGppChannelModelWgpuMezanine::ComputeBeamSweepTxPort0PerRb(
         d.uAnt = lnk.uAnt;
         d.condition = m_channelConditionModel->GetChannelCondition(lnk.sMob, lnk.uMob);
         d.uVelocity = lnk.uMob->GetVelocity();
+        d.sBeamOverride = lnk.sBeamOverride;
+        d.sKeyOverride = lnk.sKeyOverride;
         descriptors.push_back(std::move(d));
     }
     return RunUncachedGpuBatch(descriptors, txPsd, numRbOut, /*txPort0Only=*/true);

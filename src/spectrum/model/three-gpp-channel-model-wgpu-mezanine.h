@@ -219,6 +219,17 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         Ptr<const MobilityModel> uMob;
         Ptr<const PhasedArrayModel> sAnt; ///< may have any beam vector already set
         Ptr<const PhasedArrayModel> uAnt;
+        /// Optional per-beam override for the maxRSRP beam sweep. When
+        /// @c sBeamOverride is non-empty, the GPU batch uses it as the s-side
+        /// (gNB) beam instead of @c sAnt's own vector, and keys the per-beam
+        /// channel slab by @c sKeyOverride instead of @c sAnt->GetId(). This
+        /// lets the sweep share ONE antenna object across all swept beams
+        /// rather than minting a fresh-id antenna per beam -- the fresh ids grew
+        /// the global out-of-date antenna-pair adjacency matrix and made the
+        /// attach sweep O(N^2). Empty / zero => use the antenna's own beam+id
+        /// (the default for every normal link).
+        PhasedArrayModel::ComplexVector sBeamOverride;
+        uint32_t sKeyOverride{0};
     };
 
     /// @return per-link isotropic received power in the same order as @p links,

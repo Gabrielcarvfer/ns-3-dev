@@ -433,6 +433,51 @@
 \end{frame}
 
 %==============================================================================
+\begin{frame}{Same kernels, different silicon: Windows/Radeon vs Apple M4 Pro}
+  \centering
+  {\footnotesize The \alert{identical} WebGPU mezzanine, re-measured on a second
+   platform -- same scenario, same SINR, only the OS/CPU/GPU change.}
+  \vspace{0.4em}
+
+  {\small
+  \setlength{\tabcolsep}{4.5pt}
+  \begin{tabular}{llll rrr c}
+    \toprule
+    OS & CPU & GPU \scriptsize(WebGPU) & BW & CPU\,s & GPU\,s & +batch\,s & speedup\\
+    \midrule
+    \rowcolor{cpuCol!8}
+    \textcolor{cpuCol}{\textbf{Win 11}} & Ryzen 9 7940HS & Radeon 780M & 10 & 196.0 & 84.0 & 84.0 & \textbf{2.33$\times$}\\
+    \rowcolor{gpuCol!8}
+    \textcolor{gpuCol}{\textbf{macOS 26}} & Apple M4 Pro & M4 Pro 16-core & 10 & 140.3 & 41.7 & 41.9 & \textbf{3.36$\times$}\\
+    \rowcolor{gpuCol!8}
+    \textcolor{gpuCol}{\textbf{macOS 26}} & Apple M4 Pro & M4 Pro 16-core & 40 & 142.0 & 41.9 & 42.8 & \textbf{3.39$\times$}\\
+    \bottomrule
+  \end{tabular}}
+  \\[0.3em]
+  {\scriptsize DenseAmimo, ring-1, MIMO $+$ batched covariance, 100\,ms channel
+   update, num.~0 (5/10/20/40\,MHz). Win~11 row $=$ Radeon 780M (RDNA\,3);
+   macOS rows $=$ Apple M4 Pro (16-core GPU, Dawn $\to$ Metal).}
+  \vspace{0.2em}
+  \begin{columns}[T]
+  \begin{column}{0.5\textwidth}
+    \begin{block}{Apple silicon wins on both wall and ratio}\footnotesize
+      M4 Pro beats the 780M box on \alert{every} axis -- CPU \alert{140 vs 196\,s},
+      GPU \alert{42 vs 84\,s}, and a \alert{higher speedup} too
+      (\alert{3.4$\times$} vs 2.3$\times$): faster CPU baseline \emph{and} a 16-core
+      GPU that clears the channel work in well under half the time.
+    \end{block}
+  \end{column}
+  \begin{column}{0.48\textwidth}
+    \begin{block}{Wider band is still free}\footnotesize
+      On the M4 the GPU wall is \alert{flat 10$\to$40\,MHz} (41.7 $\to$ 41.9\,s):
+      the extra subcarriers vanish into the 16-core GPU -- the same
+      ``parallel-for-free'' story, on Metal instead of D3D12.
+    \end{block}
+  \end{column}
+  \end{columns}
+\end{frame}
+
+%==============================================================================
 \begin{frame}{Pushing further: the last CPU-only piece}
   Channel + beamforming now live on the GPU. \alert{MIMO adds one more cost}:
   the \alert{interference covariance} -- each receiver sums the interference from
