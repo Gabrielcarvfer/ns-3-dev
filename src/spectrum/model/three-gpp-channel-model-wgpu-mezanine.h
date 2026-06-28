@@ -55,6 +55,53 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
                                           float& geMaxDb,
                                           float& aMaxDb);
 
+    /**
+     * Lever B: out-of-cell MIMO interference covariance on the GPU. Flattens
+     * the interferer spectrum matrices in the caller's (fixed, deterministic)
+     * order, runs the GPU covariance kernel, and returns
+     * cov[nRxPorts x nRxPorts x nRb] as a ComplexMatrixArray. All interferers
+     * must share nRxPorts/nTxPorts/nRb. Returns nullptr if the GPU backend is
+     * unavailable.
+     * @param interferers the interferer spectrum channel matrices
+     * @param noisePerRb the noise PSD per RB (covariance diagonal)
+     * @param nRxPorts receive ports
+     * @param nTxPorts transmit ports (uniform across interferers)
+     * @return the covariance matrix, or nullptr
+     */
+    Ptr<ComplexMatrixArray> ComputeInterfCovGpu(
+        const std::vector<Ptr<const ComplexMatrixArray>>& interferers,
+        const std::vector<double>& noisePerRb,
+        uint32_t nRxPorts,
+        uint32_t nTxPorts);
+
+    /**
+     * Lever C (increment 3): batched out-of-cell covariance for many chunks in a
+     * single GPU dispatch. Per chunk: its interferer effective-channel matrices
+     * and its noise-per-RB. All chunks must share nRxPorts/nTxPorts/nRb. Returns
+     * one covariance ComplexMatrixArray [nRxPorts x nRxPorts x nRb] per chunk, in
+     * input order, or an empty vector if the GPU is unavailable or dims are
+     * non-uniform (caller falls back to the per-chunk CPU path).
+     * @param perChunkInterferers per-chunk interferer matrices (fixed order)
+     * @param perChunkNoise per-chunk noise PSD per RB
+     * @param nRxPorts receive ports (uniform)
+     * @param nTxPorts transmit ports (uniform)
+     * @return one covariance per chunk, or empty on fallback
+     */
+    std::vector<Ptr<ComplexMatrixArray>> ComputeInterfCovBatchGpu(
+        const std::vector<std::vector<Ptr<const ComplexMatrixArray>>>& perChunkInterferers,
+        const std::vector<std::vector<double>>& perChunkNoise,
+        uint32_t nRxPorts,
+        uint32_t nTxPorts);
+
+    /**
+     * The most-recently-constructed GPU-enabled mezzanine, or nullptr. Lets
+     * NrInterference reach a GPU device for the interference-covariance offload
+     * without threading a pointer through the spectrum framework. The kernel is
+     * stateless, so any GPU-enabled instance works.
+     * @return active instance or nullptr
+     */
+    static ThreeGppChannelModelWgpuMezanine* GetActiveGpuInstance();
+
     void UpdateChannel();
     // Phase D: decouple channel-state advancement from PRX events.
     // The mez schedules itself on a periodic NS-3 timer and refreshes
@@ -566,6 +613,8 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
 
     // ── GPU back-end handle ───────────────────────────────────────────
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
+    /// Most-recent GPU-enabled instance, for GetActiveGpuInstance() (Lever B).
+    static ThreeGppChannelModelWgpuMezanine* s_activeGpuInstance;
     mutable std::unordered_map<uint32_t, Ptr<const PhasedArrayModel>> m_antennaIdToObjectMap;
     // Dedup the per-link EnsureBatchFresh calls within the same
     // simulator tick so the small-scale GPU work runs at most once per

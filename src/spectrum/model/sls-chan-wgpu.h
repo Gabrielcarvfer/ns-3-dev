@@ -860,6 +860,33 @@ class SlsChanWgpu
     // sls-chan.wgsl near the `cir_dbg` binding.
     std::vector<float> readCirDebug(uint32_t nActiveLinks);
 
+    // Lever B: out-of-cell MIMO interference covariance on the GPU.
+    // Inputs are interleaved (re,im) f32 in Complex3DVector column-major
+    // layout. chanFlat holds nInterferers interferer channels, each
+    // [nRxPorts x nTxPorts x nRb] complex, concatenated in the caller's
+    // (fixed, deterministic) order. Returns the covariance
+    // [nRxPorts x nRxPorts x nRb] complex as interleaved (re,im) f32.
+    std::vector<float> computeInterfCov(const std::vector<float>& chanFlat,
+                                        const std::vector<float>& noisePerRb,
+                                        uint32_t nRxPorts,
+                                        uint32_t nTxPorts,
+                                        uint32_t nRb,
+                                        uint32_t nInterferers);
+
+    // Lever C (inc 3): batched out-of-cell covariance -- many chunks in one
+    // dispatch. chanFlat concatenates every chunk's interferer channels
+    // (interleaved re/im f32, Complex3DVector column-major); desc holds 2 u32 per
+    // chunk [complex offset into chanFlat, interferer count]; noiseFlat holds nRb
+    // f32 per chunk. Returns covariances [nChunks x nRxPorts x nRxPorts x nRb]
+    // concatenated as interleaved (re,im) f32. Uniform dims across chunks.
+    std::vector<float> computeInterfCovBatch(const std::vector<float>& chanFlat,
+                                             const std::vector<uint32_t>& desc,
+                                             const std::vector<float>& noiseFlat,
+                                             uint32_t nChunks,
+                                             uint32_t nRxPorts,
+                                             uint32_t nTxPorts,
+                                             uint32_t nRb);
+
     /**
      * Scene-level metadata to write alongside the channel state. The
      * pipeline doesn't actually use any of these — they're recorded so
@@ -1091,6 +1118,8 @@ class SlsChanWgpu
     // gen_spec_pow_kernel: fused outer-product + reduction.
     // Bindings 70..74 (shared with gen_spec_batch) + 77 (rb_pow_out).
     wgpu::ComputePipeline genSpecPowPipeline_;
+    wgpu::ComputePipeline interfCovPipeline_;      // Lever B: interference covariance
+    wgpu::ComputePipeline interfCovBatchPipeline_; // Lever C: batched covariance
     // reduce_spec_batch_kernel scratch (kept for readReducedPowInto path).
     wgpu::ComputePipeline reduceBatchPipeline_;
     wgpu::Buffer reduceBatchOutBuf_;

@@ -3088,6 +3088,112 @@ fn gen_spec_pow_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 // ---------------------------------------------------------------------------
+// gen_interf_cov_kernel (Lever B): out-of-cell MIMO interference covariance.
+//   cov[rxP,rxP',rb] = noise[rb]*delta(rxP,rxP')
+//                    + sum_i sum_tx H_i[rxP,tx,rb] * conj(H_i[rxP',tx,rb])
+// One thread per (rxP, rxP', rb) output element. The interferer sum runs
+// SEQUENTIALLY in upload order (the host uploads in m_allSignalsMimo order)
+// so the result is deterministic and matches the CPU accumulation order; no
+// parallel reduction over the interferer axis. Layout is column-major (rx
+// fastest) per RB page, matching Complex3DVector / the gen_spec_pow output.
+struct InterfCovCfg {
+    n_rx_ports    : u32,
+    n_tx_ports    : u32,
+    n_rb          : u32,
+    n_interferers : u32,
+}
+@group(0) @binding(80) var<uniform> icov_cfg : InterfCovCfg;
+@group(0) @binding(81) var<storage, read>       icov_chan  : array<vec2f>;
+@group(0) @binding(82) var<storage, read>       icov_noise : array<f32>;
+@group(0) @binding(83) var<storage, read_write> icov_out   : array<vec2f>;
+
+@compute @workgroup_size(64)
+fn gen_interf_cov_kernel(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let nrx   = icov_cfg.n_rx_ports;
+    let ntx   = icov_cfg.n_tx_ports;
+    let nrx2  = nrx * nrx;
+    let total = nrx2 * icov_cfg.n_rb;
+    let tid   = gid.x;
+    if (tid >= total) { return; }
+    let rb        = tid / nrx2;
+    let pp        = tid % nrx2;
+    let rxp_prime = pp / nrx;   // column
+    let rxp       = pp % nrx;   // row
+
+    var cov = vec2f(0.0, 0.0);
+    if (rxp == rxp_prime) { cov = vec2f(icov_noise[rb], 0.0); }
+
+    let per_intf = nrx * ntx * icov_cfg.n_rb;  // complex elements per interferer
+    let page     = rb * nrx * ntx;             // page offset within an interferer
+    for (var i : u32 = 0u; i < icov_cfg.n_interferers; i = i + 1u) {
+        let base = i * per_intf + page;
+        for (var tx : u32 = 0u; tx < ntx; tx = tx + 1u) {
+            let h1 = icov_chan[base + tx * nrx + rxp];        // H[rxp,  tx, rb]
+            let h2 = icov_chan[base + tx * nrx + rxp_prime];  // H[rxp', tx, rb]
+            // cov += h1 * conj(h2)
+            cov = cov + vec2f(h1.x * h2.x + h1.y * h2.y,
+                              h1.y * h2.x - h1.x * h2.y);
+        }
+    }
+    icov_out[tid] = cov;
+}
+
+// ---------------------------------------------------------------------------
+// gen_interf_cov_batch_kernel (Lever C inc 3): MANY out-of-cell covariances in
+// one dispatch. Uniform dims (n_rx_ports/n_tx_ports/n_rb) across chunks; each
+// chunk has its own interferer slice (descriptor: complex offset + count) and
+// its own noise row. Thread per (chunk, rxP, rxP', rb); per-chunk interferer
+// sum in upload order -> deterministic (matches the per-call kernel + CPU).
+struct InterfCovBatchCfg {
+    n_chunks   : u32,
+    n_rx_ports : u32,
+    n_tx_ports : u32,
+    n_rb       : u32,
+}
+@group(0) @binding(84) var<uniform> icovb_cfg : InterfCovBatchCfg;
+@group(0) @binding(85) var<storage, read>       icovb_chan  : array<vec2f>; // all chunks' interferers
+@group(0) @binding(86) var<storage, read>       icovb_desc  : array<u32>;   // 2 per chunk: [chanOff, nIntf]
+@group(0) @binding(87) var<storage, read>       icovb_noise : array<f32>;   // n_chunks * n_rb
+@group(0) @binding(88) var<storage, read_write> icovb_out   : array<vec2f>; // n_chunks * nrx*nrx*nrb
+
+@compute @workgroup_size(64)
+fn gen_interf_cov_batch_kernel(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let nrx  = icovb_cfg.n_rx_ports;
+    let ntx  = icovb_cfg.n_tx_ports;
+    let nrb  = icovb_cfg.n_rb;
+    let nrx2 = nrx * nrx;
+    let per_cov = nrx2 * nrb;
+    let total = icovb_cfg.n_chunks * per_cov;
+    let tid = gid.x;
+    if (tid >= total) { return; }
+    let chunk     = tid / per_cov;
+    let local     = tid % per_cov;
+    let rb        = local / nrx2;
+    let pp        = local % nrx2;
+    let rxp_prime = pp / nrx;
+    let rxp       = pp % nrx;
+
+    let chan_off = icovb_desc[chunk * 2u + 0u]; // complex-element offset of this chunk's interferers
+    let n_intf   = icovb_desc[chunk * 2u + 1u];
+
+    var cov = vec2f(0.0, 0.0);
+    if (rxp == rxp_prime) { cov = vec2f(icovb_noise[chunk * nrb + rb], 0.0); }
+
+    let per_intf = nrx * ntx * nrb;
+    let page     = rb * nrx * ntx;
+    for (var i : u32 = 0u; i < n_intf; i = i + 1u) {
+        let base = chan_off + i * per_intf + page;
+        for (var tx : u32 = 0u; tx < ntx; tx = tx + 1u) {
+            let h1 = icovb_chan[base + tx * nrx + rxp];
+            let h2 = icovb_chan[base + tx * nrx + rxp_prime];
+            cov = cov + vec2f(h1.x * h2.x + h1.y * h2.y,
+                              h1.y * h2.x - h1.x * h2.y);
+        }
+    }
+    icovb_out[tid] = cov;
+}
+
+// ---------------------------------------------------------------------------
 // gen_spec_pow_smem_kernel (kept for reference; see gen_spec_pow_reg_kernel below)
 //
 // Same math as gen_spec_pow_kernel, but eliminates ~1024x redundant trig by

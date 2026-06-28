@@ -3697,6 +3697,155 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
     // No waitIdle here — batched caller calls waitForSpecBatch() after all M dispatches.
 }
 
+std::vector<float>
+SlsChanWgpu::computeInterfCov(const std::vector<float>& chanFlat,
+                             const std::vector<float>& noisePerRb,
+                             uint32_t nRxPorts,
+                             uint32_t nTxPorts,
+                             uint32_t nRb,
+                             uint32_t nInterferers)
+{
+    SLS_PHASE_SCOPE("WGPU::InterfCov");
+    if (!interfCovPipeline_)
+    {
+        interfCovPipeline_ = makePipeline("gen_interf_cov_kernel");
+        assert(interfCovPipeline_ && "missing gen_interf_cov_kernel in WGSL");
+    }
+
+    struct InterfCovCfg
+    {
+        uint32_t nRxPorts;
+        uint32_t nTxPorts;
+        uint32_t nRb;
+        uint32_t nInterferers;
+    } cfg{nRxPorts, nTxPorts, nRb, nInterferers};
+
+    wgpu::Buffer cfgBuf =
+        makeBuffer(sizeof(cfg), WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst, &cfg);
+    // chanFlat can be empty (0 interferers); the binding still needs >=1 element.
+    const uint64_t chanBytes = std::max<uint64_t>(chanFlat.size() * sizeof(float), 2 * sizeof(float));
+    wgpu::Buffer chanBuf = makeBuffer(chanBytes,
+                                      WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                      chanFlat.empty() ? nullptr : chanFlat.data());
+    wgpu::Buffer noiseBuf = makeBuffer(noisePerRb.size() * sizeof(float),
+                                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                       noisePerRb.data());
+
+    const uint64_t outElems = static_cast<uint64_t>(nRxPorts) * nRxPorts * nRb; // complex
+    const uint64_t outBytes = outElems * 2 * sizeof(float);
+    wgpu::Buffer outBuf = makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    wgpu::Buffer stagingBuf = makeBuffer(outBytes, WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+
+    auto layout = interfCovPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> entries(4, wgpu::Default);
+    auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+        entries[i].binding = b;
+        entries[i].buffer = buf;
+        entries[i].offset = 0;
+        entries[i].size = sz;
+    };
+    E(0, 80, cfgBuf, sizeof(cfg));
+    E(1, 81, chanBuf);
+    E(2, 82, noiseBuf);
+    E(3, 83, outBuf);
+    wgpu::BindGroupDescriptor bgd = wgpu::Default;
+    bgd.layout = layout;
+    bgd.entryCount = static_cast<uint32_t>(entries.size());
+    bgd.entries = entries.data();
+    wgpu::BindGroup bg = device_.createBindGroup(bgd);
+
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    {
+        auto pass = enc.beginComputePass(wgpu::Default);
+        pass.setPipeline(interfCovPipeline_);
+        pass.setBindGroup(0u, bg, (size_t)0, nullptr);
+        const uint32_t total = nRxPorts * nRxPorts * nRb;
+        pass.dispatchWorkgroups((total + 63u) / 64u, 1u, 1u);
+        pass.end();
+    }
+    enc.copyBufferToBuffer(outBuf, 0, stagingBuf, 0, outBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+
+    return mapReadBuffer<float>(stagingBuf, outBytes);
+}
+
+std::vector<float>
+SlsChanWgpu::computeInterfCovBatch(const std::vector<float>& chanFlat,
+                                  const std::vector<uint32_t>& desc,
+                                  const std::vector<float>& noiseFlat,
+                                  uint32_t nChunks,
+                                  uint32_t nRxPorts,
+                                  uint32_t nTxPorts,
+                                  uint32_t nRb)
+{
+    SLS_PHASE_SCOPE("WGPU::InterfCovBatch");
+    if (!interfCovBatchPipeline_)
+    {
+        interfCovBatchPipeline_ = makePipeline("gen_interf_cov_batch_kernel");
+        assert(interfCovBatchPipeline_ && "missing gen_interf_cov_batch_kernel in WGSL");
+    }
+
+    struct Cfg
+    {
+        uint32_t nChunks;
+        uint32_t nRxPorts;
+        uint32_t nTxPorts;
+        uint32_t nRb;
+    } cfg{nChunks, nRxPorts, nTxPorts, nRb};
+
+    wgpu::Buffer cfgBuf =
+        makeBuffer(sizeof(cfg), WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst, &cfg);
+    const uint64_t chanBytes =
+        std::max<uint64_t>(chanFlat.size() * sizeof(float), 2 * sizeof(float));
+    wgpu::Buffer chanBuf = makeBuffer(chanBytes,
+                                      WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                      chanFlat.empty() ? nullptr : chanFlat.data());
+    wgpu::Buffer descBuf = makeBuffer(desc.size() * sizeof(uint32_t),
+                                      WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                      desc.data());
+    wgpu::Buffer noiseBuf = makeBuffer(noiseFlat.size() * sizeof(float),
+                                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                       noiseFlat.data());
+
+    const uint64_t outElems = static_cast<uint64_t>(nChunks) * nRxPorts * nRxPorts * nRb;
+    const uint64_t outBytes = outElems * 2 * sizeof(float);
+    wgpu::Buffer outBuf = makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    wgpu::Buffer stagingBuf = makeBuffer(outBytes, WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+
+    auto layout = interfCovBatchPipeline_.getBindGroupLayout(0);
+    std::vector<wgpu::BindGroupEntry> entries(5, wgpu::Default);
+    auto E = [&](int i, uint32_t b, wgpu::Buffer buf, uint64_t sz = WGPU_WHOLE_SIZE) {
+        entries[i].binding = b;
+        entries[i].buffer = buf;
+        entries[i].offset = 0;
+        entries[i].size = sz;
+    };
+    E(0, 84, cfgBuf, sizeof(cfg));
+    E(1, 85, chanBuf);
+    E(2, 86, descBuf);
+    E(3, 87, noiseBuf);
+    E(4, 88, outBuf);
+    wgpu::BindGroupDescriptor bgd = wgpu::Default;
+    bgd.layout = layout;
+    bgd.entryCount = static_cast<uint32_t>(entries.size());
+    bgd.entries = entries.data();
+    wgpu::BindGroup bg = device_.createBindGroup(bgd);
+
+    auto enc = device_.createCommandEncoder(wgpu::Default);
+    {
+        auto pass = enc.beginComputePass(wgpu::Default);
+        pass.setPipeline(interfCovBatchPipeline_);
+        pass.setBindGroup(0u, bg, (size_t)0, nullptr);
+        const uint32_t total = nChunks * nRxPorts * nRxPorts * nRb;
+        pass.dispatchWorkgroups((total + 63u) / 64u, 1u, 1u);
+        pass.end();
+    }
+    enc.copyBufferToBuffer(outBuf, 0, stagingBuf, 0, outBytes);
+    queue_.submit(enc.finish(wgpu::Default));
+
+    return mapReadBuffer<float>(stagingBuf, outBytes);
+}
+
 void
 SlsChanWgpu::waitForSpecBatch()
 {

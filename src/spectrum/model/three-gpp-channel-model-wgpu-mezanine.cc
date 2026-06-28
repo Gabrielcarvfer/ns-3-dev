@@ -96,6 +96,8 @@ namespace ns3
 
 NS_OBJECT_ENSURE_REGISTERED(ThreeGppChannelModelWgpuMezanine);
 
+ThreeGppChannelModelWgpuMezanine* ThreeGppChannelModelWgpuMezanine::s_activeGpuInstance = nullptr;
+
 // Always use (1,1,numRb) fakeChanSpct shape regardless of antenna count.
 // The GPU reducedPow is beamformed power; invNumTx=1.0 + PsdReduction invN=1 gives
 // Power = reducedPow correctly. Using the full (numRx,numTx,numRb) shape would
@@ -106,11 +108,187 @@ static constexpr size_t kMaxMimoFakeEntries = 0;
 ThreeGppChannelModelWgpuMezanine::ThreeGppChannelModelWgpuMezanine()
 {
     m_wgpuChannel = std::make_unique<SlsChanWgpu>();
+    s_activeGpuInstance = this;
 }
 
 ThreeGppChannelModelWgpuMezanine::~ThreeGppChannelModelWgpuMezanine()
 {
+    if (s_activeGpuInstance == this)
+    {
+        s_activeGpuInstance = nullptr;
+    }
     m_wgpuChannel = nullptr;
+}
+
+ThreeGppChannelModelWgpuMezanine*
+ThreeGppChannelModelWgpuMezanine::GetActiveGpuInstance()
+{
+    return s_activeGpuInstance;
+}
+
+Ptr<ComplexMatrixArray>
+ThreeGppChannelModelWgpuMezanine::ComputeInterfCovGpu(
+    const std::vector<Ptr<const ComplexMatrixArray>>& interferers,
+    const std::vector<double>& noisePerRb,
+    uint32_t nRxPorts,
+    uint32_t nTxPorts)
+{
+    const uint32_t nRb = static_cast<uint32_t>(noisePerRb.size());
+    if (!m_wgpuChannel || interferers.empty() || nRb == 0)
+    {
+        return nullptr;
+    }
+
+    // Flatten interferer matrices to interleaved (re,im) f32 in Complex3DVector
+    // column-major (rx fastest) per-RB-page order, in the caller's fixed order
+    // (-> deterministic, same accumulation order the CPU loop uses).
+    std::vector<float> chanFlat;
+    chanFlat.reserve(static_cast<size_t>(interferers.size()) * nRxPorts * nTxPorts * nRb * 2);
+    for (const auto& m : interferers)
+    {
+        if (!m || m->GetNumRows() != nRxPorts || m->GetNumCols() != nTxPorts ||
+            m->GetNumPages() != nRb)
+        {
+            return nullptr; // non-uniform/missing dims -> CPU fallback
+        }
+        const size_t nDoublesPerPage = static_cast<size_t>(nRxPorts) * nTxPorts * 2;
+        for (uint32_t rb = 0; rb < nRb; ++rb)
+        {
+            const auto* page = reinterpret_cast<const double*>(m->GetPagePtr(rb));
+            for (size_t k = 0; k < nDoublesPerPage; ++k)
+            {
+                chanFlat.push_back(static_cast<float>(page[k]));
+            }
+        }
+    }
+
+    const std::vector<float> noiseF(noisePerRb.begin(), noisePerRb.end());
+    const std::vector<float> outF =
+        m_wgpuChannel->computeInterfCov(chanFlat,
+                                        noiseF,
+                                        nRxPorts,
+                                        nTxPorts,
+                                        nRb,
+                                        static_cast<uint32_t>(interferers.size()));
+    const size_t expect = static_cast<size_t>(nRxPorts) * nRxPorts * nRb * 2;
+    if (outF.size() != expect)
+    {
+        return nullptr;
+    }
+
+    // outF index 2*tid {re,im}, tid = rb*nRx*nRx + col*nRx + row -> matches the
+    // covariance ComplexMatrixArray (row, col, page) layout.
+    auto cov = Create<ComplexMatrixArray>(nRxPorts, nRxPorts, nRb);
+    for (uint32_t rb = 0; rb < nRb; ++rb)
+    {
+        for (uint32_t col = 0; col < nRxPorts; ++col)
+        {
+            for (uint32_t row = 0; row < nRxPorts; ++row)
+            {
+                const size_t tid =
+                    (static_cast<size_t>(rb) * nRxPorts + col) * nRxPorts + row;
+                (*cov)(row, col, rb) =
+                    std::complex<double>(outF[2 * tid], outF[2 * tid + 1]);
+            }
+        }
+    }
+    return cov;
+}
+
+std::vector<Ptr<ComplexMatrixArray>>
+ThreeGppChannelModelWgpuMezanine::ComputeInterfCovBatchGpu(
+    const std::vector<std::vector<Ptr<const ComplexMatrixArray>>>& perChunkInterferers,
+    const std::vector<std::vector<double>>& perChunkNoise,
+    uint32_t nRxPorts,
+    uint32_t nTxPorts)
+{
+    std::vector<Ptr<ComplexMatrixArray>> result;
+    if (!m_wgpuChannel || perChunkInterferers.empty() ||
+        perChunkInterferers.size() != perChunkNoise.size())
+    {
+        return result;
+    }
+    const uint32_t nChunks = static_cast<uint32_t>(perChunkInterferers.size());
+    const uint32_t nRb = static_cast<uint32_t>(perChunkNoise[0].size());
+    if (nRb == 0)
+    {
+        return result;
+    }
+
+    // Flatten every chunk's interferers + noise into one workspace. Each chunk
+    // contributes a descriptor [complex offset into chanFlat, interferer count].
+    std::vector<float> chanFlat;
+    std::vector<uint32_t> desc;
+    std::vector<float> noiseFlat;
+    desc.reserve(static_cast<size_t>(nChunks) * 2);
+    noiseFlat.reserve(static_cast<size_t>(nChunks) * nRb);
+    const size_t nDoublesPerPage = static_cast<size_t>(nRxPorts) * nTxPorts * 2;
+
+    for (uint32_t c = 0; c < nChunks; ++c)
+    {
+        const auto& interferers = perChunkInterferers[c];
+        desc.push_back(static_cast<uint32_t>(chanFlat.size() / 2)); // complex offset
+        desc.push_back(static_cast<uint32_t>(interferers.size()));
+        if (perChunkNoise[c].size() != nRb)
+        {
+            return {}; // non-uniform RB count -> CPU fallback
+        }
+        for (double n : perChunkNoise[c])
+        {
+            noiseFlat.push_back(static_cast<float>(n));
+        }
+        for (const auto& m : interferers)
+        {
+            if (!m || m->GetNumRows() != nRxPorts || m->GetNumCols() != nTxPorts ||
+                m->GetNumPages() != nRb)
+            {
+                return {}; // non-uniform dims -> CPU fallback
+            }
+            for (uint32_t rb = 0; rb < nRb; ++rb)
+            {
+                const auto* page = reinterpret_cast<const double*>(m->GetPagePtr(rb));
+                for (size_t k = 0; k < nDoublesPerPage; ++k)
+                {
+                    chanFlat.push_back(static_cast<float>(page[k]));
+                }
+            }
+        }
+    }
+
+    const std::vector<float> covFlat = m_wgpuChannel->computeInterfCovBatch(chanFlat,
+                                                                            desc,
+                                                                            noiseFlat,
+                                                                            nChunks,
+                                                                            nRxPorts,
+                                                                            nTxPorts,
+                                                                            nRb);
+    const size_t perCov = static_cast<size_t>(nRxPorts) * nRxPorts * nRb;
+    if (covFlat.size() != static_cast<size_t>(nChunks) * perCov * 2)
+    {
+        return {};
+    }
+
+    result.reserve(nChunks);
+    for (uint32_t c = 0; c < nChunks; ++c)
+    {
+        auto cov = Create<ComplexMatrixArray>(nRxPorts, nRxPorts, nRb);
+        const size_t covBase = static_cast<size_t>(c) * perCov;
+        for (uint32_t rb = 0; rb < nRb; ++rb)
+        {
+            for (uint32_t col = 0; col < nRxPorts; ++col)
+            {
+                for (uint32_t row = 0; row < nRxPorts; ++row)
+                {
+                    const size_t local = (static_cast<size_t>(rb) * nRxPorts + col) * nRxPorts + row;
+                    const size_t idx = (covBase + local) * 2;
+                    (*cov)(row, col, rb) =
+                        std::complex<double>(covFlat[idx], covFlat[idx + 1]);
+                }
+            }
+        }
+        result.push_back(cov);
+    }
+    return result;
 }
 
 TypeId
