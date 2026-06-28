@@ -13,6 +13,7 @@
 // declarations we need are already pulled in transitively by
 // sls-chan-wgpu.h (webgpu/webgpu.hpp).
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cmath>

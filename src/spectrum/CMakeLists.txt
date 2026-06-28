@@ -192,6 +192,18 @@ build_lib(
     test/wraparound-model-test.cc
 )
 
+# The GPU back-end carries scaffolding (diagnostic counters, packed-buffer
+# offset constants, multi-backend fallback variables) that the production
+# code paths don't currently read. Don't let those scaffolding diagnostics
+# break the build under -Werror.
+if(NS3_ENABLE_3GPP_GPU)
+    target_compile_options(${libspectrum} PRIVATE
+        -Wno-error=unused-variable
+        -Wno-error=unused-const-variable
+        -Wno-error=unused-but-set-variable
+    )
+endif()
+
 if(NS3_ENABLE_3GPP_GPU)
     # wgpu-native include dirs and defines are only needed when compiling
     # spectrum's own .cc files (sls-chan-wgpu.cc, three-gpp-channel-model.cc).
@@ -264,16 +276,26 @@ endif()
 # SlsChanWgpu in — slightly wasteful at build time, but completely
 # decouples the validation harness from the library's compile flags.
 if(NS3_ENABLE_3GPP_GPU)
+    # Same scaffolding-warning suppression as on libspectrum applies to the
+    # standalone sls-chan-wgpu translation units below.
+    set(_gpu_extra_compile_options
+        -Wno-error=unused-variable
+        -Wno-error=unused-const-variable
+        -Wno-error=unused-but-set-variable
+    )
+
     add_executable(sls_chan_test examples/sls-chan-example.cc model/sls-chan-wgpu.cc)
     target_link_libraries(sls_chan_test PRIVATE webgpu)
     target_include_directories(sls_chan_test PRIVATE model/ ${WEBGPU_INCLUDES})
     target_compile_definitions(sls_chan_test PRIVATE ${WEBGPU_DEFS})
+    target_compile_options(sls_chan_test PRIVATE ${_gpu_extra_compile_options})
 
     if(${HDF5_FOUND})
         add_executable(sls_chan_validation model/sls-chan-validation.cc model/sls-chan-wgpu.cc)
         target_link_libraries(sls_chan_validation PRIVATE webgpu HDF5::HDF5)
         target_include_directories(sls_chan_validation PRIVATE model/ ${WEBGPU_INCLUDES})
         target_compile_definitions(sls_chan_validation PRIVATE ${WEBGPU_DEFS} SLS_CHAN_HDF5)
+        target_compile_options(sls_chan_validation PRIVATE ${_gpu_extra_compile_options})
         target_copy_webgpu_binaries(sls_chan_validation)
     endif()
 

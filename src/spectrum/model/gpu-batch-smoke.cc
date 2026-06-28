@@ -34,6 +34,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 
 using namespace ns3;
@@ -193,7 +194,9 @@ RunScenario(const char* label, bool useGpu, bool nlos = false)
         {
             char buf[32];
             std::snprintf(buf, sizeof(buf), "c%u-u%u", c, u - kNumCells);
-            links.push_back({mobs[c], mobs[u], ants[c], ants[u], _strdup(buf)});
+            // strdup is POSIX; MSVC ships it as `_strdup`. Use the standard
+            // spelling and leave Windows to pick up its `_strdup` alias.
+            links.push_back({mobs[c], mobs[u], ants[c], ants[u], strdup(buf)});
         }
     }
 

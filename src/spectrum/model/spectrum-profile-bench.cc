@@ -35,6 +35,10 @@
 #include "ns3/pointer.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/rng-seed-manager.h"
+#include "ns3/error-model.h"
+#include "ns3/queue.h"
+#include "ns3/simple-channel.h"
+#include "ns3/simple-net-device.h"
 #include "ns3/simulator.h"
 #include "ns3/spectrum-signal-parameters.h"
 #include "ns3/string.h"
@@ -64,6 +68,38 @@
 #endif
 
 using namespace ns3;
+
+namespace ns3
+{
+/**
+ * Stub NetDevice whose registered TypeId name contains "Gnb". The GPU
+ * mezanine classifies each link end as BS or UE by checking
+ * `GetInstanceTypeId().GetName()` for "Gnb"/"Enb"; without something
+ * matching that filter every node looks like a UE and the topology
+ * collector aborts on a missing BS reference panel. Inheriting from
+ * SimpleNetDevice gives us all of the boilerplate (channel pointers,
+ * Send(), MAC address, etc.) for free.
+ */
+class SpectrumBenchGnbNetDevice : public SimpleNetDevice
+{
+  public:
+    static TypeId GetTypeId()
+    {
+        static TypeId tid = TypeId("ns3::SpectrumBenchGnbNetDevice")
+                                .SetParent<SimpleNetDevice>()
+                                .SetGroupName("Spectrum")
+                                .AddConstructor<SpectrumBenchGnbNetDevice>();
+        return tid;
+    }
+
+    // Inherited GetInstanceTypeId (Object::GetInstanceTypeId is `final`)
+    // dispatches via the runtime-registered TypeId, so the mezanine's
+    // string match on "Gnb" sees this subclass's TypeId name.
+};
+
+NS_OBJECT_ENSURE_REGISTERED(SpectrumBenchGnbNetDevice);
+
+} // namespace ns3
 
 namespace
 {
@@ -355,6 +391,17 @@ main(int argc, char** argv)
     }
     for (uint32_t i = 0; i < kNumSites + args.nUes; ++i)
         nodes.Get(i)->AggregateObject(mobs[i]);
+
+    // Tag every cell node with a Gnb-named NetDevice so the GPU
+    // mezanine's BS/UE classifier (which walks each node's devices and
+    // looks for "Gnb"/"Enb" in the type-id name) sees the topology
+    // correctly. Without this every node would look like a UE and
+    // CollectRefreshTopology would abort on a missing BS reference
+    // panel when --use-mezanine is set.
+    for (uint32_t i = 0; i < kNumSites; ++i)
+    {
+        nodes.Get(i)->AddDevice(CreateObject<SpectrumBenchGnbNetDevice>());
+    }
 
     // For PRX evaluation we need a SpectrumValue. Use the LTE helper
     // to construct a wideband PSD; bw/freq are illustrative only —

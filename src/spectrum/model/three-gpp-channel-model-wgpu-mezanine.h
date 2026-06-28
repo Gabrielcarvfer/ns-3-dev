@@ -190,7 +190,7 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     // NR initial-association code should call SetBypassGpuBatch(true) before the
     // maxRSRP scan and SetBypassGpuBatch(false) after. The real simulation then
     // starts with a clean cache that only holds entries for the configured antennas.
-    void SetBypassGpuBatch(bool bypass);
+    void SetBypassGpuBatch(bool bypass) override;
 
     // --- Parallel uncached batch path for initial attachment and REM maps ----
     //

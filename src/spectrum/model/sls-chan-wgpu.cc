@@ -334,7 +334,12 @@ SlsChanWgpu::SlsChanWgpu()
             (unsigned long long)m_maxGpuBuffer_,
             (double)m_maxGpuBuffer_ / (1024.0 * 1024.0 * 1024.0));
     queue_ = device_.getQueue();
-    std::string wgsl = readFile("C:/tools/sources/ns-3-dev/src/spectrum/model/sls-chan.wgsl");
+    // Locate sls-chan.wgsl relative to the build's source tree. PROJECT_SOURCE_PATH
+    // is defined by CMake and points at the ns-3 checkout root, so the same binary
+    // works on any host that built it without needing a hard-coded absolute path.
+    const std::string wgslPath =
+        std::string(PROJECT_SOURCE_PATH) + "/src/spectrum/model/sls-chan.wgsl";
+    std::string wgsl = readFile(wgslPath.c_str());
     if (wgsl.empty())
     {
         SLS_LOG("ERROR: Failed to read WGSL shader\n");
