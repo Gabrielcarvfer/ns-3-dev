@@ -442,29 +442,33 @@
   {\footnotesize
   \setlength{\tabcolsep}{5pt}
   \renewcommand{\arraystretch}{0.92}
-  \begin{tabular}{lll r r}
+  \begin{tabular}{lll r r r}
     \toprule
-    OS & CPU & Backend \scriptsize(WebGPU) & wall\,s & vs CPU\\
+    OS & CPU & Backend \scriptsize(WebGPU) & CPU\,s & GPU\,s & vs CPU\\
     \midrule
     \rowcolor{cpuCol!8}
-    \textcolor{cpuCol}{\textbf{Win 11}} & Ryzen 9 7940HS & Radeon 780M \scriptsize(native D3D12) & 84.0 & \textbf{2.33$\times$}\\
+    \textcolor{cpuCol}{\textbf{Win 11}} & Ryzen 9 7940HS & Radeon 780M \scriptsize(native D3D12) & 196.0 & 84.0 & \textbf{2.33$\times$}\\
     \rowcolor{gpuCol!8}
-    \textcolor{gpuCol}{\textbf{macOS 26}} & Apple M4 Pro & M4 Pro 16-core \scriptsize(native Metal) & 41.7 & \textbf{3.36$\times$}\\
+    \textcolor{gpuCol}{\textbf{macOS 26}} & Apple M4 Pro & M4 Pro 16-core \scriptsize(native Metal) & 140.1 & 41.7 & \textbf{3.36$\times$}\\
+    \rowcolor{warnCol!12}
+    \textcolor{warnCol}{\textbf{Linux native}} & Threadripper 7965WX & RTX A6000 \scriptsize(native Vulkan) & 362.2 & 173.1 & \textbf{2.09$\times$}\\
     \midrule
     \rowcolor{mezCol!10}
-    \textcolor{mezCol}{\textbf{Linux/WSL2}} & Core Ultra 9 185H & CPU only \scriptsize(no GPU) & 360.2 & 1.00$\times$\\
+    \textcolor{mezCol}{\textbf{Linux/WSL2}} & Core Ultra 9 185H & CPU only \scriptsize(no GPU) & 360.2 & -- & 1.00$\times$\\
     \rowcolor{mezCol!10}
-     &  & llvmpipe \scriptsize(CPU software) & 185.1 & 1.95$\times$\\
+     &  & llvmpipe \scriptsize(CPU software) & 360.2 & 185.1 & 1.95$\times$\\
     \rowcolor{mezCol!10}
-     &  & Intel Arc \scriptsize(iGPU, Dozen) & 183.8 & 1.96$\times$\\
+     &  & Intel Arc \scriptsize(iGPU, Dozen) & 360.2 & 183.8 & 1.96$\times$\\
     \rowcolor{mezCol!10}
-     &  & NVIDIA RTX 2000 Ada \scriptsize(Dozen) & 187.3 & \textbf{1.92$\times$}\\
+     &  & NVIDIA RTX 2000 Ada \scriptsize(Dozen) & 360.2 & 187.3 & \textbf{1.92$\times$}\\
     \bottomrule
   \end{tabular}}
   \\[0.3em]
   {\tiny DenseAmimo ring-1, MIMO $+$ batched cov., 100\,ms update, num.~0, 10\,MHz,
-   \alert{optimized} build. Win~11/macOS $=$ native GPU wall (vs own CPU);
-   Linux $=$ \alert{WSL2} via \alert{Dozen} (Vulkan$\to$D3D12).}
+   \alert{optimized} build; GPU\,s $=$ batched-covariance wall, speedup $=$ CPU/GPU.
+   Win~11 / macOS / \alert{Linux native} $=$ native backend (D3D12 / Metal / Vulkan,
+   vs own CPU); the WSL2 rows share one CPU baseline, GPU via \alert{Dozen}
+   (Vulkan$\to$D3D12).}
 \end{frame}
 
 %==============================================================================
