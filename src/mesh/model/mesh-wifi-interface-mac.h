@@ -221,6 +221,15 @@ class MeshWifiInterfaceMac : public WifiMac
      */
     void Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId) override;
     /**
+     * The mesh point device relies on the promiscuous callback of its interfaces to
+     * forward the frames they receive (after the plugins processed them): the frames
+     * overheard in promiscuous mode, which no plugin processed, are not forwarded up.
+     *
+     * @param mpdu the overheard MPDU
+     * @param linkId the ID of the link it was received on
+     */
+    void ForwardUpOverheard(Ptr<const WifiMpdu> mpdu, uint8_t linkId) override;
+    /**
      * Send beacon.
      */
     void SendBeacon();

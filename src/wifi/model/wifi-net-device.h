@@ -215,6 +215,15 @@ class WifiNetDevice : public NetDevice
      * @param to the destination address
      */
     void ForwardUp(Ptr<const Packet> packet, Mac48Address from, Mac48Address to);
+    /**
+     * Pass a packet overheard in promiscuous mode (not addressed to this device) to the
+     * promiscuous receive callback only, as PACKET_OTHERHOST.
+     *
+     * @param packet the packet
+     * @param from the source address
+     * @param to the destination address
+     */
+    void ForwardUpOverheard(Ptr<const Packet> packet, Mac48Address from, Mac48Address to);
 
   private:
     /**

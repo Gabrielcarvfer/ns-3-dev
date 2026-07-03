@@ -160,6 +160,13 @@ MacRxMiddle::SetForwardCallback(ForwardUpCallback callback)
     m_callback = callback;
 }
 
+void
+MacRxMiddle::SetPromiscCallback(ForwardUpCallback callback)
+{
+    NS_LOG_FUNCTION_NOARGS();
+    m_promiscCallback = callback;
+}
+
 OriginatorRxStatus&
 MacRxMiddle::Lookup(Ptr<const WifiMpdu> mpdu)
 {
@@ -260,9 +267,9 @@ MacRxMiddle::HandleFragments(Ptr<const Packet> packet,
 }
 
 void
-MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
+MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId, bool overheard)
 {
-    NS_LOG_FUNCTION(*mpdu << +linkId);
+    NS_LOG_FUNCTION(*mpdu << +linkId << overheard);
     // consider the MAC header of the original MPDU (makes a difference for data frames only)
     const auto& hdr = mpdu->GetOriginal()->GetHeader();
     NS_ASSERT(hdr.IsData() || hdr.IsMgt());
@@ -299,9 +306,14 @@ MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     NS_LOG_DEBUG("forwarding data from=" << hdr.GetAddr2() << ", seq=" << hdr.GetSequenceNumber()
                                          << ", frag=" << +hdr.GetFragmentNumber());
     originator.SetSequenceControl(hdr.GetSequenceControl());
+    const auto& callback = overheard ? m_promiscCallback : m_callback;
+    if (callback.IsNull())
+    {
+        return;
+    }
     if (aggregate == mpdu->GetPacket())
     {
-        m_callback(mpdu, linkId);
+        callback(mpdu, linkId);
     }
     else
     {
@@ -309,7 +321,7 @@ MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         // A-MSDUs saves us the time to deaggregate the A-MSDU in MSDUs (which are
         // kept separate in the received mpdu) and allows us to pass the originally
         // transmitted packets (i.e., with the same UID) to the receiver.
-        m_callback(Create<WifiMpdu>(aggregate, hdr), linkId);
+        callback(Create<WifiMpdu>(aggregate, hdr), linkId);
     }
 }
 

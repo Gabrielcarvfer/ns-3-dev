@@ -47,12 +47,22 @@ class MacRxMiddle : public SimpleRefCount<MacRxMiddle>
     void SetForwardCallback(ForwardUpCallback callback);
 
     /**
+     * Set a callback to forward up the MPDUs overheard in promiscuous mode, i.e., those
+     * not addressed to this device.
+     *
+     * @param callback the callback to set
+     */
+    void SetPromiscCallback(ForwardUpCallback callback);
+
+    /**
      * Receive an MPDU on the given link.
      *
      * @param mpdu the MPDU
      * @param linkId the ID of the given link
+     * @param overheard whether the MPDU is not addressed to this device and was received
+     *        in promiscuous mode; it is then forwarded to the promiscuous callback
      */
-    void Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
+    void Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId, bool overheard = false);
 
   private:
     /// allow MacRxMiddleTest associated class access
@@ -123,6 +133,7 @@ class MacRxMiddle : public SimpleRefCount<MacRxMiddle>
     Originators m_originatorStatus;       ///< originator status
     QosOriginators m_qosOriginatorStatus; ///< QOS originator status
     ForwardUpCallback m_callback;         ///< forward up callback
+    ForwardUpCallback m_promiscCallback;  ///< forward up callback for overheard MPDUs
 };
 
 } // namespace ns3

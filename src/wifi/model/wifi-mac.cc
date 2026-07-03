@@ -50,6 +50,7 @@ WifiMac::WifiMac()
 
     m_rxMiddle = Create<MacRxMiddle>();
     m_rxMiddle->SetForwardCallback(MakeCallback(&WifiMac::Receive, this));
+    m_rxMiddle->SetPromiscCallback(MakeCallback(&WifiMac::ForwardUpOverheard, this));
 
     m_txMiddle = Create<MacTxMiddle>();
 }
@@ -1495,6 +1496,13 @@ WifiMac::SetForwardUpCallback(ForwardUpCallback upCallback)
 }
 
 void
+WifiMac::SetPromiscForwardUpCallback(ForwardUpCallback upCallback)
+{
+    NS_LOG_FUNCTION(this);
+    m_promiscForwardUp = upCallback;
+}
+
+void
 WifiMac::SetLinkUpCallback(Callback<void> linkUp)
 {
     NS_LOG_FUNCTION(this);
@@ -1860,6 +1868,31 @@ WifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     }
 
     NS_FATAL_ERROR("Don't know how to handle frame (type=" << hdr.GetType());
+}
+
+void
+WifiMac::ForwardUpOverheard(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this << *mpdu << +linkId);
+    const auto& hdr = mpdu->GetHeader();
+    if (!hdr.IsData() || !hdr.HasData() || m_promiscForwardUp.IsNull())
+    {
+        return;
+    }
+    if (hdr.IsQosData() && hdr.IsQosAmsdu())
+    {
+        for (const auto& [msdu, amsduHdr] : *PeekPointer(mpdu))
+        {
+            m_promiscForwardUp(msdu, amsduHdr.GetSourceAddr(), amsduHdr.GetDestinationAddr());
+        }
+        return;
+    }
+    // the destination is Address 3 if To DS is set, else Address 1; the source is
+    // Address 2 if From DS is clear, else Address 3 (From DS only) or Address 4 (both)
+    const auto to = hdr.IsToDs() ? hdr.GetAddr3() : hdr.GetAddr1();
+    const auto from =
+        !hdr.IsFromDs() ? hdr.GetAddr2() : (hdr.IsToDs() ? hdr.GetAddr4() : hdr.GetAddr3());
+    m_promiscForwardUp(mpdu->GetPacket(), from, to);
 }
 
 void

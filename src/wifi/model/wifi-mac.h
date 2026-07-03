@@ -485,6 +485,11 @@ class WifiMac : public Object
      */
     void SetForwardUpCallback(ForwardUpCallback upCallback);
     /**
+     * @param upCallback the callback to invoke when a data frame not addressed to this
+     *        device is overheard in promiscuous mode, with its source and destination
+     */
+    void SetPromiscForwardUpCallback(ForwardUpCallback upCallback);
+    /**
      * @param linkUp the callback to invoke when the link becomes up.
      */
     virtual void SetLinkUpCallback(Callback<void> linkUp);
@@ -951,6 +956,16 @@ class WifiMac : public Object
     virtual void DeaggregateAmsduAndForward(Ptr<const WifiMpdu> mpdu);
 
     /**
+     * Forward up a data frame overheard in promiscuous mode (not addressed to this
+     * device), for any type of MAC: its MSDUs, with the source and destination addresses
+     * given by its To DS and From DS fields (or its A-MSDU subframe headers).
+     *
+     * @param mpdu the overheard MPDU
+     * @param linkId the ID of the link it was received on
+     */
+    virtual void ForwardUpOverheard(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
+
+    /**
      * Apply the TID-to-Link Mapping negotiated with the given MLD for the given direction
      * by properly configuring the queue scheduler.
      *
@@ -1313,6 +1328,7 @@ class WifiMac : public Object
     std::unordered_map<Mac48Address, WifiTidLinkMapping, WifiAddressHash> m_ulTidLinkMappings;
 
     ForwardUpCallback m_forwardUp; //!< Callback to forward packet up the stack
+    ForwardUpCallback m_promiscForwardUp; //!< Callback to forward overheard packets up
 
     /**
      * The trace source fired when packets come into the "top" of the device

@@ -475,6 +475,12 @@ MeshWifiInterfaceMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     // contrast to most classes which derive from WifiMac.
 }
 
+void
+MeshWifiInterfaceMac::ForwardUpOverheard(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this << *mpdu << +linkId);
+}
+
 uint32_t
 MeshWifiInterfaceMac::GetLinkMetric(Mac48Address peerAddress)
 {

@@ -1386,7 +1386,7 @@ FrameExchangeManager::Receive(Ptr<const WifiPsdu> psdu,
         {
             if (!mpdu->GetHeader().IsCtl())
             {
-                m_rxMiddle->Receive(mpdu, m_linkId);
+                m_rxMiddle->Receive(mpdu, m_linkId, true);
             }
         }
     }

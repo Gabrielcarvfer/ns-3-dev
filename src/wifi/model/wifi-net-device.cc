@@ -201,6 +201,7 @@ WifiNetDevice::CompleteConfig()
     m_mac->SetWifiPhys(m_phys);
     m_mac->SetWifiRemoteStationManagers(m_stationManagers);
     m_mac->SetForwardUpCallback(MakeCallback(&WifiNetDevice::ForwardUp, this));
+    m_mac->SetPromiscForwardUpCallback(MakeCallback(&WifiNetDevice::ForwardUpOverheard, this));
     m_mac->SetLinkUpCallback(MakeCallback(&WifiNetDevice::LinkUp, this));
     m_mac->SetLinkDownCallback(MakeCallback(&WifiNetDevice::LinkDown, this));
     for (std::size_t linkId = 0; linkId < m_stationManagers.size(); linkId++)
@@ -541,6 +542,21 @@ WifiNetDevice::ForwardUp(Ptr<const Packet> packet, Mac48Address from, Mac48Addre
         m_mac->NotifyPromiscRx(copy);
         m_promiscRx(this, copy, llc.GetType(), from, to, type);
     }
+}
+
+void
+WifiNetDevice::ForwardUpOverheard(Ptr<const Packet> packet, Mac48Address from, Mac48Address to)
+{
+    NS_LOG_FUNCTION(this << packet << from << to);
+    if (m_promiscRx.IsNull())
+    {
+        return;
+    }
+    auto copy = packet->Copy();
+    LlcSnapHeader llc;
+    copy->RemoveHeader(llc);
+    m_mac->NotifyPromiscRx(copy);
+    m_promiscRx(this, copy, llc.GetType(), from, to, NetDevice::PACKET_OTHERHOST);
 }
 
 void
