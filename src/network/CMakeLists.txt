@@ -174,6 +174,7 @@ build_lib(
     test/packet-socket-apps-test-suite.cc
     test/packet-test-suite.cc
     test/packetbb-test-suite.cc
+    test/pcap-explicit-filename-test-suite.cc
     test/pcap-file-test-suite.cc
     test/sequence-number-test-suite.cc
     test/simple-net-device-test.cc
