@@ -47,7 +47,11 @@ LteNetDevice::GetTypeId()
                           "The MAC-level Maximum Transmission Unit",
                           UintegerValue(30000),
                           MakeUintegerAccessor(&LteNetDevice::SetMtu, &LteNetDevice::GetMtu),
-                          MakeUintegerChecker<uint16_t>());
+                          MakeUintegerChecker<uint16_t>())
+            .AddTraceSource("MacRxDrop",
+                            "A packet has been dropped because no protocol handler consumed it.",
+                            MakeTraceSourceAccessor(&LteNetDevice::m_macRxDropTrace),
+                            "ns3::Packet::TracedCallback");
     return tid;
 }
 
@@ -261,12 +265,20 @@ LteNetDevice::Receive(Ptr<Packet> p)
     if (p->PeekHeader(ipv4Header) != 0)
     {
         NS_LOG_LOGIC("IPv4 stack...");
-        m_rxCallback(this, p, iana::ieee802numbers::IPV4, Address());
+        if (!m_rxCallback(this, p, iana::ieee802numbers::IPV4, Address()))
+        {
+            NS_LOG_INFO("Drop packet due to no protocol handler");
+            m_macRxDropTrace(p);
+        }
     }
     else if (p->PeekHeader(ipv6Header) != 0)
     {
         NS_LOG_LOGIC("IPv6 stack...");
-        m_rxCallback(this, p, iana::ieee802numbers::IPV6, Address());
+        if (!m_rxCallback(this, p, iana::ieee802numbers::IPV6, Address()))
+        {
+            NS_LOG_INFO("Drop packet due to no protocol handler");
+            m_macRxDropTrace(p);
+        }
     }
     else
     {

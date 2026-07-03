@@ -68,7 +68,11 @@ LrWpanNetDevice::GetTypeId()
                 MakeEnumChecker(LrWpanNetDevice::RFC6282,
                                 "RFC 6282 (don't use PanId)",
                                 LrWpanNetDevice::RFC4944,
-                                "RFC 4944 (use PanId)"));
+                                "RFC 4944 (use PanId)"))
+            .AddTraceSource("MacRxDrop",
+                            "A packet has been dropped because no protocol handler consumed it.",
+                            MakeTraceSourceAccessor(&LrWpanNetDevice::m_macRxDropTrace),
+                            "ns3::Packet::TracedCallback");
     return tid;
 }
 
@@ -487,13 +491,13 @@ LrWpanNetDevice::McpsDataIndication(McpsDataIndicationParams params, Ptr<Packet>
     NS_LOG_FUNCTION(this);
     // TODO: Use the PromiscReceiveCallback if the MAC is in promiscuous mode.
 
-    if (params.m_dstAddrMode == SHORT_ADDR)
+    Address src = (params.m_dstAddrMode == SHORT_ADDR)
+                      ? Address(BuildPseudoMacAddress(params.m_srcPanId, params.m_srcAddr))
+                      : Address(params.m_srcExtAddr);
+    if (!m_receiveCallback(this, pkt, 0, src))
     {
-        m_receiveCallback(this, pkt, 0, BuildPseudoMacAddress(params.m_srcPanId, params.m_srcAddr));
-    }
-    else
-    {
-        m_receiveCallback(this, pkt, 0, params.m_srcExtAddr);
+        NS_LOG_INFO("Drop packet due to no protocol handler");
+        m_macRxDropTrace(pkt);
     }
 }
 

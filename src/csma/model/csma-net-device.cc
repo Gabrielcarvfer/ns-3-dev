@@ -824,7 +824,11 @@ CsmaNetDevice::Receive(Ptr<const Packet> packet, Ptr<CsmaNetDevice> senderDevice
     {
         m_snifferTrace(packet);
         m_macRxTrace(packet);
-        m_rxCallback(this, pktCopy, protocol, header.GetSource());
+        if (!m_rxCallback(this, pktCopy, protocol, header.GetSource()))
+        {
+            NS_LOG_INFO("Drop packet due to no protocol handler");
+            m_macRxDropTrace(packet);
+        }
     }
 }
 

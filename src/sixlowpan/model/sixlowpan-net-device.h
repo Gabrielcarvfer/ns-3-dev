@@ -375,6 +375,9 @@ class SixLowPanNetDevice : public NetDevice
     // NS_DEPRECATED() - tag for future removal
     TracedCallback<DropReason, Ptr<const Packet>, Ptr<SixLowPanNetDevice>, uint32_t> m_dropTrace;
 
+    /// Trace fired when a received packet is dropped because no protocol handler consumed it.
+    TracedCallback<Ptr<const Packet>> m_macRxDropTrace;
+
     /**
      * @brief Compress the headers according to HC1 compression.
      * @param [in] packet The packet to be compressed.

@@ -97,7 +97,11 @@ WifiNetDevice::GetTypeId()
                           "The EhtConfiguration object.",
                           PointerValue(),
                           MakePointerAccessor(&WifiNetDevice::GetEhtConfiguration),
-                          MakePointerChecker<EhtConfiguration>());
+                          MakePointerChecker<EhtConfiguration>())
+            .AddTraceSource("MacRxDrop",
+                            "A packet has been dropped because no protocol handler consumed it.",
+                            MakeTraceSourceAccessor(&WifiNetDevice::m_macRxDropTrace),
+                            "ns3::Packet::TracedCallback");
     return tid;
 }
 
@@ -529,7 +533,11 @@ WifiNetDevice::ForwardUp(Ptr<const Packet> packet, Mac48Address from, Mac48Addre
     {
         m_mac->NotifyRx(packet);
         copy->RemoveHeader(llc);
-        m_forwardUp(this, copy, llc.GetType(), from);
+        if (!m_forwardUp(this, copy, llc.GetType(), from))
+        {
+            NS_LOG_INFO("Drop packet due to no protocol handler");
+            m_macRxDropTrace(copy);
+        }
     }
     else
     {

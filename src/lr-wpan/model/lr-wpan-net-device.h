@@ -295,6 +295,9 @@ class LrWpanNetDevice : public NetDevice
      */
     TracedCallback<> m_linkChanges;
 
+    /// Trace fired when a received packet is dropped because no protocol handler consumed it.
+    TracedCallback<Ptr<const Packet>> m_macRxDropTrace;
+
     /**
      * Upper layer callback used for notification of new data packet arrivals.
      */

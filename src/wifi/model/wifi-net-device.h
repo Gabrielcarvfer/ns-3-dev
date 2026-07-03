@@ -259,6 +259,8 @@ class WifiNetDevice : public NetDevice
 
     TracedCallback<Ptr<const Packet>, Mac48Address> m_rxLogger; //!< receive trace callback
     TracedCallback<Ptr<const Packet>, Mac48Address> m_txLogger; //!< transmit trace callback
+    /// Trace fired when a received packet is dropped because no protocol handler consumed it.
+    TracedCallback<Ptr<const Packet>> m_macRxDropTrace;
 
     WifiStandard m_standard;        //!< Wifi standard
     uint32_t m_ifIndex;             //!< IF index

@@ -371,7 +371,11 @@ PointToPointNetDevice::Receive(Ptr<Packet> packet)
         }
 
         m_macRxTrace(originalPacket);
-        m_rxCallback(this, packet, protocol, GetRemote());
+        if (!m_rxCallback(this, packet, protocol, GetRemote()))
+        {
+            NS_LOG_INFO("Drop packet due to no protocol handler");
+            m_macRxDropTrace(originalPacket);
+        }
     }
 }
 

@@ -121,7 +121,11 @@ SixLowPanNetDevice::GetTypeId()
                             "Drop - DropReason, packet (including 6LoWPAN header), "
                             "SixLoWPanNetDevice Ptr, interface index.",
                             MakeTraceSourceAccessor(&SixLowPanNetDevice::m_dropTrace),
-                            "ns3::SixLowPanNetDevice::DropTracedCallback");
+                            "ns3::SixLowPanNetDevice::DropTracedCallback")
+            .AddTraceSource("MacRxDrop",
+                            "A packet has been dropped because no protocol handler consumed it.",
+                            MakeTraceSourceAccessor(&SixLowPanNetDevice::m_macRxDropTrace),
+                            "ns3::Packet::TracedCallback");
     return tid;
 }
 
@@ -401,7 +405,11 @@ SixLowPanNetDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
     }
 
     m_rxPostTrace(copyPkt, this, GetIfIndex());
-    m_rxCallback(this, copyPkt, iana::ieee802numbers::IPV6, realSrc);
+    if (!m_rxCallback(this, copyPkt, iana::ieee802numbers::IPV6, realSrc))
+    {
+        NS_LOG_INFO("Drop packet due to no protocol handler");
+        m_macRxDropTrace(copyPkt);
+    }
 }
 
 void
