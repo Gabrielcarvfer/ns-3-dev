@@ -503,8 +503,9 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
     }
 
     const WifiMacHeader& hdr = peekedItem->GetHeader();
-    // setup a Block Ack agreement if needed
-    if (hdr.IsQosData() && !hdr.GetAddr1().IsGroup() &&
+    // setup a Block Ack agreement if needed, but not while an MSDU is being
+    // fragmented: its remaining fragments would be sent under the agreement
+    if (hdr.IsQosData() && !hdr.GetAddr1().IsGroup() && !peekedItem->IsFragment() &&
         NeedSetupBlockAck(hdr.GetAddr1(), hdr.GetQosTid()))
     {
         return SendAddBaRequest(hdr.GetAddr1(),
@@ -528,12 +529,20 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
         }
     }
 
-    // Use SendDataFrame if we can try aggregation
-    if (hdr.IsQosData() && !hdr.GetAddr1().IsBroadcast() && !peekedItem->IsFragment() &&
-        !GetWifiRemoteStationManager()->NeedFragmentation(peekedItem =
-                                                              CreateAliasIfNeeded(peekedItem)))
+    // Use SendDataFrame if we can try aggregation. An MSDU sent under a Block Ack
+    // agreement is not fragmented: the recipient's reordering buffer cannot hold
+    // fragments, and Linux tears the agreement down when it receives one
+    // (@issueid{1199})
+    if (hdr.IsQosData() && !hdr.GetAddr1().IsBroadcast() && !peekedItem->IsFragment())
     {
-        return SendDataFrame(peekedItem, availableTime, initialFrame);
+        const auto underBa =
+            m_mac->GetBaAgreementEstablishedAsOriginator(hdr.GetAddr1(), hdr.GetQosTid())
+                .has_value();
+        peekedItem = CreateAliasIfNeeded(peekedItem);
+        if (underBa || !GetWifiRemoteStationManager()->NeedFragmentation(peekedItem))
+        {
+            return SendDataFrame(peekedItem, availableTime, initialFrame);
+        }
     }
 
     // Use the QoS FEM to transmit the frame in all the other cases, i.e.:
@@ -849,7 +858,14 @@ HtFrameExchangeManager::NotifyReceivedNormalAck(Ptr<WifiMpdu> mpdu)
         uint8_t tid = mpdu->GetHeader().GetQosTid();
         Ptr<QosTxop> edca = m_mac->GetQosTxop(tid);
 
-        if (m_mac->GetBaAgreementEstablishedAsOriginator(mpdu->GetHeader().GetAddr1(), tid))
+        // Only let the BA manager finalize (and dequeue) the MPDU once the whole
+        // MSDU has been acknowledged. For a non-final fragment, NotifyGotAck would
+        // dequeue the item here, and the base ReceivedNormalAck would then call
+        // WifiMacQueue::Replace() on the already-dequeued MPDU, tripping the
+        // IsQueued() assertion (see @issueid{1199}). Intermediate fragments fall through to
+        // the legacy fragment-replacement path instead.
+        if (m_mac->GetBaAgreementEstablishedAsOriginator(mpdu->GetHeader().GetAddr1(), tid) &&
+            !mpdu->GetHeader().IsMoreFragments())
         {
             // notify the BA manager that the MPDU was acknowledged
             edca->GetBaManager()->NotifyGotAck(m_linkId, mpdu);
@@ -1999,6 +2015,22 @@ HtFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             isGroup ? std::optional{hdr.IsQosAmsdu() ? mpdu->begin()->second.GetDestinationAddr()
                                                      : hdr.GetAddr1()}
                     : std::nullopt);
+        if (agreement && !isGroup && (hdr.IsMoreFragments() || hdr.GetFragmentNumber() > 0))
+        {
+            // A fragment received under a Block Ack agreement: the recipient window
+            // tracks MSDUs by sequence number and cannot hold fragments, and leaving the
+            // sequence number of the fragmented MSDU unrecorded would stall the window.
+            // As Linux (mac80211) does, terminate the agreement, which forwards up the
+            // MPDUs it buffered, and handle the fragment as received outside of any
+            // agreement, so that MacRxMiddle reassembles the MSDU (see @issueid{1199}).
+            NS_LOG_DEBUG("Fragment received under a Block Ack agreement: terminate it");
+            const auto originator =
+                GetWifiRemoteStationManager()->GetMldAddress(hdr.GetAddr2()).value_or(
+                    hdr.GetAddr2());
+            GetBaManager(tid)->DestroyRecipientAgreement(originator, tid, std::nullopt);
+            SendDelbaFrame(originator, tid, false, std::nullopt);
+            agreement.reset();
+        }
         if (agreement)
         {
             // a Block Ack agreement has been established
