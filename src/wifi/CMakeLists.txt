@@ -420,6 +420,7 @@ build_lib(
     test/wifi-fragmentation-blockack-test-suite.cc
     test/wifi-gcr-test.cc
     test/wifi-he-info-elems-test.cc
+    test/wifi-ht-single-model-spectrum-test-suite.cc
     test/wifi-ie-fragment-test.cc
     test/wifi-mac-ofdma-test.cc
     test/wifi-mac-queue-test.cc
