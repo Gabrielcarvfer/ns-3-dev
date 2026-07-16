@@ -1234,6 +1234,16 @@ after a given time period which can be configured through the attribute "UpdateP
 If "UpdatePeriod" is set to 0, the channel condition is never updated.
 It has five derived classes implementing the channel condition models described in 3GPP TR 38.901 [9]_ for different propagation scenarios.
 
+When the attribute "InterUeSpatialConsistency" is enabled, the uniform variate
+compared against the LOS probability is drawn from a per-site
+spatially-correlated Gaussian random field sampled at the terminal position,
+implementing the drop-based spatial consistency of the LOS/NLOS state of 3GPP
+TR 38.901, Sec. 7.6.3.1, with the correlation distance of Table 7.6.3.1-2:
+links from the same site to nearby terminals obtain a consistent LOS/NLOS
+state, forming contiguous LOS/NLOS regions. The field is a deterministic hash
+of the position mixed with the global RNG seed/run, hence repeatable and
+identical across model instances.
+
 ThreeGppRmaChannelConditionModel
 ````````````````````````````````
 This class implements the statistical channel condition model described in 3GPP TR 38.901 [9]_, Table 7.4.2-1, for the RMa scenario.
