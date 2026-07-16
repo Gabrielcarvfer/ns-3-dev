@@ -510,6 +510,19 @@ class ThreeGppChannelConditionModel : public ChannelConditionModel
 
     Ptr<UniformRandomVariable> m_uniformVar; //!< uniform random variable
 
+    /**
+     * @brief Correlation distance of the LOS/NLOS state, TR 38.901 Table
+     *        7.6.3.1-2.
+     *
+     * Used by the inter-UE (drop-based) spatially consistent LOS state, see
+     * the InterUeSpatialConsistency attribute. The base implementation
+     * returns the UMa distance; scenarios with a different Table 7.6.3.1-2
+     * entry override it.
+     *
+     * @return The correlation distance in meters.
+     */
+    virtual double GetLosStateCorrelationDistance() const;
+
   private:
     /**
      * This method computes the channel condition based on a probabilistic model
@@ -575,6 +588,8 @@ class ThreeGppChannelConditionModel : public ChannelConditionModel
         0}; //!< the threshold for determining what is the ratio of channels with O2I
     double m_o2iLowLossThreshold{0}; //!< the threshold for determining what is the ratio of low -
                                      //!< high O2I building penetration losses
+    /// enables inter-UE (drop-based) spatially consistent LOS/NLOS state
+    bool m_interUeSpatialConsistency{false};
     bool m_linkO2iConditionToAntennaHeight{
         false}; //!< the indicator that determines whether the O2I/O2O condition is determined based
                 //!< on the UE height
@@ -613,6 +628,14 @@ class ThreeGppRmaChannelConditionModel : public ThreeGppChannelConditionModel
      */
     ~ThreeGppRmaChannelConditionModel() override;
 
+    /**
+     * @brief Correlation distance of the LOS/NLOS state, TR 38.901 Table
+     *        7.6.3.1-2.
+     * @return The correlation distance in meters.
+     */
+    double GetLosStateCorrelationDistance() const override;
+
+  protected:
   private:
     /**
      * Compute the LOS probability as specified in Table 7.4.2-1 of 3GPP TR 38.901
@@ -733,6 +756,14 @@ class ThreeGppIndoorMixedOfficeChannelConditionModel : public ThreeGppChannelCon
      */
     ~ThreeGppIndoorMixedOfficeChannelConditionModel() override;
 
+    /**
+     * @brief Correlation distance of the LOS/NLOS state, TR 38.901 Table
+     *        7.6.3.1-2.
+     * @return The correlation distance in meters.
+     */
+    double GetLosStateCorrelationDistance() const override;
+
+  protected:
   private:
     /**
      * Compute the LOS probability as specified in Table 7.4.2-1 of 3GPP TR 38.901
@@ -773,6 +804,14 @@ class ThreeGppIndoorOpenOfficeChannelConditionModel : public ThreeGppChannelCond
      */
     ~ThreeGppIndoorOpenOfficeChannelConditionModel() override;
 
+    /**
+     * @brief Correlation distance of the LOS/NLOS state, TR 38.901 Table
+     *        7.6.3.1-2.
+     * @return The correlation distance in meters.
+     */
+    double GetLosStateCorrelationDistance() const override;
+
+  protected:
   private:
     /**
      * Compute the LOS probability as specified in Table 7.4.2-1 of 3GPP TR 38.901

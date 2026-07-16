@@ -14,6 +14,7 @@
 #include "ns3/mobility-model.h"
 #include "ns3/node.h"
 #include "ns3/pointer.h"
+#include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 
@@ -21,6 +22,97 @@
 
 namespace
 {
+
+/**
+ * @brief SplitMix64 mixing round.
+ * @param x The state to mix.
+ * @return The mixed state.
+ */
+uint64_t
+SplitMix64(uint64_t x)
+{
+    x += 0x9E3779B97F4A7C15ULL;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+    return x ^ (x >> 31);
+}
+
+/**
+ * @brief Deterministic, position-repeatable N(0,1) value for one cell of the
+ *        spatially-correlated LOS-state random field of a site.
+ *
+ * Hashing (rather than drawing from a stateful RNG stream) makes the field a
+ * pure function of its coordinates, so every model instance and every call
+ * observes the same field; this lets the drop-based spatially consistent LOS
+ * state survive a REM generator's per-point regeneration of condition models.
+ * The global RNG seed/run are mixed in so the realization still changes
+ * across independent runs, and a class-specific salt decorrelates this field
+ * from the shadow-fading and LSP fields keyed on the same site. Mirrors the
+ * hash-based fields of ThreeGppPropagationLossModel and ThreeGppChannelModel.
+ *
+ * @param siteNodeId Node id of the site endpoint owning the field.
+ * @param ix Integer grid x-coordinate of the cell.
+ * @param iy Integer grid y-coordinate of the cell.
+ * @return A standard-normal sample deterministic in (seed, run, site, ix, iy).
+ */
+double
+LosStateFieldCellNormal(uint32_t siteNodeId, int64_t ix, int64_t iy)
+{
+    uint64_t h = SplitMix64(static_cast<uint64_t>(ns3::RngSeedManager::GetSeed()));
+    h = SplitMix64(h ^ (static_cast<uint64_t>(ns3::RngSeedManager::GetRun()) + 0x1000ULL));
+    h = SplitMix64(h ^ 0x105057A7E5A17ULL); // LOS-state class salt
+    h = SplitMix64(h ^ static_cast<uint64_t>(siteNodeId));
+    h = SplitMix64(h ^ static_cast<uint64_t>(static_cast<uint32_t>(ix)));
+    h = SplitMix64(h ^ static_cast<uint64_t>(static_cast<uint32_t>(iy)));
+    // Two independent uniforms in (0,1] from the mixed state (53-bit mantissa).
+    const double inv = 1.0 / 9007199254740992.0; // 2^-53
+    double u1 = (static_cast<double>(SplitMix64(h) >> 11) + 1.0) * inv;
+    double u2 = static_cast<double>(SplitMix64(h + 1) >> 11) * inv;
+    // Box-Muller transform.
+    return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+}
+
+/**
+ * @brief Sample the unit-variance, spatially-correlated LOS-state Gaussian
+ *        random field of a site at a position.
+ *
+ * The field is obtained by filtering a grid of i.i.d. hash-generated N(0,1)
+ * cell values (grid spacing corrDist/2) with a separable exponential kernel
+ * exp(-|d|/corrDist); the weights are L2-normalized so the marginal
+ * distribution is exactly N(0,1) while two samples decorrelate with
+ * horizontal distance on the scale of corrDist.
+ *
+ * @param siteNodeId Node id of the site endpoint owning the field.
+ * @param position Sampling position (only x and y are used).
+ * @param corrDist Correlation distance in meters.
+ * @return A sample of the field with N(0,1) marginal distribution.
+ */
+double
+SampleLosStateField(uint32_t siteNodeId, const ns3::Vector& position, double corrDist)
+{
+    // The kernel decay length is scaled so the resulting autocorrelation
+    // (1 + tau/lambda) * exp(-tau/lambda) equals 1/e at tau = corrDist,
+    // matching the exp(-d/dcor) autocorrelation prescribed by TR 38.901.
+    const double lambda = corrDist / 2.1462;
+    const double spacing = 0.5 * lambda;
+    const auto ix = static_cast<int64_t>(std::floor(position.x / spacing));
+    const auto iy = static_cast<int64_t>(std::floor(position.y / spacing));
+
+    double acc = 0.0;
+    double weight2 = 0.0;
+    for (int64_t j = iy - 6; j <= iy + 7; j++)
+    {
+        const double wy = std::exp(-std::abs(j * spacing - position.y) / lambda);
+        for (int64_t i = ix - 6; i <= ix + 7; i++)
+        {
+            const double wx = std::exp(-std::abs(i * spacing - position.x) / lambda);
+            const double w = wx * wy;
+            acc += w * LosStateFieldCellNormal(siteNodeId, i, j);
+            weight2 += w * w;
+        }
+    }
+    return acc / std::sqrt(weight2);
+}
 
 /// NTN Dense Urban LOS probabilities from table 6.6.1-1 of 3GPP 38.811
 const std::map<int, double> DenseUrbanLOSProb{
@@ -357,6 +449,18 @@ ThreeGppChannelConditionModel::GetTypeId()
                           DoubleValue(1.0),
                           MakeDoubleAccessor(&ThreeGppChannelConditionModel::m_o2iLowLossThreshold),
                           MakeDoubleChecker<double>(0, 1))
+            .AddAttribute(
+                "InterUeSpatialConsistency",
+                "Enable inter-UE (drop-based) spatially consistent LOS/NLOS state, 3GPP TR "
+                "38.901 Sec. 7.6.3.1. When enabled, the uniform variate compared against the "
+                "LOS probability is drawn from a per-site spatially-correlated Gaussian random "
+                "field sampled at the terminal position (correlation distance from Table "
+                "7.6.3.1-2), so links from the same site to nearby terminals obtain a "
+                "consistent LOS/NLOS state. Matches the InterUeSpatialConsistency options of "
+                "ThreeGppPropagationLossModel and ThreeGppChannelModel.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&ThreeGppChannelConditionModel::m_interUeSpatialConsistency),
+                MakeBooleanChecker())
             .AddAttribute("LinkO2iConditionToAntennaHeight",
                           "Specifies whether the O2I condition will "
                           "be determined based on the UE height, i.e. if the UE height is 1.5 then "
@@ -440,6 +544,14 @@ ThreeGppChannelConditionModel::GetChannelCondition(Ptr<const MobilityModel> a,
     return cond;
 }
 
+double
+ThreeGppChannelConditionModel::GetLosStateCorrelationDistance() const
+{
+    // TR 38.901 Table 7.6.3.1-2, LOS/NLOS-state correlation distance of UMa
+    // (also used as fallback by scenarios without a table entry).
+    return 50.0;
+}
+
 ChannelCondition::O2iConditionValue
 ThreeGppChannelConditionModel::ComputeO2i(Ptr<const MobilityModel> a,
                                           Ptr<const MobilityModel> b) const
@@ -484,7 +596,25 @@ ThreeGppChannelConditionModel::ComputeChannelCondition(Ptr<const MobilityModel> 
     double pNlos = ComputePnlos(a, b);
 
     // draw a random value
-    double pRef = m_uniformVar->GetValue();
+    double pRef;
+    if (m_interUeSpatialConsistency)
+    {
+        // Drop-based spatially consistent LOS state (TR 38.901 Sec. 7.6.3.1):
+        // probability-integral transform of a per-site spatially-correlated
+        // Gaussian field sampled at the terminal position, so nearby
+        // terminals compare a consistent variate against the LOS probability.
+        const uint32_t idA = a->GetObject<Node>()->GetId();
+        const uint32_t idB = b->GetObject<Node>()->GetId();
+        const bool aIsSite = idA <= idB;
+        const uint32_t siteNodeId = aIsSite ? idA : idB;
+        const Vector termPos = (aIsSite ? b : a)->GetPosition();
+        const double z = SampleLosStateField(siteNodeId, termPos, GetLosStateCorrelationDistance());
+        pRef = 0.5 * std::erfc(-z * M_SQRT1_2);
+    }
+    else
+    {
+        pRef = m_uniformVar->GetValue();
+    }
 
     NS_LOG_DEBUG("pRef " << pRef << " pLos " << pLos << " pNlos " << pNlos);
 
@@ -616,6 +746,12 @@ ThreeGppRmaChannelConditionModel::ThreeGppRmaChannelConditionModel()
 
 ThreeGppRmaChannelConditionModel::~ThreeGppRmaChannelConditionModel()
 {
+}
+
+double
+ThreeGppRmaChannelConditionModel::GetLosStateCorrelationDistance() const
+{
+    return 60.0; // TR 38.901 Table 7.6.3.1-2
 }
 
 double
@@ -793,6 +929,12 @@ ThreeGppIndoorMixedOfficeChannelConditionModel::~ThreeGppIndoorMixedOfficeChanne
 }
 
 double
+ThreeGppIndoorMixedOfficeChannelConditionModel::GetLosStateCorrelationDistance() const
+{
+    return 10.0; // TR 38.901 Table 7.6.3.1-2
+}
+
+double
 ThreeGppIndoorMixedOfficeChannelConditionModel::ComputePlos(Ptr<const MobilityModel> a,
                                                             Ptr<const MobilityModel> b) const
 {
@@ -849,6 +991,12 @@ ThreeGppIndoorOpenOfficeChannelConditionModel::ThreeGppIndoorOpenOfficeChannelCo
 
 ThreeGppIndoorOpenOfficeChannelConditionModel::~ThreeGppIndoorOpenOfficeChannelConditionModel()
 {
+}
+
+double
+ThreeGppIndoorOpenOfficeChannelConditionModel::GetLosStateCorrelationDistance() const
+{
+    return 10.0; // TR 38.901 Table 7.6.3.1-2
 }
 
 double
