@@ -66,11 +66,18 @@
  * Append the simulation time to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
+ * Requires the `ns3LogContext` stream declared by the NS_LOG_* macros
+ * (see ns3::LogLineBegin()).
  */
 #define NS_LOG_APPEND_TIME_PREFIX                                                                  \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_TIME))                                                     \
     {                                                                                              \
-        NS_LOG_APPEND_TIME_PREFIX_IMPL;                                                            \
+        ns3::TimePrinter printer = ns3::LogGetTimePrinter();                                       \
+        if (printer != 0)                                                                          \
+        {                                                                                          \
+            (*printer)(ns3LogContext);                                                             \
+            ns3LogContext << " ";                                                                  \
+        }                                                                                          \
     }
 
 /**
@@ -78,11 +85,18 @@
  * Append the simulation node id to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
+ * Requires the `ns3LogContext` stream declared by the NS_LOG_* macros
+ * (see ns3::LogLineBegin()).
  */
 #define NS_LOG_APPEND_NODE_PREFIX                                                                  \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_NODE))                                                     \
     {                                                                                              \
-        NS_LOG_APPEND_NODE_PREFIX_IMPL;                                                            \
+        ns3::NodePrinter printer = ns3::LogGetNodePrinter();                                       \
+        if (printer != 0)                                                                          \
+        {                                                                                          \
+            (*printer)(ns3LogContext);                                                             \
+            ns3LogContext << " ";                                                                  \
+        }                                                                                          \
     }
 
 /**
@@ -90,11 +104,13 @@
  * Append the function name to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
+ * Requires the `ns3LogContext` stream declared by the NS_LOG_* macros
+ * (see ns3::LogLineBegin()).
  */
 #define NS_LOG_APPEND_FUNC_PREFIX                                                                  \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_FUNC))                                                     \
     {                                                                                              \
-        std::clog << g_log.Name() << ":" << __FUNCTION__ << "(): ";                                \
+        ns3LogContext << g_log.Name() << ":" << __FUNCTION__ << "(): ";                            \
     }
 
 /**
@@ -102,11 +118,13 @@
  * Append the log severity level to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
+ * Requires the `ns3LogContext` stream declared by the NS_LOG_* macros
+ * (see ns3::LogLineBegin()).
  */
 #define NS_LOG_APPEND_LEVEL_PREFIX(level)                                                          \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_LEVEL))                                                    \
     {                                                                                              \
-        std::clog << "[" << g_log.GetLevelLabel(level) << "] ";                                    \
+        ns3LogContext << "[" << g_log.GetLevelLabel(level) << "] ";                                \
     }
 
 #ifndef NS_LOG_APPEND_CONTEXT
@@ -118,12 +136,17 @@
  * This is implemented locally in `.cc` files because
  * the relevant variable is only known there.
  *
+ * The macro is expanded inside the NS_LOG_* macros where a local
+ * `std::ostream& ns3LogContext` is in scope.  Redefinitions must stream the
+ * context into `ns3LogContext` (not directly to `std::clog`) so the whole
+ * log line can be emitted with a single write operation.
+ *
  * Preferred format is something like (assuming the node id is
  * accessible from `var`:
  * @code
  *   if (var)
  *     {
- *       std::clog << "[node " << var->GetObject<Node> ()->GetId () << "] ";
+ *       ns3LogContext << "[node " << var->GetObject<Node> ()->GetId () << "] ";
  *     }
  * @endcode
  */
@@ -156,6 +179,10 @@
  *
  * The log message is expected to be a C++ ostream
  * message such as "my string" << aNumber << "my oth stream".
+ * The message and all prefixes (time, node, context, function, level) are
+ * assembled in a reusable memory buffer (`ns3LogContext`) and emitted to
+ * `std::clog` with a single write operation
+ * (see ns3::LogLineBegin() / ns3::LogLineCommit()).
  *
  * Typical usage looks like:
  * @code
@@ -173,14 +200,16 @@
     {                                                                                              \
         if (g_log.IsEnabled(level))                                                                \
         {                                                                                          \
+            std::ostream& ns3LogContext = ns3::LogLineBegin();                                     \
             NS_LOG_APPEND_TIME_PREFIX;                                                             \
             NS_LOG_APPEND_NODE_PREFIX;                                                             \
             NS_LOG_APPEND_CONTEXT;                                                                 \
             NS_LOG_APPEND_FUNC_PREFIX;                                                             \
             NS_LOG_APPEND_LEVEL_PREFIX(level);                                                     \
-            auto flags = std::clog.setf(std::ios_base::boolalpha);                                 \
-            std::clog << msg << std::endl;                                                         \
-            std::clog.flags(flags);                                                                \
+            auto flags = ns3LogContext.setf(std::ios_base::boolalpha);                             \
+            ns3LogContext << msg;                                                                  \
+            ns3LogContext.flags(flags);                                                            \
+            ns3::LogLineCommit(ns3LogContext);                                                     \
         }                                                                                          \
     } while (false)
 
@@ -198,10 +227,12 @@
     {                                                                                              \
         if (g_log.IsEnabled(ns3::LOG_FUNCTION))                                                    \
         {                                                                                          \
+            std::ostream& ns3LogContext = ns3::LogLineBegin();                                     \
             NS_LOG_APPEND_TIME_PREFIX;                                                             \
             NS_LOG_APPEND_NODE_PREFIX;                                                             \
             NS_LOG_APPEND_CONTEXT;                                                                 \
-            std::clog << g_log.Name() << ":" << __FUNCTION__ << "()" << std::endl;                 \
+            ns3LogContext << g_log.Name() << ":" << __FUNCTION__ << "()";                          \
+            ns3::LogLineCommit(ns3LogContext);                                                     \
         }                                                                                          \
     } while (false)
 
@@ -234,14 +265,16 @@
     {                                                                                              \
         if (g_log.IsEnabled(ns3::LOG_FUNCTION))                                                    \
         {                                                                                          \
+            std::ostream& ns3LogContext = ns3::LogLineBegin();                                     \
             NS_LOG_APPEND_TIME_PREFIX;                                                             \
             NS_LOG_APPEND_NODE_PREFIX;                                                             \
             NS_LOG_APPEND_CONTEXT;                                                                 \
-            std::clog << g_log.Name() << ":" << __FUNCTION__ << "(";                               \
-            auto flags = std::clog.setf(std::ios_base::boolalpha);                                 \
-            ns3::ParameterLogger(std::clog) << parameters;                                         \
-            std::clog.flags(flags);                                                                \
-            std::clog << ")" << std::endl;                                                         \
+            ns3LogContext << g_log.Name() << ":" << __FUNCTION__ << "(";                           \
+            auto flags = ns3LogContext.setf(std::ios_base::boolalpha);                             \
+            ns3::ParameterLogger(ns3LogContext) << parameters;                                     \
+            ns3LogContext.flags(flags);                                                            \
+            ns3LogContext << ")";                                                                  \
+            ns3::LogLineCommit(ns3LogContext);                                                     \
         }                                                                                          \
     } while (false)
 
@@ -256,9 +289,11 @@
     NS_LOG_CONDITION                                                                               \
     do                                                                                             \
     {                                                                                              \
-        auto flags = std::clog.setf(std::ios_base::boolalpha);                                     \
-        std::clog << msg << std::endl;                                                             \
-        std::clog.flags(flags);                                                                    \
+        std::ostream& ns3LogContext = ns3::LogLineBegin();                                         \
+        auto flags = ns3LogContext.setf(std::ios_base::boolalpha);                                 \
+        ns3LogContext << msg;                                                                      \
+        ns3LogContext.flags(flags);                                                                \
+        ns3::LogLineCommit(ns3LogContext);                                                         \
     } while (false)
 
 #endif /* NS3_LOG_ENABLE */

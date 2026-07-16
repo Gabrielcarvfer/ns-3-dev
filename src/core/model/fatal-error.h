@@ -97,6 +97,7 @@ constexpr std::string_view NS_FATAL_MSG{"NS_FATAL, terminating"};
 #define NS_FATAL_ERROR_IMPL_NO_MSG(fatal)                                                          \
     do                                                                                             \
     {                                                                                              \
+        ::ns3::LogLineFlushPartial();                                                              \
         NS_LOG_APPEND_TIME_PREFIX_IMPL;                                                            \
         NS_LOG_APPEND_NODE_PREFIX_IMPL;                                                            \
         std::cerr << "file=" << __FILE__ << ", line=" << __LINE__ << std::endl;                    \
@@ -130,6 +131,7 @@ constexpr std::string_view NS_FATAL_MSG{"NS_FATAL, terminating"};
 #define NS_FATAL_ERROR_IMPL(msg, fatal)                                                            \
     do                                                                                             \
     {                                                                                              \
+        ::ns3::LogLineFlushPartial();                                                              \
         std::cerr << "msg=\"" << msg << "\", ";                                                    \
         NS_FATAL_ERROR_IMPL_NO_MSG(fatal);                                                         \
     } while (false)

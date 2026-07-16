@@ -16,7 +16,7 @@
 /** File-local context string */
 #define NS_LOG_APPEND_CONTEXT                                                                      \
     {                                                                                              \
-        std::clog << "(local context) ";                                                           \
+        ns3LogContext << "(local context) ";                                                       \
     }
 
 #include "ns3/core-module.h"

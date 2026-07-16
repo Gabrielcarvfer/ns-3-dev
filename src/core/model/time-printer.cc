@@ -8,11 +8,14 @@
 
 #include "time-printer.h"
 
+#include "assert.h"
 #include "log.h"
 #include "nstime.h"
 #include "simulator.h" // Now()
 
-#include <iomanip>
+#include <charconv>
+#include <cmath>
+#include <iterator>
 
 /**
  * @file
@@ -28,32 +31,49 @@ NS_LOG_COMPONENT_DEFINE("TimePrinter");
 void
 DefaultTimePrinter(std::ostream& os)
 {
-    std::ios_base::fmtflags ff = os.flags(); // Save stream flags
-    std::streamsize oldPrecision = os.precision();
-    os << std::fixed;
+    int precision;
     switch (Time::GetResolution())
     {
     case Time::US:
-        os << std::setprecision(6);
+        precision = 6;
         break;
     case Time::NS:
-        os << std::setprecision(9);
+        precision = 9;
         break;
     case Time::PS:
-        os << std::setprecision(12);
+        precision = 12;
         break;
     case Time::FS:
-        os << std::setprecision(15);
+        precision = 15;
         break;
 
     default:
         // default C++ precision of 5
-        os << std::setprecision(5);
+        precision = 5;
     }
-    os << Simulator::Now().As(Time::S);
 
-    os << std::setprecision(oldPrecision);
-    os.flags(ff); // Restore stream flags
+    // Create the same Time temporaries as the historical
+    // `os << Simulator::Now().As(Time::S)` so the Time marking bookkeeping
+    // (and the Time:Mark/Clear logs it emits before the simulation starts)
+    // is unchanged.
+    Time now = Simulator::Now();
+    [[maybe_unused]] TimeWithUnit inSeconds = now.As(Time::S);
+
+    // Same output as streaming inSeconds with std::fixed, std::showpos and
+    // the resolution-dependent precision, but bypassing the ostream
+    // formatting machinery, which is significantly slower.
+    char buf[64];
+    char* p = buf;
+    double seconds = now.GetSeconds();
+    if (!std::signbit(seconds))
+    {
+        *p++ = '+';
+    }
+    auto [end, ec] =
+        std::to_chars(p, std::end(buf) - 1, seconds, std::chars_format::fixed, precision);
+    NS_ASSERT(ec == std::errc());
+    *end++ = 's';
+    os.write(buf, end - buf);
 }
 
 } // namespace ns3
