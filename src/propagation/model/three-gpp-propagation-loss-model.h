@@ -243,6 +243,36 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
                         ChannelCondition::LosConditionValue cond) const;
 
     /**
+     * @brief Sample a unit-variance, spatially-correlated Gaussian random field.
+     *
+     * Backs the inter-UE (drop-based) spatial consistency of shadow fading
+     * (3GPP TR 38.901, Sec. 7.6.3.1). Each (site, condition slot) pair owns an
+     * independent 2D Gaussian field over the horizontal plane, obtained by
+     * filtering a grid of i.i.d. N(0,1) values with a separable exponential
+     * kernel exp(-|d|/corrDist), sampled at the requested position with grid
+     * spacing corrDist/2. The weights are L2-normalized so the marginal
+     * distribution is exactly N(0,1) while two samples of the same field
+     * decorrelate with horizontal distance on the scale of corrDist. Grid cell
+     * values are a deterministic hash of the field key and cell coordinates
+     * (mixed with the global RNG seed/run), so the field is a pure function of
+     * position: repeatable, and identical across every model instance. The
+     * latter matters because the REM regenerates the propagation model per
+     * evaluated point; a stateful/streamed field would draw fresh noise each
+     * time instead of a spatially consistent value.
+     *
+     * @param siteNodeId Node id of the site endpoint owning the field.
+     * @param condSlot Channel condition slot (0 = LOS, 1 = NLOS).
+     * @param position Sampling position (only x and y are used).
+     * @param corrDist Correlation distance in meters; non-positive values
+     *        degrade to a single deterministic draw at the position.
+     * @return A sample of the field with N(0,1) marginal distribution.
+     */
+    double SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
+                                           uint8_t condSlot,
+                                           const Vector& position,
+                                           double corrDist) const;
+
+    /**
      * @brief Returns the shadow fading standard deviation
      * @param a tx mobility model
      * @param b rx mobility model
@@ -316,6 +346,8 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     bool m_buildingPenLossesEnabled; //!< enable/disable building penetration losses
     double m_meanVehicleO2iLoss; //!< normal cars (9dB), cars with metal coated glass panels (20dB)
     Ptr<NormalRandomVariable> m_normRandomVariable; //!< normal random variable
+    /// enables inter-UE (drop-based) spatially consistent shadow fading
+    bool m_interUeSpatialConsistency;
 
     /** Define a struct for the m_shadowingMap entries */
     struct ShadowingMapItem
