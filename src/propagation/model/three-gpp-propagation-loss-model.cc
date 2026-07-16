@@ -16,12 +16,53 @@
 #include "ns3/mobility-model.h"
 #include "ns3/node.h"
 #include "ns3/pointer.h"
+#include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 
 #include <cmath>
+#include <cstdint>
 
 namespace
 {
+/**
+ * @brief Deterministic, position-repeatable N(0,1) value for one cell of a
+ *        spatially-correlated random field.
+ *
+ * Hashing (rather than drawing from a stateful RNG stream) makes the field a
+ * pure function of its coordinates, so every object instance and every call
+ * observes the same field. This is what lets drop-based spatial consistency
+ * survive the REM's per-point regeneration of propagation models, and it is
+ * inherently thread-safe and repeatable. The global RNG seed/run are mixed in
+ * so the realization still changes across independent runs. Mirrors the
+ * hash-seeded CRN grids of the WebGPU mezanine back-end.
+ *
+ * @param key0 First mixing word (e.g. packed site id and condition slot).
+ * @param ix Integer grid x-coordinate of the cell.
+ * @param iy Integer grid y-coordinate of the cell.
+ * @return A standard-normal sample deterministic in (seed, run, key0, ix, iy).
+ */
+double
+HashFieldNormal(uint64_t key0, int64_t ix, int64_t iy)
+{
+    auto splitmix = [](uint64_t x) {
+        x += 0x9E3779B97F4A7C15ULL;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+        return x ^ (x >> 31);
+    };
+    uint64_t h = splitmix(static_cast<uint64_t>(ns3::RngSeedManager::GetSeed()));
+    h = splitmix(h ^ (static_cast<uint64_t>(ns3::RngSeedManager::GetRun()) + 0x1000ULL));
+    h = splitmix(h ^ key0);
+    h = splitmix(h ^ static_cast<uint64_t>(static_cast<uint32_t>(ix)));
+    h = splitmix(h ^ static_cast<uint64_t>(static_cast<uint32_t>(iy)));
+    // Two independent uniforms in (0,1] from the mixed state (53-bit mantissa).
+    const double inv = 1.0 / 9007199254740992.0; // 2^-53
+    double u1 = (static_cast<double>(splitmix(h) >> 11) + 1.0) * inv;
+    double u2 = static_cast<double>(splitmix(h + 1) >> 11) * inv;
+    // Box-Muller transform.
+    return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+}
+
 /**
  * The enumerator used for code clarity when performing parameter assignment in the GetLoss Methods
  */
@@ -282,6 +323,18 @@ ThreeGppPropagationLossModel::GetTypeId()
                           MakeBooleanAccessor(&ThreeGppPropagationLossModel::m_shadowingEnabled),
                           MakeBooleanChecker())
             .AddAttribute(
+                "InterUeSpatialConsistency",
+                "Enable inter-UE (drop-based) spatially consistent shadow fading, 3GPP TR "
+                "38.901 Sec. 7.6.3.1. When enabled, the shadow-fading realization of a link is "
+                "drawn from a per-site, per-condition spatially-correlated Gaussian random field "
+                "sampled at the terminal position (correlation distance from Table 7.5-6), so "
+                "links from the same site to nearby terminals obtain correlated shadowing. This "
+                "replaces the per-link displacement-autocorrelated draw. Matches the "
+                "InterUeSpatialConsistency option of ThreeGppChannelModel.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&ThreeGppPropagationLossModel::m_interUeSpatialConsistency),
+                MakeBooleanChecker())
+            .AddAttribute(
                 "ChannelConditionModel",
                 "Pointer to the channel condition model.",
                 PointerValue(),
@@ -317,6 +370,8 @@ ThreeGppPropagationLossModel::ThreeGppPropagationLossModel()
     m_normRandomVariable = CreateObject<NormalRandomVariable>();
     m_normRandomVariable->SetAttribute("Mean", DoubleValue(0));
     m_normRandomVariable->SetAttribute("Variance", DoubleValue(1));
+
+    m_interUeSpatialConsistency = false;
 
     m_randomO2iVar1 = CreateObject<UniformRandomVariable>();
     m_randomO2iVar2 = CreateObject<UniformRandomVariable>();
@@ -703,6 +758,25 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
 {
     NS_LOG_FUNCTION(this);
 
+    if (m_interUeSpatialConsistency)
+    {
+        // Drop-based spatial consistency (TR 38.901 Sec. 7.6.3.1): draw the
+        // shadow-fading realization from a per-site spatially-correlated
+        // Gaussian field sampled at the terminal position, instead of the
+        // per-link displacement-autocorrelated map below. Re-evaluating the
+        // field at a moving terminal's successive positions reproduces the
+        // temporal correlation automatically, so no map bookkeeping is needed.
+        const uint32_t idA = a->GetObject<Node>()->GetId();
+        const uint32_t idB = b->GetObject<Node>()->GetId();
+        const bool aIsSite = idA <= idB;
+        const uint32_t siteNodeId = aIsSite ? idA : idB;
+        const Vector termPos = (aIsSite ? b : a)->GetPosition();
+        const uint8_t condSlot = (cond == ChannelCondition::LOS) ? 0 : 1;
+        const double corrDist = GetShadowingCorrelationDistance(cond);
+        return SampleSpatiallyCorrelatedNormal(siteNodeId, condSlot, termPos, corrDist) *
+               GetShadowingStd(a, b, cond);
+    }
+
     double shadowingValue;
 
     // compute the channel key
@@ -751,6 +825,59 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
     it->second.m_condition = cond;
 
     return shadowingValue;
+}
+
+double
+ThreeGppPropagationLossModel::SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
+                                                              uint8_t condSlot,
+                                                              const Vector& position,
+                                                              double corrDist) const
+{
+    // One independent field per (site, condition slot).
+    const uint64_t fieldKey =
+        (static_cast<uint64_t>(siteNodeId) << 2) | static_cast<uint64_t>(condSlot);
+
+    if (corrDist <= 0.0)
+    {
+        // Degenerate field: a single deterministic draw keyed on a coarse cell.
+        return HashFieldNormal(fieldKey,
+                               static_cast<int64_t>(std::floor(position.x)),
+                               static_cast<int64_t>(std::floor(position.y)));
+    }
+
+    // Filtering white noise with an exponential kernel of decay length lambda
+    // yields the autocorrelation (1 + tau/lambda) * exp(-tau/lambda); lambda
+    // is scaled so it equals 1/e at tau = corrDist, matching the exp(-d/dcor)
+    // autocorrelation prescribed by TR 38.901 (the (1+a)*exp(-a) = 1/e root).
+    const double lambda = corrDist / 2.1462;
+    // Grid spacing of half the kernel length resolves the exponential kernel
+    // shape; the 14-cell window covers the +-3*lambda filter support (the
+    // truncated tail carries weight exp(-3), absorbed by the L2 normalization
+    // below). Cell values are a deterministic hash of the field key and cell
+    // coordinates, so every propagation-model instance evaluating the same
+    // position observes the same field.
+    const double spacing = 0.5 * lambda;
+    const auto ix = static_cast<int64_t>(std::floor(position.x / spacing));
+    const auto iy = static_cast<int64_t>(std::floor(position.y / spacing));
+
+    double acc = 0.0;
+    double weight2 = 0.0;
+    for (int64_t j = iy - 6; j <= iy + 7; j++)
+    {
+        const double wy = std::exp(-std::abs(j * spacing - position.y) / lambda);
+        for (int64_t i = ix - 6; i <= ix + 7; i++)
+        {
+            const double wx = std::exp(-std::abs(i * spacing - position.x) / lambda);
+            const double cell = HashFieldNormal(fieldKey, i, j);
+            const double w = wx * wy;
+            acc += w * cell;
+            weight2 += w * w;
+        }
+    }
+    // i.i.d. N(0,1) cell values combined with L2-normalized weights yield an
+    // exactly N(0,1) marginal at every position, while two samples of the same
+    // field decorrelate with distance on the scale of corrDist.
+    return acc / std::sqrt(weight2);
 }
 
 int64_t
