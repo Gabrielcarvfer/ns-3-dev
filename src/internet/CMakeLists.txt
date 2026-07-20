@@ -366,6 +366,7 @@ set(test_sources
     test/tcp-option-test.cc
     test/tcp-mss-test.cc
     test/tcp-pacing-test.cc
+    test/tcp-partial-ack-rto-test.cc
     test/tcp-pkts-acked-test.cc
     test/tcp-prr-recovery-test.cc
     test/tcp-rate-ops-test.cc
