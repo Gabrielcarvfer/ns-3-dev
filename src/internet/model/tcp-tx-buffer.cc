@@ -741,11 +741,27 @@ TcpTxBuffer::DiscardUpTo(const SequenceNumber32& seq, const Callback<void, TcpTx
             // It is not possible to have the UNA sacked; otherwise, it would
             // have been ACKed. This is, most likely, our wrong guessing
             // when adding Reno dupacks in the count.
+            // m_sackedOut already accounts for the head, which is about to
+            // lose the guessed SACK flag
+            bool lossInferred = m_sackedOut >= m_dupAckThresh * m_segmentSize;
             head->m_sacked = false;
             m_sackedOut -= head->m_packet->GetSize();
-            NS_LOG_INFO("Moving the SACK flag from the HEAD to another segment");
-            AddRenoSack();
-            MarkHeadAsLost();
+            if (m_sackEnabled || lossInferred)
+            {
+                NS_LOG_INFO("Moving the SACK flag from the HEAD to another segment");
+                AddRenoSack();
+                MarkHeadAsLost();
+            }
+            else
+            {
+                // With SACK disabled, the guessed SACKs are pure dupack
+                // accounting. If they never reached the duplicate ACK
+                // threshold, no loss has been inferred: the cumulative ACK
+                // consumes the guess. Moving it forward would mark the
+                // new head as lost and cause a spurious retransmission and
+                // recovery entry on the next dupack (see issue #1107)
+                NS_LOG_INFO("Removing the guessed SACK flag from the new HEAD");
+            }
         }
 
         NS_ASSERT_MSG(head->m_startSeq == seq,
