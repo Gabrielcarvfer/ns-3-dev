@@ -81,6 +81,10 @@ Ns3TcpNoDelayTestCase::SinkRx(std::string, Ptr<const Packet> p, const Address&)
 void
 Ns3TcpNoDelayTestCase::DoRun()
 {
+    // The expected segment boundaries assume that the segment payload equals
+    // the configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
     uint16_t sinkPort = 50000;
     double sinkStopTime = 8;   // sec; will trigger Socket::Close
     double writerStopTime = 5; // sec; will trigger Socket::Close

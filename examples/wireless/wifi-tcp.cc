@@ -91,7 +91,10 @@ main(int argc, char* argv[])
                        TypeIdValue(TypeId::LookupByName(tcpVariant)));
 
     /* Configure TCP Options */
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(payloadSize));
+    // Configure a segment size such that each application packet of payloadSize
+    // bytes fits in a single segment, accounting for the 12 bytes of the
+    // timestamp option carried by every segment
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(payloadSize + 12));
 
     WifiMacHelper wifiMac;
     WifiHelper wifiHelper;

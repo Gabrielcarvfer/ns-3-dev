@@ -1504,6 +1504,9 @@ class TcpSocketBase : public TcpSocket
     Ptr<TcpRateOps> m_rateOps;                 //!< Rate operations
 
     // Guesses over the other connection end
+    uint32_t m_advertisedMss{0}; //!< MSS advertised in the MSS option (our configured segment size)
+    bool m_segmentSizeAdjusted{
+        false}; //!< True if the segment size has been reduced by the size of the TCP options
 
     // The following three traces pass a packet with a TCP header
     TracedCallback<Ptr<const Packet>,
