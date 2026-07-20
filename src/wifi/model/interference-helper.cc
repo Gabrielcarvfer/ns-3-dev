@@ -455,7 +455,14 @@ InterferenceHelper::CalculateNoiseInterferenceW(Ptr<Event> event,
             continue;
         }
         noiseInterference = it->second.GetPower() - event->GetRxPower(band) - muMimoPower;
-        if (std::abs(noiseInterference) < std::numeric_limits<double>::epsilon())
+        // The difference of the accumulated power and the power of the event(s) being
+        // subtracted is affected by rounding errors proportional to the magnitude of the
+        // operands (many signals may have been added to and removed from the accumulated
+        // power): clamp negligible (possibly negative) residuals to zero
+        const auto tolerance = (it->second.GetPower() + event->GetRxPower(band) + muMimoPower) *
+                               1e9 * std::numeric_limits<double>::epsilon();
+        if (std::abs(noiseInterference) <
+            std::max<double>(tolerance, std::numeric_limits<double>::epsilon()))
         {
             // fix some possible rounding issues with double values
             noiseInterference = Watt_u{0.0};
