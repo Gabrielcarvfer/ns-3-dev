@@ -312,23 +312,36 @@ class WifiPhyHelper : public PcapHelperForDevice, public AsciiTraceHelperForDevi
                                                     uint8_t phyId);
 
     /**
+     * Get the MPDU to write to a pcap file, without A-MPDU delimiter and padding,
+     * nor FCS.
+     *
+     * @param packet the packet traced by the PHY
+     * @param txVector the TXVECTOR
+     * @param[out] eof whether the A-MPDU delimiter had its EOF bit set
+     * @return the MPDU
+     */
+    static Ptr<Packet> GetPcapMpdu(Ptr<const Packet> packet,
+                                   const WifiTxVector& txVector,
+                                   bool& eof);
+
+    /**
      * Get the Radiotap header for a received packet.
      *
-     * @param packet the packet
      * @param channelFreqMhz the channel frequency
      * @param p20Index the index of the primary20 channel
      * @param txVector the TXVECTOR
      * @param aMpdu the A-MPDU information
+     * @param eof whether the A-MPDU delimiter had its EOF bit set (see GetPcapMpdu)
      * @param staId the STA-ID
      * @param signalNoise the rx signal and noise information (for receiver only)
      * @return the radiotap header
      */
     static RadiotapHeader GetRadiotapHeader(
-        Ptr<Packet> packet,
         uint16_t channelFreqMhz,
         uint8_t p20Index,
         const WifiTxVector& txVector,
         MpduInfo aMpdu,
+        bool eof,
         uint16_t staId,
         std::optional<SignalNoiseDbm> signalNoise = std::nullopt);
 

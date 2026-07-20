@@ -268,22 +268,23 @@ WifiPhyHelper::PcapSniffTxEvent(const std::shared_ptr<PcapFilesInfo>& info,
     {
         return;
     }
+    bool eof;
+    Ptr<Packet> p = GetPcapMpdu(packet, txVector, eof);
     switch (info->pcapDlt)
     {
     case iana::linktype::IEEE802_11:
-        file->Write(Simulator::Now(), packet);
+        file->Write(Simulator::Now(), p);
         return;
     case iana::linktype::IEEE802_11_PRISM: {
         NS_FATAL_ERROR("PcapSniffTxEvent(): DLT_PRISM_HEADER not implemented");
         return;
     }
     case iana::linktype::IEEE802_11_RADIOTAP: {
-        Ptr<Packet> p = packet->Copy();
-        const auto header = GetRadiotapHeader(p,
-                                              channelFreqMhz,
+        const auto header = GetRadiotapHeader(channelFreqMhz,
                                               info->device->GetPhy(phyId)->GetPrimary20Index(),
                                               txVector,
                                               aMpdu,
+                                              eof,
                                               staId);
         p->AddHeader(header);
         file->Write(Simulator::Now(), p);
@@ -309,22 +310,23 @@ WifiPhyHelper::PcapSniffRxEvent(const std::shared_ptr<PcapFilesInfo>& info,
     {
         return;
     }
+    bool eof;
+    Ptr<Packet> p = GetPcapMpdu(packet, txVector, eof);
     switch (info->pcapDlt)
     {
     case iana::linktype::IEEE802_11:
-        file->Write(Simulator::Now(), packet);
+        file->Write(Simulator::Now(), p);
         return;
     case iana::linktype::IEEE802_11_PRISM: {
         NS_FATAL_ERROR("PcapSniffRxEvent(): DLT_PRISM_HEADER not implemented");
         return;
     }
     case iana::linktype::IEEE802_11_RADIOTAP: {
-        Ptr<Packet> p = packet->Copy();
-        const auto header = GetRadiotapHeader(p,
-                                              channelFreqMhz,
+        const auto header = GetRadiotapHeader(channelFreqMhz,
                                               info->device->GetPhy(phyId)->GetPrimary20Index(),
                                               txVector,
                                               aMpdu,
+                                              eof,
                                               staId,
                                               signalNoise);
         p->AddHeader(header);
@@ -336,12 +338,34 @@ WifiPhyHelper::PcapSniffRxEvent(const std::shared_ptr<PcapFilesInfo>& info,
     }
 }
 
+Ptr<Packet>
+WifiPhyHelper::GetPcapMpdu(Ptr<const Packet> packet, const WifiTxVector& txVector, bool& eof)
+{
+    Ptr<Packet> mpdu = packet->Copy();
+    eof = false;
+    if (txVector.IsAggregation())
+    {
+        // For PCAP file, MPDU Delimiter and Padding should be removed by the MAC Driver
+        AmpduSubframeHeader hdr;
+        mpdu->RemoveHeader(hdr);
+        eof = hdr.GetEof() && hdr.GetLength() > 0;
+        mpdu = mpdu->CreateFragment(0, static_cast<uint32_t>(hdr.GetLength()));
+    }
+    // The FCS added by the simulator is not a real checksum (its four octets are
+    // zero), hence it is removed and the pcap trace does not include it, so that
+    // packet analyzers do not check it (see issue #300). It is removed after the
+    // A-MPDU delimiter and padding, which follow it.
+    WifiMacTrailer fcs;
+    mpdu->RemoveTrailer(fcs);
+    return mpdu;
+}
+
 RadiotapHeader
-WifiPhyHelper::GetRadiotapHeader(Ptr<Packet> packet,
-                                 uint16_t channelFreqMhz,
+WifiPhyHelper::GetRadiotapHeader(uint16_t channelFreqMhz,
                                  uint8_t p20Index,
                                  const WifiTxVector& txVector,
                                  MpduInfo aMpdu,
+                                 bool eof,
                                  uint16_t staId,
                                  std::optional<SignalNoiseDbm> signalNoise)
 {
@@ -357,8 +381,6 @@ WifiPhyHelper::GetRadiotapHeader(Ptr<Packet> packet,
     header.SetTsft(Simulator::Now().GetMicroSeconds());
 
     uint8_t frameFlags = RadiotapHeader::FRAME_FLAG_NONE;
-    // Our capture includes the FCS, so we set the flag to say so.
-    frameFlags |= RadiotapHeader::FRAME_FLAG_FCS_INCLUDED;
     if (preamble == WIFI_PREAMBLE_SHORT)
     {
         frameFlags |= RadiotapHeader::FRAME_FLAG_SHORT_PREAMBLE;
@@ -453,13 +475,7 @@ WifiPhyHelper::GetRadiotapHeader(Ptr<Packet> packet,
     {
         RadiotapHeader::AmpduStatusFields ampduStatusFields{.referenceNumber = aMpdu.mpduRefNumber};
         ampduStatusFields.flags |= RadiotapHeader::A_MPDU_STATUS_LAST_KNOWN;
-        /* For PCAP file, MPDU Delimiter and Padding should be removed by the MAC Driver */
-        AmpduSubframeHeader hdr;
-        uint32_t extractedLength;
-        packet->RemoveHeader(hdr);
-        extractedLength = hdr.GetLength();
-        packet = packet->CreateFragment(0, static_cast<uint32_t>(extractedLength));
-        if (aMpdu.type == LAST_MPDU_IN_AGGREGATE || (hdr.GetEof() && hdr.GetLength() > 0))
+        if (aMpdu.type == LAST_MPDU_IN_AGGREGATE || eof)
         {
             ampduStatusFields.flags |= RadiotapHeader::A_MPDU_STATUS_LAST;
         }
