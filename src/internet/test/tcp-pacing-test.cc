@@ -200,6 +200,7 @@ TcpPacingTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
     SetSegmentSize(SENDER, m_segmentSize);
+    SetSegmentSize(RECEIVER, m_segmentSize);
     SetInitialSsThresh(SENDER, m_ssThresh);
     SetInitialCwnd(SENDER, m_initialCwnd);
     SetPacingStatus(SENDER, true);

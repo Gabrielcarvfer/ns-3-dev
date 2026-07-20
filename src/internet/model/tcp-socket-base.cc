@@ -27,6 +27,7 @@
 #include "tcp-congestion-ops.h"
 #include "tcp-header.h"
 #include "tcp-l4-protocol.h"
+#include "tcp-option-rfc793.h"
 #include "tcp-option-sack-permitted.h"
 #include "tcp-option-sack.h"
 #include "tcp-option-ts.h"
@@ -1462,6 +1463,19 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         // recovery algorithms (e.g. PRR) can distinguish SACK from non-SACK
         // DeliveredData accounting.
         m_tcb->m_sackEnabled = m_sackEnabled;
+
+        if (tcpHeader.HasOption(TcpOption::MSS))
+        {
+            ProcessOptionMss(tcpHeader.GetOption(TcpOption::MSS));
+        }
+        else
+        {
+            // No MSS option received: assume the default maximum segment size
+            // of 536 bytes for IPv4 and 1220 bytes for IPv6 (RFC 9293,
+            // Section 3.7.1)
+            uint32_t defaultMss = (m_endPoint != nullptr) ? 536 : 1220;
+            m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, defaultMss);
+        }
 
         // When receiving a <SYN> or <SYN-ACK> we should adapt TS to the other end
         if (tcpHeader.HasOption(TcpOption::TS) && m_timestampEnabled)
@@ -2956,6 +2970,11 @@ TcpSocketBase::SendEmptyPacket(uint8_t flags)
     bool isAck = flags == TcpHeader::ACK;
     if (hasSyn)
     {
+        // The MSS option should be sent in every SYN segment when the receive
+        // MSS differs from the default, and may be sent always (RFC 9293,
+        // Section 3.7.1, SHLD-5 and MAY-3): always send it
+        AddOptionMss(header);
+
         if (m_winScalingEnabled)
         { // The window scaling option is set only on SYN packets
             AddOptionWScale(header);
@@ -4571,6 +4590,26 @@ TcpSocketBase::ProcessOptionSack(const Ptr<const TcpOption> option)
     }
 
     return m_txBuffer->Update(s->GetSackList(), MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
+}
+
+void
+TcpSocketBase::ProcessOptionMss(const Ptr<const TcpOption> option)
+{
+    NS_LOG_FUNCTION(this << option);
+
+    Ptr<const TcpOptionMSS> mss = DynamicCast<const TcpOptionMSS>(option);
+    NS_LOG_INFO(m_node->GetId() << " Received a MSS option with value " << mss->GetMSS());
+    m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, static_cast<uint32_t>(mss->GetMSS()));
+}
+
+void
+TcpSocketBase::AddOptionMss(TcpHeader& header)
+{
+    NS_LOG_FUNCTION(this << header);
+    Ptr<TcpOptionMSS> option = CreateObject<TcpOptionMSS>();
+    option->SetMSS(static_cast<uint16_t>(std::min(m_tcb->m_segmentSize, 65535U)));
+    header.AppendOption(option);
+    NS_LOG_INFO(m_node->GetId() << " Add option MSS " << option->GetMSS());
 }
 
 void
