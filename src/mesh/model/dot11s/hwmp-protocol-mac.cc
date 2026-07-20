@@ -72,8 +72,18 @@ HwmpProtocolMac::ReceiveData(Ptr<Packet> packet, const WifiMacHeader& header)
     switch (meshHdr.GetAddressExt())
     {
     case 0:
-        source = header.GetAddr4();
-        destination = header.GetAddr3();
+        if (header.GetAddr1().IsGroup())
+        {
+            // Group addressed frames use the three-address format
+            // (IEEE 802.11-2012, Table 8-19)
+            destination = header.GetAddr1();
+            source = header.GetAddr3();
+        }
+        else
+        {
+            source = header.GetAddr4();
+            destination = header.GetAddr3();
+        }
         break;
     default:
         NS_FATAL_ERROR("6-address scheme is not yet supported and 4-address extension is not "
@@ -83,8 +93,7 @@ HwmpProtocolMac::ReceiveData(Ptr<Packet> packet, const WifiMacHeader& header)
     tag.SetTtl(meshHdr.GetMeshTtl());
     packet->AddPacketTag(tag);
 
-    if ((destination == Mac48Address::GetBroadcast()) &&
-        (m_protocol->DropDataFrame(meshHdr.GetMeshSeqno(), source)))
+    if (destination.IsGroup() && (m_protocol->DropDataFrame(meshHdr.GetMeshSeqno(), source)))
     {
         NS_LOG_DEBUG("Dropping frame; source " << source << " dest " << destination << " seqno "
                                                << meshHdr.GetMeshSeqno());
@@ -220,7 +229,14 @@ HwmpProtocolMac::UpdateOutcomingFrame(Ptr<Packet> packet,
     meshHdr.SetMeshSeqno(tag.GetSeqno());
     meshHdr.SetMeshTtl(tag.GetTtl());
     packet->AddHeader(meshHdr);
-    header.SetAddr1(tag.GetAddress());
+    if (!(header.GetAddr1().IsGroup() && tag.GetAddress() == Mac48Address::GetBroadcast()))
+    {
+        // Group addressed frames carry the DA in Address 1; do not replace it
+        // with the broadcast address (the tag carries a specific receiver
+        // address when a group addressed frame is sent as individually
+        // addressed frames to each neighbor)
+        header.SetAddr1(tag.GetAddress());
+    }
     header.SetQosMeshControlPresent();
     return true;
 }

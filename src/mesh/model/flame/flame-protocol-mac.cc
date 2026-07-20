@@ -81,7 +81,12 @@ FlameProtocolMac::UpdateOutcomingFrame(Ptr<Packet> packet,
     {
         NS_FATAL_ERROR("FLAME tag must exist here");
     }
-    header.SetAddr1(tag.receiver);
+    if (!(header.GetAddr1().IsGroup() && tag.receiver == Mac48Address::GetBroadcast()))
+    {
+        // Group addressed frames carry the DA in Address 1; do not replace it
+        // with the broadcast address
+        header.SetAddr1(tag.receiver);
+    }
     if (tag.receiver == Mac48Address::GetBroadcast())
     {
         m_stats.txBroadcast++;

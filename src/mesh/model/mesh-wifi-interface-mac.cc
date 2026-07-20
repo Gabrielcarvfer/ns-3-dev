@@ -205,13 +205,28 @@ MeshWifiInterfaceMac::Enqueue(Ptr<WifiMpdu> mpdu, Mac48Address to, Mac48Address 
     auto& hdr = mpdu->GetHeader();
     auto packet = mpdu->GetPacket()->Copy();
 
-    hdr.SetAddr2(GetAddress());
-    hdr.SetAddr3(to);
-    hdr.SetAddr4(from);
-    hdr.SetDsFrom();
-    hdr.SetDsTo();
-    // Address 1 is unknown here. Routing plugin is responsible to correctly set it.
-    hdr.SetAddr1(Mac48Address());
+    if (to.IsGroup())
+    {
+        // Group addressed mesh Data frames use the three-address format with
+        // To DS = 0 and From DS = 1: Address 1 is the DA (group address),
+        // Address 2 is the TA and Address 3 is the mesh SA
+        // (IEEE 802.11-2012, Table 8-19)
+        hdr.SetAddr1(to);
+        hdr.SetAddr2(GetAddress());
+        hdr.SetAddr3(from);
+        hdr.SetDsFrom();
+        hdr.SetDsNotTo();
+    }
+    else
+    {
+        hdr.SetAddr2(GetAddress());
+        hdr.SetAddr3(to);
+        hdr.SetAddr4(from);
+        hdr.SetDsFrom();
+        hdr.SetDsTo();
+        // Address 1 is unknown here. Routing plugin is responsible to correctly set it.
+        hdr.SetAddr1(Mac48Address());
+    }
     // Filter packet through all installed plugins
     for (auto i = m_plugins.rbegin(); i != m_plugins.rend(); ++i)
     {
@@ -406,7 +421,7 @@ MeshWifiInterfaceMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     const WifiMacHeader* hdr = &mpdu->GetHeader();
     Ptr<Packet> packet = mpdu->GetPacket()->Copy();
     // Process beacon
-    if ((hdr->GetAddr1() != GetAddress()) && (hdr->GetAddr1() != Mac48Address::GetBroadcast()))
+    if ((hdr->GetAddr1() != GetAddress()) && !hdr->GetAddr1().IsGroup())
     {
         return;
     }
@@ -467,7 +482,17 @@ MeshWifiInterfaceMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     // Forward data up
     if (hdr->IsData())
     {
-        ForwardUp(packet, hdr->GetAddr4(), hdr->GetAddr3());
+        if (hdr->GetAddr1().IsGroup())
+        {
+            // Group addressed frames use the three-address format: DA is
+            // Address 1 and the mesh SA is Address 3 (IEEE 802.11-2012,
+            // Table 8-19)
+            ForwardUp(packet, hdr->GetAddr3(), hdr->GetAddr1());
+        }
+        else
+        {
+            ForwardUp(packet, hdr->GetAddr4(), hdr->GetAddr3());
+        }
     }
 
     // We don't bother invoking WifiMac::Receive() here, because
