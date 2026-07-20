@@ -2214,8 +2214,14 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                 m_recoveryOps->DoRecovery(m_tcb, currentDelivered, false);
             }
 
-            // If the packet is already retransmitted do not retransmit it
-            if (!m_txBuffer->IsRetransmittedDataAcked(ackNumber + m_tcb->m_segmentSize))
+            // In NewReno-style recovery (RFC 6582, Section 3.2), a partial ACK
+            // implies that the first unacknowledged segment was also lost:
+            // retransmit it, unless it has been already retransmitted. With
+            // SACK, retransmissions are governed by the scoreboard and the
+            // pipe (RFC 6675, Section 5), and are performed by
+            // SendPendingData(), so no forced retransmission must occur here
+            if (!m_sackEnabled &&
+                !m_txBuffer->IsRetransmittedDataAcked(ackNumber + m_tcb->m_segmentSize))
             {
                 DoRetransmit(); // Assume the next seq is lost. Retransmit lost packet
                 m_tcb->m_cWndInfl = SafeSubtraction(m_tcb->m_cWndInfl, bytesAcked);
