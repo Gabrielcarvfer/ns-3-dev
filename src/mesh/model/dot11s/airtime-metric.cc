@@ -72,11 +72,13 @@ AirtimeLinkMetricCalculator::CalculateMetric(Mac48Address peerAddress,
      * draft)
      */
     NS_ASSERT(!peerAddress.IsGroup());
-    // obtain current rate:
+    // obtain the TX vector currently used for transmissions to the peer station, which
+    // carries the actual preamble type, channel width, number of spatial streams and
+    // guard interval of the link (not just the data mode)
     m_testHeader.SetAddr1(peerAddress);
-    WifiMode mode = mac->GetWifiRemoteStationManager()
-                        ->GetDataTxVector(m_testHeader, mac->GetWifiPhy()->GetChannelWidth())
-                        .GetMode();
+    WifiTxVector txVector =
+        mac->GetWifiRemoteStationManager()->GetDataTxVector(m_testHeader,
+                                                            mac->GetWifiPhy()->GetChannelWidth());
     // obtain frame error rate:
     double failAvg = mac->GetWifiRemoteStationManager()->GetInfo(peerAddress).GetFrameErrorRate();
     if (failAvg == 1)
@@ -85,9 +87,6 @@ AirtimeLinkMetricCalculator::CalculateMetric(Mac48Address peerAddress,
         return (uint32_t)0xffffffff;
     }
     NS_ASSERT(failAvg < 1.0);
-    WifiTxVector txVector;
-    txVector.SetMode(mode);
-    txVector.SetPreambleType(WIFI_PREAMBLE_LONG);
     // calculate metric
     uint32_t metric =
         (uint32_t)((double)(/*Overhead + payload*/
