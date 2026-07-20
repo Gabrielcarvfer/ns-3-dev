@@ -2225,26 +2225,18 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             // previously lost and now successfully received. All others have
             // been processed when they come under the form of dupACKs
             m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_srtt);
-            NewAck(ackNumber, m_isFirstPartialAck);
-
-            if (m_isFirstPartialAck)
-            {
-                NS_LOG_DEBUG("Partial ACK of " << ackNumber
-                                               << " and this is the first (RTO will be reset);"
-                                                  " cwnd set to "
-                                               << m_tcb->m_cWnd << " recover seq: " << m_recover
-                                               << " dupAck count: " << m_dupAckCount);
-                m_isFirstPartialAck = false;
-            }
-            else
-            {
-                NS_LOG_DEBUG("Partial ACK of "
-                             << ackNumber
-                             << " and this is NOT the first (RTO will not be reset)"
-                                " cwnd set to "
-                             << m_tcb->m_cWnd << " recover seq: " << m_recover
-                             << " dupAck count: " << m_dupAckCount);
-            }
+            // RFC 6298, Section 5.3: restart the retransmission timer on every
+            // ACK acknowledging new data. This is the Slow-but-Steady variant
+            // of NewReno (RFC 3782, Section 4), which departs from RFC 6582,
+            // Section 3.2, step 3, where only the first partial ACK of a fast
+            // recovery resets the timer: a recovery spanning several partial
+            // ACKs would otherwise be cut short by a spurious timeout
+            NewAck(ackNumber, true);
+            NS_LOG_DEBUG("Partial ACK of " << ackNumber
+                                           << " in fast recovery (RTO reset);"
+                                              " cwnd set to "
+                                           << m_tcb->m_cWnd << " recover seq: " << m_recover
+                                           << " dupAck count: " << m_dupAckCount);
         }
         // From RFC 6675 section 5.1
         // In addition, a new recovery phase (as described in Section 5) MUST NOT
@@ -2263,7 +2255,18 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                     m_txBuffer->GetSacked() == 0,
                     "Some segment got dup-acked in CA_LOSS state: " << m_txBuffer->GetSacked());
             }
-            NewAck(ackNumber, true);
+            // Impatient variant of NewReno (RFC 3782, Section 4): after a
+            // retransmission timeout, reset the retransmit timer only upon the
+            // first partial acknowledgment, so that a long series of partial
+            // ACKs does not prevent the timer from firing again
+            NewAck(ackNumber, m_isFirstPartialAck);
+            if (m_isFirstPartialAck)
+            {
+                NS_LOG_DEBUG("Partial ACK of " << ackNumber
+                                               << " in CA_LOSS and this is the first"
+                                                  " (RTO will be reset)");
+                m_isFirstPartialAck = false;
+            }
         }
         else if (m_tcb->m_congState == TcpSocketState::CA_CWR)
         {
