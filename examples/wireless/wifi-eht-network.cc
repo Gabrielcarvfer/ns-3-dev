@@ -645,8 +645,11 @@ main(int argc, char* argv[])
                 // When multiple stations are used, there are chances that association requests
                 // collide and hence the throughput may be lower than expected. Therefore, we relax
                 // the check that the throughput cannot decrease by introducing a scaling factor (or
-                // tolerance)
-                auto tolerance = 0.10;
+                // tolerance). TCP throughput exhibits a much higher run-to-run variance when
+                // combined with (BSRP triggered) UL OFDMA, because the feedback loop between the
+                // TCP congestion control and the MU scheduler is sensitive to timing: use a
+                // larger tolerance in that case
+                auto tolerance = udp ? 0.10 : 0.30;
                 cumulRxBytes = GetRxBytes(udp, serverApp, payloadSize);
                 auto rxBytes = std::accumulate(cumulRxBytes.cbegin(), cumulRxBytes.cend(), 0.0);
                 auto throughput = (rxBytes * 8) / simulationTime.GetMicroSeconds(); // Mbit/s
