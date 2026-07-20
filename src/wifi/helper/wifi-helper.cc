@@ -268,17 +268,22 @@ WifiPhyHelper::PcapSniffTxEvent(const std::shared_ptr<PcapFilesInfo>& info,
     {
         return;
     }
+    // The FCS added by the simulator is not a real checksum (its four octets are
+    // zero), hence it is removed and the pcap trace does not include it, so that
+    // packet analyzers do not check it (see issue #300)
+    Ptr<Packet> p = packet->Copy();
+    WifiMacTrailer fcs;
+    p->RemoveTrailer(fcs);
     switch (info->pcapDlt)
     {
     case iana::linktype::IEEE802_11:
-        file->Write(Simulator::Now(), packet);
+        file->Write(Simulator::Now(), p);
         return;
     case iana::linktype::IEEE802_11_PRISM: {
         NS_FATAL_ERROR("PcapSniffTxEvent(): DLT_PRISM_HEADER not implemented");
         return;
     }
     case iana::linktype::IEEE802_11_RADIOTAP: {
-        Ptr<Packet> p = packet->Copy();
         const auto header = GetRadiotapHeader(p,
                                               channelFreqMhz,
                                               info->device->GetPhy(phyId)->GetPrimary20Index(),
@@ -309,17 +314,22 @@ WifiPhyHelper::PcapSniffRxEvent(const std::shared_ptr<PcapFilesInfo>& info,
     {
         return;
     }
+    // The FCS added by the simulator is not a real checksum (its four octets are
+    // zero), hence it is removed and the pcap trace does not include it, so that
+    // packet analyzers do not check it (see issue #300)
+    Ptr<Packet> p = packet->Copy();
+    WifiMacTrailer fcs;
+    p->RemoveTrailer(fcs);
     switch (info->pcapDlt)
     {
     case iana::linktype::IEEE802_11:
-        file->Write(Simulator::Now(), packet);
+        file->Write(Simulator::Now(), p);
         return;
     case iana::linktype::IEEE802_11_PRISM: {
         NS_FATAL_ERROR("PcapSniffRxEvent(): DLT_PRISM_HEADER not implemented");
         return;
     }
     case iana::linktype::IEEE802_11_RADIOTAP: {
-        Ptr<Packet> p = packet->Copy();
         const auto header = GetRadiotapHeader(p,
                                               channelFreqMhz,
                                               info->device->GetPhy(phyId)->GetPrimary20Index(),
@@ -357,8 +367,6 @@ WifiPhyHelper::GetRadiotapHeader(Ptr<Packet> packet,
     header.SetTsft(Simulator::Now().GetMicroSeconds());
 
     uint8_t frameFlags = RadiotapHeader::FRAME_FLAG_NONE;
-    // Our capture includes the FCS, so we set the flag to say so.
-    frameFlags |= RadiotapHeader::FRAME_FLAG_FCS_INCLUDED;
     if (preamble == WIFI_PREAMBLE_SHORT)
     {
         frameFlags |= RadiotapHeader::FRAME_FLAG_SHORT_PREAMBLE;
