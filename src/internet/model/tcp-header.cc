@@ -428,6 +428,17 @@ TcpHeader::AppendOption(Ptr<const TcpOption> option)
             return false;
         }
 
+        if (option->GetKind() != TcpOption::NOP && option->GetKind() != TcpOption::END &&
+            HasOption(option->GetKind()))
+        {
+            // Every option except the padding ones (NOP) may appear at most
+            // once in a TCP header (see issue #940: a duplicated option would
+            // be ignored by GetOption(), which returns the first instance)
+            NS_LOG_WARN("Option kind " << static_cast<int>(option->GetKind())
+                                       << " already present, not appending it again");
+            return false;
+        }
+
         if (option->GetKind() != TcpOption::END)
         {
             m_options.push_back(option);

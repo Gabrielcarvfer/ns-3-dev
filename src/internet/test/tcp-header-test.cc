@@ -10,6 +10,7 @@
 #include "ns3/random-variable-stream.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-option-rfc793.h"
+#include "ns3/tcp-option-ts.h"
 #include "ns3/test.h"
 
 #include <stdint.h>
@@ -444,6 +445,53 @@ TcpHeaderFlagsToString::DoRun()
  *
  * @brief TCP header TestSuite
  */
+/**
+ * @ingroup internet-test
+ *
+ * @brief Test that duplicate options are rejected (see @issueid{940})
+ */
+class TcpHeaderDuplicateOptionTestCase : public TestCase
+{
+  public:
+    TcpHeaderDuplicateOptionTestCase()
+        : TestCase("Duplicate TCP options are not appended")
+    {
+    }
+
+    void DoRun() override
+    {
+        TcpHeader header;
+        Ptr<TcpOptionTS> ts = CreateObject<TcpOptionTS>();
+        ts->SetTimestamp(42);
+        ts->SetEcho(13);
+        NS_TEST_ASSERT_MSG_EQ(header.AppendOption(ts), true, "Could not append the TS option");
+
+        Ptr<TcpOptionTS> duplicate = CreateObject<TcpOptionTS>();
+        duplicate->SetTimestamp(84);
+        duplicate->SetEcho(26);
+        NS_TEST_ASSERT_MSG_EQ(header.AppendOption(duplicate),
+                              false,
+                              "A duplicate TS option was appended");
+
+        Ptr<const TcpOptionTS> read =
+            DynamicCast<const TcpOptionTS>(header.GetOption(TcpOption::TS));
+        NS_TEST_ASSERT_MSG_EQ(read->GetTimestamp(), 42, "Unexpected timestamp value");
+
+        // Padding (NOP) options can be appended multiple times
+        NS_TEST_ASSERT_MSG_EQ(header.AppendOption(CreateObject<TcpOptionNOP>()),
+                              true,
+                              "Could not append a NOP option");
+        NS_TEST_ASSERT_MSG_EQ(header.AppendOption(CreateObject<TcpOptionNOP>()),
+                              true,
+                              "Could not append a second NOP option");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief TCP header TestSuite
+ */
 class TcpHeaderTestSuite : public TestSuite
 {
   public:
@@ -453,6 +501,7 @@ class TcpHeaderTestSuite : public TestSuite
         AddTestCase(new TcpHeaderGetSetTestCase("GetSet test cases"), TestCase::Duration::QUICK);
         AddTestCase(new TcpHeaderWithRFC793OptionTestCase("Test for options in RFC 793"),
                     TestCase::Duration::QUICK);
+        AddTestCase(new TcpHeaderDuplicateOptionTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpHeaderFlagsToString("Test flags to string function"),
                     TestCase::Duration::QUICK);
     }
