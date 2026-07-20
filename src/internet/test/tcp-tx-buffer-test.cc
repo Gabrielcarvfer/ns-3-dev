@@ -37,6 +37,10 @@ class TcpTxBufferTestCase : public TestCase
     void TestNewBlock();
     /** @brief Test the generation of a previously sent block */
     void TestTransmittedBlock();
+    /** @brief Test that a cumulative ACK consumes a guessed (Reno) SACK (see @issueid{1107}) */
+    void TestRenoSackDiscard();
+    /** @brief Test the dupack threshold governing the guessed (Reno) SACK discard */
+    void TestRenoSackDiscardThreshold();
     /** @brief Test the generation of the "next" block */
     void TestNextSeg();
     /** @brief Test the logic of merging items in GetTransmittedSegment()
@@ -80,6 +84,8 @@ TcpTxBufferTestCase::DoRun()
      */
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestTransmittedBlock, this);
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestNextSeg, this);
+    Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestRenoSackDiscard, this);
+    Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestRenoSackDiscardThreshold, this);
 
     /*
      * Case for transmitted block:
@@ -315,6 +321,87 @@ TcpTxBufferTestCase::TestNextSeg()
 
     txBuf->DiscardUpTo(ret + segmentSize);
     NS_TEST_ASSERT_MSG_EQ(txBuf->Size(), 0, "Data inside the buffer");
+}
+
+void
+TcpTxBufferTestCase::TestRenoSackDiscard()
+{
+    // With SACK disabled, dupacks are accounted for by guessing a SACKed
+    // segment (AddRenoSack). When the cumulative ACK advances, the guessed
+    // SACK must be consumed and not moved onto the new head, which would mark
+    // the head as lost and trigger a spurious retransmission (see issue #1107)
+    Ptr<TcpTxBuffer> txBuf = CreateObject<TcpTxBuffer>();
+    const uint32_t segmentSize = 100;
+    txBuf->SetRWndCallback(MakeCallback(&TcpTxBufferTestCase::GetRWnd, this));
+    txBuf->SetHeadSequence(SequenceNumber32(1));
+    txBuf->SetSegmentSize(segmentSize);
+    txBuf->SetSackEnabled(false);
+    txBuf->SetDupAckThresh(3);
+
+    txBuf->Add(Create<Packet>(segmentSize * 4));
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        txBuf->CopyFromSequence(segmentSize, SequenceNumber32(1 + i * segmentSize));
+    }
+
+    // A dupack is emulated as a SACK of one (guessed) segment
+    txBuf->AddRenoSack();
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), segmentSize, "Reno SACK not accounted for");
+
+    // The cumulative ACK acknowledges the first segment, so the segment which
+    // was guessed as SACKed becomes the head of the buffer
+    txBuf->DiscardUpTo(SequenceNumber32(1 + segmentSize));
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), 0, "Guessed SACK not consumed by the cumulative ACK");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetLost(), 0, "A segment was spuriously marked as lost");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->IsLost(SequenceNumber32(1 + segmentSize)),
+                          false,
+                          "New head spuriously marked as lost");
+}
+
+void
+TcpTxBufferTestCase::TestRenoSackDiscardThreshold()
+{
+    // The guessed SACKs are moved forward (inferring a loss) only once they
+    // account for m_dupAckThresh segments. With one guess less, the cumulative
+    // ACK must consume the guess without marking the new head as lost
+    const uint32_t segmentSize = 100;
+    const uint32_t dupAckThresh = 3;
+
+    for (uint32_t guesses = dupAckThresh - 1; guesses <= dupAckThresh; ++guesses)
+    {
+        Ptr<TcpTxBuffer> txBuf = CreateObject<TcpTxBuffer>();
+        txBuf->SetRWndCallback(MakeCallback(&TcpTxBufferTestCase::GetRWnd, this));
+        txBuf->SetHeadSequence(SequenceNumber32(1));
+        txBuf->SetSegmentSize(segmentSize);
+        txBuf->SetSackEnabled(false);
+        txBuf->SetDupAckThresh(dupAckThresh);
+
+        txBuf->Add(Create<Packet>(segmentSize * 8));
+        for (uint32_t i = 0; i < 8; ++i)
+        {
+            txBuf->CopyFromSequence(segmentSize, SequenceNumber32(1 + i * segmentSize));
+        }
+
+        for (uint32_t i = 0; i < guesses; ++i)
+        {
+            txBuf->AddRenoSack();
+        }
+        NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(),
+                              guesses * segmentSize,
+                              "Reno SACKs not accounted for");
+
+        txBuf->DiscardUpTo(SequenceNumber32(1 + segmentSize));
+
+        const bool lossExpected = (guesses >= dupAckThresh);
+        NS_TEST_ASSERT_MSG_EQ(txBuf->IsLost(SequenceNumber32(1 + segmentSize)),
+                              lossExpected,
+                              "Loss inferred from " << guesses << " guessed SACKs with a "
+                                                    << dupAckThresh << " dupack threshold");
+        NS_TEST_ASSERT_MSG_EQ(txBuf->GetLost(),
+                              lossExpected ? segmentSize : 0,
+                              "Unexpected amount of lost data with " << guesses
+                                                                     << " guessed SACKs");
+    }
 }
 
 void
