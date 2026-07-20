@@ -1505,6 +1505,9 @@ class TcpSocketBase : public TcpSocket
 
     // Guesses over the other connection end
     bool m_isFirstPartialAck{true}; //!< First partial ACK after a retransmission timeout (CA_LOSS)
+    uint32_t m_advertisedMss{0}; //!< MSS advertised in the MSS option (our configured segment size)
+    bool m_segmentSizeAdjusted{
+        false}; //!< True if the segment size has been reduced by the size of the TCP options
 
     // The following three traces pass a packet with a TCP header
     TracedCallback<Ptr<const Packet>,

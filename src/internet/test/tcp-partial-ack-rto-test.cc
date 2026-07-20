@@ -76,6 +76,10 @@ TcpPartialAckRtoTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
+    // The dropped sequence numbers assume that the segment payload equals the
+    // configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    socket->SetAttribute("Timestamp", BooleanValue(false));
     // NewReno-style recovery with multiple partial ACKs
     socket->SetAttribute("Sack", BooleanValue(false));
     // Make the RTO shorter than the duration of the fast recovery phase

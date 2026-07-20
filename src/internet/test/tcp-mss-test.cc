@@ -78,10 +78,8 @@ TcpMssOptionTestCase::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
         }
         else
         {
-            // The receiver processes the sender MSS before sending the SYN+ACK,
-            // hence it advertises the minimum of the two configured values
             NS_TEST_ASSERT_MSG_EQ(mss->GetMSS(),
-                                  std::min(m_senderSegSize, m_receiverSegSize),
+                                  m_receiverSegSize,
                                   "Receiver advertised an unexpected MSS");
         }
     }
@@ -92,8 +90,13 @@ TcpMssOptionTestCase::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
                               "MSS option present in non-SYN segment");
         if (who == SENDER && p->GetSize() > 0)
         {
+            // The segment size in use is the minimum of the configured and the
+            // advertised MSS, decreased by the size of the timestamp option
+            // carried by every segment (RFC 9293, Section 3.7.1), which is
+            // enabled by default
+            constexpr uint32_t TS_OPTION_SIZE = 12;
             NS_TEST_ASSERT_MSG_EQ(GetSegSize(SENDER),
-                                  std::min(m_senderSegSize, m_receiverSegSize),
+                                  std::min(m_senderSegSize, m_receiverSegSize) - TS_OPTION_SIZE,
                                   "Sender segment size not clamped to the advertised MSS");
         }
     }
