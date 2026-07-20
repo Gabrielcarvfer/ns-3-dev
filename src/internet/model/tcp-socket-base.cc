@@ -429,7 +429,6 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_recoverActive(sock.m_recoverActive),
       m_retxThresh(sock.m_retxThresh),
       m_limitedTx(sock.m_limitedTx),
-      m_isFirstPartialAck(sock.m_isFirstPartialAck),
       m_txTrace(sock.m_txTrace),
       m_rxTrace(sock.m_rxTrace),
       m_pacingTimer(Timer::CANCEL_ON_DESTROY),
@@ -2225,26 +2224,18 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             // previously lost and now successfully received. All others have
             // been processed when they come under the form of dupACKs
             m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_srtt);
-            NewAck(ackNumber, m_isFirstPartialAck);
-
-            if (m_isFirstPartialAck)
-            {
-                NS_LOG_DEBUG("Partial ACK of " << ackNumber
-                                               << " and this is the first (RTO will be reset);"
-                                                  " cwnd set to "
-                                               << m_tcb->m_cWnd << " recover seq: " << m_recover
-                                               << " dupAck count: " << m_dupAckCount);
-                m_isFirstPartialAck = false;
-            }
-            else
-            {
-                NS_LOG_DEBUG("Partial ACK of "
-                             << ackNumber
-                             << " and this is NOT the first (RTO will not be reset)"
-                                " cwnd set to "
-                             << m_tcb->m_cWnd << " recover seq: " << m_recover
-                             << " dupAck count: " << m_dupAckCount);
-            }
+            // RFC 6298, Section 5.3: restart the retransmission timer on every
+            // ACK acknowledging new data. This is the Slow-but-Steady variant
+            // of NewReno (RFC 6582, Section 6), which departs from RFC 6582,
+            // Section 3.2, step 3, where only the first partial ACK of a fast
+            // recovery resets the timer: a recovery spanning several partial
+            // ACKs would otherwise be cut short by a spurious timeout
+            NewAck(ackNumber, true);
+            NS_LOG_DEBUG("Partial ACK of " << ackNumber
+                                           << " in fast recovery (RTO reset);"
+                                              " cwnd set to "
+                                           << m_tcb->m_cWnd << " recover seq: " << m_recover
+                                           << " dupAck count: " << m_dupAckCount);
         }
         // From RFC 6675 section 5.1
         // In addition, a new recovery phase (as described in Section 5) MUST NOT
@@ -2263,7 +2254,11 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                     m_txBuffer->GetSacked() == 0,
                     "Some segment got dup-acked in CA_LOSS state: " << m_txBuffer->GetSacked());
             }
+            // RFC 6298, Section 5.3: restart the retransmission timer on every
+            // ACK acknowledging new data, after a timeout as during a fast
+            // recovery
             NewAck(ackNumber, true);
+            NS_LOG_DEBUG("Partial ACK of " << ackNumber << " in CA_LOSS (RTO reset)");
         }
         else if (m_tcb->m_congState == TcpSocketState::CA_CWR)
         {
@@ -2317,8 +2312,6 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             // phase.
             else if (m_tcb->m_congState == TcpSocketState::CA_RECOVERY)
             {
-                m_isFirstPartialAck = true;
-
                 // Recalculate the segs acked, that are from m_recover to ackNumber
                 // (which are the ones we have not passed to PktsAcked and that
                 // can increase cWnd)
@@ -2337,8 +2330,6 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             }
             else if (m_tcb->m_congState == TcpSocketState::CA_LOSS)
             {
-                m_isFirstPartialAck = true;
-
                 // Recalculate the segs acked, that are from m_recover to ackNumber
                 // (which are the ones we have not passed to PktsAcked and that
                 // can increase cWnd)

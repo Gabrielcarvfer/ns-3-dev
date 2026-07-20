@@ -1504,7 +1504,6 @@ class TcpSocketBase : public TcpSocket
     Ptr<TcpRateOps> m_rateOps;                 //!< Rate operations
 
     // Guesses over the other connection end
-    bool m_isFirstPartialAck{true}; //!< First partial ACK during RECOVERY
 
     // The following three traces pass a packet with a TCP header
     TracedCallback<Ptr<const Packet>,
