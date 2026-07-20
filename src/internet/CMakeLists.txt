@@ -362,6 +362,7 @@ set(test_sources
     test/tcp-ledbat-test.cc
     test/tcp-linux-reno-test.cc
     test/tcp-loss-test.cc
+    test/tcp-lost-retransmission-test.cc
     test/tcp-lp-test.cc
     test/tcp-option-test.cc
     test/tcp-mss-test.cc
