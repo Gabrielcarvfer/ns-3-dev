@@ -72,8 +72,18 @@ HwmpProtocolMac::ReceiveData(Ptr<Packet> packet, const WifiMacHeader& header)
     switch (meshHdr.GetAddressExt())
     {
     case 0:
-        source = header.GetAddr4();
-        destination = header.GetAddr3();
+        if (!header.IsToDs())
+        {
+            // Group addressed frames use the three-address format
+            // (IEEE 802.11-2012, Table 8-19)
+            destination = header.GetAddr1();
+            source = header.GetAddr3();
+        }
+        else
+        {
+            source = header.GetAddr4();
+            destination = header.GetAddr3();
+        }
         break;
     default:
         NS_FATAL_ERROR("6-address scheme is not yet supported and 4-address extension is not "
@@ -83,8 +93,7 @@ HwmpProtocolMac::ReceiveData(Ptr<Packet> packet, const WifiMacHeader& header)
     tag.SetTtl(meshHdr.GetMeshTtl());
     packet->AddPacketTag(tag);
 
-    if ((destination == Mac48Address::GetBroadcast()) &&
-        (m_protocol->DropDataFrame(meshHdr.GetMeshSeqno(), source)))
+    if (destination.IsGroup() && (m_protocol->DropDataFrame(meshHdr.GetMeshSeqno(), source)))
     {
         NS_LOG_DEBUG("Dropping frame; source " << source << " dest " << destination << " seqno "
                                                << meshHdr.GetMeshSeqno());
@@ -220,7 +229,23 @@ HwmpProtocolMac::UpdateOutcomingFrame(Ptr<Packet> packet,
     meshHdr.SetMeshSeqno(tag.GetSeqno());
     meshHdr.SetMeshTtl(tag.GetTtl());
     packet->AddHeader(meshHdr);
-    header.SetAddr1(tag.GetAddress());
+    if (!header.GetAddr1().IsGroup())
+    {
+        header.SetAddr1(tag.GetAddress());
+    }
+    else if (!tag.GetAddress().IsGroup())
+    {
+        // A group addressed frame sent as a chain of individually addressed
+        // frames no longer fits the three-address format, whose Address 1 is
+        // both the RA and the DA. Move it to the four-address format, which
+        // keeps the group DA in Address 3 (IEEE 802.11-2012, Table 8-19)
+        const auto destination = header.GetAddr1();
+        const auto source = header.GetAddr3();
+        header.SetAddr1(tag.GetAddress());
+        header.SetAddr3(destination);
+        header.SetAddr4(source);
+        header.SetDsTo();
+    }
     header.SetQosMeshControlPresent();
     return true;
 }
