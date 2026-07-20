@@ -76,6 +76,10 @@ Ns3TcpSocketTestCaseP2P::SinkRx(std::string path, Ptr<const Packet> p, const Add
 void
 Ns3TcpSocketTestCaseP2P::DoRun()
 {
+    // The expected segment boundaries assume that the segment payload equals
+    // the configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
     uint16_t sinkPort = 50000;
     double sinkStopTime = 40;   // sec; will trigger Socket::Close
     double writerStopTime = 30; // sec; will trigger Socket::Close
@@ -201,6 +205,10 @@ Ns3TcpSocketTestCaseCsma::SinkRx(std::string path, Ptr<const Packet> p, const Ad
 void
 Ns3TcpSocketTestCaseCsma::DoRun()
 {
+    // The expected segment boundaries assume that the segment payload equals
+    // the configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
     uint16_t sinkPort = 50000;
     double sinkStopTime = 40;   // sec; will trigger Socket::Close
     double writerStopTime = 30; // sec; will trigger Socket::Close

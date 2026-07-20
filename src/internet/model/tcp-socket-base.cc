@@ -429,6 +429,8 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_recoverActive(sock.m_recoverActive),
       m_retxThresh(sock.m_retxThresh),
       m_limitedTx(sock.m_limitedTx),
+      m_advertisedMss(sock.m_advertisedMss),
+      m_segmentSizeAdjusted(sock.m_segmentSizeAdjusted),
       m_txTrace(sock.m_txTrace),
       m_rxTrace(sock.m_rxTrace),
       m_pacingTimer(Timer::CANCEL_ON_DESTROY),
@@ -1463,6 +1465,15 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         // DeliveredData accounting.
         m_tcb->m_sackEnabled = m_sackEnabled;
 
+        if (m_advertisedMss == 0)
+        {
+            // Save the value to advertise in the MSS option before it is
+            // reduced below: the advertised MSS reflects our configured
+            // segment size regardless of the peer MSS and of the size of the
+            // TCP options (RFC 6691, Section 2)
+            m_advertisedMss = m_tcb->m_segmentSize;
+        }
+
         if (tcpHeader.HasOption(TcpOption::MSS))
         {
             ProcessOptionMss(tcpHeader.GetOption(TcpOption::MSS));
@@ -1485,6 +1496,31 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         else
         {
             m_timestampEnabled = false;
+        }
+
+        if (m_timestampEnabled && !m_segmentSizeAdjusted)
+        {
+            // The MSS counts only data octets, it does not count the TCP
+            // header or the TCP options, so the sender must reduce the TCP data
+            // length to account for the options it includes (RFC 6691, Section
+            // 2): decrease the segment size by the size of the timestamp
+            // option (and its padding to a word), which is carried by every
+            // segment. The segment size may have been clamped by the MSS the
+            // peer advertised, so a tiny value cannot bring it to zero.
+            // 10 bytes of option, padded to a 4 byte boundary
+            const uint32_t tsOptionSize =
+                ((CreateObject<TcpOptionTS>()->GetSerializedSize() + 3) / 4) * 4;
+            if (m_tcb->m_segmentSize > tsOptionSize)
+            {
+                m_tcb->m_segmentSize -= tsOptionSize;
+            }
+            else
+            {
+                m_tcb->m_segmentSize = 1;
+            }
+            m_segmentSizeAdjusted = true;
+            NS_LOG_INFO("Decreased the segment size to " << m_tcb->m_segmentSize
+                                                         << " to accommodate the TCP options");
         }
 
         // Initialize cWnd and ssThresh
@@ -4604,7 +4640,11 @@ TcpSocketBase::AddOptionMss(TcpHeader& header)
 {
     NS_LOG_FUNCTION(this << header);
     Ptr<TcpOptionMSS> option = CreateObject<TcpOptionMSS>();
-    option->SetMSS(static_cast<uint16_t>(std::min(m_tcb->m_segmentSize, 65535U)));
+    if (m_advertisedMss == 0)
+    {
+        m_advertisedMss = m_tcb->m_segmentSize;
+    }
+    option->SetMSS(static_cast<uint16_t>(std::min(m_advertisedMss, 65535U)));
     header.AppendOption(option);
     NS_LOG_INFO(m_node->GetId() << " Add option MSS " << option->GetMSS());
 }

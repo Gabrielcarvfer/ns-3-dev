@@ -103,6 +103,11 @@ void
 TcpLinuxRenoSSTest::ConfigureEnvironment()
 {
     TcpGeneralTest::ConfigureEnvironment();
+    // The congestion window checks assume that the segment payload equals the
+    // configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
+
     SetPropagationDelay(MilliSeconds(5));
     SetAppPktCount(m_packets);
     SetAppPktSize(m_packetSize);
@@ -276,6 +281,11 @@ void
 TcpLinuxRenoCongAvoidTest::ConfigureEnvironment()
 {
     TcpGeneralTest::ConfigureEnvironment();
+    // The congestion window checks assume that the segment payload equals the
+    // configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
+
     SetAppPktSize(m_packetSize);
     SetAppPktCount(m_packets);
     SetMTU(1500);

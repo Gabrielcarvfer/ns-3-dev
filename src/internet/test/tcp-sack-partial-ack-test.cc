@@ -80,6 +80,10 @@ TcpSackPartialAckTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
+    // The dropped sequence numbers assume that the segment payload equals the
+    // configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    socket->SetAttribute("Timestamp", BooleanValue(false));
     socket->SetAttribute("Sack", BooleanValue(true));
     // Avoid retransmission timeouts during the test
     socket->SetAttribute("MinRto", TimeValue(Seconds(10)));

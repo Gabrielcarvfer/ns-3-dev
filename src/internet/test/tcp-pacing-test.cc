@@ -187,6 +187,11 @@ void
 TcpPacingTest::ConfigureEnvironment()
 {
     TcpGeneralTest::ConfigureEnvironment();
+    // The pacing interval computations assume that the segment payload equals the
+    // configured segment size: disable the timestamp option, which would
+    // decrease the payload by its size
+    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
+
     SetAppPktSize(m_packetSize);
     SetAppPktCount(m_packets);
     SetAppPktInterval(NanoSeconds(10));
