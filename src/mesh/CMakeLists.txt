@@ -72,6 +72,7 @@ build_lib(
     test/dot11s/airtime-metric-regression.cc
     test/dot11s/dot11s-test-suite.cc
     test/dot11s/hwmp-control-recorder.cc
+    test/dot11s/hwmp-multicast-regression.cc
     test/dot11s/hwmp-proactive-regression.cc
     test/dot11s/hwmp-reactive-regression.cc
     test/dot11s/hwmp-simplest-regression.cc

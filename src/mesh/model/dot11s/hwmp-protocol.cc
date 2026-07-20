@@ -238,7 +238,7 @@ HwmpProtocol::RequestRoute(uint32_t sourceIface,
                 "HWMP tag has come with a packet from upper layer. This must not occur...");
         }
         // Filling TAG:
-        if (destination == Mac48Address::GetBroadcast())
+        if (destination.IsGroup())
         {
             tag.SetSeqno(m_dataSeqno++);
         }
@@ -258,7 +258,7 @@ HwmpProtocol::RequestRoute(uint32_t sourceIface,
             return false;
         }
     }
-    if (destination == Mac48Address::GetBroadcast())
+    if (destination.IsGroup())
     {
         m_stats.txBroadcast++;
         m_stats.txBytes += packet->GetSize();
@@ -333,7 +333,7 @@ HwmpProtocol::ForwardUnicast(uint32_t sourceIface,
                              uint32_t ttl)
 {
     NS_LOG_FUNCTION(this << sourceIface << source << destination << packet << protocolType << ttl);
-    NS_ASSERT(destination != Mac48Address::GetBroadcast());
+    NS_ASSERT(!destination.IsGroup());
     HwmpRtable::LookupResult result = m_rtable->LookupReactive(destination);
     NS_LOG_DEBUG("Requested src = " << source << ", dst = " << destination << ", I am "
                                     << GetAddress() << ", RA = " << result.retransmitter);
