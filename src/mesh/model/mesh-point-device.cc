@@ -486,7 +486,7 @@ MeshPointDevice::DoSend(bool success,
     // Count statistics
     Statistics* stats = ((src == m_address) ? &m_txStats : &m_fwdStats);
 
-    if (dst.IsBroadcast())
+    if (dst.IsGroup())
     {
         stats->broadcastData++;
         stats->broadcastDataBytes += packet->GetSize();
