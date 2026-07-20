@@ -364,6 +364,7 @@ set(test_sources
     test/tcp-loss-test.cc
     test/tcp-lp-test.cc
     test/tcp-option-test.cc
+    test/tcp-mss-test.cc
     test/tcp-pacing-test.cc
     test/tcp-pkts-acked-test.cc
     test/tcp-prr-recovery-test.cc
