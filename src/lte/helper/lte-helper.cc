@@ -774,25 +774,46 @@ LteHelper::InstallSingleEnbDevice(Ptr<Node> n)
             MakeCallback(&LteEnbPhy::ReceiveLteControlMessageList, ccPhy));
         ccPhy->GetUlSpectrumPhy()->SetLtePhyUlHarqFeedbackCallback(
             MakeCallback(&LteEnbPhy::ReportUlHarqFeedback, ccPhy));
-        NS_LOG_LOGIC("set the propagation model frequencies");
-        double dlFreq = LteSpectrumValueHelper::GetCarrierFrequency(it->second->GetDlEarfcn());
-        NS_LOG_LOGIC("DL freq: " << dlFreq);
-        bool dlFreqOk =
-            m_downlinkPathlossModel->SetAttributeFailSafe("Frequency", DoubleValue(dlFreq));
-        if (!dlFreqOk)
-        {
-            NS_LOG_WARN("DL propagation model does not have a Frequency attribute");
-        }
+    }
 
-        double ulFreq = LteSpectrumValueHelper::GetCarrierFrequency(it->second->GetUlEarfcn());
+    // Set the frequency of the frequency-dependent (non spectrum aware) pathloss models.
+    // All the component carriers share a single downlink (and a single uplink) spectrum
+    // channel and hence a single pathloss model, so a single frequency can be configured:
+    // use the frequency of the primary component carrier and warn the user that the
+    // pathloss of every carrier is computed at that frequency (see issue #1293).
+    // Spectrum aware pathloss models (SpectrumPropagationLossModel subclasses) do not
+    // have a Frequency attribute and compute the pathloss of each spectral component,
+    // hence they are not affected.
+    NS_LOG_LOGIC("set the propagation model frequencies");
+    auto primaryCcIt = ccMap.begin();
+    const auto dlFreq =
+        LteSpectrumValueHelper::GetCarrierFrequency(primaryCcIt->second->GetDlEarfcn());
+    NS_LOG_LOGIC("DL freq: " << dlFreq);
+    const auto dlFreqOk =
+        m_downlinkPathlossModel->SetAttributeFailSafe("Frequency", DoubleValue(dlFreq));
+    if (!dlFreqOk)
+    {
+        NS_LOG_WARN("DL propagation model does not have a Frequency attribute");
+    }
 
-        NS_LOG_LOGIC("UL freq: " << ulFreq);
-        bool ulFreqOk =
-            m_uplinkPathlossModel->SetAttributeFailSafe("Frequency", DoubleValue(ulFreq));
-        if (!ulFreqOk)
-        {
-            NS_LOG_WARN("UL propagation model does not have a Frequency attribute");
-        }
+    const auto ulFreq =
+        LteSpectrumValueHelper::GetCarrierFrequency(primaryCcIt->second->GetUlEarfcn());
+    NS_LOG_LOGIC("UL freq: " << ulFreq);
+    const auto ulFreqOk =
+        m_uplinkPathlossModel->SetAttributeFailSafe("Frequency", DoubleValue(ulFreq));
+    if (!ulFreqOk)
+    {
+        NS_LOG_WARN("UL propagation model does not have a Frequency attribute");
+    }
+
+    if (ccMap.size() > 1 && (dlFreqOk || ulFreqOk))
+    {
+        NS_LOG_WARN("The configured pathloss model is frequency-dependent but not spectrum aware, "
+                    "and all the component carriers share it: the pathloss of every component "
+                    "carrier is computed at the frequency of the primary component carrier. Use a "
+                    "SpectrumPropagationLossModel subclass (e.g., "
+                    "ns3::FriisSpectrumPropagationLossModel) for per-carrier frequency-dependent "
+                    "pathloss in carrier aggregation scenarios");
     }
     rrc->SetForwardUpCallback(MakeCallback(&LteEnbNetDevice::Receive, dev));
     dev->Initialize();

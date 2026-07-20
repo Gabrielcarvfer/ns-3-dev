@@ -314,6 +314,7 @@ set(test_sources
     test/lte-test-ipv6-routing.cc
     test/lte-test-link-adaptation.cc
     test/lte-test-mimo.cc
+    test/lte-test-pathloss-model-frequency.cc
     test/lte-test-pathloss-model.cc
     test/lte-test-pf-ff-mac-scheduler.cc
     test/lte-test-phy-error-model.cc
