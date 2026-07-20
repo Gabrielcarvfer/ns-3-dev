@@ -1279,6 +1279,29 @@ class TcpSocketBase : public TcpSocket
     uint8_t CalculateWScale() const;
 
     /**
+     * @brief Read the MSS option from other side
+     *
+     * The maximum segment size to use when sending data is set to the
+     * minimum of our configured segment size and the value advertised by
+     * the peer (@RFC{9293}, Section 3.7.1).
+     *
+     * @param option MSS option from the header
+     */
+    void ProcessOptionMss(const Ptr<const TcpOption> option);
+
+    /**
+     * @brief Add the MSS option to the header
+     *
+     * The MSS option should be sent in every SYN segment when the receive
+     * MSS differs from the default, and may be sent always (@RFC{9293},
+     * Section 3.7.1, SHLD-5 and MAY-3): it is always sent. The advertised
+     * value is our current segment size.
+     *
+     * @param header TcpHeader where the method should add the option
+     */
+    void AddOptionMss(TcpHeader& header);
+
+    /**
      * @brief Read the SACK PERMITTED option
      *
      * Currently this is a placeholder, since no operations should be done
