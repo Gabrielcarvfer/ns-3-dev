@@ -1428,13 +1428,14 @@ TcpTxBuffer::AddRenoSack()
 {
     NS_LOG_FUNCTION(this);
 
-    if (m_sackEnabled)
+    if (m_sentList.size() < 2)
     {
-        NS_ASSERT(m_sentList.size() > 1);
-    }
-    else
-    {
-        NS_ASSERT(!m_sentList.empty());
+        // Nothing can be guessed as SACKed: the head can never be SACKed and
+        // there is no other sent segment. This can happen with peers whose
+        // ACKs do not follow the patterns of the ns-3 TCP implementation,
+        // e.g., real TCP stacks reached through emulation (see issue #248)
+        NS_LOG_INFO("No segment available to add a Reno SACK");
+        return;
     }
 
     m_renoSack = true;
