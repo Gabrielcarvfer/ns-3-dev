@@ -11,6 +11,7 @@ cpp_examples = [
     ("tcp-large-transfer", "True", "True"),
     ("tcp-star-server", "True", "True"),
     ("tcp-variants-comparison", "True", "True"),
+    ("tcp-recovery-fsm-trace", "True", "True"),
     (
         "tcp-validation --firstTcpType=dctcp --linkRate=50Mbps --baseRtt=10ms --queueUseEcn=1 --stopTime=15s --validate=dctcp-10ms",
         "True",
