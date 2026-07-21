@@ -16,6 +16,7 @@
 #include "ns3/channel-condition-model.h"
 
 #include <array>
+#include <map>
 #include <unordered_map>
 
 namespace ns3
@@ -376,7 +377,9 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * then becomes its own single-ray tap: the per-cluster structures of channelParams
      * (delays, powers, angles, XPRs, phases, Doppler terms) are expanded to one entry per
      * (cluster, ray) pair, the sub-cluster mapping of Table 7.5-5 is not applied, and
-     * m_numRaysPerCluster is set to 1.
+     * m_numRaysPerCluster is set to 1. When the spatial-consistency draw context is active,
+     * the offset angles and relative delays are drawn from the spatially-correlated fields
+     * (TR 38.901 Sec. 7.6.3.1, optional large bandwidth extension).
      *
      * @param channelParams Channel parameters holding the cluster-level structures of steps
      *        5-7; expanded in place to per-ray taps.
@@ -471,23 +474,105 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * samples of the same field decorrelate with horizontal distance on the
      * scale of corrDist.
      *
-     * Grid values are drawn once from a dedicated random stream and memoized,
-     * so every link evaluated at any time during the simulation observes the
-     * same underlying field (position-based repeatability).
+     * Grid cell values are a deterministic hash of the field key and cell
+     * coordinates (mixed with the global RNG seed/run) and are memoized, so
+     * the field is a pure function of position: every link evaluated at any
+     * time, and every model instance, observes the same underlying field.
+     * The cross-instance repeatability matters for callers that re-create
+     * the channel model per evaluated location (e.g. a REM generator).
      *
      * @param siteNodeId Node id of the site endpoint owning the field.
      * @param condSlot Channel condition slot (0=LOS, 1=NLOS, 2=O2I).
-     * @param lspIndex Index of the LSP in the LSP-vector ordering.
+     * @param varId Identifier of the random variate (LSP index, or a
+     *        cluster/ray-specific variate id, see ScFieldNormal).
      * @param position Sampling position (only x and y are used).
      * @param corrDist Correlation distance in meters; non-positive values
-     *        degrade to an independent N(0,1) draw.
+     *        degrade to a single deterministic draw at the position.
      * @return A sample of the field with N(0,1) marginal distribution.
      */
     double SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
                                            uint8_t condSlot,
-                                           uint8_t lspIndex,
+                                           uint32_t varId,
                                            const Vector& position,
                                            double corrDist) const;
+
+    /**
+     * @brief Correlation distance of the cluster and ray specific random
+     *        variables, TR 38.901 Table 7.6.3.1-2.
+     *
+     * Scenarios without a Table 7.6.3.1-2 column (V2V, NTN) fall back to the
+     * UMa distances.
+     *
+     * @param losCondition The LOS condition of the link.
+     * @param isO2i Whether the link is O2I.
+     * @return The correlation distance in meters.
+     */
+    double GetClusterCorrelationDistance(ChannelCondition::LosConditionValue losCondition,
+                                         bool isO2i) const;
+
+    /**
+     * @brief Context enabling spatially-consistent draws of the cluster and
+     *        ray specific random variables of one link.
+     *
+     * Set by GenerateChannelParameters for the duration of the channel
+     * parameter generation when the InterUeSpatialConsistency attribute is
+     * enabled, and consumed by ScNormal/ScUniform01 in the generation
+     * helpers. When inactive, the helpers fall back to the i.i.d. random
+     * variables.
+     */
+    struct ScDrawContext
+    {
+        bool active{false};     ///< whether spatially-consistent draws are active
+        uint32_t siteNodeId{0}; ///< node id of the site endpoint
+        uint8_t condSlot{0};    ///< condition slot (0=LOS, 1=NLOS, 2=O2I)
+        Vector termPos;         ///< terminal position sampling the fields
+        double corrDist{0};     ///< cluster-RV correlation distance in meters
+    };
+
+    /**
+     * @brief Draw a N(0,1) variate for the cluster/ray-specific variable varId.
+     *
+     * Returns a sample of the per-site spatially-correlated field of varId when
+     * the spatial-consistency draw context is active, and an i.i.d. draw of
+     * m_normalRv otherwise (see ScDrawContext).
+     *
+     * @param varId Identifier of the variate, unique per (variable class,
+     *        cluster, ray, polarization) so distinct draws use independent
+     *        fields. Must not collide with the LSP indices 0-6, see
+     *        ScFieldVarId.
+     * @return A standard-normal sample.
+     */
+    double ScNormal(uint32_t varId) const;
+
+    /**
+     * @brief Draw a U(0,1) variate for the cluster/ray-specific variable varId.
+     *
+     * Probability-integral transform of ScNormal, so the uniform variate is
+     * spatially consistent when the draw context is active (see ScDrawContext).
+     * The result is clamped away from 0 and 1 so log() and tan() consumers
+     * remain finite.
+     *
+     * @param varId Identifier of the variate, see ScNormal.
+     * @return A uniform sample in (0, 1).
+     */
+    double ScUniform01(uint32_t varId) const;
+
+    /**
+     * @brief Build the field identifier of one cluster/ray-specific variate.
+     *
+     * LSP fields use varIds 0-6; cluster/ray-specific variates are offset
+     * beyond them and packed as (class, cluster, ray/polarization).
+     *
+     * @param varClass Variable class (delay, cluster shadowing, angle sign, ...).
+     * @param cluster Cluster index.
+     * @param ray Ray index (or polarization index, or 0 when unused).
+     * @return The field identifier.
+     */
+    static uint32_t ScFieldVarId(uint8_t varClass, uint8_t cluster, uint8_t ray)
+    {
+        return 8 + ((static_cast<uint32_t>(varClass) << 16) |
+                    (static_cast<uint32_t>(cluster) << 8) | static_cast<uint32_t>(ray));
+    }
 
     /**
      * Generate the cluster delays.
@@ -1209,16 +1294,40 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     Ptr<NormalRandomVariable> m_normalRv;
     /// enables inter-UE (drop-based) spatially consistent LSP generation
     bool m_interUeSpatialConsistency;
-    /// normal random variable feeding the spatially-correlated LSP fields
-    Ptr<NormalRandomVariable> m_normalRvSpatCons;
+
     /**
-     * Lazily-populated grids of i.i.d. N(0,1) values backing the
-     * spatially-correlated LSP fields. The outer key identifies the field
-     * (site node id, condition slot, LSP index); the inner key packs the
-     * 2D integer grid coordinates. `mutable` because fields are extended
-     * on demand from within the `const` channel-parameter generator.
+     * @brief Cached filter window of the spatially-correlated field sampler.
+     *
+     * The window (grid origin, separable exponential weights and their
+     * L2 normalization) depends only on the sampling position and the
+     * correlation distance, which are shared by every variate drawn for one
+     * link, so it is computed once and reused across the thousands of field
+     * draws of one channel generation (see SampleSpatiallyCorrelatedNormal).
      */
-    mutable std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> m_spatConsGrid;
+    struct FieldWindow
+    {
+        int64_t ix{0};               ///< grid x-coordinate of the first window cell
+        int64_t iy{0};               ///< grid y-coordinate of the first window cell
+        std::array<double, 14> wx{}; ///< separable filter weights along x
+        std::array<double, 14> wy{}; ///< separable filter weights along y
+        double invL2Norm{0};         ///< reciprocal L2 norm of the 2D weights
+    };
+
+    /// position the cached filter windows were computed for
+    mutable Vector m_fieldWindowPos;
+    /**
+     * Cached filter windows keyed by correlation distance, valid for
+     * m_fieldWindowPos. `mutable` because the cache is refreshed from within
+     * the `const` channel-parameter generator.
+     */
+    mutable std::map<double, FieldWindow> m_fieldWindowCache;
+    /**
+     * Spatial-consistency draw context of the link whose channel parameters
+     * are being generated, see ScDrawContext. `mutable` because it is set
+     * from within the `const` channel-parameter generator.
+     */
+    mutable ScDrawContext m_scDrawCtx;
+
     /**
      * Sentinel value of m_cluster1st/m_cluster2nd meaning that no sub-cluster mapping is
      * applied (large bandwidth modeling of TR 38.901 Sec. 7.6.2.2, which replaces the fixed
