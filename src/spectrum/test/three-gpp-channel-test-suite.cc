@@ -55,11 +55,15 @@ class ThreeGppChannelMatrixComputationTest : public TestCase
      * of the transmitter
      * @param rxPorts the number of vertical and horizontal ports of the antenna
      * array of the receiver
+     * @param largeBandwidth enable the large bandwidth modeling of TR 38.901 Sec. 7.6.2.2,
+     * checking that each ray becomes an individually delayed tap and that the channel
+     * normalization is preserved
      */
     ThreeGppChannelMatrixComputationTest(uint32_t txAntennaElements = 2,
                                          uint32_t rxAntennaElements = 2,
                                          uint32_t txPorts = 1,
-                                         uint32_t rxPorts = 1);
+                                         uint32_t rxPorts = 1,
+                                         bool largeBandwidth = false);
 
     /**
      * Destructor
@@ -89,21 +93,24 @@ class ThreeGppChannelMatrixComputationTest : public TestCase
     std::vector<double> m_normVector; //!< each element is the norm of a channel realization
     uint32_t m_txAntennaElements{4};  //!< number of rows and columns of tx antenna array
     uint32_t m_rxAntennaElements{4};  //!< number of rows and columns of rx antenna array
-    uint32_t m_txPorts{1}; //!< number of horizontal and vertical ports of tx antenna array
-    uint32_t m_rxPorts{1}; //!< number of horizontal and vertical ports of rx antenna array
+    uint32_t m_txPorts{1};        //!< number of horizontal and vertical ports of tx antenna array
+    uint32_t m_rxPorts{1};        //!< number of horizontal and vertical ports of rx antenna array
+    bool m_largeBandwidth{false}; //!< enable the TR 38.901 Sec. 7.6.2.2 modeling
 };
 
 ThreeGppChannelMatrixComputationTest::ThreeGppChannelMatrixComputationTest(
     uint32_t txAntennaElements,
     uint32_t rxAntennaElements,
     uint32_t txPorts,
-    uint32_t rxPorts)
+    uint32_t rxPorts,
+    bool largeBandwidth)
     : TestCase("Check the dimensions and the norm of the channel matrix")
 {
     m_txAntennaElements = txAntennaElements;
     m_rxAntennaElements = rxAntennaElements;
     m_txPorts = txPorts;
     m_rxPorts = rxPorts;
+    m_largeBandwidth = largeBandwidth;
 }
 
 ThreeGppChannelMatrixComputationTest::~ThreeGppChannelMatrixComputationTest()
@@ -159,6 +166,11 @@ ThreeGppChannelMatrixComputationTest::DoRun()
     channelModel->SetAttribute("Scenario", StringValue("RMa"));
     channelModel->SetAttribute("ChannelConditionModel", PointerValue(channelConditionModel));
     channelModel->SetAttribute("UpdatePeriod", TimeValue(MilliSeconds(updatePeriodMs)));
+    if (m_largeBandwidth)
+    {
+        channelModel->SetAttribute("LargeBandwidthArrayModeling", BooleanValue(true));
+        channelModel->SetAttribute("ChannelBandwidth", DoubleValue(400e6));
+    }
     channelModel->AssignStreams(1);
 
     // create the tx and rx nodes
@@ -213,6 +225,17 @@ ThreeGppChannelMatrixComputationTest::DoRun()
         channelMatrix->m_channel.GetNumRows(),
         m_rxAntennaElements * m_rxAntennaElements,
         "The second dimension of H should be equal to the number of rx antenna elements");
+
+    if (m_largeBandwidth)
+    {
+        // Under TR 38.901 Sec. 7.6.2.2 each of the at-least-20 rays of every cluster is
+        // expanded into its own individually delayed tap, so the number of taps is far
+        // larger than the standard per-cluster (plus sub-cluster) count.
+        NS_TEST_ASSERT_MSG_GT_OR_EQ(channelMatrix->m_channel.GetNumPages(),
+                                    40,
+                                    "With the large bandwidth modeling every cluster should be "
+                                    "expanded into at least 20 single-ray taps");
+    }
 
     // test if the channel matrix is correctly generated
     uint16_t numIt = 2000;
@@ -2146,6 +2169,10 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
         TestCase::Duration::QUICK);
 
     AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 1, 1), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 1, 1, true),
+                TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppChannelMatrixComputationTest(4, 2, 2, 2, true),
+                TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppChannelMatrixComputationTest(4, 2, 1, 1), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 2, 2), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppChannelMatrixComputationTest(4, 4, 2, 2), TestCase::Duration::QUICK);

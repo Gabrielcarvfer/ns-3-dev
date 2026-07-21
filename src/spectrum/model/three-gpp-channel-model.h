@@ -173,9 +173,16 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         double m_dis3D;                                //!< 3D distance between tx and rx
         DoubleVector m_clusterShadowing;               //!< cluster shadowing
         DoubleVector m_clusterPower;                   //!< cluster powers
-        DoubleVector m_attenuation_dB;   //!< vector that stores the attenuation of the blockage
-        uint8_t m_cluster1st;            //!< index of the first strongest cluster
-        uint8_t m_cluster2nd;            //!< index of the second-strongest cluster
+        DoubleVector m_attenuation_dB; //!< vector that stores the attenuation of the blockage
+        uint8_t m_cluster1st;          //!< index of the first strongest cluster
+        uint8_t m_cluster2nd;          //!< index of the second-strongest cluster
+        /**
+         * Number of rays per stored cluster entry consumed by GetNewChannel. Equal to the
+         * scenario table's rays per cluster, except under the large bandwidth modeling of
+         * TR 38.901 Sec. 7.6.2.2, where each ray is expanded into its own single-ray tap
+         * and this is 1. Zero means "use the scenario table value".
+         */
+        uint8_t m_numRaysPerCluster{0};
         Vector m_txSpeed;                //!< TX velocity
         Vector m_rxSpeed;                //!< RX velocity
         DoubleVector m_delayConsistency; //!< cluster delay for consistency update
@@ -345,6 +352,9 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * @param table3gpp the 3gpp parameters from the table
      * @param aMob the a node mobility model
      * @param bMob the b node mobility model
+     * @param txAntenna the antenna array of the departure (a-ordered) node, used only by the
+     * large bandwidth modeling of TR 38.901 Sec. 7.6.2.2 to derive the array aperture in
+     * Equation (7.6-8); may be nullptr, in which case the angular ray-count factors are 1
      * @return ThreeGppChannelParams structure with all the channel parameters generated
      * according 38.901 steps from 4 to 10.
      */
@@ -352,7 +362,30 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         Ptr<const ChannelCondition> channelCondition,
         Ptr<const ParamsTable> table3gpp,
         Ptr<const MobilityModel> aMob,
-        Ptr<const MobilityModel> bMob) const;
+        Ptr<const MobilityModel> bMob,
+        Ptr<const PhasedArrayModel> txAntenna = nullptr) const;
+
+    /**
+     * @brief Apply the intra-cluster angular and delay spread modeling of TR 38.901
+     *        Sec. 7.6.2.2 (large bandwidth and large antenna arrays).
+     *
+     * Re-draws the per-ray offset angles as unif(-2, 2) per cluster and ray (7.6-5), draws
+     * ray-relative delays as unif(0, 2 cDS), derives unequal ray powers (7.6-6) and computes
+     * the number of rays per cluster from the bandwidth and array aperture (7.6-8). Each ray
+     * then becomes its own single-ray tap: the per-cluster structures of channelParams
+     * (delays, powers, angles, XPRs, phases, Doppler terms) are expanded to one entry per
+     * (cluster, ray) pair, the sub-cluster mapping of Table 7.5-5 is not applied, and
+     * m_numRaysPerCluster is set to 1.
+     *
+     * @param channelParams Channel parameters holding the cluster-level structures of steps
+     *        5-7; expanded in place to per-ray taps.
+     * @param table3gpp 3GPP parameters table (cDS, cASA, cASD, cZSA, uLgZSD, XPR statistics).
+     * @param txAntenna Departure-side antenna array used for the aperture terms of (7.6-8);
+     *        may be nullptr.
+     */
+    void ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> channelParams,
+                                        Ptr<const ParamsTable> table3gpp,
+                                        Ptr<const PhasedArrayModel> txAntenna) const;
 
     /**
      * @brief Large-scale channel parameters (3GPP TR 38.901).
@@ -862,12 +895,13 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * @param[out] clusterPhase 3D array [numClusters][raysPerCluster][4] with initial
      * phases (radians).
      * @param reducedClusterNumber Number of (possibly reduced) clusters to generate.
-     * @param table3gpp Pointer to the 3GPP parameters table (uXpr, sigXpr, rays per
-     * cluster).
+     * @param raysPerCluster Number of rays per cluster to generate.
+     * @param table3gpp Pointer to the 3GPP parameters table (uXpr, sigXpr).
      */
     void GenerateCrossPolPowerRatiosAndInitialPhases(Double2DVector* crossPolarizationPowerRatios,
                                                      Double3DVector* clusterPhase,
                                                      const uint8_t reducedClusterNumber,
+                                                     const uint8_t raysPerCluster,
                                                      Ptr<const ParamsTable> table3gpp) const;
     /**
      * @brief Identify the two strongest base clusters and append their derived subclusters.
@@ -1112,6 +1146,20 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
     Ptr<UniformRandomVariable> m_uniformRv;
     /// normal random variable
     Ptr<NormalRandomVariable> m_normalRv;
+    /**
+     * Sentinel value of m_cluster1st/m_cluster2nd meaning that no sub-cluster mapping is
+     * applied (large bandwidth modeling of TR 38.901 Sec. 7.6.2.2, which replaces the fixed
+     * sub-cluster structure with per-ray delays).
+     */
+    static constexpr uint8_t NO_SUBCLUSTERS{0xFF};
+
+    /// enable the intra-cluster modeling of TR 38.901 Sec. 7.6.2.2
+    bool m_largeBandwidthArrayModeling{false};
+    /// simulation bandwidth B in Hz used by Equation (7.6-8)
+    double m_channelBandwidth{0.0};
+    /// upper limit Mmax on the number of rays per cluster in Equation (7.6-8)
+    uint8_t m_maxRaysPerCluster{20};
+
     /// uniform random variable used to shuffle an array in GetNewChannel
     Ptr<UniformRandomVariable> m_uniformRvShuffle;
     /**
