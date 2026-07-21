@@ -159,6 +159,12 @@ GetBsUtHeightsUmiStreetCanyon(double heightA, double heightB)
 }
 
 /**
+ * Finite, large loss returned for links outside the domain of the TR 38.811 model
+ * (non-positive elevation angles), in dB.
+ */
+constexpr double OUT_OF_DOMAIN_LOSS_DB = 500.0;
+
+/**
  * @brief Computes the free-space path loss using the formula described in 3GPP TR 38.811,
  * Table 6.6.2
  *
@@ -1750,6 +1756,14 @@ ThreeGppNTNPropagationLossModel::GetLossLos(Ptr<MobilityModel> a, Ptr<MobilityMo
     auto [elevAngle, elevAngleQuantized] =
         ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
 
+    // Issue #1354: Avoid unbounded negative loss (gain) for ground-ground transmissions
+    if (!std::isfinite(elevAngle) || elevAngle <= 0.0)
+    {
+        NS_LOG_DEBUG("Elevation angle " << elevAngle << " deg is non-positive, returning "
+                                        << OUT_OF_DOMAIN_LOSS_DB << " dB loss");
+        return OUT_OF_DOMAIN_LOSS_DB;
+    }
+
     // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
     double loss = ComputeNtnPathloss(m_frequency, distance3D);
 
@@ -1773,6 +1787,14 @@ ThreeGppNTNPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a, Ptr<MobilityM
     double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
     auto [elevAngle, elevAngleQuantized] =
         ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
+
+    // Issue #1354: Avoid unbounded negative loss (gain) for ground-ground transmissions
+    if (!std::isfinite(elevAngle) || elevAngle <= 0.0)
+    {
+        NS_LOG_DEBUG("Elevation angle " << elevAngle << " deg is non-positive, returning "
+                                        << OUT_OF_DOMAIN_LOSS_DB << " dB loss");
+        return OUT_OF_DOMAIN_LOSS_DB;
+    }
 
     // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
     double loss = ComputeNtnPathloss(m_frequency, distance3D);
