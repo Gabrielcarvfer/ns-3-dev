@@ -93,6 +93,18 @@ build_lib_example(
 )
 
 build_lib_example(
+  NAME three-gpp-spatial-consistency-example
+  SOURCE_FILES three-gpp-spatial-consistency-example.cc
+  LIBRARIES_TO_LINK
+    ${libantenna}
+    ${libcore}
+    ${libnetwork}
+    ${libmobility}
+    ${libpropagation}
+    ${libspectrum}
+)
+
+build_lib_example(
   NAME three-gpp-channel-consistency-example
   SOURCE_FILES three-gpp-channel-consistency-example.cc
   LIBRARIES_TO_LINK
