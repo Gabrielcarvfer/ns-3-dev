@@ -1197,8 +1197,10 @@ by default). The modifications to Step 7 follow the specification: the per-ray
 offset angles are drawn as unif(-2, 2) per cluster and ray (Equation 7.6-5)
 instead of the fixed offsets of Table 7.5-3, each ray receives a relative delay
 drawn as unif(0, 2 cDS) and an unequal power (Equation 7.6-6), and the number
-of rays per cluster is derived from the bandwidth and the departure array
-aperture (Equation 7.6-8, sparseness parameter 0.5), bounded by the
+of rays per cluster is derived from the bandwidth and the array aperture, taken
+as the per-dimension maximum over the two ends' arrays so that it does not
+depend on the link direction (Equation 7.6-8, sparseness parameter 0.5, and
+"the maximum antenna aperture" of Sec. 7.6.2.1), bounded by the
 ``MaxRaysPerCluster`` attribute (Mmax in the specification, a user-selected
 complexity/accuracy trade-off) and further clamped so that the expanded taps
 fit the 8-bit cluster indexing of the model. The simulation bandwidth B of
