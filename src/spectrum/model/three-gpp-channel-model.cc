@@ -2647,10 +2647,6 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
     // get the 3GPP parameters
     const Ptr<const ParamsTable> table3gpp = GetThreeGppTable(aMobOrdered, bMobOrdered, condition);
 
-    // Antenna array of the departure (a-ordered) node, used by the large bandwidth
-    // modeling of TR 38.901 Sec. 7.6.2.2 to derive the array aperture.
-    const Ptr<const PhasedArrayModel> txAntennaOrdered = aMobOrdered == aMob ? aAntenna : bAntenna;
-
     if (NewChannelParamsNeeded(channelParamsKey, condition, aMob, bMob))
     {
         NS_LOG_DEBUG(
@@ -2660,7 +2656,8 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
                                                                       table3gpp,
                                                                       aMobOrdered,
                                                                       bMobOrdered,
-                                                                      txAntennaOrdered));
+                                                                      aAntenna,
+                                                                      bAntenna));
     }
     else
     {
@@ -2680,7 +2677,8 @@ ThreeGppChannelModel::GetChannel(Ptr<const MobilityModel> aMob,
                                                                               table3gpp,
                                                                               aMobOrdered,
                                                                               bMobOrdered,
-                                                                              txAntennaOrdered));
+                                                                              aAntenna,
+                                                                              bAntenna));
             }
             else
             {
@@ -3721,7 +3719,8 @@ ThreeGppChannelModel::GenerateCrossPolPowerRatiosAndInitialPhases(
 void
 ThreeGppChannelModel::ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> channelParams,
                                                      Ptr<const ParamsTable> table3gpp,
-                                                     Ptr<const PhasedArrayModel> txAntenna) const
+                                                     Ptr<const PhasedArrayModel> antennaA,
+                                                     Ptr<const PhasedArrayModel> antennaB) const
 {
     NS_LOG_FUNCTION(this);
     const uint16_t nClusters = channelParams->m_reducedClusterNumber;
@@ -3730,11 +3729,20 @@ ThreeGppChannelModel::ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> 
     const double cZSD = 0.375 * std::pow(10.0, table3gpp->m_uLgZSD);
 
     // Equation (7.6-8): number of rays per cluster resolvable with the simulated
-    // bandwidth (delay resolution) and the departure array aperture (angle resolution).
+    // bandwidth (delay resolution) and the array aperture (angle resolution). One
+    // parameter realization serves both link directions, so the aperture is the
+    // per-dimension maximum over the two ends' arrays ("the maximum antenna
+    // aperture", Sec. 7.6.2.1), which is direction-independent and preserves the
+    // channel reciprocity.
     constexpr double k = 0.5; // "sparseness" parameter
-    const auto [dHOverLambda, dVOverLambda] = GetPanelApertures(txAntenna);
-    const double dH = lambda * dHOverLambda; // horizontal aperture of the departure array
-    const double dV = lambda * dVOverLambda; // vertical aperture of the departure array
+    double dH = 0.0;          // maximum horizontal aperture of the two arrays in meters
+    double dV = 0.0;          // maximum vertical aperture of the two arrays in meters
+    for (const auto& antenna : {antennaA, antennaB})
+    {
+        const auto [h, v] = GetPanelApertures(antenna);
+        dH = std::max(dH, lambda * h);
+        dV = std::max(dV, lambda * v);
+    }
     const double mT = std::max(std::ceil(4 * k * table3gpp->m_cDS * m_channelBandwidth), 1.0);
     const double mAod =
         std::max(std::ceil(4 * k * table3gpp->m_cASD * M_PI * dH / (180.0 * lambda)), 1.0);
@@ -4239,7 +4247,8 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                                                 Ptr<const ParamsTable> table3gpp,
                                                 Ptr<const MobilityModel> aMob,
                                                 Ptr<const MobilityModel> bMob,
-                                                Ptr<const PhasedArrayModel> txAntenna) const
+                                                Ptr<const PhasedArrayModel> antennaA,
+                                                Ptr<const PhasedArrayModel> antennaB) const
 {
     NS_LOG_FUNCTION(this);
     // Enforce canonical ordering (by node id) for deterministic parameter generation.
@@ -4394,7 +4403,7 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
         // are performed inside on the recomputed number of rays; the random coupling
         // of rays is not applied, since it would break the association between each
         // ray's offset angles and its power in Equation (7.6-6).
-        ApplyLargeBandwidthRayModeling(channelParams, table3gpp, txAntenna);
+        ApplyLargeBandwidthRayModeling(channelParams, table3gpp, antennaA, antennaB);
     }
 
     // save delay consistency for the channel updates with the reduced cluster number

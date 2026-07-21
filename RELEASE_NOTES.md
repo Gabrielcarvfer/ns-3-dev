@@ -50,6 +50,7 @@ Python 3.10 to 3.14.
 
 ### Bugs fixed
 
+- (spectrum) The number of rays per cluster of the large bandwidth modeling of the 3GPP TR 38.901 fast-fading model (Equation 7.6-8) now uses the maximum antenna aperture over the two link ends, as Sec. 7.6.2.1 prescribes, instead of the aperture of the lowest node id end.
 - (lr-wpan) !2916 Pcap files are now correctly generated with and without FCS cases.
 - (mesh) #1341 Fixed dot11s regression that ignored the link rate, degrading the HWMP routing metric to hop count.
 - (sixlowpan) #1342 Fixed a deserialization error in the MESH header.
