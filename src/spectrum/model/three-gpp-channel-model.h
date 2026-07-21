@@ -354,9 +354,10 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * @param table3gpp the 3gpp parameters from the table
      * @param aMob the a node mobility model
      * @param bMob the b node mobility model
-     * @param txAntenna the antenna array of the departure (a-ordered) node, used only by the
-     * large bandwidth modeling of TR 38.901 Sec. 7.6.2.2 to derive the array aperture in
-     * Equation (7.6-8); may be nullptr, in which case the angular ray-count factors are 1
+     * @param antennaA the antenna array of one link end, used only by the large bandwidth
+     * modeling of TR 38.901 Sec. 7.6.2.2 to derive the array aperture in Equation (7.6-8);
+     * may be nullptr, in which case that end does not contribute to the aperture
+     * @param antennaB the antenna array of the other link end, see antennaA
      * @return ThreeGppChannelParams structure with all the channel parameters generated
      * according 38.901 steps from 4 to 10.
      */
@@ -365,7 +366,8 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         Ptr<const ParamsTable> table3gpp,
         Ptr<const MobilityModel> aMob,
         Ptr<const MobilityModel> bMob,
-        Ptr<const PhasedArrayModel> txAntenna = nullptr) const;
+        Ptr<const PhasedArrayModel> antennaA = nullptr,
+        Ptr<const PhasedArrayModel> antennaB = nullptr) const;
 
     /**
      * @brief Apply the intra-cluster angular and delay spread modeling of TR 38.901
@@ -384,12 +386,14 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * @param channelParams Channel parameters holding the cluster-level structures of steps
      *        5-7; expanded in place to per-ray taps.
      * @param table3gpp 3GPP parameters table (cDS, cASA, cASD, cZSA, uLgZSD, XPR statistics).
-     * @param txAntenna Departure-side antenna array used for the aperture terms of (7.6-8);
-     *        may be nullptr.
+     * @param antennaA Antenna array of one link end; with antennaB it provides the aperture
+     *        terms of (7.6-8) as the per-dimension maximum over the two arrays. May be nullptr.
+     * @param antennaB Antenna array of the other link end, see antennaA.
      */
     void ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> channelParams,
                                         Ptr<const ParamsTable> table3gpp,
-                                        Ptr<const PhasedArrayModel> txAntenna) const;
+                                        Ptr<const PhasedArrayModel> antennaA,
+                                        Ptr<const PhasedArrayModel> antennaB) const;
 
     /**
      * @brief Large-scale channel parameters (3GPP TR 38.901).
