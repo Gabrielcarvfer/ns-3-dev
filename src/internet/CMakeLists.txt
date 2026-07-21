@@ -278,6 +278,7 @@ if((applications
   set(ns3tcp_sources
       test/ns3tcp-cubic-test-suite.cc
       test/ns3tcp-loss-test-suite.cc
+      test/ns3tcp-recovery-fsm-test-suite.cc
       test/ns3tcp-socket-writer.cc
       test/ns3tcp-state-test-suite.cc
   )
