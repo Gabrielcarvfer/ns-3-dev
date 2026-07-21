@@ -1181,6 +1181,16 @@ ThreeGppChannelModel::GetTypeId()
                 TimeValue(MilliSeconds(0)),
                 MakeTimeAccessor(&ThreeGppChannelModel::m_updatePeriod),
                 MakeTimeChecker())
+            .AddAttribute(
+                "LosRayOnly",
+                "When enabled, the stochastic cluster coefficients (fading) are suppressed and "
+                "only the LOS ray, steering, and antenna field patterns are preserved. This "
+                "corresponds to a K-factor of infinity in TR 38.901 eq. (7.5-30). The resulting "
+                "LOS channel is deterministic and no longer conforms to the TR 38.901/38.811 "
+                "statistical model. This attribute has no effect on NLOS channels.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&ThreeGppChannelModel::m_losRayOnly),
+                MakeBooleanChecker())
             // attributes for the blockage model
             .AddAttribute("Blockage",
                           "Enable blockage model A (sec 7.6.4.1)",
@@ -4469,11 +4479,23 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
 
         // Ricean weighting of (7.5-30): the NLOS coefficients are scaled by
         // sqrt(1/(K+1)) and the LOS ray by sqrt(K/(K+1)). The LOS ray is
-        // additionally attenuated if blockage is enabled.
+        // additionally attenuated if blockage is enabled. With LosRayOnly,
+        // the stochastic clusters are absent and the K-factor goes to
+        // infinity; the LOS ray carries unit power.
         const double kLinear = std::pow(10.0, channelParams->m_K_factor / 10.0);
-        const double nlosScale = std::sqrt(1.0 / (kLinear + 1.0));
-        const double losScale = std::sqrt(kLinear / (1.0 + kLinear)) /
-                                std::pow(10.0, channelParams->m_attenuation_dB[0] / 10.0);
+        double nlosScale;
+        double losScale;
+        if (m_losRayOnly)
+        {
+            nlosScale = 0.0;
+            losScale = 1.0;
+        }
+        else
+        {
+            nlosScale = std::sqrt(1.0 / (kLinear + 1.0));
+            losScale = std::sqrt(kLinear / (1.0 + kLinear));
+        }
+        losScale /= std::pow(10.0, channelParams->m_attenuation_dB[0] / 10.0);
 
         // Field patterns depend only on the angle and the panel
         // polarisation, NOT on the element index. Cache one (Phi,

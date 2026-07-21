@@ -1123,6 +1123,13 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * Uniform random variable, used to compute the additional Doppler contribution
      */
     Ptr<UniformRandomVariable> m_uniformRvDoppler;
+    /**
+     * If true, suppress the stochastic cluster coefficients (fading) and
+     * preserve only the LOS ray, steering, and antenna field patterns.
+     * This corresponds to K-factor of infinity from TR 38.901 eq. 7.5-30.
+     * NLOS channels are unaffected.
+     */
+    bool m_losRayOnly;
     // parameters for the blockage model
     /// enables the blockage model A
     bool m_blockage;
