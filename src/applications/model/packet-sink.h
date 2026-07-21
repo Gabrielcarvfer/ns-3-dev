@@ -187,6 +187,8 @@ class PacketSink : public SinkApplication
     /// headers
     TracedCallback<Ptr<const Packet>, const Address&, const Address&, const SeqTsSizeHeader&>
         m_rxTraceWithSeqTsSize;
+
+    uint8_t m_tos{0}; //!< Type of Service for outbound packets
 };
 
 } // namespace ns3

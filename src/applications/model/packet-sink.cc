@@ -23,6 +23,7 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/udp-socket.h"
+#include "ns3/uinteger.h"
 
 namespace ns3
 {
@@ -49,6 +50,12 @@ PacketSink::GetTypeId()
                           BooleanValue(false),
                           MakeBooleanAccessor(&PacketSink::m_enableSeqTsSizeHeader),
                           MakeBooleanChecker())
+            .AddAttribute("Tos",
+                          "The Type of Service used to send IPv4 packets. "
+                          "All 8 bits of the TOS byte are set (including ECN bits).",
+                          UintegerValue(0),
+                          MakeUintegerAccessor(&PacketSink::m_tos),
+                          MakeUintegerChecker<uint8_t>())
             .AddTraceSource("RxWithAddresses",
                             "A packet has been received",
                             MakeTraceSourceAccessor(&PacketSink::m_rxTraceWithAddresses),
@@ -308,6 +315,10 @@ PacketSink::HandleAccept(Ptr<Socket> s, const Address& from)
 {
     NS_LOG_FUNCTION(this << s << from);
     s->SetRecvCallback(MakeCallback(&PacketSink::HandleRead, this));
+    if (m_tos)
+    {
+        s->SetIpTos(m_tos);
+    }
     m_socketList.push_back(s);
 }
 
