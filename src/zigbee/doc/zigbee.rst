@@ -35,8 +35,14 @@ This is the case of ``NetDevices`` such as the ``LrWpanNetDevice``.
 While other technologies like 6loWPAN can interact with the underlying MAC layer through general-purpose ``NetDevice`` interfaces, Zigbee has specific requirements that necessitate certain features from a lr-wpan MAC.
 Consequently, the |ns3| Zigbee implementation directly accesses the aggregated ``LrWpanMacBase`` and interfaces with it accordingly.
 
-The current scope of the project includes **only the NWK layer and the APS layer in the Zigbee stack**. However, the project can be later extended
+The current scope of the project includes **the NWK layer, the APS layer and the ZDO in the Zigbee stack**. However, the project can be later extended
 to support higher layers like the application framework (AF) or services like the Zigbee Cluster Library (ZCL).
+
+By default, the NWK and APS layers along with the ZDO are integrated and active within the Zigbee stack.
+However, users can choose to work solely with the NWK layer, bypassing the use of the APS layer and the ZDO
+or with the NWK and APS layer without the ZDO.
+To define the parts of the stack to include, use the ``SetLayers(StackLayers::<option>)`` function in the Zigbee helper.
+Available options are: ``NWK_ONLY``, ``NWK_AND_APS``, and ``FULL_STACK``. Not selecting any option will default to ``FULL_STACK``.
 
 
 Scope and Limitations
@@ -66,10 +72,13 @@ The APS has the following limitations:
 - No acknowledged transmissions
 - No trace sources
 
+The ZDO has the following limitations:
+
+- Only ``NWK_addr_req`` command is supported.
+
 The following Zigbee layers or services are not supported yet:
 
 - Zigbee Cluster Library (ZCL)
-- Zigbee Device Object (ZDO)
 - Application Framework (AF)
 
 To see a list of |ns3| Zigbee undergoing development efforts check issue `#1165 <https://gitlab.com/nsnam/ns-3-dev/-/issues/1165>`_
@@ -129,8 +138,9 @@ As a result of this joining process, devices are assigned a short address (16-bi
 7. Short addresses are assigned by the coordinator randomly, which means there could be instances of address duplication. Although the Zigbee specification includes a mechanism for detecting address duplication, this feature is not currently supported in this implementation.
 8. If the association request fails, the device will receive a confirmation with a status indicating failure, rather than ``SUCCESSFUL``, and the short address FF:FF will be received (indicating that the device is not associated).
 
-Note: The process described above outlines the steps for joining the network using a MAC association join.
-However, devices that are required to act as routers must also issue an additional ``NLME-START-ROUTER.request`` primitive after joining the network in order to begin functioning as routers.
+.. note::
+    The process described above outlines the steps for joining the network using a MAC association join.
+    However, devices that are required to act as routers must also issue an additional ``NLME-START-ROUTER.request`` primitive after joining the network in order to begin functioning as routers.
 
 In |ns3|, Zigbee NWK, coordinators or routers can be found using the following primitive::
 
@@ -340,9 +350,6 @@ Similarly, the APS layer can transmit data that includes information about sourc
 This implementation provides only the most basic functions of the APS, enabling data transmission using 16-bit or group address destinations.
 Features such as transmission to IEEE addresses (64-bit address destinations), fragmentation, duplication detection, and security are not currently supported.
 
-By default, the APS layer is integrated and active within the Zigbee stack.
-However, users can choose to work solely with the NWK layer.
-To do this, they must disable the APS by using the ``SetNwkLayerOnly()`` function in the Zigbee helper.
 
 
 The following is a list of APS primitives are included:
@@ -457,6 +464,31 @@ Usage is similar to previous examples, in the following snippet only relevant pa
     zstack->GetNwk()->GetAps()->ApsdeDataRequest(dataReqParams, p);
 
 
+Zigbee Device Object (ZDO)
+--------------------------
+
+Zigbee Device Object (ZDO) is a specialized entity within the Zigbee stack that serves as middleware
+to perform various management and control functions. It providing essential services that facilitate the operation of Zigbee devices within a network.
+From a design perspective, it is similar to an application layer, but it is not considered a part of the application framework (AF) in the Zigbee stack.
+
+The ZDO is responsible for several key functions, including:
+- **Device Discovery:** The ZDO enables devices to discover each other within the Zigbee network, facilitating the establishment of communication links.
+- **Network Management:** The ZDO manages network parameters, such as device roles, network addresses, and routing information, ensuring efficient operation of the Zigbee network
+- **Security Management:** It handles security-related tasks, including key management and authentication, to ensure secure communication between devices.
+- **Binding Management:** The ZDO manages the binding of devices, allowing them to establish relationships and communicate effectively based on their roles and capabilities.
+
+ZDO implements the Zigbee Device Profile (ZDP), which defines a set of standardized commands and responses that devices can use to interact with the ZDO.
+Furthermore, ZDO use the APS layer to transmit and receive ZDP commands, which are encapsulated within APS frames for communication between devices.
+In this regard, it uses the endpoint 0 (zero) exclusively and the profile ID 0x0000 (ZDP ID) to identify ZDP commands and responses.
+
+Because the APS layer is connected to ZDO and other components, a demultiplexer is used to route incoming APS frames to the appropriate destination based on the endpoint.
+
+Transmission of ZDO commands is similar to the usage of primitives in other layers. For further details on how to use ZDO,
+please refer to the ``zigbee-zdo-test.cc`` example in the |ns3| source code.
+
+.. note::
+    Only a small list of ZDO commands are currently supported.
+
 Usage
 -----
 
@@ -547,6 +579,7 @@ The following unit test have been developed to ensure the correct behavior of th
 
 * ``zigbee-rreq-test``: Test some situations in which RREQ messages should be retried during a route discovery process.
 * ``zigbee-aps-data-test``: Test the APS data transmission using 16-bit and 64-bit destinations.
+* ``zigbee-zdo-test``: Test the use of ZDO commands.
 
 Validation
 ----------

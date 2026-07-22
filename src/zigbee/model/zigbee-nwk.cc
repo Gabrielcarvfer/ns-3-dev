@@ -2978,6 +2978,12 @@ ZigbeeNwk::GetIeeeAddrByNwkAddr(Mac16Address nwkAddr, Mac64Address& ieeeAddr)
 }
 
 void
+ZigbeeNwk::UpdateNwkAddrMap(Mac16Address nwkAddr, Mac64Address ieeeAddr)
+{
+    m_nwkAddressMap.Update(ieeeAddr, nwkAddr);
+}
+
+void
 ZigbeeNwk::SetNldeDataIndicationCallback(NldeDataIndicationCallback c)
 {
     m_nldeDataIndicationCallback = c;

@@ -1474,6 +1474,8 @@ BroadcastTransactionRecord::Print(Ptr<OutputStreamWrapper> stream) const
 bool
 NwkAddressMap::Update(Mac64Address ieeeAddr, Mac16Address nwkAddr)
 {
+    NS_LOG_FUNCTION(this << ieeeAddr << " = " << nwkAddr);
+
     auto ieeeIt = m_ieeeToNwk.find(ieeeAddr.ConvertToInt());
     if (ieeeIt != m_ieeeToNwk.end())
     {

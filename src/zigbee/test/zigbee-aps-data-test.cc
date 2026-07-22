@@ -246,6 +246,7 @@ ZigbeeApsDataTestCase::DoRun()
     // Add Zigbee stack with  NWK and APS
 
     ZigbeeHelper zigbeeHelper;
+    zigbeeHelper.SetLayers(zigbee::StackLayers::NWK_AND_APS);
     ZigbeeStackContainer zigbeeStackContainer = zigbeeHelper.Install(lrwpanDevices);
 
     Ptr<ZigbeeStack> zstack0 = zigbeeStackContainer.Get(0)->GetObject<ZigbeeStack>();

@@ -596,11 +596,7 @@ ZigbeeAps::ReceiveData(const ZigbeeApsHeader& apsHeader,
     {
         if (!m_apsdeDataIndicationCallback.IsNull())
         {
-            // Note: Extracting the Address directly from the NWK, creates a dependency on this NWK
-            // implementation. This is not a very good design, but in practice, it is unavoidable
-            // due to the quasi cross-layer design of the specification
-            //(tigly coupled design of the APS in respect to the NWK).
-            indicationParams.m_dstAddr16 = m_nwk->GetNetworkAddress();
+            indicationParams.m_dstAddr16 = params.m_dstAddr;
             indicationParams.m_dstAddrMode = ApsDstAddressMode::DST_ADDR16_DST_ENDPOINT_PRESENT;
             indicationParams.m_dstEndPoint = apsHeader.GetDstEndpoint();
             indicationParams.m_srcAddrMode = ApsSrcAddressMode::SRC_ADDR16_SRC_ENDPOINT_PRESENT;

@@ -978,6 +978,21 @@ class ZigbeeNwk : public Object
     bool GetIeeeAddrByNwkAddr(Mac16Address nwkAddr, Mac64Address& ieeeAddr);
 
     /**
+     *  Update an entry mapping a nwkIeeeAddress (64-bit)
+     *  to a nwkAddress (16-bit). The update works in both ways. If an entry
+     *  do not exist, it is created. If an entry already exists, it is updated.
+     *
+     *  This function is not explicitly defined in the Zigbee specification,
+     *  but the APS layer needs a way to transmit data using the IEEE address
+     *  and this information must be extracted from the nwkAddressMap NIB contained
+     *  in the NWK layer.
+     *
+     *  @param nwkAddr The known NWK address (16-bit)
+     *  @param ieeeAddr The obtained mapped IEEE address (64-bit)
+     */
+    void UpdateNwkAddrMap(Mac16Address nwkAddr, Mac64Address ieeeAddr);
+
+    /**
      *  Set the callback for the end of a RX, as part of the
      *  interconnections between the NWK and the APS sublayer. The callback
      *  implements the callback used in a NLDE-DATA.indication.

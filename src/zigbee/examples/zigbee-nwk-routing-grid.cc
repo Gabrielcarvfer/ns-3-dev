@@ -279,7 +279,7 @@ main(int argc, char* argv[])
     lrWpanHelper.SetExtendedAddresses(lrwpanDevices);
 
     ZigbeeHelper zigbeeHelper;
-    zigbeeHelper.SetNwkLayerOnly();
+    zigbeeHelper.SetLayers(StackLayers::ONLY_NWK);
     zigbeeStacks = zigbeeHelper.Install(lrwpanDevices);
 
     // NWK callbacks hooks
