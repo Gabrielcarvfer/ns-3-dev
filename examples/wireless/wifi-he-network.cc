@@ -523,6 +523,11 @@ main(int argc, char* argv[])
                           << (widthStr.size() > 3 ? "" : "\t") << gi << " ns\t\t\t" << throughput
                           << " Mbit/s" << std::endl;
 
+                if (throughput == 0)
+                {
+                    NS_LOG_ERROR("Obtained zero throughput!");
+                    exit(1);
+                }
                 // test first element
                 if (mcs == minMcs && width == 20 && gi == 3200)
                 {
@@ -552,7 +557,7 @@ main(int argc, char* argv[])
                     {
                         previous = throughput;
                     }
-                    else if (throughput > 0)
+                    else
                     {
                         NS_LOG_ERROR("Obtained throughput " << throughput << " is not expected!");
                         exit(1);
@@ -562,7 +567,7 @@ main(int argc, char* argv[])
                     {
                         prevThroughput[index] = throughput;
                     }
-                    else if (throughput > 0)
+                    else
                     {
                         NS_LOG_ERROR("Obtained throughput " << throughput << " is not expected!");
                         exit(1);
