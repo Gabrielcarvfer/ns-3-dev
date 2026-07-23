@@ -821,6 +821,21 @@ EmlsrManager::NotifyTxopEnd(uint8_t linkId, Ptr<QosTxop> edca)
         }
     }
     m_staMac->UnblockTxOnLink(linkIds, WifiQueueBlockedReason::USING_OTHER_EMLSR_LINK);
+
+    // If the TXOP ended unsuccessfully (the contention window on this link has been increased),
+    // the frames to transmit on the other links are retries; request channel access on the other
+    // links by generating a random backoff, so that multiple EMLSR clients whose TXOPs failed
+    // simultaneously (e.g., because their initial frames collided) do not deterministically
+    // gain immediate access at the same time on the other links and collide again
+    if (edca && edca->GetCw(linkId) > edca->GetMinCw(linkId))
+    {
+        for (const auto id : linkIds)
+        {
+            edca->StartAccessAfterEvent(id,
+                                        Txop::DIDNT_HAVE_FRAMES_TO_TRANSMIT,
+                                        Txop::DONT_CHECK_MEDIUM_BUSY);
+        }
+    }
 }
 
 void
