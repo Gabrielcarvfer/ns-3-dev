@@ -137,3 +137,14 @@ build_example(
     ${libinternet-apps}
     ${libflow-monitor}
 )
+
+build_example(
+  NAME tcp-many-flows
+  SOURCE_FILES tcp-many-flows.cc
+  LIBRARIES_TO_LINK
+    ${libpoint-to-point}
+    ${libinternet}
+    ${libapplications}
+    ${libtraffic-control}
+    ${libflow-monitor}
+)
