@@ -194,10 +194,13 @@ Ipv4EndPointDemux::Lookup(Ipv4Address daddr,
 {
     NS_LOG_FUNCTION(this << daddr << dport << saddr << sport << incomingInterface);
 
-    EndPoints retval1; // Matches exact on local port, wildcards on others
-    EndPoints retval2; // Matches exact on local port/adder, wildcards on others
-    EndPoints retval3; // Matches all but local address
-    EndPoints retval4; // Exact match on all 4
+    // Best match per specificity class, most specific wins. Classes are:
+    // 1: exact on local port, wildcards on others
+    // 2: exact on local port/addr, wildcards on others
+    // 3: all but local address
+    // 4: exact match on all 4
+    Ipv4EndPoint* match[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+    unsigned int matchCount[5] = {0, 0, 0, 0, 0};
 
     NS_LOG_DEBUG("Looking up endpoint for destination address " << daddr << ":" << dport);
     for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
@@ -305,51 +308,46 @@ Ipv4EndPointDemux::Lookup(Ipv4Address daddr,
         { // All 4 match - this is the case of an open TCP connection, for example.
             NS_LOG_LOGIC("Found an endpoint for case 4, adding " << endP->GetLocalAddress() << ":"
                                                                  << endP->GetLocalPort());
-            retval4.push_back(endP);
+            match[4] = endP;
+            matchCount[4]++;
         }
         if (localAddressMatchesWildCard && remoteAddressMatchesExact && remotePortMatchesExact)
         { // All but local address - no idea what this case could be.
             NS_LOG_LOGIC("Found an endpoint for case 3, adding " << endP->GetLocalAddress() << ":"
                                                                  << endP->GetLocalPort());
-            retval3.push_back(endP);
+            match[3] = endP;
+            matchCount[3]++;
         }
         if (localAddressMatchesExact && remoteAddressMatchesWildCard && remotePortMatchesWildCard)
         { // Only local port and local address matches exactly - Not yet opened connection
             NS_LOG_LOGIC("Found an endpoint for case 2, adding " << endP->GetLocalAddress() << ":"
                                                                  << endP->GetLocalPort());
-            retval2.push_back(endP);
+            match[2] = endP;
+            matchCount[2]++;
         }
         if (localAddressMatchesWildCard && remoteAddressMatchesWildCard &&
             remotePortMatchesWildCard)
         { // Only local port matches exactly - Endpoint open to "any" connection
             NS_LOG_LOGIC("Found an endpoint for case 1, adding " << endP->GetLocalAddress() << ":"
                                                                  << endP->GetLocalPort());
-            retval1.push_back(endP);
+            match[1] = endP;
+            matchCount[1]++;
         }
     }
 
     // Here we find the most exact match
     EndPoints retval;
-    if (!retval4.empty())
+    for (int specificity = 4; specificity >= 1; specificity--)
     {
-        retval = retval4;
+        if (matchCount[specificity] > 0)
+        {
+            NS_ABORT_MSG_IF(matchCount[specificity] > 1,
+                            "Too many endpoints - perhaps you created too many sockets without "
+                            "binding them to different NetDevices.");
+            retval.push_back(match[specificity]);
+            break;
+        }
     }
-    else if (!retval3.empty())
-    {
-        retval = retval3;
-    }
-    else if (!retval2.empty())
-    {
-        retval = retval2;
-    }
-    else
-    {
-        retval = retval1;
-    }
-
-    NS_ABORT_MSG_IF(retval.size() > 1,
-                    "Too many endpoints - perhaps you created too many sockets without binding "
-                    "them to different NetDevices.");
     return retval; // might be empty if no matches
 }
 
