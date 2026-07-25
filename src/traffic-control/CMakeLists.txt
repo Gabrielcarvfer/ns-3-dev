@@ -27,6 +27,7 @@ build_lib(
     model/codel-queue-disc.cc
     model/fifo-queue-disc.cc
     model/fq-cobalt-queue-disc.cc
+    model/fq-codel-flat-queue-disc.cc
     model/fq-codel-queue-disc.cc
     model/fq-pie-queue-disc.cc
     model/mq-queue-disc.cc
@@ -45,6 +46,7 @@ build_lib(
     model/codel-queue-disc.h
     model/fifo-queue-disc.h
     model/fq-cobalt-queue-disc.h
+    model/fq-codel-flat-queue-disc.h
     model/fq-codel-queue-disc.h
     model/fq-pie-queue-disc.h
     model/mq-queue-disc.h
@@ -62,6 +64,7 @@ build_lib(
     test/cobalt-queue-disc-test-suite.cc
     test/codel-queue-disc-test-suite.cc
     test/fifo-queue-disc-test-suite.cc
+    test/fq-codel-flat-queue-disc-test-suite.cc
     test/pie-queue-disc-test-suite.cc
     test/prio-queue-disc-test-suite.cc
     test/queue-disc-traces-test-suite.cc
