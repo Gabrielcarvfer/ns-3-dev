@@ -53,6 +53,12 @@ const double m2   =       4294944443.0;
 /** Normalization to obtain randoms on [0,1). */
 const double norm =       1.0 / (m1 + 1.0);
 
+/** Reciprocal of the first component modulus; @see RandU01. */
+const double m1Inv =      1.0 / m1;
+
+/** Reciprocal of the second component modulus; @see RandU01. */
+const double m2Inv =      1.0 / m2;
+
 /** First component multiplier of <i>n</i> - 2 value. */
 const double a12  =       1403580.0;
 
@@ -333,13 +339,23 @@ RngStream::RandU01()
     double p2;
     double u;
 
+    // Multiplying by the precomputed reciprocal replaces the expensive
+    // division; the estimated quotient can be off by one, so the remainder is
+    // corrected afterwards. All intermediate values are integers below 2^53,
+    // hence exact in double precision, and the reduction into [0, m) is
+    // unique: the result is bit-identical to dividing by m directly.
+
     /* Component 1 */
     p1 = a12 * m_currentState[1] - a13n * m_currentState[0];
-    k = static_cast<int32_t>(p1 / m1);
+    k = static_cast<int32_t>(p1 * m1Inv);
     p1 -= k * m1;
-    if (p1 < 0.0)
+    while (p1 < 0.0)
     {
         p1 += m1;
+    }
+    while (p1 >= m1)
+    {
+        p1 -= m1;
     }
     m_currentState[0] = m_currentState[1];
     m_currentState[1] = m_currentState[2];
@@ -347,11 +363,15 @@ RngStream::RandU01()
 
     /* Component 2 */
     p2 = a21 * m_currentState[5] - a23n * m_currentState[3];
-    k = static_cast<int32_t>(p2 / m2);
+    k = static_cast<int32_t>(p2 * m2Inv);
     p2 -= k * m2;
-    if (p2 < 0.0)
+    while (p2 < 0.0)
     {
         p2 += m2;
+    }
+    while (p2 >= m2)
+    {
+        p2 -= m2;
     }
     m_currentState[3] = m_currentState[4];
     m_currentState[4] = m_currentState[5];
