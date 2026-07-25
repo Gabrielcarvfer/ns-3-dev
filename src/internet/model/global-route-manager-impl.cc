@@ -989,7 +989,7 @@ GlobalRouteManagerImpl<T>::SPFNext(SPFVertex<T>* v, CandidateQueue<T>& candidate
                     // If we've changed the cost to get to the vertex represented by <w>, we
                     // must reorder the priority queue keyed to that cost.
                     //
-                    candidate.Reorder();
+                    candidate.Reorder(cw);
                 }
             }
         }
