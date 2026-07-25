@@ -553,6 +553,30 @@ class QueueDisc : public Object
     void DropAfterDequeue(Ptr<const QueueDiscItem> item, const char* reason);
 
     /**
+     * @brief Perform the actions required when the queue disc is notified of
+     *        a packet enqueue
+     *
+     * Called automatically for packets enqueued into internal queues or
+     * child queue discs; queue discs that manage their own packet storage
+     * must call it for every enqueued packet to keep the statistics correct.
+     *
+     * @param item item that was enqueued
+     */
+    void PacketEnqueued(Ptr<const QueueDiscItem> item);
+
+    /**
+     * @brief Perform the actions required when the queue disc is notified of
+     *        a packet dequeue
+     *
+     * Called automatically for packets dequeued from internal queues or
+     * child queue discs; queue discs that manage their own packet storage
+     * must call it for every dequeued packet to keep the statistics correct.
+     *
+     * @param item item that was dequeued
+     */
+    void PacketDequeued(Ptr<const QueueDiscItem> item);
+
+    /**
      * @brief Marks the given packet and, if successful, updates the counters
      *        associated with the given reason
      * @param item item that has to be marked
@@ -658,20 +682,6 @@ class QueueDisc : public Object
      * @return true if the device queue is not stopped and the queue disc is not empty
      */
     bool Transmit(Ptr<QueueDiscItem> item);
-
-    /**
-     * @brief Perform the actions required when the queue disc is notified of
-     *        a packet enqueue
-     * @param item item that was enqueued
-     */
-    void PacketEnqueued(Ptr<const QueueDiscItem> item);
-
-    /**
-     * @brief Perform the actions required when the queue disc is notified of
-     *        a packet dequeue
-     * @param item item that was dequeued
-     */
-    void PacketDequeued(Ptr<const QueueDiscItem> item);
 
     /// Default quota (as in /proc/sys/net/core/dev_weight)
     static const uint32_t DEFAULT_QUOTA = 64;
