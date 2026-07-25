@@ -490,9 +490,11 @@ bool
 Ipv4L3Protocol::IsDestinationAddress(Ipv4Address address, uint32_t iif) const
 {
     // First check the incoming interface for a unicast address match
-    for (uint32_t i = 0; i < GetNAddresses(iif); i++)
+    Ptr<Ipv4Interface> iface = GetInterface(iif);
+    const uint32_t nAddresses = iface->GetNAddresses();
+    for (uint32_t i = 0; i < nAddresses; i++)
     {
-        Ipv4InterfaceAddress iaddr = GetAddress(iif, i);
+        const Ipv4InterfaceAddress& iaddr = iface->GetAddress(i);
         if (address == iaddr.GetLocal())
         {
             NS_LOG_LOGIC("For me (destination " << address << " match)");

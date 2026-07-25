@@ -15,7 +15,7 @@
 #include "ns3/ptr.h"
 #include "ns3/traced-callback.h"
 
-#include <list>
+#include <vector>
 
 namespace ns3
 {
@@ -216,7 +216,7 @@ class Ipv6Interface : public Object
      * @param index index
      * @return Ipv6InterfaceAddress address whose index is i
      */
-    Ipv6InterfaceAddress GetAddress(uint32_t index) const;
+    const Ipv6InterfaceAddress& GetAddress(uint32_t index) const;
 
     /**
      * @brief Get an address which is in the same network prefix as destination.
@@ -296,18 +296,18 @@ class Ipv6Interface : public Object
     /**
      * @brief Container for the Ipv6InterfaceAddresses.
      */
-    typedef std::list<std::pair<Ipv6InterfaceAddress, Ipv6Address>> Ipv6InterfaceAddressList;
+    typedef std::vector<std::pair<Ipv6InterfaceAddress, Ipv6Address>> Ipv6InterfaceAddressList;
 
     /**
      * @brief Container Iterator for the Ipv6InterfaceAddresses.
      */
-    typedef std::list<std::pair<Ipv6InterfaceAddress, Ipv6Address>>::iterator
+    typedef std::vector<std::pair<Ipv6InterfaceAddress, Ipv6Address>>::iterator
         Ipv6InterfaceAddressListI;
 
     /**
      * @brief Const Container Iterator for the Ipv6InterfaceAddresses.
      */
-    typedef std::list<std::pair<Ipv6InterfaceAddress, Ipv6Address>>::const_iterator
+    typedef std::vector<std::pair<Ipv6InterfaceAddress, Ipv6Address>>::const_iterator
         Ipv6InterfaceAddressListCI;
 
     /**
