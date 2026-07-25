@@ -15,6 +15,8 @@
 
 #include <list>
 #include <stdint.h>
+#include <unordered_map>
+#include <vector>
 
 namespace ns3
 {
@@ -180,6 +182,15 @@ class Ipv4EndPointDemux
      * @brief The first ephemeral port.
      */
     uint16_t m_portFirst;
+
+    /**
+     * @brief End points indexed by local port, in insertion order.
+     *
+     * Every end point has a fixed local port, so the lookups only need to
+     * scan the end points bound to the packet's destination port instead
+     * of the whole list.
+     */
+    std::unordered_map<uint16_t, std::vector<Ipv4EndPoint*>> m_endPointsByPort;
 
     /**
      * @brief A list of IPv4 end points.

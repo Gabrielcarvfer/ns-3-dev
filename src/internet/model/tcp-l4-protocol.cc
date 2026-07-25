@@ -157,6 +157,7 @@ TcpL4Protocol::DoDispose()
 {
     NS_LOG_FUNCTION(this);
     m_sockets.clear();
+    m_socketIds.clear();
 
     if (m_endPoints != nullptr)
     {
@@ -204,6 +205,7 @@ TcpL4Protocol::CreateSocket(TypeId congestionTypeId, TypeId recoveryTypeId)
     socket->SetCongestionControlAlgorithm(algo);
     socket->SetRecoveryAlgorithm(recovery);
 
+    m_socketIds[PeekPointer(socket)] = m_socketIndex;
     m_sockets[m_socketIndex++] = socket;
     return socket;
 }
@@ -741,13 +743,11 @@ TcpL4Protocol::AddSocket(Ptr<TcpSocketBase> socket)
 {
     NS_LOG_FUNCTION(this << socket);
 
-    for (auto& socketItem : m_sockets)
+    if (m_socketIds.find(PeekPointer(socket)) != m_socketIds.end())
     {
-        if (socketItem.second == socket)
-        {
-            return;
-        }
+        return;
     }
+    m_socketIds[PeekPointer(socket)] = m_socketIndex;
     m_sockets[m_socketIndex++] = socket;
 }
 
@@ -756,17 +756,14 @@ TcpL4Protocol::RemoveSocket(Ptr<TcpSocketBase> socket)
 {
     NS_LOG_FUNCTION(this << socket);
 
-    for (auto& socketItem : m_sockets)
+    auto idIter = m_socketIds.find(PeekPointer(socket));
+    if (idIter == m_socketIds.end())
     {
-        if (socketItem.second == socket)
-        {
-            socketItem.second = nullptr;
-            m_sockets.erase(socketItem.first);
-            return true;
-        }
+        return false;
     }
-
-    return false;
+    m_sockets.erase(idIter->second);
+    m_socketIds.erase(idIter);
+    return true;
 }
 
 void
