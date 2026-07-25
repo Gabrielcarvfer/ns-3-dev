@@ -39,9 +39,38 @@ class OlsrState
     Associations m_associations;     //!< The node's local Host Network Associations that will be
                                      //!< advertised using HNA messages.
 
+    /// Version of the state relevant to MPR and routing table computation.
+    /// Incremented on every mutation of the link, neighbor, 2-hop neighbor,
+    /// topology, interface association and host association sets, so those
+    /// computations can be skipped when nothing they depend on has changed.
+    /// Timer-only refreshes and duplicate/MPR-selector set changes do not
+    /// increment it.
+    uint64_t m_version{0};
+
   public:
     OlsrState()
     {
+    }
+
+    /**
+     * Gets the state version relevant to MPR and routing table computation.
+     * @returns The state version.
+     */
+    uint64_t GetVersion() const
+    {
+        return m_version;
+    }
+
+    /**
+     * Increments the state version.
+     *
+     * Must be called after any direct mutation of the sets that MPR or
+     * routing table computation depend on (e.g. changing a neighbor tuple
+     * status through a pointer obtained from a Find method).
+     */
+    void BumpVersion()
+    {
+        m_version++;
     }
 
     // MPR selector
