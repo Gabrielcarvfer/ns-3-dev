@@ -14,7 +14,7 @@
 #include "ns3/ptr.h"
 #include "ns3/traced-callback.h"
 
-#include <list>
+#include <vector>
 
 namespace ns3
 {
@@ -161,7 +161,7 @@ class Ipv4Interface : public Object
      * @param index Index of Ipv4InterfaceAddress to return
      * @returns The Ipv4InterfaceAddress address whose index is i
      */
-    Ipv4InterfaceAddress GetAddress(uint32_t index) const;
+    const Ipv4InterfaceAddress& GetAddress(uint32_t index) const;
 
     /**
      * @returns the number of Ipv4InterfaceAddress stored on this interface
@@ -215,17 +215,17 @@ class Ipv4Interface : public Object
     /**
      * @brief Container for the Ipv4InterfaceAddresses.
      */
-    typedef std::list<Ipv4InterfaceAddress> Ipv4InterfaceAddressList;
+    typedef std::vector<Ipv4InterfaceAddress> Ipv4InterfaceAddressList;
 
     /**
      * @brief Container Iterator for the Ipv4InterfaceAddresses.
      */
-    typedef std::list<Ipv4InterfaceAddress>::const_iterator Ipv4InterfaceAddressListCI;
+    typedef std::vector<Ipv4InterfaceAddress>::const_iterator Ipv4InterfaceAddressListCI;
 
     /**
      * @brief Const Container Iterator for the Ipv4InterfaceAddresses.
      */
-    typedef std::list<Ipv4InterfaceAddress>::iterator Ipv4InterfaceAddressListI;
+    typedef std::vector<Ipv4InterfaceAddress>::iterator Ipv4InterfaceAddressListI;
 
     bool m_ifup;                        //!< The state of this interface
     bool m_forwarding;                  //!< Forwarding state.

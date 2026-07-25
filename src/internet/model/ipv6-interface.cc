@@ -301,29 +301,15 @@ Ipv6Interface::IsSolicitedMulticastAddress(Ipv6Address address) const
     return false;
 }
 
-Ipv6InterfaceAddress
+const Ipv6InterfaceAddress&
 Ipv6Interface::GetAddress(uint32_t index) const
 {
     NS_LOG_FUNCTION(this << index);
-    uint32_t i = 0;
-
-    if (m_addresses.size() > index)
-    {
-        for (auto it = m_addresses.begin(); it != m_addresses.end(); ++it)
-        {
-            if (i == index)
-            {
-                return it->first;
-            }
-            i++;
-        }
-    }
-    else
+    if (index >= m_addresses.size())
     {
         NS_FATAL_ERROR("index " << index << " out of bounds");
     }
-    Ipv6InterfaceAddress addr;
-    return addr; /* quiet compiler */
+    return m_addresses[index].first;
 }
 
 uint32_t
