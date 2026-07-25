@@ -13,6 +13,7 @@
 #include "ipv6-interface.h"
 
 #include "ns3/callback.h"
+#include "ns3/deprecated.h"
 #include "ns3/ipv6-address.h"
 #include "ns3/net-device.h"
 
@@ -70,6 +71,9 @@ class Ipv6EndPoint
      * @brief Set the local port.
      * @param port the port to set
      */
+    NS_DEPRECATED_3_49(
+        "The local port must not change after allocation: Ipv6EndPointDemux indexes end "
+        "points by their local port")
     void SetLocalPort(uint16_t port);
 
     /**
