@@ -137,8 +137,15 @@ MakeEvent(MEM mem_ptr, OBJ obj, Ts... args)
       public:
         EventMemberImpl() = delete;
 
+        // The object, member function and arguments are stored directly
+        // instead of in a std::function holding the result of std::bind:
+        // std::function type-erases its target, so invoking it costs an
+        // indirect call through the erased target (more than one for a
+        // bound member function), which the direct member call below avoids.
         EventMemberImpl(OBJ obj, MEM function, Ts... args)
-            : m_function(std::bind(function, obj, args...))
+            : m_obj(obj),
+              m_function(function),
+              m_arguments(args...)
         {
         }
 
@@ -150,10 +157,17 @@ MakeEvent(MEM mem_ptr, OBJ obj, Ts... args)
       private:
         void Notify() override
         {
-            m_function();
+            std::apply(
+                [this](Ts&... args) {
+                    (internal::EventMemberImplObjTraits<OBJ>::GetReference(m_obj).*
+                     m_function)(args...);
+                },
+                m_arguments);
         }
 
-        std::function<void()> m_function;
+        OBJ m_obj;
+        MEM m_function;
+        std::tuple<std::remove_reference_t<Ts>...> m_arguments;
     }* ev = new EventMemberImpl(obj, mem_ptr, args...);
 
     return ev;
