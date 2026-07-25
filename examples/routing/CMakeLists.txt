@@ -132,3 +132,12 @@ build_example(
     ${libapplications}
     ${libinternet}
 )
+
+build_example(
+  NAME global-routing-grid
+  SOURCE_FILES global-routing-grid.cc
+  LIBRARIES_TO_LINK
+    ${libpoint-to-point}
+    ${libinternet}
+    ${libapplications}
+)
