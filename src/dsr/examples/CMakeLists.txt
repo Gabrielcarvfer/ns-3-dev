@@ -11,3 +11,13 @@ build_lib_example(
     ${libwifi}
     ${libdsr}
 )
+
+build_lib_example(
+  NAME dsr-dense-scaling
+  SOURCE_FILES dsr-dense-scaling.cc
+  LIBRARIES_TO_LINK
+    ${libdsr}
+    ${libcsma}
+    ${libinternet}
+    ${libapplications}
+)
