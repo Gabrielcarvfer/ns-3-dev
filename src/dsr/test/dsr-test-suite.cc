@@ -24,12 +24,15 @@
 #include "ns3/dsr-option-header.h"
 #include "ns3/dsr-rcache.h"
 #include "ns3/dsr-routing-header.h"
+#include "ns3/dsr-routing.h"
 #include "ns3/dsr-rreq-table.h"
 #include "ns3/dsr-rsendbuff.h"
+#include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/ipv4-route.h"
 #include "ns3/mesh-helper.h"
 #include "ns3/ptr.h"
+#include "ns3/simple-net-device-helper.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/test.h"
@@ -612,6 +615,59 @@ DsrRreqTableTest::DoRun()
  * @ingroup dsr-test
  * @ingroup tests
  *
+ * @class DsrMacToIpTest
+ * @brief Test the MAC to IP address mapping when not all the nodes can be mapped
+ */
+class DsrMacToIpTest : public TestCase
+{
+  public:
+    DsrMacToIpTest();
+    void DoRun() override;
+};
+
+DsrMacToIpTest::DsrMacToIpTest()
+    : TestCase("DSR MAC to IP address mapping")
+{
+}
+
+void
+DsrMacToIpTest::DoRun()
+{
+    // Nodes that cannot be mapped, created first so they are visited first
+    NodeContainer noStack(1);
+    NodeContainer noDevice(1);
+    NodeContainer nodes(2);
+
+    SimpleNetDeviceHelper simple;
+    NetDeviceContainer devices = simple.Install(nodes);
+
+    InternetStackHelper internet;
+    internet.Install(noDevice);
+    internet.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.0.0.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    // The mapping covers all the nodes, so DSR need not be installed on any
+    Ptr<dsr::DsrRouting> dsrRouting = CreateObject<dsr::DsrRouting>();
+
+    const Mac48Address neighbor = Mac48Address::ConvertFrom(devices.Get(1)->GetAddress());
+    NS_TEST_EXPECT_MSG_EQ(dsrRouting->GetIPfromMAC(neighbor),
+                          interfaces.GetAddress(1),
+                          "Wrong IP address of the DSR neighbor");
+    NS_TEST_EXPECT_MSG_EQ(dsrRouting->GetIPfromMAC(Mac48Address::Allocate()),
+                          Ipv4Address(),
+                          "An unknown MAC address must not map to an IP address");
+
+    Simulator::Destroy();
+}
+
+// -----------------------------------------------------------------------------
+/**
+ * @ingroup dsr-test
+ * @ingroup tests
+ *
  * @class DsrTestSuite
  * @brief DSR test suite
  */
@@ -630,5 +686,6 @@ class DsrTestSuite : public TestSuite
         AddTestCase(new DsrAckHeaderTest, TestCase::Duration::QUICK);
         AddTestCase(new DsrCacheEntryTest, TestCase::Duration::QUICK);
         AddTestCase(new DsrSendBuffTest, TestCase::Duration::QUICK);
+        AddTestCase(new DsrMacToIpTest, TestCase::Duration::QUICK);
     }
 } g_dsrTestSuite;

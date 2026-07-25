@@ -76,6 +76,9 @@ namespace dsr
 
 NS_OBJECT_ENSURE_REGISTERED(DsrRouting);
 
+/// Index of the IPv4 interface DSR runs on
+constexpr uint32_t DSR_INTERFACE = 1;
+
 /*
  * The extension header is the fixed size dsr header, it is response for recognizing DSR option
  types
@@ -711,19 +714,32 @@ Ipv4Address
 DsrRouting::GetIPfromMAC(Mac48Address address)
 {
     NS_LOG_FUNCTION(this << address);
+    // The cache is rebuilt on a miss to pick up nodes created since. Addresses
+    // changing during the simulation are not supported.
+    auto cached = m_macToIpCache.find(address);
+    if (cached != m_macToIpCache.end())
+    {
+        return cached->second;
+    }
     int32_t nNodes = NodeList::GetNNodes();
     for (int32_t i = 0; i < nNodes; ++i)
     {
         Ptr<Node> node = NodeList::GetNode(i);
         Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
-        Ptr<NetDevice> netDevice = ipv4->GetNetDevice(1);
-
-        if (netDevice->GetAddress() == address)
+        if (!ipv4 || ipv4->GetNInterfaces() <= DSR_INTERFACE ||
+            ipv4->GetNAddresses(DSR_INTERFACE) == 0)
         {
-            return ipv4->GetAddress(1, 0).GetLocal();
+            continue;
+        }
+        const Address macAddress = ipv4->GetNetDevice(DSR_INTERFACE)->GetAddress();
+        if (Mac48Address::IsMatchingType(macAddress))
+        {
+            m_macToIpCache[Mac48Address::ConvertFrom(macAddress)] =
+                ipv4->GetAddress(DSR_INTERFACE, 0).GetLocal();
         }
     }
-    return nullptr;
+    cached = m_macToIpCache.find(address);
+    return cached != m_macToIpCache.end() ? cached->second : Ipv4Address();
 }
 
 void

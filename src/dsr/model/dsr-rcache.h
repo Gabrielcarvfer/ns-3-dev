@@ -630,6 +630,8 @@ class DsrRouteCache : public Object
 
     /// Delete all outdated entries and invalidate valid entry if Lifetime is expired
     void Purge();
+    /// Make the next Purge() scan the route cache
+    void ResetPurgeDue();
     /// Print route cache
     /// @param os the output stream
     void Print(std::ostream& os);
@@ -772,6 +774,12 @@ class DsrRouteCache : public Object
     std::map<Ipv4Address, routeEntryVector>
         m_sortedRoutes; ///< Map the ipv4Address to route entry vector
 
+    /// Earliest time at which a cached route can expire
+    Time m_purgeDue{Seconds(0)};
+
+    /// Earliest time at which a cached link or node stability can expire
+    Time m_linkPurgeDue{Seconds(0)};
+
     routeEntryVector m_routeEntryVector; ///< Define the route vector
 
     uint32_t m_maxEntriesEachDst; ///< number of entries for each destination
@@ -847,6 +855,8 @@ class DsrRouteCache : public Object
      * @brief Purge from the cache if the stability time expired
      */
     void PurgeLinkNode();
+    /// Make the next PurgeLinkNode() scan the link and node caches
+    void ResetLinkPurgeDue();
     /**
      * When a link from the Route Cache is used in routing a packet originated or salvaged
      * by that node, the stability metric for each of the two endpoint nodes of that link is
