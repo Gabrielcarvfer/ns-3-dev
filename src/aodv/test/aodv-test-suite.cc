@@ -724,6 +724,109 @@ struct AodvRtableTest : public TestCase
 
 /**
  * @ingroup aodv-test
+ *
+ * @brief Test the expiration of AODV routing table entries
+ *
+ * A route is refreshed many times, as done for each forwarded packet, and then
+ * left to expire. The number of pending expirations must not grow with the
+ * number of refreshes, and the route must be invalidated and deleted on time.
+ */
+struct AodvRtablePurgeTest : public TestCase
+{
+    AodvRtablePurgeTest()
+        : TestCase("Rtable purge"),
+          m_rtable(m_badLinkLifetime)
+    {
+    }
+
+    void DoRun() override;
+
+    /// Extend the lifetime of the route
+    void Refresh();
+
+    /**
+     * Check the state of the route
+     *
+     * @param found whether the route is expected to be in the routing table
+     * @param flag the expected flag of the route, if found
+     */
+    void Check(bool found, RouteFlags flag);
+
+    /// Check the number of pending expirations
+    void CheckPendingExpirations();
+
+    const Ipv4Address m_destination{"10.0.0.2"};    ///< destination of the route
+    const Time m_lifetime{Seconds(3)};              ///< lifetime of the route
+    const Time m_badLinkLifetime{Seconds(2)};       ///< time an invalid route is kept
+    const Time m_refreshInterval{MilliSeconds(10)}; ///< interval between refreshes of the route
+    const Time m_lastRefresh{Seconds(60)};          ///< time of the last refresh of the route
+    const Time m_margin{MilliSeconds(1)};           ///< time between an expiration and its check
+
+    RoutingTable m_rtable; ///< the routing table
+};
+
+void
+AodvRtablePurgeTest::Refresh()
+{
+    RoutingTableEntry rt;
+    NS_TEST_ASSERT_MSG_EQ(m_rtable.LookupRoute(m_destination, rt), true, "Route not found");
+    rt.SetLifeTime(m_lifetime);
+    NS_TEST_EXPECT_MSG_EQ(m_rtable.Update(rt), true, "Route not updated");
+}
+
+void
+AodvRtablePurgeTest::Check(bool found, RouteFlags flag)
+{
+    RoutingTableEntry rt;
+    NS_TEST_ASSERT_MSG_EQ(m_rtable.LookupRoute(m_destination, rt),
+                          found,
+                          "Unexpected presence of the route at " << Simulator::Now());
+    if (found)
+    {
+        NS_TEST_EXPECT_MSG_EQ(rt.GetFlag(), flag, "Unexpected flag at " << Simulator::Now());
+    }
+}
+
+void
+AodvRtablePurgeTest::CheckPendingExpirations()
+{
+    NS_TEST_EXPECT_MSG_EQ(m_rtable.m_expirations.size(),
+                          1,
+                          "Pending expirations grow with the refreshes of a route");
+}
+
+void
+AodvRtablePurgeTest::DoRun()
+{
+    RoutingTableEntry rt(nullptr, // output device
+                         m_destination,
+                         true, // validSeqNo
+                         1,    // seqNo
+                         Ipv4InterfaceAddress(),
+                         1,             // hop
+                         m_destination, // next hop
+                         m_lifetime);
+    NS_TEST_ASSERT_MSG_EQ(m_rtable.AddRoute(rt), true, "Route not added");
+
+    for (Time t = m_refreshInterval; t <= m_lastRefresh; t += m_refreshInterval)
+    {
+        Simulator::Schedule(t, &AodvRtablePurgeTest::Refresh, this);
+    }
+    Simulator::Schedule(m_lastRefresh, &AodvRtablePurgeTest::CheckPendingExpirations, this);
+
+    const Time invalidation = m_lastRefresh + m_lifetime;
+    const Time deletion = invalidation + m_margin + m_badLinkLifetime;
+    Simulator::Schedule(invalidation - m_margin, &AodvRtablePurgeTest::Check, this, true, VALID);
+    Simulator::Schedule(invalidation + m_margin, &AodvRtablePurgeTest::Check, this, true, INVALID);
+    Simulator::Schedule(deletion - m_margin, &AodvRtablePurgeTest::Check, this, true, INVALID);
+    Simulator::Schedule(deletion + m_margin, &AodvRtablePurgeTest::Check, this, false, INVALID);
+
+    Simulator::Run();
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup aodv-test
  * @brief Test case for AODV parameter validation guardrails and defaults.
  */
 class AodvParameterValidationTestCase : public TestCase
@@ -774,6 +877,7 @@ class AodvTestSuite : public TestSuite
         AddTestCase(new AodvRqueueTest, TestCase::Duration::QUICK);
         AddTestCase(new AodvRtableEntryTest, TestCase::Duration::QUICK);
         AddTestCase(new AodvRtableTest, TestCase::Duration::QUICK);
+        AddTestCase(new AodvRtablePurgeTest, TestCase::Duration::QUICK);
         AddTestCase(new AodvParameterValidationTestCase, TestCase::Duration::QUICK);
     }
 } g_aodvTestSuite; ///< the test suite

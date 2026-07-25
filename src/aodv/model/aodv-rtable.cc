@@ -277,7 +277,27 @@ RoutingTable::AddRoute(RoutingTableEntry& rt)
         rt.SetRreqCnt(0);
     }
     auto result = m_ipv4AddressEntry.insert(std::make_pair(rt.GetDestination(), rt));
+    if (result.second)
+    {
+        QueueExpiration(rt);
+    }
     return result.second;
+}
+
+void
+RoutingTable::QueueExpiration(const RoutingTableEntry& rt)
+{
+    const Time expiration = Simulator::Now() + rt.GetLifeTime();
+    auto [queued, isNew] = m_queuedExpiration.try_emplace(rt.GetDestination(), expiration);
+    if (!isNew)
+    {
+        if (expiration >= queued->second)
+        {
+            return;
+        }
+        queued->second = expiration;
+    }
+    m_expirations.emplace(expiration, rt.GetDestination());
 }
 
 bool
@@ -291,6 +311,7 @@ RoutingTable::Update(RoutingTableEntry& rt)
         return false;
     }
     i->second = rt;
+    QueueExpiration(rt);
     if (i->second.GetFlag() != IN_SEARCH)
     {
         NS_LOG_LOGIC("Route update to " << rt.GetDestination() << " set RreqCnt to 0");
@@ -311,6 +332,7 @@ RoutingTable::SetEntryState(Ipv4Address id, RouteFlags state)
     }
     i->second.SetFlag(state);
     i->second.SetRreqCnt(0);
+    QueueExpiration(i->second);
     NS_LOG_LOGIC("Route set entry state to " << id << ": new state is " << state);
     return true;
 }
@@ -345,6 +367,7 @@ RoutingTable::InvalidateRoutesWithDst(const std::map<Ipv4Address, uint32_t>& unr
             {
                 NS_LOG_LOGIC("Invalidate route with destination address " << i->first);
                 i->second.Invalidate(m_badLinkLifetime);
+                QueueExpiration(i->second);
             }
         }
     }
@@ -377,35 +400,40 @@ void
 RoutingTable::Purge()
 {
     NS_LOG_FUNCTION(this);
-    if (m_ipv4AddressEntry.empty())
+    const Time now = Simulator::Now();
+    while (!m_expirations.empty() && m_expirations.top().first < now)
     {
-        return;
-    }
-    for (auto i = m_ipv4AddressEntry.begin(); i != m_ipv4AddressEntry.end();)
-    {
-        if (i->second.GetLifeTime().IsStrictlyNegative())
+        const auto [expiration, dst] = m_expirations.top();
+        m_expirations.pop();
+        auto queued = m_queuedExpiration.find(dst);
+        if (queued != m_queuedExpiration.end() && queued->second == expiration)
         {
-            if (i->second.GetFlag() == INVALID)
-            {
-                auto tmp = i;
-                ++i;
-                m_ipv4AddressEntry.erase(tmp);
-            }
-            else if (i->second.GetFlag() == VALID)
-            {
-                NS_LOG_LOGIC("Invalidate route with destination address " << i->first);
-                i->second.Invalidate(m_badLinkLifetime);
-                ++i;
-            }
-            else
-            {
-                ++i;
-            }
+            m_queuedExpiration.erase(queued);
         }
-        else
+        auto i = m_ipv4AddressEntry.find(dst);
+        if (i == m_ipv4AddressEntry.end())
         {
-            ++i;
+            continue;
         }
+        const Time lifeTime = i->second.GetLifeTime();
+        if (!lifeTime.IsStrictlyNegative())
+        {
+            // The lifetime was extended since this expiration was queued.
+            QueueExpiration(i->second);
+            continue;
+        }
+        if (i->second.GetFlag() == INVALID)
+        {
+            m_ipv4AddressEntry.erase(i);
+        }
+        else if (i->second.GetFlag() == VALID)
+        {
+            NS_LOG_LOGIC("Invalidate route with destination address " << i->first);
+            i->second.Invalidate(m_badLinkLifetime);
+            QueueExpiration(i->second);
+        }
+        // Entries in other states (e.g. IN_SEARCH) are left alone; any state
+        // or lifetime change re-queues their expiration.
     }
 }
 

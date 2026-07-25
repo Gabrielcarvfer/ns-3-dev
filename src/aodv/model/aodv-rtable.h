@@ -24,8 +24,11 @@
 
 #include <cassert>
 #include <map>
+#include <queue>
 #include <stdint.h>
 #include <sys/types.h>
+#include <utility>
+#include <vector>
 
 namespace ns3
 {
@@ -411,6 +414,9 @@ class RoutingTableEntry
  */
 class RoutingTable
 {
+    /// Declared friend to enable unit tests
+    friend struct AodvRtablePurgeTest;
+
   public:
     /**
      * constructor
@@ -528,6 +534,25 @@ class RoutingTable
   private:
     /// The routing table
     std::map<Ipv4Address, RoutingTableEntry> m_ipv4AddressEntry;
+
+    /// Min-heap of pending expiration times of routing table entries
+    std::priority_queue<std::pair<Time, Ipv4Address>,
+                        std::vector<std::pair<Time, Ipv4Address>>,
+                        std::greater<>>
+        m_expirations;
+
+    /// Earliest pending expiration time in m_expirations of each destination
+    std::map<Ipv4Address, Time> m_queuedExpiration;
+
+    /**
+     * @brief Queue the expiration of a routing table entry.
+     *
+     * Nothing is queued if an earlier expiration of the same destination is
+     * pending: Purge() queues the actual one when it gets to it.
+     *
+     * @param rt The routing table entry.
+     */
+    void QueueExpiration(const RoutingTableEntry& rt);
     /// Deletion time for invalid routes
     Time m_badLinkLifetime;
     /**
