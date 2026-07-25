@@ -1078,13 +1078,13 @@ Ipv4L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv4Header& ip, uin
     NS_LOG_FUNCTION(this << packet << &ip << iif);
     Ptr<Packet> p = packet->Copy(); // need to pass a non-const packet up
     Ipv4Header ipHeader = ip;
+    bool reassembled = false;
 
     if (!ipHeader.IsLastFragment() || ipHeader.GetFragmentOffset() != 0)
     {
         NS_LOG_LOGIC("Received a fragment, processing " << *p);
-        bool isPacketComplete;
-        isPacketComplete = ProcessFragment(p, ipHeader, iif);
-        if (!isPacketComplete)
+        reassembled = ProcessFragment(p, ipHeader, iif);
+        if (!reassembled)
         {
             return;
         }
@@ -1106,9 +1106,10 @@ Ipv4L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv4Header& ip, uin
     Ptr<IpL4Protocol> protocol = GetProtocol(ipHeader.GetProtocol(), iif);
     if (protocol)
     {
-        // we need to make a copy in the unlikely event we hit the
-        // RX_ENDPOINT_UNREACH codepath
-        Ptr<Packet> copy = p->Copy();
+        // The RX_ENDPOINT_UNREACH codepath needs the pre-Receive packet.
+        // For non-reassembled packets the original suffices, so the copy is
+        // only needed when the packet was rebuilt from fragments.
+        Ptr<const Packet> preReceived = reassembled ? Ptr<const Packet>(p->Copy()) : packet;
         IpL4Protocol::RxStatus status = protocol->Receive(p, ipHeader, GetInterface(iif));
         switch (status)
         {
@@ -1137,7 +1138,7 @@ Ipv4L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv4Header& ip, uin
             }
             if (!subnetDirected)
             {
-                GetIcmp()->SendDestUnreachPort(ipHeader, copy);
+                GetIcmp()->SendDestUnreachPort(ipHeader, preReceived);
             }
         }
     }
