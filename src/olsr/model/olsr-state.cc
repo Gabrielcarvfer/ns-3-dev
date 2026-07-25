@@ -134,6 +134,7 @@ OlsrState::FindNeighborTuple(const Ipv4Address& mainAddr, Willingness willingnes
 void
 OlsrState::EraseNeighborTuple(const NeighborTuple& tuple)
 {
+    m_version++;
     for (auto it = m_neighborSet.begin(); it != m_neighborSet.end(); it++)
     {
         if (*it == tuple)
@@ -147,6 +148,7 @@ OlsrState::EraseNeighborTuple(const NeighborTuple& tuple)
 void
 OlsrState::EraseNeighborTuple(const Ipv4Address& mainAddr)
 {
+    m_version++;
     for (auto it = m_neighborSet.begin(); it != m_neighborSet.end(); it++)
     {
         if (it->neighborMainAddr == mainAddr)
@@ -160,6 +162,7 @@ OlsrState::EraseNeighborTuple(const Ipv4Address& mainAddr)
 void
 OlsrState::InsertNeighborTuple(const NeighborTuple& tuple)
 {
+    m_version++;
     for (auto it = m_neighborSet.begin(); it != m_neighborSet.end(); it++)
     {
         if (it->neighborMainAddr == tuple.neighborMainAddr)
@@ -192,6 +195,7 @@ OlsrState::FindTwoHopNeighborTuple(const Ipv4Address& neighborMainAddr,
 void
 OlsrState::EraseTwoHopNeighborTuple(const TwoHopNeighborTuple& tuple)
 {
+    m_version++;
     for (auto it = m_twoHopNeighborSet.begin(); it != m_twoHopNeighborSet.end(); it++)
     {
         if (*it == tuple)
@@ -206,6 +210,7 @@ void
 OlsrState::EraseTwoHopNeighborTuples(const Ipv4Address& neighborMainAddr,
                                      const Ipv4Address& twoHopNeighborAddr)
 {
+    m_version++;
     for (auto it = m_twoHopNeighborSet.begin(); it != m_twoHopNeighborSet.end();)
     {
         if (it->neighborMainAddr == neighborMainAddr &&
@@ -223,6 +228,7 @@ OlsrState::EraseTwoHopNeighborTuples(const Ipv4Address& neighborMainAddr,
 void
 OlsrState::EraseTwoHopNeighborTuples(const Ipv4Address& neighborMainAddr)
 {
+    m_version++;
     for (auto it = m_twoHopNeighborSet.begin(); it != m_twoHopNeighborSet.end();)
     {
         if (it->neighborMainAddr == neighborMainAddr)
@@ -239,6 +245,7 @@ OlsrState::EraseTwoHopNeighborTuples(const Ipv4Address& neighborMainAddr)
 void
 OlsrState::InsertTwoHopNeighborTuple(const TwoHopNeighborTuple& tuple)
 {
+    m_version++;
     m_twoHopNeighborSet.push_back(tuple);
 }
 
@@ -335,6 +342,7 @@ OlsrState::FindSymLinkTuple(const Ipv4Address& ifaceAddr, Time now)
 void
 OlsrState::EraseLinkTuple(const LinkTuple& tuple)
 {
+    m_version++;
     for (auto it = m_linkSet.begin(); it != m_linkSet.end(); it++)
     {
         if (*it == tuple)
@@ -348,6 +356,7 @@ OlsrState::EraseLinkTuple(const LinkTuple& tuple)
 LinkTuple&
 OlsrState::InsertLinkTuple(const LinkTuple& tuple)
 {
+    m_version++;
     m_linkSet.push_back(tuple);
     return m_linkSet.back();
 }
@@ -383,6 +392,7 @@ OlsrState::FindNewerTopologyTuple(const Ipv4Address& lastAddr, uint16_t ansn)
 void
 OlsrState::EraseTopologyTuple(const TopologyTuple& tuple)
 {
+    m_version++;
     for (auto it = m_topologySet.begin(); it != m_topologySet.end(); it++)
     {
         if (*it == tuple)
@@ -396,6 +406,7 @@ OlsrState::EraseTopologyTuple(const TopologyTuple& tuple)
 void
 OlsrState::EraseOlderTopologyTuples(const Ipv4Address& lastAddr, uint16_t ansn)
 {
+    m_version++;
     for (auto it = m_topologySet.begin(); it != m_topologySet.end();)
     {
         if (it->lastAddr == lastAddr && it->sequenceNumber < ansn)
@@ -412,6 +423,7 @@ OlsrState::EraseOlderTopologyTuples(const Ipv4Address& lastAddr, uint16_t ansn)
 void
 OlsrState::InsertTopologyTuple(const TopologyTuple& tuple)
 {
+    m_version++;
     m_topologySet.push_back(tuple);
 }
 
@@ -446,6 +458,7 @@ OlsrState::FindIfaceAssocTuple(const Ipv4Address& ifaceAddr) const
 void
 OlsrState::EraseIfaceAssocTuple(const IfaceAssocTuple& tuple)
 {
+    m_version++;
     for (auto it = m_ifaceAssocSet.begin(); it != m_ifaceAssocSet.end(); it++)
     {
         if (*it == tuple)
@@ -459,6 +472,7 @@ OlsrState::EraseIfaceAssocTuple(const IfaceAssocTuple& tuple)
 void
 OlsrState::InsertIfaceAssocTuple(const IfaceAssocTuple& tuple)
 {
+    m_version++;
     m_ifaceAssocSet.push_back(tuple);
 }
 
@@ -497,6 +511,7 @@ OlsrState::FindAssociationTuple(const Ipv4Address& gatewayAddr,
 void
 OlsrState::EraseAssociationTuple(const AssociationTuple& tuple)
 {
+    m_version++;
     for (auto it = m_associationSet.begin(); it != m_associationSet.end(); it++)
     {
         if (*it == tuple)
@@ -510,12 +525,14 @@ OlsrState::EraseAssociationTuple(const AssociationTuple& tuple)
 void
 OlsrState::InsertAssociationTuple(const AssociationTuple& tuple)
 {
+    m_version++;
     m_associationSet.push_back(tuple);
 }
 
 void
 OlsrState::EraseAssociation(const Association& tuple)
 {
+    m_version++;
     for (auto it = m_associations.begin(); it != m_associations.end(); it++)
     {
         if (*it == tuple)
@@ -529,6 +546,7 @@ OlsrState::EraseAssociation(const Association& tuple)
 void
 OlsrState::InsertAssociation(const Association& tuple)
 {
+    m_version++;
     m_associations.push_back(tuple);
 }
 

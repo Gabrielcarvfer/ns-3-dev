@@ -43,6 +43,8 @@
 
 #include <iomanip>
 #include <iostream>
+#include <unordered_map>
+#include <unordered_set>
 
 /********** Useful macros **********/
 
@@ -631,74 +633,124 @@ RoutingProtocol::RecvOlsr(Ptr<Socket> socket)
     RoutingTableComputation();
 }
 
-///
-/// @brief This auxiliary function (defined in \RFC{3626}) is used for calculating the MPR Set.
-///
-/// @param tuple the neighbor tuple which has the main address of the node we are going to calculate
-/// its degree to.
-/// @return the degree of the node.
-///
-int
-RoutingProtocol::Degree(const NeighborTuple& tuple)
-{
-    int degree = 0;
-    for (auto it = m_state.GetTwoHopNeighbors().begin(); it != m_state.GetTwoHopNeighbors().end();
-         it++)
-    {
-        const TwoHopNeighborTuple& nb2hop_tuple = *it;
-        if (nb2hop_tuple.neighborMainAddr == tuple.neighborMainAddr)
-        {
-            const NeighborTuple* nb_tuple =
-                m_state.FindNeighborTuple(nb2hop_tuple.neighborMainAddr);
-            if (nb_tuple == nullptr)
-            {
-                degree++;
-            }
-        }
-    }
-    return degree;
-}
-
 namespace
 {
-///
-/// @brief Remove all covered 2-hop neighbors from N2 set.
-/// This is a helper function used by MprComputation algorithm.
-///
-/// @param neighborMainAddr Neighbor main address.
-/// @param N2 Reference to the 2-hop neighbor set.
-///
+
+/// 2-hop addresses not yet covered, indexed by the neighbor reaching them
+using TwoHopsOfNeighbor = std::unordered_map<Ipv4Address, std::unordered_set<Ipv4Address>>;
+/// Neighbors reaching each 2-hop address not yet covered
+using NeighborsOfTwoHop = std::unordered_map<Ipv4Address, std::vector<Ipv4Address>>;
+
+/**
+ * Remove all the 2-hop addresses reachable through the given neighbor from the
+ * uncovered set.
+ *
+ * @param neighborMainAddr Main address of the neighbor selected as MPR.
+ * @param twoHopsOfNeighbor Uncovered 2-hop addresses per neighbor.
+ * @param neighborsOfTwoHop Neighbors reaching each uncovered 2-hop address.
+ */
 void
-CoverTwoHopNeighbors(Ipv4Address neighborMainAddr, TwoHopNeighborSet& N2)
+CoverTwoHopNeighbors(const Ipv4Address& neighborMainAddr,
+                     TwoHopsOfNeighbor& twoHopsOfNeighbor,
+                     NeighborsOfTwoHop& neighborsOfTwoHop)
 {
-    // first gather all 2-hop neighbors to be removed
-    std::set<Ipv4Address> toRemove;
-    for (auto twoHopNeigh = N2.begin(); twoHopNeigh != N2.end(); twoHopNeigh++)
+    auto covering = twoHopsOfNeighbor.find(neighborMainAddr);
+    if (covering == twoHopsOfNeighbor.end())
     {
-        if (twoHopNeigh->neighborMainAddr == neighborMainAddr)
-        {
-            toRemove.insert(twoHopNeigh->twoHopNeighborAddr);
-        }
+        return;
     }
-    // Now remove all matching records from N2
-    for (auto twoHopNeigh = N2.begin(); twoHopNeigh != N2.end();)
+    for (const auto& twoHopAddr : covering->second)
     {
-        if (toRemove.find(twoHopNeigh->twoHopNeighborAddr) != toRemove.end())
+        auto reachedBy = neighborsOfTwoHop.find(twoHopAddr);
+        if (reachedBy == neighborsOfTwoHop.end())
         {
-            twoHopNeigh = N2.erase(twoHopNeigh);
+            continue;
         }
-        else
+        for (const auto& otherNeighbor : reachedBy->second)
         {
-            twoHopNeigh++;
+            if (otherNeighbor != neighborMainAddr)
+            {
+                auto other = twoHopsOfNeighbor.find(otherNeighbor);
+                if (other != twoHopsOfNeighbor.end())
+                {
+                    other->second.erase(twoHopAddr);
+                }
+            }
         }
+        neighborsOfTwoHop.erase(reachedBy);
+    }
+    twoHopsOfNeighbor.erase(covering);
+}
+
+/**
+ * Get the precomputed degree D(y) of a neighbor.
+ *
+ * @param degrees Degree of each neighbor, indexed by main address.
+ * @param tuple The neighbor tuple.
+ * @return The degree of the neighbor, or 0 if it has none.
+ */
+int
+GetDegree(const std::unordered_map<Ipv4Address, int>& degrees, const NeighborTuple& tuple)
+{
+    auto it = degrees.find(tuple.neighborMainAddr);
+    return it == degrees.end() ? 0 : it->second;
+}
+
+/**
+ * Copy the routing table entry for a destination into the local mirror.
+ *
+ * @param table The routing table.
+ * @param routeByDest The local mirror of the routing table.
+ * @param dest The destination address.
+ */
+void
+MirrorEntry(const std::map<Ipv4Address, RoutingTableEntry>& table,
+            std::unordered_map<Ipv4Address, RoutingTableEntry>& routeByDest,
+            const Ipv4Address& dest)
+{
+    auto tableEntry = table.find(dest);
+    if (tableEntry != table.end())
+    {
+        routeByDest[dest] = tableEntry->second;
     }
 }
-} // unnamed namespace
+
+/**
+ * Look up a destination in the local mirror of the routing table.
+ *
+ * @param routeByDest The local mirror of the routing table.
+ * @param dest The destination address.
+ * @param outEntry Set to the entry found, if any.
+ * @return True if an entry for the destination exists.
+ */
+bool
+LookupLocal(const std::unordered_map<Ipv4Address, RoutingTableEntry>& routeByDest,
+            const Ipv4Address& dest,
+            RoutingTableEntry& outEntry)
+{
+    auto it = routeByDest.find(dest);
+    if (it == routeByDest.end())
+    {
+        return false;
+    }
+    outEntry = it->second;
+    return true;
+}
+
+} // namespace
 
 void
 RoutingProtocol::MprComputation()
 {
     NS_LOG_FUNCTION(this);
+
+    if (m_mprVersionValid && m_state.GetVersion() == m_mprVersion)
+    {
+        NS_LOG_DEBUG("MPR set inputs unchanged; skipping recomputation");
+        return;
+    }
+    m_mprVersion = m_state.GetVersion();
+    m_mprVersionValid = true;
 
     // MPR computation should be done for each interface. See section 8.3.1
     // (RFC 3626) for details.
@@ -714,6 +766,13 @@ RoutingProtocol::MprComputation()
         {
             N.push_back(*neighbor);
         }
+    }
+
+    std::unordered_map<Ipv4Address, const NeighborTuple*> symNeighborByAddr;
+    symNeighborByAddr.reserve(N.size());
+    for (const auto& neighbor : N)
+    {
+        symNeighborByAddr.emplace(neighbor.neighborMainAddr, &neighbor);
     }
 
     // N2 is the set of 2-hop neighbors reachable from "the interface
@@ -736,16 +795,8 @@ RoutingProtocol::MprComputation()
 
         //  excluding:
         // (i)   the nodes only reachable by members of N with willingness Willingness::NEVER
-        bool ok = false;
-        for (auto neigh = N.begin(); neigh != N.end(); neigh++)
-        {
-            if (neigh->neighborMainAddr == twoHopNeigh->neighborMainAddr)
-            {
-                ok = (neigh->willingness != Willingness::NEVER);
-                break;
-            }
-        }
-        if (!ok)
+        auto neigh = symNeighborByAddr.find(twoHopNeigh->neighborMainAddr);
+        if (neigh == symNeighborByAddr.end() || neigh->second->willingness == Willingness::NEVER)
         {
             continue;
         }
@@ -753,18 +804,26 @@ RoutingProtocol::MprComputation()
         // excluding:
         // (iii) all the symmetric neighbors: the nodes for which there exists a symmetric
         //       link to this node on some interface.
-        for (auto neigh = N.begin(); neigh != N.end(); neigh++)
+        if (symNeighborByAddr.find(twoHopNeigh->twoHopNeighborAddr) != symNeighborByAddr.end())
         {
-            if (neigh->neighborMainAddr == twoHopNeigh->twoHopNeighborAddr)
-            {
-                ok = false;
-                break;
-            }
+            continue;
         }
 
-        if (ok)
+        N2.push_back(*twoHopNeigh);
+    }
+
+    // Bidirectional coverage maps over N2: which uncovered 2-hop addresses each
+    // neighbor reaches, and which neighbors reach each uncovered 2-hop address.
+    TwoHopsOfNeighbor twoHopsOfNeighbor;
+    NeighborsOfTwoHop neighborsOfTwoHop;
+    for (const auto& twoHopNeigh : N2)
+    {
+        if (twoHopsOfNeighbor[twoHopNeigh.neighborMainAddr]
+                .insert(twoHopNeigh.twoHopNeighborAddr)
+                .second)
         {
-            N2.push_back(*twoHopNeigh);
+            neighborsOfTwoHop[twoHopNeigh.twoHopNeighborAddr].push_back(
+                twoHopNeigh.neighborMainAddr);
         }
     }
 
@@ -796,83 +855,79 @@ RoutingProtocol::MprComputation()
             mprSet.insert(neighbor->neighborMainAddr);
             // (not in RFC but I think is needed: remove the 2-hop
             // neighbors reachable by the MPR from N2)
-            CoverTwoHopNeighbors(neighbor->neighborMainAddr, N2);
+            CoverTwoHopNeighbors(neighbor->neighborMainAddr, twoHopsOfNeighbor, neighborsOfTwoHop);
         }
     }
 
     // 2. Calculate D(y), where y is a member of N, for all nodes in N.
-    // (we do this later)
+    // Precomputed here so step 4 ties resolve in O(1) per comparison.
+    std::unordered_set<Ipv4Address> allNeighborAddrs;
+    for (const auto& neighbor : m_state.GetNeighbors())
+    {
+        allNeighborAddrs.insert(neighbor.neighborMainAddr);
+    }
+    std::unordered_map<Ipv4Address, int> degrees;
+    for (const auto& twoHopNeigh : m_state.GetTwoHopNeighbors())
+    {
+        if (allNeighborAddrs.find(twoHopNeigh.neighborMainAddr) == allNeighborAddrs.end())
+        {
+            degrees[twoHopNeigh.neighborMainAddr]++;
+        }
+    }
 
     // 3. Add to the MPR set those nodes in N, which are the *only*
     // nodes to provide reachability to a node in N2.
     std::set<Ipv4Address> coveredTwoHopNeighbors;
-    for (auto twoHopNeigh = N2.begin(); twoHopNeigh != N2.end(); twoHopNeigh++)
+    for (const auto& [twoHopAddr, reachingNeighbors] : neighborsOfTwoHop)
     {
-        bool onlyOne = true;
-        // try to find another neighbor that can reach twoHopNeigh->twoHopNeighborAddr
-        for (auto otherTwoHopNeigh = N2.begin(); otherTwoHopNeigh != N2.end(); otherTwoHopNeigh++)
+        if (reachingNeighbors.size() == 1)
         {
-            if (otherTwoHopNeigh->twoHopNeighborAddr == twoHopNeigh->twoHopNeighborAddr &&
-                otherTwoHopNeigh->neighborMainAddr != twoHopNeigh->neighborMainAddr)
-            {
-                onlyOne = false;
-                break;
-            }
-        }
-        if (onlyOne)
-        {
-            NS_LOG_LOGIC("Neighbor " << twoHopNeigh->neighborMainAddr
-                                     << " is the only that can reach 2-hop neigh. "
-                                     << twoHopNeigh->twoHopNeighborAddr << " => select as MPR.");
+            const Ipv4Address& onlyNeighbor = reachingNeighbors.front();
+            NS_LOG_LOGIC("Neighbor " << onlyNeighbor << " is the only that can reach 2-hop neigh. "
+                                     << twoHopAddr << " => select as MPR.");
 
-            mprSet.insert(twoHopNeigh->neighborMainAddr);
+            mprSet.insert(onlyNeighbor);
 
             // take note of all the 2-hop neighbors reachable by the newly elected MPR
-            for (auto otherTwoHopNeigh = N2.begin(); otherTwoHopNeigh != N2.end();
-                 otherTwoHopNeigh++)
-            {
-                if (otherTwoHopNeigh->neighborMainAddr == twoHopNeigh->neighborMainAddr)
-                {
-                    coveredTwoHopNeighbors.insert(otherTwoHopNeigh->twoHopNeighborAddr);
-                }
-            }
+            const auto& reachable = twoHopsOfNeighbor[onlyNeighbor];
+            coveredTwoHopNeighbors.insert(reachable.begin(), reachable.end());
         }
     }
     // Remove the nodes from N2 which are now covered by a node in the MPR set.
-    for (auto twoHopNeigh = N2.begin(); twoHopNeigh != N2.end();)
+    for (const auto& twoHopAddr : coveredTwoHopNeighbors)
     {
-        if (coveredTwoHopNeighbors.find(twoHopNeigh->twoHopNeighborAddr) !=
-            coveredTwoHopNeighbors.end())
+        auto reachedBy = neighborsOfTwoHop.find(twoHopAddr);
+        if (reachedBy == neighborsOfTwoHop.end())
         {
-            // This works correctly only because it is known that twoHopNeigh is reachable by
-            // exactly one neighbor, so only one record in N2 exists for each of them. This record
-            // is erased here.
-            NS_LOG_LOGIC("2-hop neigh. " << twoHopNeigh->twoHopNeighborAddr
-                                         << " is already covered by an MPR.");
-            twoHopNeigh = N2.erase(twoHopNeigh);
+            continue;
         }
-        else
+        NS_LOG_LOGIC("2-hop neigh. " << twoHopAddr << " is already covered by an MPR.");
+        for (const auto& neighbor : reachedBy->second)
         {
-            twoHopNeigh++;
+            auto twoHops = twoHopsOfNeighbor.find(neighbor);
+            if (twoHops != twoHopsOfNeighbor.end())
+            {
+                twoHops->second.erase(twoHopAddr);
+            }
         }
+        neighborsOfTwoHop.erase(reachedBy);
     }
 
     // 4. While there exist nodes in N2 which are not covered by at
     // least one node in the MPR set:
-    while (N2.begin() != N2.end())
+    while (!neighborsOfTwoHop.empty())
     {
 #ifdef NS3_LOG_ENABLE
         {
             std::ostringstream os;
             os << "[";
-            for (auto iter = N2.begin(); iter != N2.end(); iter++)
+            for (auto iter = neighborsOfTwoHop.begin(); iter != neighborsOfTwoHop.end(); iter++)
             {
                 auto next = iter;
                 next++;
-                os << iter->neighborMainAddr << "->" << iter->twoHopNeighborAddr;
-                if (next != N2.end())
+                for (const auto& neighbor : iter->second)
                 {
-                    os << ", ";
+                    os << neighbor << "->" << iter->first << ", ";
                 }
             }
             os << "]";
@@ -890,13 +945,10 @@ RoutingProtocol::MprComputation()
         {
             const NeighborTuple& nb_tuple = *it;
             int r = 0;
-            for (auto it2 = N2.begin(); it2 != N2.end(); it2++)
+            auto twoHops = twoHopsOfNeighbor.find(nb_tuple.neighborMainAddr);
+            if (twoHops != twoHopsOfNeighbor.end())
             {
-                const TwoHopNeighborTuple& nb2hop_tuple = *it2;
-                if (nb_tuple.neighborMainAddr == nb2hop_tuple.neighborMainAddr)
-                {
-                    r++;
-                }
+                r = static_cast<int>(twoHops->second.size());
             }
             rs.insert(r);
             reachability[r].push_back(&nb_tuple);
@@ -936,7 +988,7 @@ RoutingProtocol::MprComputation()
                     }
                     else if (r == max_r)
                     {
-                        if (Degree(*nb_tuple) > Degree(*max))
+                        if (GetDegree(degrees, *nb_tuple) > GetDegree(degrees, *max))
                         {
                             max = nb_tuple;
                             max_r = r;
@@ -946,12 +998,13 @@ RoutingProtocol::MprComputation()
             }
         }
 
-        if (max != nullptr)
+        if (max == nullptr)
         {
-            mprSet.insert(max->neighborMainAddr);
-            CoverTwoHopNeighbors(max->neighborMainAddr, N2);
-            NS_LOG_LOGIC(N2.size() << " 2-hop neighbors left to cover!");
+            break;
         }
+        mprSet.insert(max->neighborMainAddr);
+        CoverTwoHopNeighbors(max->neighborMainAddr, twoHopsOfNeighbor, neighborsOfTwoHop);
+        NS_LOG_LOGIC(neighborsOfTwoHop.size() << " 2-hop neighbors left to cover!");
     }
 
 #ifdef NS3_LOG_ENABLE
@@ -997,8 +1050,30 @@ RoutingProtocol::RoutingTableComputation()
     NS_LOG_DEBUG(Simulator::Now().As(Time::S)
                  << " : Node " << m_mainAddress << ": RoutingTableComputation begin...");
 
+    const Time now = Simulator::Now();
+
+    if (m_routingVersionValid && m_state.GetVersion() == m_routingVersion)
+    {
+        NS_LOG_DEBUG("Routing table inputs unchanged; skipping recomputation");
+        return;
+    }
+    m_routingVersion = m_state.GetVersion();
+    m_routingVersionValid = true;
+
     // 1. All the entries from the routing table are removed.
     Clear();
+
+    // Local mirror of the routing table, so the repeated Lookup() calls below
+    // resolve in O(1) instead of a tree search per call.
+    std::unordered_map<Ipv4Address, RoutingTableEntry> routeByDest;
+
+    // Group the link set by neighbor main address, so step 2 visits only the
+    // links of each neighbor instead of rescanning the whole link set.
+    std::unordered_map<Ipv4Address, std::vector<const LinkTuple*>> linksByMainAddr;
+    for (const auto& link_tuple : m_state.GetLinks())
+    {
+        linksByMainAddr[GetMainAddress(link_tuple.neighborIfaceAddr)].push_back(&link_tuple);
+    }
 
     // 2. The new routing entries are added starting with the
     // symmetric neighbors (h=1) as the destination nodes.
@@ -1011,15 +1086,16 @@ RoutingProtocol::RoutingTableComputation()
         {
             bool nb_main_addr = false;
             const LinkTuple* lt = nullptr;
-            const LinkSet& linkSet = m_state.GetLinks();
+            auto neighborLinks = linksByMainAddr.find(nb_tuple.neighborMainAddr);
+            static const std::vector<const LinkTuple*> noLinks;
+            const auto& linkSet =
+                neighborLinks != linksByMainAddr.end() ? neighborLinks->second : noLinks;
             for (auto it2 = linkSet.begin(); it2 != linkSet.end(); it2++)
             {
-                const LinkTuple& link_tuple = *it2;
+                const LinkTuple& link_tuple = **it2;
                 NS_LOG_DEBUG("Looking at link tuple: "
-                             << link_tuple
-                             << (link_tuple.time >= Simulator::Now() ? "" : " (expired)"));
-                if ((GetMainAddress(link_tuple.neighborIfaceAddr) == nb_tuple.neighborMainAddr) &&
-                    link_tuple.time >= Simulator::Now())
+                             << link_tuple << (link_tuple.time >= now ? "" : " (expired)"));
+                if (link_tuple.time >= now)
                 {
                     NS_LOG_LOGIC("Link tuple matches neighbor "
                                  << nb_tuple.neighborMainAddr
@@ -1029,6 +1105,7 @@ RoutingProtocol::RoutingTableComputation()
                              link_tuple.neighborIfaceAddr,
                              link_tuple.localIfaceAddr,
                              1);
+                    MirrorEntry(m_table, routeByDest, link_tuple.neighborIfaceAddr);
                     if (link_tuple.neighborIfaceAddr == nb_tuple.neighborMainAddr)
                     {
                         nb_main_addr = true;
@@ -1058,7 +1135,24 @@ RoutingProtocol::RoutingTableComputation()
                 NS_LOG_LOGIC("no R_dest_addr is equal to the main address of the neighbor "
                              "=> adding additional routing entry");
                 AddEntry(nb_tuple.neighborMainAddr, lt->neighborIfaceAddr, lt->localIfaceAddr, 1);
+                MirrorEntry(m_table, routeByDest, nb_tuple.neighborMainAddr);
             }
+        }
+    }
+
+    // Hash indexes for the scans in step 3: symmetric neighbors and neighbors
+    // with willingness different from Willingness::NEVER.
+    std::unordered_set<Ipv4Address> symNeighborAddrs;
+    std::unordered_set<Ipv4Address> willingNeighborAddrs;
+    for (const auto& neighbor : neighborSet)
+    {
+        if (neighbor.status == NeighborTuple::STATUS_SYM)
+        {
+            symNeighborAddrs.insert(neighbor.neighborMainAddr);
+        }
+        if (neighbor.willingness != Willingness::NEVER)
+        {
+            willingNeighborAddrs.insert(neighbor.neighborMainAddr);
         }
     }
 
@@ -1075,7 +1169,7 @@ RoutingProtocol::RoutingTableComputation()
         NS_LOG_LOGIC("Looking at two-hop neighbor tuple: " << nb2hop_tuple);
 
         // a 2-hop neighbor which is not a neighbor node or the node itself
-        if (m_state.FindSymNeighborTuple(nb2hop_tuple.twoHopNeighborAddr))
+        if (symNeighborAddrs.find(nb2hop_tuple.twoHopNeighborAddr) != symNeighborAddrs.end())
         {
             NS_LOG_LOGIC("Two-hop neighbor tuple is also neighbor; skipped.");
             continue;
@@ -1090,16 +1184,8 @@ RoutingProtocol::RoutingTableComputation()
         // ...and such that there exist at least one entry in the 2-hop
         // neighbor set where N_neighbor_main_addr correspond to a
         // neighbor node with willingness different of Willingness::NEVER...
-        bool nb2hopOk = false;
-        for (auto neighbor = neighborSet.begin(); neighbor != neighborSet.end(); neighbor++)
-        {
-            if (neighbor->neighborMainAddr == nb2hop_tuple.neighborMainAddr &&
-                neighbor->willingness != Willingness::NEVER)
-            {
-                nb2hopOk = true;
-                break;
-            }
-        }
+        bool nb2hopOk =
+            willingNeighborAddrs.find(nb2hop_tuple.neighborMainAddr) != willingNeighborAddrs.end();
         if (!nb2hopOk)
         {
             NS_LOG_LOGIC("Two-hop neighbor tuple skipped: 2-hop neighbor "
@@ -1121,11 +1207,12 @@ RoutingProtocol::RoutingTableComputation()
         //                                   R_dest_addr == N_neighbor_main_addr
         //                                                  of the 2-hop tuple;
         RoutingTableEntry entry;
-        bool foundEntry = Lookup(nb2hop_tuple.neighborMainAddr, entry);
+        bool foundEntry = LookupLocal(routeByDest, nb2hop_tuple.neighborMainAddr, entry);
         if (foundEntry)
         {
             NS_LOG_LOGIC("Adding routing entry for two-hop neighbor.");
             AddEntry(nb2hop_tuple.twoHopNeighborAddr, entry.nextAddr, entry.interface, 2);
+            MirrorEntry(m_table, routeByDest, nb2hop_tuple.twoHopNeighborAddr);
         }
         else
         {
@@ -1152,8 +1239,10 @@ RoutingProtocol::RoutingTableComputation()
 
             RoutingTableEntry destAddrEntry;
             RoutingTableEntry lastAddrEntry;
-            bool have_destAddrEntry = Lookup(topology_tuple.destAddr, destAddrEntry);
-            bool have_lastAddrEntry = Lookup(topology_tuple.lastAddr, lastAddrEntry);
+            bool have_destAddrEntry =
+                LookupLocal(routeByDest, topology_tuple.destAddr, destAddrEntry);
+            bool have_lastAddrEntry =
+                LookupLocal(routeByDest, topology_tuple.lastAddr, lastAddrEntry);
             if (!have_destAddrEntry && have_lastAddrEntry && lastAddrEntry.distance == h)
             {
                 NS_LOG_LOGIC("Adding routing table entry based on the topology tuple.");
@@ -1171,6 +1260,7 @@ RoutingProtocol::RoutingTableComputation()
                          lastAddrEntry.nextAddr,
                          lastAddrEntry.interface,
                          h + 1);
+                MirrorEntry(m_table, routeByDest, topology_tuple.destAddr);
                 added = true;
             }
             else
@@ -1200,8 +1290,8 @@ RoutingProtocol::RoutingTableComputation()
         const IfaceAssocTuple& tuple = *it;
         RoutingTableEntry entry1;
         RoutingTableEntry entry2;
-        bool have_entry1 = Lookup(tuple.mainAddr, entry1);
-        bool have_entry2 = Lookup(tuple.ifaceAddr, entry2);
+        bool have_entry1 = LookupLocal(routeByDest, tuple.mainAddr, entry1);
+        bool have_entry2 = LookupLocal(routeByDest, tuple.ifaceAddr, entry2);
         if (have_entry1 && !have_entry2)
         {
             // then a route entry is created in the routing table with:
@@ -1211,6 +1301,7 @@ RoutingProtocol::RoutingTableComputation()
             //       R_dist       =  R_dist       (of the recorded route entry)
             //       R_iface_addr =  R_iface_addr (of the recorded route entry).
             AddEntry(tuple.ifaceAddr, entry1.nextAddr, entry1.interface, entry1.distance);
+            MirrorEntry(m_table, routeByDest, tuple.ifaceAddr);
         }
     }
 
@@ -1258,7 +1349,7 @@ RoutingProtocol::RoutingTableComputation()
 
         RoutingTableEntry gatewayEntry;
 
-        bool gatewayEntryExists = Lookup(tuple.gatewayAddr, gatewayEntry);
+        bool gatewayEntryExists = LookupLocal(routeByDest, tuple.gatewayAddr, gatewayEntry);
         bool addRoute = false;
 
         uint32_t routeIndex = 0;
@@ -2114,9 +2205,10 @@ RoutingProtocol::PopulateNeighborSet(const olsr::MessageHeader& msg,
                                      const olsr::MessageHeader::Hello& hello)
 {
     NeighborTuple* nb_tuple = m_state.FindNeighborTuple(msg.GetOriginatorAddress());
-    if (nb_tuple != nullptr)
+    if (nb_tuple != nullptr && nb_tuple->willingness != hello.willingness)
     {
         nb_tuple->willingness = hello.willingness;
+        m_state.BumpVersion();
     }
 }
 
@@ -2127,6 +2219,22 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
     Time now = Simulator::Now();
 
     NS_LOG_DEBUG("Olsr node " << m_mainAddress << ": PopulateTwoHopNeighborSet BEGIN");
+
+    // Index the originator's existing 2-hop tuples by 2-hop address, so each
+    // HELLO-listed address resolves in O(1) instead of scanning the whole set.
+    TwoHopNeighborSet& twoHopSet = m_state.GetTwoHopNeighbors();
+    std::unordered_map<Ipv4Address, size_t> twoHopIndexByAddr;
+    auto rebuildTwoHopIndex = [&]() {
+        twoHopIndexByAddr.clear();
+        for (size_t i = 0; i < twoHopSet.size(); i++)
+        {
+            if (twoHopSet[i].neighborMainAddr == msg.GetOriginatorAddress())
+            {
+                twoHopIndexByAddr[twoHopSet[i].twoHopNeighborAddr] = i;
+            }
+        }
+    };
+    rebuildTwoHopIndex();
 
     for (auto link_tuple = m_state.GetLinks().begin(); link_tuple != m_state.GetLinks().end();
          link_tuple++)
@@ -2177,17 +2285,19 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
                     }
 
                     // Otherwise, a 2-hop tuple is created
-                    TwoHopNeighborTuple* nb2hop_tuple =
-                        m_state.FindTwoHopNeighborTuple(msg.GetOriginatorAddress(), nb2hop_addr);
+                    auto indexIter = twoHopIndexByAddr.find(nb2hop_addr);
                     NS_LOG_LOGIC("Adding the 2-hop neighbor"
-                                 << (nb2hop_tuple ? " (refreshing existing entry)" : ""));
-                    if (nb2hop_tuple == nullptr)
+                                 << (indexIter != twoHopIndexByAddr.end()
+                                         ? " (refreshing existing entry)"
+                                         : ""));
+                    if (indexIter == twoHopIndexByAddr.end())
                     {
                         TwoHopNeighborTuple new_nb2hop_tuple;
                         new_nb2hop_tuple.neighborMainAddr = msg.GetOriginatorAddress();
                         new_nb2hop_tuple.twoHopNeighborAddr = nb2hop_addr;
                         new_nb2hop_tuple.expirationTime = now + msg.GetVTime();
                         AddTwoHopNeighborTuple(new_nb2hop_tuple);
+                        twoHopIndexByAddr[nb2hop_addr] = twoHopSet.size() - 1;
                         // Schedules nb2hop tuple deletion
                         m_events.Track(Simulator::Schedule(DELAY(new_nb2hop_tuple.expirationTime),
                                                            &RoutingProtocol::Nb2hopTupleTimerExpire,
@@ -2197,7 +2307,7 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
                     }
                     else
                     {
-                        nb2hop_tuple->expirationTime = now + msg.GetVTime();
+                        twoHopSet[indexIter->second].expirationTime = now + msg.GetVTime();
                     }
                 }
                 else if (neighborType == NeighborType::NOT_NEIGH)
@@ -2210,6 +2320,7 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
                     NS_LOG_LOGIC(
                         "2-hop neighbor is NOT_NEIGH => deleting matching 2-hop neighbor state");
                     m_state.EraseTwoHopNeighborTuples(msg.GetOriginatorAddress(), nb2hop_addr);
+                    rebuildTwoHopIndex();
                 }
                 else
                 {
@@ -2425,6 +2536,10 @@ RoutingProtocol::LinkTupleUpdated(const LinkTuple& tuple, Willingness willingnes
             nb_tuple->status = NeighborTuple::STATUS_NOT_SYM;
             NS_LOG_DEBUG(*nb_tuple << "->status = STATUS_NOT_SYM; changed:"
                                    << int(statusBefore != nb_tuple->status));
+        }
+        if (statusBefore != nb_tuple->status)
+        {
+            m_state.BumpVersion();
         }
     }
     else

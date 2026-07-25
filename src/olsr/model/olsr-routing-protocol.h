@@ -797,8 +797,6 @@ class RoutingProtocol : public Ipv4RoutingProtocol
     void PopulateMprSelectorSet(const olsr::MessageHeader& msg,
                                 const olsr::MessageHeader::Hello& hello);
 
-    int Degree(const NeighborTuple& tuple);
-
     /**
      * Check that address is one of my interfaces.
      * @param a the address to check.
@@ -807,6 +805,12 @@ class RoutingProtocol : public Ipv4RoutingProtocol
     bool IsMyOwnAddress(const Ipv4Address& a) const;
 
     Ipv4Address m_mainAddress; //!< the node main address.
+
+    uint64_t m_mprVersion{0};          //!< State version the MPR set was computed from.
+    bool m_mprVersionValid{false};     //!< Whether m_mprVersion refers to a computed MPR set.
+    uint64_t m_routingVersion{0};      //!< State version the routing table was computed from.
+    bool m_routingVersionValid{false}; //!< Whether m_routingVersion refers to a computed
+                                       //!< routing table.
 
     // One socket per interface, each bound to that interface's address
     // (reason: for OLSR Link Sensing we need to know on which interface
