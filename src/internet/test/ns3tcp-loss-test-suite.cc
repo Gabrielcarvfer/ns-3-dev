@@ -328,6 +328,8 @@ Ns3TcpLossTestCase::StartFlow(Ptr<Socket> localSocket, Ipv4Address servAddress, 
 void
 Ns3TcpLossTestCase::DoRun()
 {
+    Packet::EnablePrinting(); // Enable packet metadata
+
     // Network topology
     //
     //           8Mb/s, 0.1ms       0.8Mb/s, 100ms

@@ -322,6 +322,8 @@ Ns3TcpStateTestCase::StartFlow(Ptr<Socket> localSocket, Ipv4Address servAddress,
 void
 Ns3TcpStateTestCase::DoRun()
 {
+    Packet::EnablePrinting(); // Enable packet metadata
+
     // Network topology
     //
     //           10Mb/s, 0.1ms      10Mb/s, 0.1ms

@@ -83,7 +83,10 @@ CubicCwndTracer(Gnuplot2dDataset* gnuplotTimeSeries,
 {
     // We store data in two structures because Gnuplot2DDataset data is not exportable
     NS_LOG_DEBUG("cwnd " << newval / 1448.0);
-    gnuplotTimeSeries->Add(Simulator::Now().GetSeconds(), newval / 1448.0);
+    if (gnuplotTimeSeries)
+    {
+        gnuplotTimeSeries->Add(Simulator::Now().GetSeconds(), newval / 1448.0);
+    }
     timeSeries->insert_or_assign(Simulator::Now(), newval / 1448.0);
 }
 
@@ -178,10 +181,12 @@ Ns3TcpCubicTestCase::IncreaseBandwidth(Ptr<PointToPointNetDevice> device)
 void
 Ns3TcpCubicTestCase::ConnectCwndTrace(uint32_t nodeId, uint32_t socketId)
 {
-    Config::ConnectWithoutContext(
-        "/NodeList/" + std::to_string(nodeId) + "/$ns3::TcpL4Protocol/SocketList/" +
-            std::to_string(socketId) + "/CongestionWindow",
-        MakeBoundCallback(&CubicCwndTracer, &m_cwndTimeSeries, &m_timeSeries));
+    Config::ConnectWithoutContext("/NodeList/" + std::to_string(nodeId) +
+                                      "/$ns3::TcpL4Protocol/SocketList/" +
+                                      std::to_string(socketId) + "/CongestionWindow",
+                                  MakeBoundCallback(&CubicCwndTracer,
+                                                    m_writeGnuplot ? &m_cwndTimeSeries : nullptr,
+                                                    &m_timeSeries));
 }
 
 bool
