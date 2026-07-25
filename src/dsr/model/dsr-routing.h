@@ -897,6 +897,10 @@ class DsrRouting : public IpL4Protocol
 
     std::vector<Ipv4Address> m_finalRoute; ///< The route cache
 
+    /// Cache of the MAC to IP address mapping used by GetIPfromMAC, which
+    /// otherwise scans every node in the simulation per received packet.
+    std::map<Mac48Address, Ipv4Address> m_macToIpCache;
+
     std::map<Ipv4Address, Timer> m_addressReqTimer; ///< Map IP address + RREQ timer.
 
     std::map<Ipv4Address, Timer> m_nonPropReqTimer; ///< Map IP address + RREQ timer.

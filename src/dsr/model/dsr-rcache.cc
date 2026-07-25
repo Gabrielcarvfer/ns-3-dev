@@ -216,6 +216,7 @@ DsrRouteCache::UpdateRouteEntry(Ipv4Address dst)
         /*
          * Save the new route cache along with the destination address in map
          */
+        m_purgeDue = Simulator::Now();
         auto result = m_sortedRoutes.insert(std::make_pair(dst, rtVector));
         return result.second;
     }
@@ -278,6 +279,7 @@ DsrRouteCache::LookupRoute(Ipv4Address id, DsrRouteCacheEntry& rt)
                     std::list<DsrRouteCacheEntry> newVector;
                     newVector.push_back(changeEntry);
                     newVector.sort(CompareRoutesExpire); // sort the route vector first
+                    m_purgeDue = Simulator::Now();
                     m_sortedRoutes[id] =
                         newVector; // Only get the first sub route and add it in route cache
                     NS_LOG_INFO("We have a sub-route to " << id << " add it in route cache");
@@ -474,6 +476,12 @@ void
 DsrRouteCache::PurgeLinkNode()
 {
     NS_LOG_FUNCTION(this);
+    if (Simulator::Now() < m_linkPurgeDue)
+    {
+        // No link can have expired yet; link cache mutations reset the gate.
+        return;
+    }
+    Time nextDue = Time::Max();
     for (auto i = m_linkCache.begin(); i != m_linkCache.end();)
     {
         NS_LOG_DEBUG("The link stability " << i->second.GetLinkStability().As(Time::S));
@@ -485,6 +493,7 @@ DsrRouteCache::PurgeLinkNode()
         }
         else
         {
+            nextDue = std::min(nextDue, Simulator::Now() + i->second.GetLinkStability());
             ++i;
         }
     }
@@ -500,9 +509,11 @@ DsrRouteCache::PurgeLinkNode()
         }
         else
         {
+            nextDue = std::min(nextDue, Simulator::Now() + i->second.GetNodeStability());
             ++i;
         }
     }
+    m_linkPurgeDue = nextDue;
 }
 
 void
@@ -530,6 +541,7 @@ DsrRouteCache::IncStability(Ipv4Address node)
         NS_LOG_INFO("The initial stability " << m_initStability.As(Time::S));
         DsrNodeStab ns(m_initStability);
         m_nodeCache[node] = ns;
+        m_linkPurgeDue = Simulator::Now();
         return false;
     }
     else
@@ -540,6 +552,7 @@ DsrRouteCache::IncStability(Ipv4Address node)
                     << Time(i->second.GetNodeStability() * m_stabilityIncrFactor).As(Time::S));
         DsrNodeStab ns(Time(i->second.GetNodeStability() * m_stabilityIncrFactor));
         m_nodeCache[node] = ns;
+        m_linkPurgeDue = Simulator::Now();
         return true;
     }
     return false;
@@ -554,6 +567,7 @@ DsrRouteCache::DecStability(Ipv4Address node)
     {
         DsrNodeStab ns(m_initStability);
         m_nodeCache[node] = ns;
+        m_linkPurgeDue = Simulator::Now();
         return false;
     }
     else
@@ -564,6 +578,7 @@ DsrRouteCache::DecStability(Ipv4Address node)
                     << Time(i->second.GetNodeStability() / m_stabilityDecrFactor).As(Time::S));
         DsrNodeStab ns(Time(i->second.GetNodeStability() / m_stabilityDecrFactor));
         m_nodeCache[node] = ns;
+        m_linkPurgeDue = Simulator::Now();
         return true;
     }
     return false;
@@ -584,10 +599,12 @@ DsrRouteCache::AddRoute_Link(DsrRouteCacheEntry::IP_VECTOR nodelist, Ipv4Address
         if (m_nodeCache.find(nodelist[i]) == m_nodeCache.end())
         {
             m_nodeCache[nodelist[i]] = ns;
+            m_linkPurgeDue = Simulator::Now();
         }
         if (m_nodeCache.find(nodelist[i + 1]) == m_nodeCache.end())
         {
             m_nodeCache[nodelist[i + 1]] = ns;
+            m_linkPurgeDue = Simulator::Now();
         }
         Link link(nodelist[i], nodelist[i + 1]); // Link represent the one link for the route
         DsrLinkStab stab;                        // Link stability
@@ -609,6 +626,7 @@ DsrRouteCache::AddRoute_Link(DsrRouteCacheEntry::IP_VECTOR nodelist, Ipv4Address
             stab.SetLinkStability(m_minLifeTime);
         }
         m_linkCache[link] = stab;
+        m_linkPurgeDue = Simulator::Now();
         NS_LOG_DEBUG("Add a new link");
         link.Print();
         NS_LOG_DEBUG("Link Info");
@@ -638,6 +656,7 @@ DsrRouteCache::UseExtends(DsrRouteCacheEntry::IP_VECTOR rt)
             if (m_linkCache[link].GetLinkStability() < m_useExtends)
             {
                 m_linkCache[link].SetLinkStability(m_useExtends);
+                m_linkPurgeDue = Simulator::Now();
                 // TODO remove after debug
                 NS_LOG_INFO("The time of the link "
                             << m_linkCache[link].GetLinkStability().As(Time::S));
@@ -685,6 +704,7 @@ DsrRouteCache::AddRoute(DsrRouteCacheEntry& rt)
         /**
          * Save the new route cache along with the destination address in map
          */
+        m_purgeDue = Simulator::Now();
         auto result = m_sortedRoutes.insert(std::make_pair(dst, rtVector));
         return result.second;
     }
@@ -726,6 +746,7 @@ DsrRouteCache::AddRoute(DsrRouteCacheEntry& rt)
             /**
              * Save the new route cache along with the destination address in map
              */
+            m_purgeDue = Simulator::Now();
             auto result = m_sortedRoutes.insert(std::make_pair(dst, rtVector));
             return result.second;
         }
@@ -764,6 +785,7 @@ DsrRouteCache::FindSameRoute(DsrRouteCacheEntry& rt, std::list<DsrRouteCacheEntr
             /*
              * Save the new route cache along with the destination address in map
              */
+            m_purgeDue = Simulator::Now();
             auto result = m_sortedRoutes.insert(std::make_pair(rt.GetDestination(), rtVector));
             return result.second;
         }
@@ -987,61 +1009,41 @@ DsrRouteCache::Purge()
         NS_LOG_DEBUG("The route cache is empty");
         return;
     }
+    const Time now = Simulator::Now();
+    if (now < m_purgeDue)
+    {
+        // No entry can have expired yet; any cache mutation resets m_purgeDue.
+        return;
+    }
+    Time nextDue = Time::Max();
     for (auto i = m_sortedRoutes.begin(); i != m_sortedRoutes.end();)
     {
-        // Loop of route cache entry with the route size
-        auto itmp = i;
-        /*
-         * The route cache entry vector
-         */
-        Ipv4Address dst = i->first;
-        std::list<DsrRouteCacheEntry> rtVector = i->second;
-        NS_LOG_DEBUG("The route vector size of 1 " << dst << " " << rtVector.size());
-        if (!rtVector.empty())
+        std::list<DsrRouteCacheEntry>& rtVector = i->second;
+        for (auto j = rtVector.begin(); j != rtVector.end();)
         {
-            for (auto j = rtVector.begin(); j != rtVector.end();)
+            NS_LOG_DEBUG("The expire time of every entry with expire time " << j->GetExpireTime());
+            if (j->GetExpireTime().IsNegative())
             {
-                NS_LOG_DEBUG("The expire time of every entry with expire time "
-                             << j->GetExpireTime());
-                /*
-                 * First verify if the route has expired or not
-                 */
-                if (j->GetExpireTime().IsNegative())
-                {
-                    /*
-                     * When the expire time has passed, erase the certain route
-                     */
-                    NS_LOG_DEBUG("Erase the expired route for " << dst << " with expire time "
-                                                                << j->GetExpireTime());
-                    j = rtVector.erase(j);
-                }
-                else
-                {
-                    ++j;
-                }
-            }
-            NS_LOG_DEBUG("The route vector size of 2 " << dst << " " << rtVector.size());
-            if (!rtVector.empty())
-            {
-                ++i;
-                m_sortedRoutes.erase(itmp); // erase the entry first
-                /*
-                 * Save the new route cache along with the destination address in map
-                 */
-                m_sortedRoutes.insert(std::make_pair(dst, rtVector));
+                NS_LOG_DEBUG("Erase the expired route for " << i->first << " with expire time "
+                                                            << j->GetExpireTime());
+                j = rtVector.erase(j);
             }
             else
             {
-                ++i;
-                m_sortedRoutes.erase(itmp);
+                nextDue = std::min(nextDue, now + j->GetExpireTime());
+                ++j;
             }
+        }
+        if (rtVector.empty())
+        {
+            i = m_sortedRoutes.erase(i);
         }
         else
         {
             ++i;
-            m_sortedRoutes.erase(itmp);
         }
     }
+    m_purgeDue = nextDue;
 }
 
 void

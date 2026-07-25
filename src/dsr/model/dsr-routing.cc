@@ -700,19 +700,27 @@ Ipv4Address
 DsrRouting::GetIPfromMAC(Mac48Address address)
 {
     NS_LOG_FUNCTION(this << address);
+    // This runs for every promiscuously received packet; scanning every node
+    // in the simulation each time dominates large runs, so the mapping is
+    // cached, rebuilt on a miss to pick up nodes created since. Addresses
+    // changing during the simulation is not supported (as before, where the
+    // scan assumed the address is on device 1).
+    auto cached = m_macToIpCache.find(address);
+    if (cached != m_macToIpCache.end())
+    {
+        return cached->second;
+    }
     int32_t nNodes = NodeList::GetNNodes();
     for (int32_t i = 0; i < nNodes; ++i)
     {
         Ptr<Node> node = NodeList::GetNode(i);
         Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
         Ptr<NetDevice> netDevice = ipv4->GetNetDevice(1);
-
-        if (netDevice->GetAddress() == address)
-        {
-            return ipv4->GetAddress(1, 0).GetLocal();
-        }
+        m_macToIpCache[Mac48Address::ConvertFrom(netDevice->GetAddress())] =
+            ipv4->GetAddress(1, 0).GetLocal();
     }
-    return nullptr;
+    cached = m_macToIpCache.find(address);
+    return cached != m_macToIpCache.end() ? cached->second : Ipv4Address();
 }
 
 void
