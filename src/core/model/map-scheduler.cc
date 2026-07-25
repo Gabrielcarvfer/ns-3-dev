@@ -51,9 +51,11 @@ void
 MapScheduler::Insert(const Event& ev)
 {
     NS_LOG_FUNCTION(this << ev.impl << ev.key.m_ts << ev.key.m_uid);
-    std::pair<EventMapI, bool> result;
-    result = m_list.insert(std::make_pair(ev.key, ev.impl));
-    NS_ASSERT(result.second);
+    // Keys order by timestamp, then by an increasing uid, so events scheduled
+    // at or after the latest pending one append in O(1) amortized.
+    [[maybe_unused]] const auto sizeBefore = m_list.size();
+    m_list.emplace_hint(m_list.end(), ev.key, ev.impl);
+    NS_ASSERT_MSG(m_list.size() == sizeBefore + 1, "Duplicate event key");
 }
 
 bool
