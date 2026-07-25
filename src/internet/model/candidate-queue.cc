@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <vector>
 
 namespace ns3
 {
@@ -49,13 +50,11 @@ template <typename T>
 std::ostream&
 operator<<(std::ostream& os, const CandidateQueue<T>& q)
 {
-    const typename CandidateQueue<T>::CandidateList_t& list = q.m_candidates;
-
     os << "*** CandidateQueue Begin (<id, distance, LSA-type>) ***" << std::endl;
-    for (auto iter = list.begin(); iter != list.end(); iter++)
+    for (const auto& [priority, vertex] : q.m_queue)
     {
-        os << "<" << (*iter)->GetVertexId() << ", " << (*iter)->GetDistanceFromRoot() << ", "
-           << (*iter)->GetVertexType() << ">" << std::endl;
+        os << "<" << vertex->GetVertexId() << ", " << vertex->GetDistanceFromRoot() << ", "
+           << vertex->GetVertexType() << ">" << std::endl;
     }
     os << "*** CandidateQueue End ***";
     return os;
@@ -63,7 +62,6 @@ operator<<(std::ostream& os, const CandidateQueue<T>& q)
 
 template <typename T>
 CandidateQueue<T>::CandidateQueue()
-    : m_candidates()
 {
     NS_LOG_FUNCTION(this);
 }
@@ -80,7 +78,7 @@ void
 CandidateQueue<T>::Clear()
 {
     NS_LOG_FUNCTION(this);
-    while (!m_candidates.empty())
+    while (!m_queue.empty())
     {
         SPFVertex<T>* p = Pop();
         delete p;
@@ -93,12 +91,12 @@ void
 CandidateQueue<T>::Push(SPFVertex<T>* vNew)
 {
     NS_LOG_FUNCTION(this << vNew);
+    NS_ASSERT_MSG(m_index.find(vNew->GetVertexId()) == m_index.end(),
+                  "Vertex " << vNew->GetVertexId() << " is already on the candidate queue");
 
-    auto i = std::upper_bound(m_candidates.begin(),
-                              m_candidates.end(),
-                              vNew,
-                              &CandidateQueue::CompareSPFVertex);
-    m_candidates.insert(i, vNew);
+    const Priority priority = MakePriority(vNew);
+    m_queue.emplace(priority, vNew);
+    m_index[vNew->GetVertexId()] = {priority, vNew};
 }
 
 template <typename T>
@@ -106,13 +104,15 @@ SPFVertex<T>*
 CandidateQueue<T>::Pop()
 {
     NS_LOG_FUNCTION(this);
-    if (m_candidates.empty())
+    if (m_queue.empty())
     {
         return nullptr;
     }
 
-    SPFVertex<T>* v = m_candidates.front();
-    m_candidates.pop_front();
+    auto top = m_queue.begin();
+    SPFVertex<T>* v = top->second;
+    m_queue.erase(top);
+    m_index.erase(v->GetVertexId());
     return v;
 }
 
@@ -121,12 +121,12 @@ SPFVertex<T>*
 CandidateQueue<T>::Top() const
 {
     NS_LOG_FUNCTION(this);
-    if (m_candidates.empty())
+    if (m_queue.empty())
     {
         return nullptr;
     }
 
-    return m_candidates.front();
+    return m_queue.begin()->second;
 }
 
 template <typename T>
@@ -134,7 +134,7 @@ bool
 CandidateQueue<T>::Empty() const
 {
     NS_LOG_FUNCTION(this);
-    return m_candidates.empty();
+    return m_queue.empty();
 }
 
 template <typename T>
@@ -142,7 +142,7 @@ uint32_t
 CandidateQueue<T>::Size() const
 {
     NS_LOG_FUNCTION(this);
-    return m_candidates.size();
+    return m_queue.size();
 }
 
 template <typename T>
@@ -150,18 +150,8 @@ SPFVertex<T>*
 CandidateQueue<T>::Find(const IpAddress addr) const
 {
     NS_LOG_FUNCTION(this);
-    auto i = m_candidates.begin();
-
-    for (; i != m_candidates.end(); i++)
-    {
-        SPFVertex<T>* v = *i;
-        if (v->GetVertexId() == addr)
-        {
-            return v;
-        }
-    }
-
-    return nullptr;
+    auto i = m_index.find(addr);
+    return i != m_index.end() ? i->second.second : nullptr;
 }
 
 template <typename T>
@@ -170,9 +160,42 @@ CandidateQueue<T>::Reorder()
 {
     NS_LOG_FUNCTION(this);
 
-    m_candidates.sort(&CandidateQueue::CompareSPFVertex);
+    // Stable rebuild: extract the vertices in their current (stale) order
+    // and re-insert them sorted by their current priorities, so vertices
+    // with equal priority keep their relative order, exactly as the former
+    // stable list sort did.
+    std::vector<SPFVertex<T>*> vertices;
+    vertices.reserve(m_queue.size());
+    for (const auto& [priority, vertex] : m_queue)
+    {
+        vertices.push_back(vertex);
+    }
+    std::stable_sort(vertices.begin(), vertices.end(), &CandidateQueue::CompareSPFVertex);
+    m_queue.clear();
+    m_index.clear();
+    for (SPFVertex<T>* vertex : vertices)
+    {
+        const Priority priority = MakePriority(vertex);
+        m_queue.emplace(priority, vertex);
+        m_index[vertex->GetVertexId()] = {priority, vertex};
+    }
     NS_LOG_LOGIC("After reordering the CandidateQueue");
     NS_LOG_LOGIC(*this);
+}
+
+template <typename T>
+void
+CandidateQueue<T>::Reorder(SPFVertex<T>* vertex)
+{
+    NS_LOG_FUNCTION(this << vertex);
+
+    auto indexEntry = m_index.find(vertex->GetVertexId());
+    NS_ASSERT_MSG(indexEntry != m_index.end(),
+                  "Vertex " << vertex->GetVertexId() << " is not on the candidate queue");
+    m_queue.erase(indexEntry->second.first);
+    const Priority priority = MakePriority(vertex);
+    m_queue.emplace(priority, vertex);
+    indexEntry->second.first = priority;
 }
 
 /*

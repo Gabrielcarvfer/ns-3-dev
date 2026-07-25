@@ -14,8 +14,10 @@
 #include "ns3/ipv4-address.h"
 #include "ns3/ipv6-address.h"
 
-#include <list>
+#include <map>
 #include <stdint.h>
+#include <tuple>
+#include <unordered_map>
 
 namespace ns3
 {
@@ -169,11 +171,26 @@ class CandidateQueue
      * increasing distance.
      *
      * This method is provided in case the values of m_distanceFromRoot change
-     * during the routing calculations.
+     * during the routing calculations. When the changed vertex is known,
+     * prefer the overload taking that vertex, which reorders in logarithmic
+     * instead of linearithmic time.
      *
      * @see SPFVertex
      */
     void Reorder();
+
+    /**
+     * @brief Restore the queue ordering after the distance of the given
+     * vertex has been decreased.
+     *
+     * Equivalent to Reorder() when only @p vertex changed, but runs in
+     * logarithmic time. The vertex keeps the same position relative to
+     * equal-priority vertices as a stable full reordering would give it.
+     *
+     * @see SPFVertex
+     * @param vertex The vertex whose distance from the root has changed.
+     */
+    void Reorder(SPFVertex<T>* vertex);
 
   private:
     /**
@@ -189,8 +206,49 @@ class CandidateQueue
      */
     static bool CompareSPFVertex(const SPFVertex<T>* v1, const SPFVertex<T>* v2);
 
-    typedef std::list<SPFVertex<T>*> CandidateList_t; //!< container of SPFVertex pointers
-    CandidateList_t m_candidates;                     //!< SPFVertex candidates
+    /**
+     * @brief Priority of a queued vertex.
+     *
+     * Vertices are popped by increasing distance from the root; on equal
+     * distance a network vertex is ranked before a router vertex, and
+     * remaining ties preserve insertion order through a sequence number
+     * (a vertex whose distance is decreased is re-inserted with a fresh
+     * sequence number, matching the ordering the former stable full sort
+     * produced).
+     */
+    struct Priority
+    {
+        uint32_t distance; //!< Distance from the root vertex.
+        uint8_t typeRank;  //!< 0 for network vertices, 1 otherwise.
+        uint64_t sequence; //!< Insertion order tie breaker.
+
+        /**
+         * Comparison operator.
+         * @param o The other priority.
+         * @return True if this priority is popped before @p o.
+         */
+        bool operator<(const Priority& o) const
+        {
+            return std::tie(distance, typeRank, sequence) <
+                   std::tie(o.distance, o.typeRank, o.sequence);
+        }
+    };
+
+    /**
+     * Compute the priority of a vertex.
+     * @param vertex The vertex.
+     * @return Its priority, using the next sequence number.
+     */
+    Priority MakePriority(const SPFVertex<T>* vertex)
+    {
+        const uint8_t typeRank = vertex->GetVertexType() == SPFVertex<T>::VertexNetwork ? 0 : 1;
+        return Priority{vertex->GetDistanceFromRoot(), typeRank, m_sequence++};
+    }
+
+    std::map<Priority, SPFVertex<T>*> m_queue; //!< The queued vertices by priority.
+    /// The queued vertices indexed by vertex ID, with their current priority.
+    std::unordered_map<IpAddress, std::pair<Priority, SPFVertex<T>*>> m_index;
+    uint64_t m_sequence{0}; //!< Next insertion sequence number.
 
     /**
      * @brief Stream insertion operator.
