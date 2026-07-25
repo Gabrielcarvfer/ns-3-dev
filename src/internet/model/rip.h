@@ -19,6 +19,9 @@
 #include "ns3/random-variable-stream.h"
 
 #include <list>
+#include <map>
+#include <unordered_map>
+#include <vector>
 
 namespace ns3
 {
@@ -380,7 +383,34 @@ class Rip : public Ipv4RoutingProtocol
      */
     void DeleteRoute(RipRoutingTableEntry* route);
 
-    Routes m_routes;                //!<  the forwarding table for network.
+    Routes m_routes; //!<  the forwarding table for network.
+
+    /**
+     * @brief Routes indexed by prefix length (longest first) and network.
+     *
+     * Lookup() performs a longest prefix match on every routed packet; the
+     * index reduces it to one hash probe per distinct prefix length instead
+     * of a scan of the whole routing table. Within a bucket the routes keep
+     * the iteration order of m_routes, preserving which of several equal
+     * routes is selected.
+     */
+    std::map<uint16_t,
+             std::unordered_map<Ipv4Address, std::vector<RipRoutingTableEntry*>>,
+             std::greater<>>
+        m_routesByPrefix;
+
+    /**
+     * @brief Add a route to the prefix index.
+     * @param route The route.
+     * @param front True if the route was added at the front of m_routes.
+     */
+    void AddToPrefixIndex(RipRoutingTableEntry* route, bool front);
+
+    /**
+     * @brief Remove a route from the prefix index.
+     * @param route The route.
+     */
+    void RemoveFromPrefixIndex(RipRoutingTableEntry* route);
     Ptr<Ipv4> m_ipv4;               //!< IPv4 reference
     Time m_startupDelay;            //!< Random delay before protocol startup.
     Time m_minTriggeredUpdateDelay; //!< Min cooldown delay after a Triggered Update.
