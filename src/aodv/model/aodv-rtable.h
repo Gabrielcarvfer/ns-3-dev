@@ -24,8 +24,11 @@
 
 #include <cassert>
 #include <map>
+#include <queue>
 #include <stdint.h>
 #include <sys/types.h>
+#include <utility>
+#include <vector>
 
 namespace ns3
 {
@@ -528,6 +531,27 @@ class RoutingTable
   private:
     /// The routing table
     std::map<Ipv4Address, RoutingTableEntry> m_ipv4AddressEntry;
+
+    /**
+     * @brief Pending expiration times of routing table entries.
+     *
+     * Purge() only needs to visit entries whose lifetime may have run out,
+     * so the pending expiration times are kept in a min-heap instead of
+     * scanning the whole table on every call (Purge runs on every route
+     * lookup). Entries whose lifetime was extended after being queued are
+     * re-queued at their actual expiration when popped; stale entries for
+     * deleted routes are discarded when popped.
+     */
+    std::priority_queue<std::pair<Time, Ipv4Address>,
+                        std::vector<std::pair<Time, Ipv4Address>>,
+                        std::greater<>>
+        m_expirations;
+
+    /**
+     * @brief Queue the expiration of a routing table entry.
+     * @param rt The routing table entry.
+     */
+    void QueueExpiration(const RoutingTableEntry& rt);
     /// Deletion time for invalid routes
     Time m_badLinkLifetime;
     /**
