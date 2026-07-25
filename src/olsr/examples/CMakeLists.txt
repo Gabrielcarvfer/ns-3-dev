@@ -19,3 +19,13 @@ build_lib_example(
     ${libapplications}
     ${libwifi}
 )
+
+build_lib_example(
+  NAME olsr-dense-scaling
+  SOURCE_FILES olsr-dense-scaling.cc
+  LIBRARIES_TO_LINK
+    ${libcsma}
+    ${libinternet}
+    ${libolsr}
+    ${libapplications}
+)
