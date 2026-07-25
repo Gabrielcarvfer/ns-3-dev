@@ -772,6 +772,23 @@ class DsrRouteCache : public Object
     std::map<Ipv4Address, routeEntryVector>
         m_sortedRoutes; ///< Map the ipv4Address to route entry vector
 
+    /**
+     * Earliest time at which a cached route can expire.
+     *
+     * Purge() runs on every route lookup; until this time passes (or the
+     * cache is mutated, which resets it) the purge scan is skipped.
+     */
+    Time m_purgeDue{Seconds(0)};
+
+    /**
+     * Earliest time at which a cached link or node stability can expire.
+     *
+     * PurgeLinkNode() runs on every link-cache route lookup; until this
+     * time passes (or the link/node caches are mutated, which resets it)
+     * the purge scan is skipped.
+     */
+    Time m_linkPurgeDue{Seconds(0)};
+
     routeEntryVector m_routeEntryVector; ///< Define the route vector
 
     uint32_t m_maxEntriesEachDst; ///< number of entries for each destination
