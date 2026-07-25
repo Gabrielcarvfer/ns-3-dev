@@ -331,7 +331,7 @@ Ipv4Interface::AddAddress(Ipv4InterfaceAddress addr)
     return true;
 }
 
-Ipv4InterfaceAddress
+const Ipv4InterfaceAddress&
 Ipv4Interface::GetAddress(uint32_t index) const
 {
     NS_LOG_FUNCTION(this << index);
@@ -339,18 +339,7 @@ Ipv4Interface::GetAddress(uint32_t index) const
     {
         NS_FATAL_ERROR("index " << index << " out of bounds");
     }
-
-    uint32_t tmp = 0;
-    for (auto i = m_ifaddrs.begin(); i != m_ifaddrs.end(); i++)
-    {
-        if (tmp == index)
-        {
-            return *i;
-        }
-        ++tmp;
-    }
-
-    return {}; // quiet compiler
+    return m_ifaddrs[index];
 }
 
 Ipv4InterfaceAddress
