@@ -41,6 +41,13 @@ build_exec(
         EXECUTABLE_DIRECTORY_PATH ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/utils/
       )
 
+build_exec(
+        EXECNAME bench-callbacks
+        SOURCE_FILES bench-callbacks.cc
+        LIBRARIES_TO_LINK ${libcore}
+        EXECUTABLE_DIRECTORY_PATH ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/utils/
+      )
+
 if(network IN_LIST libs_to_build)
   build_exec(
         EXECNAME bench-packets
