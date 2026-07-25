@@ -23,6 +23,7 @@
 #include "ns3/simulator.h"
 #include "ns3/uinteger.h"
 
+#include <algorithm>
 #include <iomanip>
 
 #define RIPNG_ALL_NODE "ff02::9"
@@ -565,6 +566,7 @@ RipNg::DoDispose()
 {
     NS_LOG_FUNCTION(this);
 
+    m_routesByPrefix.clear();
     for (auto j = m_routes.begin(); j != m_routes.end(); j = m_routes.erase(j))
     {
         delete j->first;
@@ -596,7 +598,6 @@ RipNg::Lookup(Ipv6Address dst, bool setSource, Ptr<NetDevice> interface)
     NS_LOG_FUNCTION(this << dst << interface);
 
     Ptr<Ipv6Route> rtentry = nullptr;
-    uint16_t longestMask = 0;
 
     /* when sending on link-local multicast, there have to be interface specified */
     if (dst.IsLinkLocalMulticast())
@@ -613,33 +614,27 @@ RipNg::Lookup(Ipv6Address dst, bool setSource, Ptr<NetDevice> interface)
         return rtentry;
     }
 
-    for (auto it = m_routes.begin(); it != m_routes.end(); it++)
+    // Longest prefix match: try each prefix length present in the routing
+    // table, longest first, with one hash probe per length. Within a bucket
+    // the iteration order matches m_routes, so the selected route among
+    // equal candidates is the same one the former full scan selected.
+    for (auto& [maskLen, networks] : m_routesByPrefix)
     {
-        RipNgRoutingTableEntry* j = it->first;
-
-        if (j->GetRouteStatus() == RipNgRoutingTableEntry::RIPNG_VALID)
+        const Ipv6Prefix lengthPrefix(static_cast<uint8_t>(maskLen));
+        auto bucket = networks.find(dst.CombinePrefix(lengthPrefix));
+        if (bucket == networks.end())
         {
-            Ipv6Prefix mask = j->GetDestNetworkPrefix();
-            uint16_t maskLen = mask.GetPrefixLength();
-            Ipv6Address entry = j->GetDestNetwork();
-
-            NS_LOG_LOGIC("Searching for route to " << dst << ", mask length " << maskLen);
-
-            if (mask.IsMatch(dst, entry))
+            continue;
+        }
+        for (RipNgRoutingTableEntry* j : bucket->second)
+        {
+            if (j->GetRouteStatus() == RipNgRoutingTableEntry::RIPNG_VALID)
             {
                 NS_LOG_LOGIC("Found global network route " << j << ", mask length " << maskLen);
 
                 /* if interface is given, check the route will output on this interface */
                 if (!interface || interface == m_ipv6->GetNetDevice(j->GetInterface()))
                 {
-                    if (maskLen < longestMask)
-                    {
-                        NS_LOG_LOGIC("Previous match longer, skipping");
-                        continue;
-                    }
-
-                    longestMask = maskLen;
-
                     Ipv6RoutingTableEntry* route = j;
                     uint32_t interfaceIdx = route->GetInterface();
                     rtentry = Create<Ipv6Route>();
@@ -670,6 +665,11 @@ RipNg::Lookup(Ipv6Address dst, bool setSource, Ptr<NetDevice> interface)
                     rtentry->SetOutputDevice(m_ipv6->GetNetDevice(interfaceIdx));
                 }
             }
+        }
+        if (rtentry)
+        {
+            // Any match at a shorter prefix length would be less specific.
+            break;
         }
     }
 
@@ -702,6 +702,7 @@ RipNg::AddNetworkRouteTo(Ipv6Address network,
     route->SetRouteChanged(true);
 
     m_routes.emplace_back(route, EventId());
+    AddToPrefixIndex(route, false);
 }
 
 void
@@ -715,6 +716,48 @@ RipNg::AddNetworkRouteTo(Ipv6Address network, Ipv6Prefix networkPrefix, uint32_t
     route->SetRouteChanged(true);
 
     m_routes.emplace_back(route, EventId());
+    AddToPrefixIndex(route, false);
+}
+
+void
+RipNg::AddToPrefixIndex(RipNgRoutingTableEntry* route, bool front)
+{
+    auto& bucket =
+        m_routesByPrefix[route->GetDestNetworkPrefix().GetPrefixLength()][route->GetDestNetwork()];
+    if (front)
+    {
+        bucket.insert(bucket.begin(), route);
+    }
+    else
+    {
+        bucket.push_back(route);
+    }
+}
+
+void
+RipNg::RemoveFromPrefixIndex(RipNgRoutingTableEntry* route)
+{
+    const uint16_t len = route->GetDestNetworkPrefix().GetPrefixLength();
+    auto lengthBucket = m_routesByPrefix.find(len);
+    if (lengthBucket == m_routesByPrefix.end())
+    {
+        return;
+    }
+    auto networkBucket = lengthBucket->second.find(route->GetDestNetwork());
+    if (networkBucket == lengthBucket->second.end())
+    {
+        return;
+    }
+    auto& routes = networkBucket->second;
+    routes.erase(std::remove(routes.begin(), routes.end(), route), routes.end());
+    if (routes.empty())
+    {
+        lengthBucket->second.erase(networkBucket);
+        if (lengthBucket->second.empty())
+        {
+            m_routesByPrefix.erase(lengthBucket);
+        }
+    }
 }
 
 void
@@ -750,6 +793,7 @@ RipNg::DeleteRoute(RipNgRoutingTableEntry* route)
     {
         if (it->first == route)
         {
+            RemoveFromPrefixIndex(route);
             delete route;
             m_routes.erase(it);
             return;
@@ -1163,6 +1207,7 @@ RipNg::HandleResponses(RipNgHeader hdr,
             route->SetRouteStatus(RipNgRoutingTableEntry::RIPNG_VALID);
             route->SetRouteChanged(true);
             m_routes.emplace_front(route, EventId());
+            AddToPrefixIndex(route, true);
             EventId invalidateEvent =
                 Simulator::Schedule(m_timeoutDelay, &RipNg::InvalidateRoute, this, route);
             (m_routes.begin())->second = invalidateEvent;

@@ -19,6 +19,9 @@
 #include "ns3/random-variable-stream.h"
 
 #include <list>
+#include <map>
+#include <unordered_map>
+#include <vector>
 
 namespace ns3
 {
@@ -394,7 +397,34 @@ class RipNg : public Ipv6RoutingProtocol
      */
     void DeleteRoute(RipNgRoutingTableEntry* route);
 
-    Routes m_routes;                //!<  the forwarding table for network.
+    Routes m_routes; //!<  the forwarding table for network.
+
+    /**
+     * @brief Routes indexed by prefix length (longest first) and network.
+     *
+     * Lookup() performs a longest prefix match on every routed packet; the
+     * index reduces it to one hash probe per distinct prefix length instead
+     * of a scan of the whole routing table. Within a bucket the routes keep
+     * the iteration order of m_routes, preserving which of several equal
+     * routes is selected.
+     */
+    std::map<uint16_t,
+             std::unordered_map<Ipv6Address, std::vector<RipNgRoutingTableEntry*>>,
+             std::greater<>>
+        m_routesByPrefix;
+
+    /**
+     * @brief Add a route to the prefix index.
+     * @param route The route.
+     * @param front True if the route was added at the front of m_routes.
+     */
+    void AddToPrefixIndex(RipNgRoutingTableEntry* route, bool front);
+
+    /**
+     * @brief Remove a route from the prefix index.
+     * @param route The route.
+     */
+    void RemoveFromPrefixIndex(RipNgRoutingTableEntry* route);
     Ptr<Ipv6> m_ipv6;               //!< IPv6 reference
     Time m_startupDelay;            //!< Random delay before protocol startup.
     Time m_minTriggeredUpdateDelay; //!< Min cooldown delay after a Triggered Update.
