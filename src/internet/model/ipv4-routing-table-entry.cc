@@ -228,7 +228,7 @@ operator<<(std::ostream& os, const Ipv4RoutingTableEntry& route)
 }
 
 bool
-operator==(const Ipv4RoutingTableEntry a, const Ipv4RoutingTableEntry b)
+operator==(const Ipv4RoutingTableEntry& a, const Ipv4RoutingTableEntry& b)
 {
     return (a.GetDest() == b.GetDest() && a.GetDestNetworkMask() == b.GetDestNetworkMask() &&
             a.GetGateway() == b.GetGateway() && a.GetInterface() == b.GetInterface());
@@ -346,7 +346,7 @@ operator<<(std::ostream& os, const Ipv4MulticastRoutingTableEntry& route)
 }
 
 bool
-operator==(const Ipv4MulticastRoutingTableEntry a, const Ipv4MulticastRoutingTableEntry b)
+operator==(const Ipv4MulticastRoutingTableEntry& a, const Ipv4MulticastRoutingTableEntry& b)
 {
     return (a.GetOrigin() == b.GetOrigin() && a.GetGroup() == b.GetGroup() &&
             a.GetInputInterface() == b.GetInputInterface() &&
