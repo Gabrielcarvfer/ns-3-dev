@@ -581,6 +581,7 @@ Rip::DoDispose()
 {
     NS_LOG_FUNCTION(this);
 
+    m_routesByPrefix.clear();
     for (auto j = m_routes.begin(); j != m_routes.end(); j = m_routes.erase(j))
     {
         delete j->first;
@@ -612,7 +613,6 @@ Rip::Lookup(Ipv4Address dst, bool setSource, Ptr<NetDevice> interface)
     NS_LOG_FUNCTION(this << dst << interface);
 
     Ptr<Ipv4Route> rtentry = nullptr;
-    uint16_t longestMask = 0;
 
     /* when sending on local multicast, there have to be interface specified */
     if (dst.IsLocalMulticast())
@@ -628,33 +628,27 @@ Rip::Lookup(Ipv4Address dst, bool setSource, Ptr<NetDevice> interface)
         return rtentry;
     }
 
-    for (auto it = m_routes.begin(); it != m_routes.end(); it++)
+    // Longest prefix match: try each prefix length present in the routing
+    // table, longest first, with one hash probe per length. Within a bucket
+    // the iteration order matches m_routes, so the selected route among
+    // equal candidates is the same one the former full scan selected.
+    for (auto& [maskLen, networks] : m_routesByPrefix)
     {
-        RipRoutingTableEntry* j = it->first;
-
-        if (j->GetRouteStatus() == RipRoutingTableEntry::RIP_VALID)
+        const Ipv4Mask lengthMask(maskLen == 0 ? 0 : (~uint32_t(0) << (32 - maskLen)));
+        auto bucket = networks.find(dst.CombineMask(lengthMask));
+        if (bucket == networks.end())
         {
-            Ipv4Mask mask = j->GetDestNetworkMask();
-            uint16_t maskLen = mask.GetPrefixLength();
-            Ipv4Address entry = j->GetDestNetwork();
-
-            NS_LOG_LOGIC("Searching for route to " << dst << ", mask length " << maskLen);
-
-            if (mask.IsMatch(dst, entry))
+            continue;
+        }
+        for (RipRoutingTableEntry* j : bucket->second)
+        {
+            if (j->GetRouteStatus() == RipRoutingTableEntry::RIP_VALID)
             {
                 NS_LOG_LOGIC("Found global network route " << j << ", mask length " << maskLen);
 
                 /* if interface is given, check the route will output on this interface */
                 if (!interface || interface == m_ipv4->GetNetDevice(j->GetInterface()))
                 {
-                    if (maskLen < longestMask)
-                    {
-                        NS_LOG_LOGIC("Previous match longer, skipping");
-                        continue;
-                    }
-
-                    longestMask = maskLen;
-
                     Ipv4RoutingTableEntry* route = j;
                     uint32_t interfaceIdx = route->GetInterface();
                     rtentry = Create<Ipv4Route>();
@@ -678,6 +672,11 @@ Rip::Lookup(Ipv4Address dst, bool setSource, Ptr<NetDevice> interface)
                     rtentry->SetOutputDevice(m_ipv4->GetNetDevice(interfaceIdx));
                 }
             }
+        }
+        if (rtentry)
+        {
+            // Any match at a shorter prefix length would be less specific.
+            break;
         }
     }
 
@@ -703,6 +702,7 @@ Rip::AddNetworkRouteTo(Ipv4Address network,
     route->SetRouteChanged(true);
 
     m_routes.emplace_back(route, EventId());
+    AddToPrefixIndex(route, false);
 }
 
 void
@@ -716,6 +716,48 @@ Rip::AddNetworkRouteTo(Ipv4Address network, Ipv4Mask networkPrefix, uint32_t int
     route->SetRouteChanged(true);
 
     m_routes.emplace_back(route, EventId());
+    AddToPrefixIndex(route, false);
+}
+
+void
+Rip::AddToPrefixIndex(RipRoutingTableEntry* route, bool front)
+{
+    auto& bucket =
+        m_routesByPrefix[route->GetDestNetworkMask().GetPrefixLength()][route->GetDestNetwork()];
+    if (front)
+    {
+        bucket.insert(bucket.begin(), route);
+    }
+    else
+    {
+        bucket.push_back(route);
+    }
+}
+
+void
+Rip::RemoveFromPrefixIndex(RipRoutingTableEntry* route)
+{
+    const uint16_t len = route->GetDestNetworkMask().GetPrefixLength();
+    auto lengthBucket = m_routesByPrefix.find(len);
+    if (lengthBucket == m_routesByPrefix.end())
+    {
+        return;
+    }
+    auto networkBucket = lengthBucket->second.find(route->GetDestNetwork());
+    if (networkBucket == lengthBucket->second.end())
+    {
+        return;
+    }
+    auto& routes = networkBucket->second;
+    routes.erase(std::remove(routes.begin(), routes.end(), route), routes.end());
+    if (routes.empty())
+    {
+        lengthBucket->second.erase(networkBucket);
+        if (lengthBucket->second.empty())
+        {
+            m_routesByPrefix.erase(lengthBucket);
+        }
+    }
 }
 
 void
@@ -751,6 +793,7 @@ Rip::DeleteRoute(RipRoutingTableEntry* route)
     {
         if (it->first == route)
         {
+            RemoveFromPrefixIndex(route);
             delete route;
             m_routes.erase(it);
             return;
@@ -1151,6 +1194,7 @@ Rip::HandleResponses(RipHeader hdr,
             route->SetRouteStatus(RipRoutingTableEntry::RIP_VALID);
             route->SetRouteChanged(true);
             m_routes.emplace_front(route, EventId());
+            AddToPrefixIndex(route, true);
             EventId invalidateEvent =
                 Simulator::Schedule(m_timeoutDelay, &Rip::InvalidateRoute, this, route);
             (m_routes.begin())->second = invalidateEvent;
