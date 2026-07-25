@@ -93,6 +93,8 @@
 
 #include <list>
 #include <stdint.h>
+#include <unordered_map>
+#include <vector>
 
 namespace ns3
 {
@@ -555,6 +557,24 @@ class GlobalRouting : public std::enable_if_t<std::is_same_v<Ipv4RoutingProtocol
     HostRoutes m_hostRoutes;             //!< Routes to hosts
     NetworkRoutes m_networkRoutes;       //!< Routes to networks
     ASExternalRoutes m_ASexternalRoutes; //!< External routes imported
+
+    /**
+     * Host routes indexed by destination address, in insertion order.
+     *
+     * With global routing every node ends up with a host route per
+     * destination in the topology, so the per-packet lookup and the
+     * duplicate check on insertion must not scan the whole host route
+     * list. The values are the ECMP candidate sets used by LookupGlobal.
+     */
+    std::unordered_map<IpAddress, std::vector<IpRoutingTableEntry*>> m_hostRoutesByDest;
+
+    /**
+     * Network routes indexed by destination network, in insertion order.
+     *
+     * Only used to keep the duplicate check on insertion from scanning
+     * the whole network route list.
+     */
+    std::unordered_map<IpAddress, std::vector<IpRoutingTableEntry*>> m_networkRoutesByDest;
 
     Ptr<Ip> m_ip; //!< associated IPv4 instance
 };

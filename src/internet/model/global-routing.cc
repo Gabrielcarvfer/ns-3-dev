@@ -20,6 +20,7 @@
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <vector>
 
@@ -103,7 +104,8 @@ GlobalRouting<T>::AddHostRouteTo(IpAddress dest, IpAddress nextHop, uint32_t int
     NS_LOG_FUNCTION(this << dest << nextHop << interface);
     auto route = new IpRoutingTableEntry();
     *route = IpRoutingTableEntry::CreateHostRouteTo(dest, nextHop, interface);
-    for (auto routePointer : m_hostRoutes)
+    auto& sameDestRoutes = m_hostRoutesByDest[dest];
+    for (auto routePointer : sameDestRoutes)
     {
         if (*routePointer == *route)
         {
@@ -112,6 +114,7 @@ GlobalRouting<T>::AddHostRouteTo(IpAddress dest, IpAddress nextHop, uint32_t int
             return;
         }
     }
+    sameDestRoutes.push_back(route);
     m_hostRoutes.push_back(route);
 }
 
@@ -122,7 +125,8 @@ GlobalRouting<T>::AddHostRouteTo(IpAddress dest, uint32_t interface)
     NS_LOG_FUNCTION(this << dest << interface);
     auto route = new IpRoutingTableEntry();
     *route = IpRoutingTableEntry::CreateHostRouteTo(dest, interface);
-    for (auto routePointer : m_hostRoutes)
+    auto& sameDestRoutes = m_hostRoutesByDest[dest];
+    for (auto routePointer : sameDestRoutes)
     {
         if (*routePointer == *route)
         {
@@ -131,6 +135,7 @@ GlobalRouting<T>::AddHostRouteTo(IpAddress dest, uint32_t interface)
             return;
         }
     }
+    sameDestRoutes.push_back(route);
     m_hostRoutes.push_back(route);
 }
 
@@ -144,7 +149,8 @@ GlobalRouting<T>::AddNetworkRouteTo(IpAddress network,
     NS_LOG_FUNCTION(this << network << networkMask << nextHop << interface);
     auto route = new IpRoutingTableEntry();
     *route = IpRoutingTableEntry::CreateNetworkRouteTo(network, networkMask, nextHop, interface);
-    for (auto routePointer : m_networkRoutes)
+    auto& sameNetworkRoutes = m_networkRoutesByDest[network];
+    for (auto routePointer : sameNetworkRoutes)
     {
         if (*routePointer == *route)
         {
@@ -153,6 +159,7 @@ GlobalRouting<T>::AddNetworkRouteTo(IpAddress network,
             return;
         }
     }
+    sameNetworkRoutes.push_back(route);
     m_networkRoutes.push_back(route);
 }
 
@@ -165,7 +172,8 @@ GlobalRouting<T>::AddNetworkRouteTo(IpAddress network,
     NS_LOG_FUNCTION(this << network << networkMask << interface);
     auto route = new IpRoutingTableEntry();
     *route = IpRoutingTableEntry::CreateNetworkRouteTo(network, networkMask, interface);
-    for (auto routePointer : m_networkRoutes)
+    auto& sameNetworkRoutes = m_networkRoutesByDest[network];
+    for (auto routePointer : sameNetworkRoutes)
     {
         if (*routePointer == *route)
         {
@@ -174,6 +182,7 @@ GlobalRouting<T>::AddNetworkRouteTo(IpAddress network,
             return;
         }
     }
+    sameNetworkRoutes.push_back(route);
     m_networkRoutes.push_back(route);
 }
 
@@ -211,21 +220,22 @@ GlobalRouting<T>::LookupGlobal(IpAddress dest, Ptr<NetDevice> oif)
     RouteVec_t allRoutes;
 
     NS_LOG_LOGIC("Number of m_hostRoutes = " << m_hostRoutes.size());
-    for (auto i = m_hostRoutes.begin(); i != m_hostRoutes.end(); i++)
+    auto sameDestRoutes = m_hostRoutesByDest.find(dest);
+    if (sameDestRoutes != m_hostRoutesByDest.end())
     {
-        NS_ASSERT((*i)->IsHost());
-        if ((*i)->GetDest() == dest)
+        for (auto route : sameDestRoutes->second)
         {
+            NS_ASSERT(route->IsHost());
             if (oif)
             {
-                if (oif != m_ip->GetNetDevice((*i)->GetInterface()))
+                if (oif != m_ip->GetNetDevice(route->GetInterface()))
                 {
                     NS_LOG_LOGIC("Not on requested interface, skipping");
                     continue;
                 }
             }
-            allRoutes.push_back(*i);
-            NS_LOG_LOGIC(allRoutes.size() << "Found global host route" << *i);
+            allRoutes.push_back(route);
+            NS_LOG_LOGIC(allRoutes.size() << "Found global host route" << route);
         }
     }
     if (allRoutes.empty()) // if no host route is found
@@ -416,6 +426,17 @@ GlobalRouting<T>::RemoveRoute(uint32_t index)
             if (tmp == index)
             {
                 NS_LOG_LOGIC("Removing route " << index << "; size = " << m_hostRoutes.size());
+                auto sameDestRoutes = m_hostRoutesByDest.find((*i)->GetDest());
+                if (sameDestRoutes != m_hostRoutesByDest.end())
+                {
+                    auto& destRoutes = sameDestRoutes->second;
+                    destRoutes.erase(std::remove(destRoutes.begin(), destRoutes.end(), *i),
+                                     destRoutes.end());
+                    if (destRoutes.empty())
+                    {
+                        m_hostRoutesByDest.erase(sameDestRoutes);
+                    }
+                }
                 delete *i;
                 m_hostRoutes.erase(i);
                 NS_LOG_LOGIC("Done removing host route "
@@ -432,6 +453,17 @@ GlobalRouting<T>::RemoveRoute(uint32_t index)
         if (tmp == index)
         {
             NS_LOG_LOGIC("Removing route " << index << "; size = " << m_networkRoutes.size());
+            auto sameNetworkRoutes = m_networkRoutesByDest.find((*j)->GetDestNetwork());
+            if (sameNetworkRoutes != m_networkRoutesByDest.end())
+            {
+                auto& networkRoutes = sameNetworkRoutes->second;
+                networkRoutes.erase(std::remove(networkRoutes.begin(), networkRoutes.end(), *j),
+                                    networkRoutes.end());
+                if (networkRoutes.empty())
+                {
+                    m_networkRoutesByDest.erase(sameNetworkRoutes);
+                }
+            }
             delete *j;
             m_networkRoutes.erase(j);
             NS_LOG_LOGIC("Done removing network route "
@@ -472,6 +504,8 @@ void
 GlobalRouting<T>::DoDispose()
 {
     NS_LOG_FUNCTION(this);
+    m_hostRoutesByDest.clear();
+    m_networkRoutesByDest.clear();
     for (auto i = m_hostRoutes.begin(); i != m_hostRoutes.end(); i = m_hostRoutes.erase(i))
     {
         delete (*i);

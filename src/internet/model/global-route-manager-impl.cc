@@ -496,6 +496,7 @@ GlobalRouteManagerLSDB<T>::Insert(IpAddress addr, GlobalRoutingLSA<IpManager>* l
     else
     {
         m_database.insert(LSDBPair_t(addr, lsa));
+        m_linkDataIndexValid = false;
     }
 }
 
@@ -523,14 +524,8 @@ GlobalRouteManagerLSDB<T>::GetLSA(IpAddress addr) const
     //
     // Look up an LSA by its address.
     //
-    for (auto i = m_database.begin(); i != m_database.end(); i++)
-    {
-        if (i->first == addr)
-        {
-            return i->second;
-        }
-    }
-    return nullptr;
+    auto i = m_database.find(addr);
+    return i != m_database.end() ? i->second : nullptr;
 }
 
 template <typename T>
@@ -539,23 +534,28 @@ GlobalRouteManagerLSDB<T>::GetLSAByLinkData(IpAddress addr) const
 {
     NS_LOG_FUNCTION(this << addr);
     //
-    // Look up an LSA by its address.
+    // Look up an LSA by the link data of its transit network link records.
     //
-    for (auto i = m_database.begin(); i != m_database.end(); i++)
+    if (!m_linkDataIndexValid)
     {
-        GlobalRoutingLSA<IpManager>* temp = i->second;
-        // Iterate among temp's Link Records
-        for (uint32_t j = 0; j < temp->GetNLinkRecords(); j++)
+        m_linkDataIndex.clear();
+        for (auto i = m_database.begin(); i != m_database.end(); i++)
         {
-            GlobalRoutingLinkRecord<IpManager>* lr = temp->GetLinkRecord(j);
-            if (lr->GetLinkType() == GlobalRoutingLinkRecord<IpManager>::TransitNetwork &&
-                lr->GetLinkData() == addr)
+            GlobalRoutingLSA<IpManager>* temp = i->second;
+            for (uint32_t j = 0; j < temp->GetNLinkRecords(); j++)
             {
-                return temp;
+                GlobalRoutingLinkRecord<IpManager>* lr = temp->GetLinkRecord(j);
+                if (lr->GetLinkType() == GlobalRoutingLinkRecord<IpManager>::TransitNetwork)
+                {
+                    // Keep the first match, as the linear search did.
+                    m_linkDataIndex.insert({lr->GetLinkData(), temp});
+                }
             }
         }
+        m_linkDataIndexValid = true;
     }
-    return nullptr;
+    auto it = m_linkDataIndex.find(addr);
+    return it != m_linkDataIndex.end() ? it->second : nullptr;
 }
 
 // ---------------------------------------------------------------------------
