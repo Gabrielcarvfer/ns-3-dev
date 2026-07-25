@@ -177,7 +177,7 @@ std::ostream& operator<<(std::ostream& os, const Ipv4RoutingTableEntry& route);
  * @param b rhs
  * @returns true if operands are equal, false otherwise
  */
-bool operator==(const Ipv4RoutingTableEntry a, const Ipv4RoutingTableEntry b);
+bool operator==(const Ipv4RoutingTableEntry& a, const Ipv4RoutingTableEntry& b);
 
 /**
  * @ingroup ipv4Routing
@@ -275,7 +275,7 @@ std::ostream& operator<<(std::ostream& os, const Ipv4MulticastRoutingTableEntry&
  * @param b rhs
  * @returns true if operands are equal, false otherwise
  */
-bool operator==(const Ipv4MulticastRoutingTableEntry a, const Ipv4MulticastRoutingTableEntry b);
+bool operator==(const Ipv4MulticastRoutingTableEntry& a, const Ipv4MulticastRoutingTableEntry& b);
 
 } // namespace ns3
 

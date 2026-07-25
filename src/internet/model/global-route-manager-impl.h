@@ -28,6 +28,7 @@
 #include <map>
 #include <queue>
 #include <stdint.h>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -770,6 +771,15 @@ class GlobalRouteManagerLSDB
     LSDBMap_t m_database; //!< database of IPv4 addresses / Link State Advertisements
     std::vector<GlobalRoutingLSA<IpManager>*>
         m_extdatabase; //!< database of External Link State Advertisements
+
+    /**
+     * Index of the Link State Advertisements by the link data of their
+     * transit network link records, so GetLSAByLinkData does not have to
+     * scan every link record in the database. Rebuilt lazily after
+     * insertions.
+     */
+    mutable std::unordered_map<IpAddress, GlobalRoutingLSA<IpManager>*> m_linkDataIndex;
+    mutable bool m_linkDataIndexValid{false}; //!< Whether m_linkDataIndex is up to date.
 };
 
 /**
