@@ -15,6 +15,8 @@
 
 #include <list>
 #include <stdint.h>
+#include <unordered_map>
+#include <vector>
 
 namespace ns3
 {
@@ -145,6 +147,9 @@ class Ipv6EndPointDemux
 
     /**
      * @brief Get the entire list of end points registered.
+     *
+     * End points are grouped by local port.
+     *
      * @return list of Ipv6EndPoint
      */
     EndPoints GetEndPoints() const;
@@ -172,9 +177,13 @@ class Ipv6EndPointDemux
     uint16_t m_portLast;
 
     /**
-     * @brief A list of IPv6 end points.
+     * @brief The IPv6 end points, indexed by local port.
+     *
+     * Every end point has a fixed local port, so the lookups only need to
+     * scan the end points bound to the packet's destination port. End points
+     * sharing a port are kept in insertion order.
      */
-    EndPoints m_endPoints;
+    std::unordered_map<uint16_t, std::vector<Ipv6EndPoint*>> m_endPointsByPort;
 };
 
 } /* namespace ns3 */

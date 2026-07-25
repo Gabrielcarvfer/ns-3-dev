@@ -334,8 +334,10 @@ class TcpL4Protocol : public IpL4Protocol
     TypeId m_congestionTypeId;       //!< The socket TypeId
     TypeId m_recoveryTypeId;         //!< The recovery TypeId
     std::unordered_map<uint64_t, Ptr<TcpSocketBase>>
-        m_sockets;             //!< Unordered map of socket IDs and corresponding sockets
-    uint64_t m_socketIndex{0}; //!< index of the next socket to be created
+        m_sockets; //!< Unordered map of socket IDs and corresponding sockets
+    std::unordered_map<TcpSocketBase*, uint64_t>
+        m_socketIds;                                 //!< Reverse map of sockets to their socket IDs
+    uint64_t m_socketIndex{0};                       //!< index of the next socket to be created
     IpL4Protocol::DownTargetCallback m_downTarget;   //!< Callback to send packets over IPv4
     IpL4Protocol::DownTargetCallback6 m_downTarget6; //!< Callback to send packets over IPv6
 

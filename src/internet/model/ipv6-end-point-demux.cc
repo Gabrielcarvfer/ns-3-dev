@@ -12,6 +12,8 @@
 
 #include "ns3/log.h"
 
+#include <algorithm>
+
 namespace ns3
 {
 
@@ -28,36 +30,35 @@ Ipv6EndPointDemux::Ipv6EndPointDemux()
 Ipv6EndPointDemux::~Ipv6EndPointDemux()
 {
     NS_LOG_FUNCTION(this);
-    for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
+    for (auto& [port, endPoints] : m_endPointsByPort)
     {
-        Ipv6EndPoint* endPoint = *i;
-        delete endPoint;
+        for (Ipv6EndPoint* endPoint : endPoints)
+        {
+            delete endPoint;
+        }
     }
-    m_endPoints.clear();
+    m_endPointsByPort.clear();
 }
 
 bool
 Ipv6EndPointDemux::LookupPortLocal(uint16_t port)
 {
     NS_LOG_FUNCTION(this << port);
-    for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
-    {
-        if ((*i)->GetLocalPort() == port)
-        {
-            return true;
-        }
-    }
-    return false;
+    return m_endPointsByPort.find(port) != m_endPointsByPort.end();
 }
 
 bool
 Ipv6EndPointDemux::LookupLocal(Ptr<NetDevice> boundNetDevice, Ipv6Address addr, uint16_t port)
 {
     NS_LOG_FUNCTION(this << addr << port);
-    for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
+    auto bucket = m_endPointsByPort.find(port);
+    if (bucket == m_endPointsByPort.end())
     {
-        if ((*i)->GetLocalPort() == port && (*i)->GetLocalAddress() == addr &&
-            (*i)->GetBoundNetDevice() == boundNetDevice)
+        return false;
+    }
+    for (Ipv6EndPoint* endP : bucket->second)
+    {
+        if (endP->GetLocalAddress() == addr && endP->GetBoundNetDevice() == boundNetDevice)
         {
             return true;
         }
@@ -76,8 +77,8 @@ Ipv6EndPointDemux::Allocate()
         return nullptr;
     }
     auto endPoint = new Ipv6EndPoint(Ipv6Address::GetAny(), port);
-    m_endPoints.push_back(endPoint);
-    NS_LOG_DEBUG("Now have >>" << m_endPoints.size() << "<< endpoints.");
+    m_endPointsByPort[port].push_back(endPoint);
+    NS_LOG_DEBUG("Now have >>" << GetEndPoints().size() << "<< endpoints.");
     return endPoint;
 }
 
@@ -92,8 +93,8 @@ Ipv6EndPointDemux::Allocate(Ipv6Address address)
         return nullptr;
     }
     auto endPoint = new Ipv6EndPoint(address, port);
-    m_endPoints.push_back(endPoint);
-    NS_LOG_DEBUG("Now have >>" << m_endPoints.size() << "<< endpoints.");
+    m_endPointsByPort[port].push_back(endPoint);
+    NS_LOG_DEBUG("Now have >>" << GetEndPoints().size() << "<< endpoints.");
     return endPoint;
 }
 
@@ -115,8 +116,8 @@ Ipv6EndPointDemux::Allocate(Ptr<NetDevice> boundNetDevice, Ipv6Address address, 
         return nullptr;
     }
     auto endPoint = new Ipv6EndPoint(address, port);
-    m_endPoints.push_back(endPoint);
-    NS_LOG_DEBUG("Now have >>" << m_endPoints.size() << "<< endpoints.");
+    m_endPointsByPort[port].push_back(endPoint);
+    NS_LOG_DEBUG("Now have >>" << GetEndPoints().size() << "<< endpoints.");
     return endPoint;
 }
 
@@ -128,21 +129,25 @@ Ipv6EndPointDemux::Allocate(Ptr<NetDevice> boundNetDevice,
                             uint16_t peerPort)
 {
     NS_LOG_FUNCTION(this << boundNetDevice << localAddress << localPort << peerAddress << peerPort);
-    for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
+    auto portBucket = m_endPointsByPort.find(localPort);
+    if (portBucket != m_endPointsByPort.end())
     {
-        if ((*i)->GetLocalPort() == localPort && (*i)->GetLocalAddress() == localAddress &&
-            (*i)->GetPeerPort() == peerPort && (*i)->GetPeerAddress() == peerAddress &&
-            ((*i)->GetBoundNetDevice() == boundNetDevice || !(*i)->GetBoundNetDevice()))
+        for (Ipv6EndPoint* endP : portBucket->second)
         {
-            NS_LOG_WARN("Duplicated endpoint.");
-            return nullptr;
+            if (endP->GetLocalAddress() == localAddress && endP->GetPeerPort() == peerPort &&
+                endP->GetPeerAddress() == peerAddress &&
+                (endP->GetBoundNetDevice() == boundNetDevice || !endP->GetBoundNetDevice()))
+            {
+                NS_LOG_WARN("Duplicated endpoint.");
+                return nullptr;
+            }
         }
     }
     auto endPoint = new Ipv6EndPoint(localAddress, localPort);
     endPoint->SetPeer(peerAddress, peerPort);
-    m_endPoints.push_back(endPoint);
+    m_endPointsByPort[localPort].push_back(endPoint);
 
-    NS_LOG_DEBUG("Now have >>" << m_endPoints.size() << "<< endpoints.");
+    NS_LOG_DEBUG("Now have >>" << GetEndPoints().size() << "<< endpoints.");
 
     return endPoint;
 }
@@ -151,15 +156,23 @@ void
 Ipv6EndPointDemux::DeAllocate(Ipv6EndPoint* endPoint)
 {
     NS_LOG_FUNCTION(this);
-    for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
+    auto bucket = m_endPointsByPort.find(endPoint->GetLocalPort());
+    if (bucket == m_endPointsByPort.end())
     {
-        if (*i == endPoint)
-        {
-            delete endPoint;
-            m_endPoints.erase(i);
-            break;
-        }
+        return;
     }
+    auto& portEndPoints = bucket->second;
+    auto it = std::find(portEndPoints.begin(), portEndPoints.end(), endPoint);
+    if (it == portEndPoints.end())
+    {
+        return;
+    }
+    portEndPoints.erase(it);
+    if (portEndPoints.empty())
+    {
+        m_endPointsByPort.erase(bucket);
+    }
+    delete endPoint;
 }
 
 /*
@@ -182,10 +195,13 @@ Ipv6EndPointDemux::Lookup(Ipv6Address daddr,
     EndPoints retval4; /* Exact match on all 4 */
 
     NS_LOG_DEBUG("Looking up endpoint for destination address " << daddr);
-    for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
+    auto portBucket = m_endPointsByPort.find(dport);
+    if (portBucket == m_endPointsByPort.end())
     {
-        Ipv6EndPoint* endP = *i;
-
+        return {};
+    }
+    for (Ipv6EndPoint* endP : portBucket->second)
+    {
         NS_LOG_DEBUG("Looking at endpoint dport="
                      << endP->GetLocalPort() << " daddr=" << endP->GetLocalAddress()
                      << " sport=" << endP->GetPeerPort() << " saddr=" << endP->GetPeerAddress());
@@ -194,14 +210,6 @@ Ipv6EndPointDemux::Lookup(Ipv6Address daddr,
         {
             NS_LOG_LOGIC("Skipping endpoint " << &endP
                                               << " because endpoint can not receive packets");
-            continue;
-        }
-
-        if (endP->GetLocalPort() != dport)
-        {
-            NS_LOG_LOGIC("Skipping endpoint " << &endP << " because endpoint dport "
-                                              << endP->GetLocalPort()
-                                              << " does not match packet dport " << dport);
             continue;
         }
 
@@ -302,35 +310,35 @@ Ipv6EndPointDemux::SimpleLookup(Ipv6Address dst, uint16_t dport, Ipv6Address src
     uint32_t genericity = 3;
     Ipv6EndPoint* generic = nullptr;
 
-    for (auto i = m_endPoints.begin(); i != m_endPoints.end(); i++)
+    auto portBucket = m_endPointsByPort.find(dport);
+    if (portBucket == m_endPointsByPort.end())
+    {
+        return nullptr;
+    }
+    for (Ipv6EndPoint* endP : portBucket->second)
     {
         uint32_t tmp = 0;
 
-        if ((*i)->GetLocalPort() != dport)
-        {
-            continue;
-        }
-
-        if ((*i)->GetLocalAddress() == dst && (*i)->GetPeerPort() == sport &&
-            (*i)->GetPeerAddress() == src)
+        if (endP->GetLocalAddress() == dst && endP->GetPeerPort() == sport &&
+            endP->GetPeerAddress() == src)
         {
             /* this is an exact match. */
-            return *i;
+            return endP;
         }
 
-        if ((*i)->GetLocalAddress() == Ipv6Address::GetAny())
+        if (endP->GetLocalAddress() == Ipv6Address::GetAny())
         {
             tmp++;
         }
 
-        if ((*i)->GetPeerAddress() == Ipv6Address::GetAny())
+        if (endP->GetPeerAddress() == Ipv6Address::GetAny())
         {
             tmp++;
         }
 
         if (tmp < genericity)
         {
-            generic = (*i);
+            generic = endP;
             genericity = tmp;
         }
     }
@@ -362,7 +370,12 @@ Ipv6EndPointDemux::AllocateEphemeralPort()
 Ipv6EndPointDemux::EndPoints
 Ipv6EndPointDemux::GetEndPoints() const
 {
-    return m_endPoints;
+    EndPoints ret;
+    for (const auto& [port, endPoints] : m_endPointsByPort)
+    {
+        ret.insert(ret.end(), endPoints.begin(), endPoints.end());
+    }
+    return ret;
 }
 
 } /* namespace ns3 */
