@@ -73,10 +73,6 @@ class MapScheduler : public Scheduler
   private:
     /** Event list type: a Map from EventKey to EventImpl. */
     typedef std::map<Scheduler::EventKey, EventImpl*> EventMap;
-    /** EventMap iterator. */
-    typedef std::map<Scheduler::EventKey, EventImpl*>::iterator EventMapI;
-    /** EventMap const iterator. */
-    typedef std::map<Scheduler::EventKey, EventImpl*>::const_iterator EventMapCI;
 
     /** The event list. */
     EventMap m_list;

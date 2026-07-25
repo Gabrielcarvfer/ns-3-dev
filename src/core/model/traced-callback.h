@@ -11,7 +11,7 @@
 
 #include "callback.h"
 
-#include <list>
+#include <vector>
 
 /**
  * @file
@@ -105,7 +105,7 @@ class TracedCallback
      *
      * @tparam Ts \deduced Types of the functor arguments.
      */
-    typedef std::list<Callback<void, Ts...>> CallbackList;
+    typedef std::vector<Callback<void, Ts...>> CallbackList;
     /** The chain of Callbacks. */
     CallbackList m_callbackList;
 };
@@ -184,9 +184,11 @@ template <typename... Ts>
 void
 TracedCallback<Ts...>::operator()(Ts... args) const
 {
-    for (auto i = m_callbackList.begin(); i != m_callbackList.end(); i++)
+    // Index-based iteration stays valid if a callback connects another sink
+    // (and thus grows the vector) while being invoked.
+    for (std::size_t i = 0; i < m_callbackList.size(); i++)
     {
-        (*i)(args...);
+        m_callbackList[i](args...);
     }
 }
 
