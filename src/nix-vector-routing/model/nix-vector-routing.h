@@ -483,6 +483,16 @@ class NixVectorRouting : public std::enable_if_t<std::is_same_v<Ipv4RoutingProto
     /** Cache stores IpRoutes based on destination ip */
     mutable IpRouteMap_t m_ipRouteCache;
 
+    /**
+     * BFS parent vector, reused across route computations.
+     *
+     * BFS resets only the entries it touched in the previous run (recorded
+     * in m_bfsTouched), so computing a short route in a large topology does
+     * not pay an allocation and fill proportional to the total node count.
+     */
+    mutable std::vector<Ptr<Node>> m_parentVector;
+    mutable std::vector<uint32_t> m_bfsTouched; //!< node ids set in m_parentVector by the last BFS
+
     Ptr<Ip> m_ip;     //!< IP object
     Ptr<Node> m_node; //!< Node object
 
