@@ -35,6 +35,8 @@
 #include "ns3/uinteger.h"
 #include "ns3/vector.h"
 
+#include <algorithm>
+
 /// Minimum IPv6 MTU, as defined by \RFC{2460}
 #define IPV6_MIN_MTU 1280
 
@@ -165,6 +167,9 @@ Ipv6L3Protocol::DoDispose()
     m_node = nullptr;
     m_routingProtocol = nullptr;
     m_pmtuCache = nullptr;
+    m_localAddresses.clear();
+    m_localAddressIndexValid = false;
+    m_extensionDemux = nullptr;
     Object::DoDispose();
 }
 
@@ -216,7 +221,30 @@ Ipv6L3Protocol::AddIpv6Interface(Ptr<Ipv6Interface> interface)
     m_interfaces.push_back(interface);
     m_reverseInterfacesContainer[interface->GetDevice()] = index;
     m_nInterfaces++;
+    m_localAddressIndexValid = false;
     return index;
+}
+
+void
+Ipv6L3Protocol::InvalidateLocalAddressIndex()
+{
+    m_localAddressIndexValid = false;
+}
+
+void
+Ipv6L3Protocol::BuildLocalAddressIndex()
+{
+    NS_LOG_FUNCTION(this);
+    m_localAddresses.clear();
+    for (uint32_t i = 0; i < GetNInterfaces(); i++)
+    {
+        const uint32_t nAddresses = GetNAddresses(i);
+        for (uint32_t j = 0; j < nAddresses; j++)
+        {
+            m_localAddresses[GetAddress(i, j).GetAddress()].push_back(i);
+        }
+    }
+    m_localAddressIndexValid = true;
 }
 
 Ptr<Ipv6Interface>
@@ -1049,7 +1077,11 @@ Ipv6L3Protocol::Receive(Ptr<NetDevice> device,
         }
     }
 
-    Ptr<Ipv6ExtensionDemux> ipv6ExtensionDemux = m_node->GetObject<Ipv6ExtensionDemux>();
+    if (!m_extensionDemux)
+    {
+        m_extensionDemux = m_node->GetObject<Ipv6ExtensionDemux>();
+    }
+    Ptr<Ipv6ExtensionDemux> ipv6ExtensionDemux = m_extensionDemux;
     Ptr<Ipv6Extension> ipv6Extension = nullptr;
     uint8_t nextHeader = hdr.GetNextHeader();
     bool stopProcessing = false;
@@ -1102,41 +1134,36 @@ Ipv6L3Protocol::Receive(Ptr<NetDevice> device,
         }
     }
 
-    for (uint32_t j = 0; j < GetNInterfaces(); j++)
+    if (!m_localAddressIndexValid)
     {
-        for (uint32_t i = 0; i < GetNAddresses(j); i++)
+        BuildLocalAddressIndex();
+    }
+    auto localMatch = m_localAddresses.find(hdr.GetDestination());
+    if (localMatch != m_localAddresses.end())
+    {
+        const auto& ifaces = localMatch->second;
+        if (std::find(ifaces.begin(), ifaces.end(), interface) != ifaces.end())
         {
-            Ipv6InterfaceAddress iaddr = GetAddress(j, i);
-            Ipv6Address addr = iaddr.GetAddress();
-            if (addr == hdr.GetDestination())
-            {
-                if (j == interface)
-                {
-                    NS_LOG_LOGIC("For me (destination " << addr << " match)");
-                    LocalDeliver(packet, hdr, interface);
-                    return;
-                }
-                else if (!GetStrongEndSystemModel())
-                {
-                    NS_LOG_LOGIC("For me (destination "
-                                 << addr
-                                 << " match) on another interface with Weak End System Model"
-                                 << hdr.GetDestination());
-                    LocalDeliver(packet, hdr, interface);
-                    return;
-                }
-                else
-                {
-                    NS_LOG_LOGIC(
-                        "For me (destination "
-                        << addr
-                        << " match) on another interface with Strong End System Model - discarding"
-                        << hdr.GetDestination());
-                    m_dropTrace(hdr, packet, DROP_NO_ROUTE, this, interface);
-                    return;
-                }
-            }
-            NS_LOG_LOGIC("Address " << addr << " not a match");
+            NS_LOG_LOGIC("For me (destination " << hdr.GetDestination() << " match)");
+            LocalDeliver(packet, hdr, interface);
+            return;
+        }
+        else if (!GetStrongEndSystemModel())
+        {
+            NS_LOG_LOGIC("For me (destination "
+                         << hdr.GetDestination()
+                         << " match) on another interface with Weak End System Model");
+            LocalDeliver(packet, hdr, interface);
+            return;
+        }
+        else
+        {
+            NS_LOG_LOGIC("For me (destination "
+                         << hdr.GetDestination()
+                         << " match) on another interface with Strong End System Model - "
+                            "discarding");
+            m_dropTrace(hdr, packet, DROP_NO_ROUTE, this, interface);
+            return;
         }
     }
 
@@ -1184,18 +1211,11 @@ Ipv6L3Protocol::SendRealOut(Ptr<Ipv6Route> route, Ptr<Packet> packet, const Ipv6
     std::list<Ipv6ExtensionFragment::Ipv6PayloadHeaderPair> fragments;
 
     // Check if this is the source of the packet
-    bool fromMe = false;
-    for (uint32_t i = 0; i < GetNInterfaces(); i++)
+    if (!m_localAddressIndexValid)
     {
-        for (uint32_t j = 0; j < GetNAddresses(i); j++)
-        {
-            if (GetAddress(i, j).GetAddress() == ipHeader.GetSource())
-            {
-                fromMe = true;
-                break;
-            }
-        }
+        BuildLocalAddressIndex();
     }
+    const bool fromMe = m_localAddresses.find(ipHeader.GetSource()) != m_localAddresses.end();
 
     size_t targetMtu = 0;
 
@@ -1225,7 +1245,11 @@ Ipv6L3Protocol::SendRealOut(Ptr<Ipv6Route> route, Ptr<Packet> packet, const Ipv6
             return;
         }
 
-        Ptr<Ipv6ExtensionDemux> ipv6ExtensionDemux = m_node->GetObject<Ipv6ExtensionDemux>();
+        if (!m_extensionDemux)
+        {
+            m_extensionDemux = m_node->GetObject<Ipv6ExtensionDemux>();
+        }
+        Ptr<Ipv6ExtensionDemux> ipv6ExtensionDemux = m_extensionDemux;
 
         // To get specific method GetFragments from Ipv6ExtensionFragmentation
         Ipv6ExtensionFragment* ipv6Fragment = dynamic_cast<Ipv6ExtensionFragment*>(
@@ -1427,7 +1451,11 @@ Ipv6L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv6Header& ip, uin
     NS_LOG_FUNCTION(this << packet << ip << iif);
     Ptr<Packet> p = packet->Copy();
     Ptr<IpL4Protocol> protocol = nullptr;
-    Ptr<Ipv6ExtensionDemux> ipv6ExtensionDemux = m_node->GetObject<Ipv6ExtensionDemux>();
+    if (!m_extensionDemux)
+    {
+        m_extensionDemux = m_node->GetObject<Ipv6ExtensionDemux>();
+    }
+    Ptr<Ipv6ExtensionDemux> ipv6ExtensionDemux = m_extensionDemux;
     Ptr<Ipv6Extension> ipv6Extension = nullptr;
     Ipv6Address dst = ip.GetDestination();
     uint8_t nextHeader = ip.GetNextHeader();
