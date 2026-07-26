@@ -19,7 +19,7 @@
 #include "ns3/random-variable-stream.h"
 #include "ns3/traced-callback.h"
 
-#include <list>
+#include <map>
 
 namespace ns3
 {
@@ -135,7 +135,18 @@ class INTERNET_EXPORT ArpL3Protocol : public Object
     void NotifyNewAggregate() override;
 
   private:
-    typedef std::list<Ptr<ArpCache>> CacheList; //!< container of the ARP caches
+    /**
+     * @brief Get the number of ARP caches.
+     * @returns the number of ARP caches
+     */
+    std::size_t GetNCaches() const;
+
+    /**
+     * @brief Get an ARP cache, in increasing order of the NetDevice index.
+     * @param i the position of the ARP cache
+     * @returns the ARP cache
+     */
+    Ptr<ArpCache> GetCache(std::size_t i) const;
 
     /**
      * @brief Finds the cache associated with a NetDevice
@@ -159,7 +170,7 @@ class INTERNET_EXPORT ArpL3Protocol : public Object
      */
     void SendArpReply(Ptr<const ArpCache> cache, Ipv4Address myIp, Ipv4Address toIp, Address toMac);
 
-    CacheList m_cacheList;                         //!< ARP cache container
+    std::map<uint32_t, Ptr<ArpCache>> m_caches;    //!< ARP caches, indexed by NetDevice index
     Ptr<Node> m_node;                              //!< node the ARP L3 protocol is associated with
     TracedCallback<Ptr<const Packet>> m_dropTrace; //!< trace for packets dropped by ARP
     Ptr<RandomVariableStream> m_requestJitter;     //!< jitter to de-sync ARP requests
