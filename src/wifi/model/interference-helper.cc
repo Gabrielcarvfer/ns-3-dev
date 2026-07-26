@@ -490,7 +490,7 @@ InterferenceHelper::CalculateMuMimoPowerW(Ptr<const Event> event,
     {
         if (IsSameMuMimoTransmission(event, it->second.GetEvent()))
         {
-            auto hePpdu = DynamicCast<HePpdu>(it->second.GetEvent()->GetPpdu()->Copy());
+            auto hePpdu = DynamicCast<const HePpdu>(it->second.GetEvent()->GetPpdu());
             NS_ASSERT(hePpdu);
             HePpdu::TxPsdFlag psdFlag = hePpdu->GetTxPsdFlag();
             if (psdFlag == HePpdu::PSD_HE_PORTION)
@@ -643,7 +643,7 @@ InterferenceHelper::CalculatePhyHeaderSectionPsr(Ptr<const Event> event,
                                                  const NiChanges& ni,
                                                  MHz_u channelWidth,
                                                  const WifiSpectrumBandInfo& band,
-                                                 PhyHeaderSections phyHeaderSections) const
+                                                 const PhyHeaderSections& phyHeaderSections) const
 {
     NS_LOG_FUNCTION(this << band);
     double psr = 1.0; /* Packet Success Rate */
