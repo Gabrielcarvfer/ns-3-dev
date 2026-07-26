@@ -20,6 +20,7 @@
 #include "ns3/traced-callback.h"
 
 #include <list>
+#include <unordered_map>
 
 namespace ns3
 {
@@ -159,7 +160,12 @@ class INTERNET_EXPORT ArpL3Protocol : public Object
      */
     void SendArpReply(Ptr<const ArpCache> cache, Ipv4Address myIp, Ipv4Address toIp, Address toMac);
 
-    CacheList m_cacheList;                         //!< ARP cache container
+    CacheList m_cacheList; //!< ARP cache container
+    /**
+     * ARP caches indexed by device, so the per-ARP-packet cache lookup does
+     * not scan the cache list.
+     */
+    std::unordered_map<NetDevice*, Ptr<ArpCache>> m_cacheByDevice;
     Ptr<Node> m_node;                              //!< node the ARP L3 protocol is associated with
     TracedCallback<Ptr<const Packet>> m_dropTrace; //!< trace for packets dropped by ARP
     Ptr<RandomVariableStream> m_requestJitter;     //!< jitter to de-sync ARP requests
