@@ -23,6 +23,7 @@
 #include <list>
 #include <map>
 #include <stdint.h>
+#include <vector>
 
 namespace ns3
 {
@@ -348,6 +349,16 @@ class ArpCache : public Object
     void HandleWaitReplyTimeout();
     uint32_t m_pendingQueueSize; //!< number of packets waiting for a resolution
     Cache m_arpCache;            //!< the ARP cache
+
+    /**
+     * Reverse (MAC address to entries) index used by LookupInverse.
+     *
+     * Rebuilt lazily on the first inverse lookup after any change to the
+     * cache membership or to an entry's MAC address, so the common
+     * per-packet inverse lookup does not scan the whole cache.
+     */
+    std::map<Address, std::vector<ArpCache::Entry*>> m_reverseIndex;
+    bool m_reverseIndexValid{false}; //!< whether m_reverseIndex is up to date
     TracedCallback<Ptr<const Packet>>
         m_dropTrace; //!< trace for packets dropped by the ARP cache queue
 };
