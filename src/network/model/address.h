@@ -17,8 +17,10 @@
 
 #include <array>
 #include <compare>
+#include <functional>
 #include <ostream>
 #include <stdint.h>
+#include <string_view>
 #include <unordered_map>
 
 namespace ns3
@@ -321,6 +323,8 @@ class Address
      */
     friend std::istream& operator>>(std::istream& is, Address& address);
 
+    friend struct std::hash<Address>;
+
     uint8_t m_type{UNASSIGNED_TYPE};        //!< Type of the address
     uint8_t m_len{0};                       //!< Length of the address
     std::array<uint8_t, MAX_SIZE> m_data{}; //!< The address value
@@ -332,5 +336,27 @@ std::ostream& operator<<(std::ostream& os, const Address& address);
 std::istream& operator>>(std::istream& is, Address& address);
 
 } // namespace ns3
+
+namespace std
+{
+
+/**
+ * @brief Hash function class for Address.
+ */
+template <>
+struct hash<ns3::Address>
+{
+    /**
+     * @brief Returns the hash of an Address.
+     * @param addr Address to hash
+     * @returns the hash of the address
+     */
+    size_t operator()(const ns3::Address& addr) const
+    {
+        std::string_view data(reinterpret_cast<const char*>(addr.m_data.data()), addr.m_len);
+        return std::hash<std::string_view>()(data) ^ (std::hash<uint8_t>()(addr.m_type) << 1);
+    }
+};
+} // namespace std
 
 #endif /* ADDRESS_H */
