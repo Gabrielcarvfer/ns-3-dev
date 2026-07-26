@@ -97,7 +97,7 @@ class LteMiErrorModel
                                               const std::vector<int>& map,
                                               uint16_t size,
                                               uint8_t mcs,
-                                              HarqProcessInfoList_t miHistory);
+                                              const HarqProcessInfoList_t& miHistory);
 
     /**
      * @brief run the error-model algorithm for the specified PCFICH+PDCCH channels

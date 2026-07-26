@@ -14,6 +14,7 @@
 
 #include "ns3/event-id.h"
 
+#include <deque>
 #include <map>
 
 namespace ns3
@@ -86,7 +87,7 @@ class LteRlcTm : public LteRlc
         Time m_waitingSince; ///< Layer arrival time
     };
 
-    std::vector<TxPdu> m_txBuffer; ///< Transmission buffer
+    std::deque<TxPdu> m_txBuffer; ///< Transmission buffer
 
     uint32_t m_maxTxBufferSize; ///< maximum transmit buffer size
     uint32_t m_txBufferSize;    ///< transmit buffer size

@@ -265,7 +265,7 @@ EpcTftClassifier::Classify(Ptr<Packet> p, EpcTft::Direction direction, uint16_t 
         {
             NS_LOG_LOGIC("TFT id: " << it->first);
             NS_LOG_LOGIC(" Ptr<EpcTft>: " << it->second);
-            Ptr<EpcTft> tft = it->second;
+            const Ptr<EpcTft>& tft = it->second;
             if (tft->Matches(direction,
                              remoteAddressIpv4,
                              localAddressIpv4,
@@ -295,7 +295,7 @@ EpcTftClassifier::Classify(Ptr<Packet> p, EpcTft::Direction direction, uint16_t 
         {
             NS_LOG_LOGIC("TFT id: " << it->first);
             NS_LOG_LOGIC(" Ptr<EpcTft>: " << it->second);
-            Ptr<EpcTft> tft = it->second;
+            const Ptr<EpcTft>& tft = it->second;
             if (tft->Matches(direction,
                              remoteAddressIpv6,
                              localAddressIpv6,
