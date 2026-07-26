@@ -306,6 +306,7 @@ DistributedSimulatorImpl::ProcessOneEvent()
 
     NS_LOG_LOGIC("handle " << next.key.m_ts);
     m_currentTs = next.key.m_ts;
+    PublishCurrentTs(m_currentTs);
     m_currentContext = next.key.m_context;
     m_currentUid = next.key.m_uid;
     next.impl->Invoke();

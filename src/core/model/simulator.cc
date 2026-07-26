@@ -77,14 +77,10 @@ PeekImpl()
     return &impl;
 }
 
-/**
- * @ingroup simulator
- * @brief Get the SimulatorImpl singleton.
- * @return The singleton pointer.
- * @see Simulator::GetImplementation()
- */
-static SimulatorImpl*
-GetImpl()
+uint64_t Simulator::s_currentTs = 0;
+
+SimulatorImpl*
+Simulator::GetImpl()
 {
     SimulatorImpl** pimpl = PeekImpl();
     /* Please, don't include any calls to logging macros in this function
@@ -117,6 +113,8 @@ GetImpl()
         //
         LogSetTimePrinter(&DefaultTimePrinter);
         LogSetNodePrinter(&DefaultNodePrinter);
+
+        SimulatorImpl::PublishCurrentTs((*pimpl)->Now().GetTimeStep());
     }
     return *pimpl;
 }
@@ -141,6 +139,7 @@ Simulator::Destroy()
     (*pimpl)->Destroy();
     (*pimpl)->Unref();
     *pimpl = nullptr;
+    SimulatorImpl::PublishCurrentTs(0);
 }
 
 void
@@ -187,13 +186,21 @@ Simulator::GetStopEvent()
     return m_stopEvent;
 }
 
+#ifdef _WIN32
 Time
 Simulator::Now()
 {
     /* Please, don't include any calls to logging macros in this function
      * or pay the price, that is, stack explosions.
      */
-    return GetImpl()->Now();
+    return TimeStep(s_currentTs);
+}
+#endif
+
+void
+SimulatorImpl::PublishCurrentTs(uint64_t ts)
+{
+    Simulator::s_currentTs = ts;
 }
 
 Time
@@ -284,11 +291,13 @@ Simulator::IsExpired(const EventId& id)
     return GetImpl()->IsExpired(id);
 }
 
+#ifdef _WIN32
 Time
 Now()
 {
     return Simulator::Now();
 }
+#endif
 
 Time
 Simulator::GetMaximumSimulationTime()
@@ -335,6 +344,7 @@ Simulator::SetImplementation(Ptr<SimulatorImpl> impl)
             "Call Simulator::SetImplementation earlier or after Simulator::Destroy.");
     }
     *PeekImpl() = GetPointer(impl);
+    SimulatorImpl::PublishCurrentTs(impl->Now().GetTimeStep());
     // Set the default scheduler
     ObjectFactory factory;
     StringValue s;
