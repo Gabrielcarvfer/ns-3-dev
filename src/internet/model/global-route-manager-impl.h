@@ -763,7 +763,7 @@ class GlobalRouteManagerLSDB
     uint32_t GetNumExtLSAs() const;
 
   private:
-    typedef std::map<IpAddress, GlobalRoutingLSA<IpManager>*>
+    typedef std::unordered_map<IpAddress, GlobalRoutingLSA<IpManager>*>
         LSDBMap_t; //!< container of IPv4 addresses / Link State Advertisements
     typedef std::pair<IpAddress, GlobalRoutingLSA<IpManager>*>
         LSDBPair_t; //!< pair of IPv4 addresses / Link State Advertisements
@@ -920,6 +920,15 @@ class GlobalRouteManagerImpl
 
   private:
     SPFVertex<T>* m_spfroot; //!< the root node
+
+    /**
+     * Aggregates of the node owning the current SPF root, resolved once per
+     * SPFCalculate run; the route installation helpers run once per SPF
+     * vertex and would otherwise re-resolve them through GetObject for
+     * every vertex.
+     */
+    Ptr<GlobalRouter<IpManager>> m_rootRouter; //!< The root node's global router.
+    Ptr<Ip> m_rootIp;                          //!< The root node's Ip instance.
     GlobalRouteManagerLSDB<IpManager>*
         m_lsdb; //!< the Link State DataBase (LSDB) of the Global Route Manager
 
