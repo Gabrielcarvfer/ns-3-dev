@@ -68,32 +68,4 @@ EventId::IsPending() const
     return !IsExpired();
 }
 
-EventImpl*
-EventId::PeekEventImpl() const
-{
-    NS_LOG_FUNCTION(this);
-    return PeekPointer(m_eventImpl);
-}
-
-uint64_t
-EventId::GetTs() const
-{
-    NS_LOG_FUNCTION(this);
-    return m_ts;
-}
-
-uint32_t
-EventId::GetContext() const
-{
-    NS_LOG_FUNCTION(this);
-    return m_context;
-}
-
-uint32_t
-EventId::GetUid() const
-{
-    NS_LOG_FUNCTION(this);
-    return m_uid;
-}
-
 } // namespace ns3
