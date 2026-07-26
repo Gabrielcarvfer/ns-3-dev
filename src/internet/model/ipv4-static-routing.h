@@ -19,8 +19,11 @@
 #include "ns3/socket.h"
 
 #include <list>
+#include <map>
 #include <stdint.h>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace ns3
 {
@@ -399,6 +402,22 @@ class Ipv4StaticRouting : public Ipv4RoutingProtocol
      * @brief the forwarding table for network.
      */
     NetworkRoutes m_networkRoutes;
+
+    /**
+     * Network routes indexed by prefix length (longest first) and network,
+     * in insertion order.
+     *
+     * Rebuilt lazily on the first lookup after any change to the network
+     * route table, so the per-packet longest prefix match costs one hash
+     * probe per distinct prefix length instead of a scan of the whole
+     * route list.
+     */
+    std::map<
+        uint16_t,
+        std::unordered_map<Ipv4Address, std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>>>,
+        std::greater<>>
+        m_routesByPrefix;
+    bool m_prefixIndexValid{false}; //!< whether m_routesByPrefix is up to date
 
     /**
      * @brief the forwarding table for multicast.

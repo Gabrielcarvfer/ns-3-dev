@@ -69,6 +69,7 @@ Ipv4StaticRouting::AddNetworkRouteTo(Ipv4Address network,
     {
         auto routePtr = new Ipv4RoutingTableEntry(route);
         m_networkRoutes.emplace_back(routePtr, metric);
+        m_prefixIndexValid = false;
     }
 }
 
@@ -87,6 +88,7 @@ Ipv4StaticRouting::AddNetworkRouteTo(Ipv4Address network,
         auto routePtr = new Ipv4RoutingTableEntry(route);
 
         m_networkRoutes.emplace_back(routePtr, metric);
+        m_prefixIndexValid = false;
     }
 }
 
@@ -142,6 +144,7 @@ Ipv4StaticRouting::SetDefaultMulticastRoute(uint32_t outputInterface)
     Ipv4Mask networkMask("240.0.0.0");
     *route = Ipv4RoutingTableEntry::CreateNetworkRouteTo(network, networkMask, outputInterface);
     m_networkRoutes.emplace_back(route, 0);
+    m_prefixIndexValid = false;
 }
 
 uint32_t
@@ -250,54 +253,59 @@ Ipv4StaticRouting::LookupStatic(Ipv4Address dest, Ptr<NetDevice> oif)
         return rtentry;
     }
 
-    for (auto i = m_networkRoutes.begin(); i != m_networkRoutes.end(); i++)
+    if (!m_prefixIndexValid)
     {
-        Ipv4RoutingTableEntry* j = i->first;
-        uint32_t metric = i->second;
-        Ipv4Mask mask = (j)->GetDestNetworkMask();
-        uint16_t masklen = mask.GetPrefixLength();
-        Ipv4Address entry = (j)->GetDestNetwork();
-        NS_LOG_LOGIC("Searching for route to " << dest << ", checking against route to " << entry
-                                               << "/" << masklen);
-        if (mask.IsMatch(dest, entry))
+        m_routesByPrefix.clear();
+        for (auto& [route, metric] : m_networkRoutes)
         {
-            NS_LOG_LOGIC("Found global network route " << j << ", mask length " << masklen
-                                                       << ", metric " << metric);
-            if (oif)
+            const Ipv4Mask mask = route->GetDestNetworkMask();
+            const Ipv4Address network = route->GetDestNetwork().CombineMask(mask);
+            m_routesByPrefix[mask.GetPrefixLength()][network].emplace_back(route, metric);
+        }
+        m_prefixIndexValid = true;
+    }
+
+    // Longest prefix match: probe each prefix length present in the table,
+    // longest first.  Matches at equal prefix length necessarily share the
+    // same network, so a bucket is a complete candidate set; within it, the
+    // lowest metric wins (last entry on ties, as in the original scan).
+    for (auto& [masklen, networks] : m_routesByPrefix)
+    {
+        const Ipv4Mask lengthMask(masklen == 0 ? 0 : (~uint32_t(0) << (32 - masklen)));
+        auto bucket = networks.find(dest.CombineMask(lengthMask));
+        if (bucket == networks.end())
+        {
+            continue;
+        }
+        Ipv4RoutingTableEntry* best = nullptr;
+        for (auto& [route, metric] : bucket->second)
+        {
+            if (oif && oif != m_ipv4->GetNetDevice(route->GetInterface()))
             {
-                if (oif != m_ipv4->GetNetDevice(j->GetInterface()))
-                {
-                    NS_LOG_LOGIC("Not on requested interface, skipping");
-                    continue;
-                }
-            }
-            if (masklen < longest_mask) // Not interested if got shorter mask
-            {
-                NS_LOG_LOGIC("Previous match longer, skipping");
+                NS_LOG_LOGIC("Not on requested interface, skipping");
                 continue;
             }
-            if (masklen > longest_mask) // Reset metric if longer masklen
-            {
-                shortest_metric = 0xffffffff;
-            }
-            longest_mask = masklen;
             if (metric > shortest_metric)
             {
                 NS_LOG_LOGIC("Equal mask length, but previous metric shorter, skipping");
                 continue;
             }
             shortest_metric = metric;
-            Ipv4RoutingTableEntry* route = (j);
-            uint32_t interfaceIdx = route->GetInterface();
+            best = route;
+        }
+        if (best)
+        {
+            longest_mask = masklen;
+            NS_LOG_LOGIC("Found global network route " << best << ", mask length " << longest_mask
+                                                       << ", metric " << shortest_metric);
+            uint32_t interfaceIdx = best->GetInterface();
             rtentry = Create<Ipv4Route>();
-            rtentry->SetDestination(route->GetDest());
-            rtentry->SetSource(m_ipv4->SourceAddressSelection(interfaceIdx, route->GetDest()));
-            rtentry->SetGateway(route->GetGateway());
+            rtentry->SetDestination(best->GetDest());
+            rtentry->SetSource(m_ipv4->SourceAddressSelection(interfaceIdx, best->GetDest()));
+            rtentry->SetGateway(best->GetGateway());
             rtentry->SetOutputDevice(m_ipv4->GetNetDevice(interfaceIdx));
-            if (masklen == 32)
-            {
-                break;
-            }
+            // Any match at a shorter prefix length would be less specific.
+            break;
         }
     }
     if (rtentry)
@@ -448,6 +456,7 @@ Ipv4StaticRouting::RemoveRoute(uint32_t index)
         {
             delete j->first;
             m_networkRoutes.erase(j);
+            m_prefixIndexValid = false;
             return;
         }
         tmp++;
@@ -581,6 +590,8 @@ Ipv4StaticRouting::DoDispose()
     {
         delete (j->first);
     }
+    m_routesByPrefix.clear();
+    m_prefixIndexValid = false;
     for (auto i = m_multicastRoutes.begin(); i != m_multicastRoutes.end();
          i = m_multicastRoutes.erase(i))
     {
@@ -622,6 +633,7 @@ Ipv4StaticRouting::NotifyInterfaceDown(uint32_t i)
         {
             delete it->first;
             it = m_networkRoutes.erase(it);
+            m_prefixIndexValid = false;
         }
         else
         {
@@ -667,6 +679,7 @@ Ipv4StaticRouting::NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress 
         {
             delete it->first;
             it = m_networkRoutes.erase(it);
+            m_prefixIndexValid = false;
         }
         else
         {

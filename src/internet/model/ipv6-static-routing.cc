@@ -172,6 +172,7 @@ Ipv6StaticRouting::AddNetworkRouteTo(Ipv6Address network,
     {
         auto routePtr = new Ipv6RoutingTableEntry(route);
         m_networkRoutes.emplace_back(routePtr, metric);
+        m_prefixIndexValid = false;
     }
 }
 
@@ -199,6 +200,7 @@ Ipv6StaticRouting::AddNetworkRouteTo(Ipv6Address network,
     {
         auto routePtr = new Ipv6RoutingTableEntry(route);
         m_networkRoutes.emplace_back(routePtr, metric);
+        m_prefixIndexValid = false;
     }
 }
 
@@ -216,6 +218,7 @@ Ipv6StaticRouting::AddNetworkRouteTo(Ipv6Address network,
     {
         auto routePtr = new Ipv6RoutingTableEntry(route);
         m_networkRoutes.emplace_back(routePtr, metric);
+        m_prefixIndexValid = false;
     }
 }
 
@@ -258,6 +261,7 @@ Ipv6StaticRouting::SetDefaultMulticastRoute(uint32_t outputInterface)
     auto networkMask = Ipv6Prefix(8);
     *route = Ipv6RoutingTableEntry::CreateNetworkRouteTo(network, networkMask, outputInterface);
     m_networkRoutes.emplace_back(route, 0);
+    m_prefixIndexValid = false;
 }
 
 uint32_t
@@ -391,69 +395,71 @@ Ipv6StaticRouting::LookupStatic(Ipv6Address dst, Ptr<NetDevice> interface)
         return rtentry;
     }
 
-    for (auto it = m_networkRoutes.begin(); it != m_networkRoutes.end(); it++)
+    if (!m_prefixIndexValid)
     {
-        Ipv6RoutingTableEntry* j = it->first;
-        uint32_t metric = it->second;
-        Ipv6Prefix mask = j->GetDestNetworkPrefix();
-        uint16_t maskLen = mask.GetPrefixLength();
-        Ipv6Address entry = j->GetDestNetwork();
-
-        NS_LOG_LOGIC("Searching for route to " << dst << ", mask length " << maskLen << ", metric "
-                                               << metric);
-
-        if (mask.IsMatch(dst, entry))
+        m_routesByPrefix.clear();
+        for (auto& [route, metric] : m_networkRoutes)
         {
-            NS_LOG_LOGIC("Found global network route " << *j << ", mask length " << maskLen
-                                                       << ", metric " << metric);
+            const Ipv6Prefix prefix = route->GetDestNetworkPrefix();
+            const Ipv6Address network = route->GetDestNetwork().CombinePrefix(prefix);
+            m_routesByPrefix[prefix.GetPrefixLength()][network].emplace_back(route, metric);
+        }
+        m_prefixIndexValid = true;
+    }
 
+    // Longest prefix match: probe each prefix length present in the table,
+    // longest first.  Matches at equal prefix length necessarily share the
+    // same network, so a bucket is a complete candidate set; within it, the
+    // lowest metric wins (last entry on ties, as in the original scan).
+    for (auto& [maskLen, networks] : m_routesByPrefix)
+    {
+        auto bucket = networks.find(dst.CombinePrefix(Ipv6Prefix(static_cast<uint8_t>(maskLen))));
+        if (bucket == networks.end())
+        {
+            continue;
+        }
+        Ipv6RoutingTableEntry* best = nullptr;
+        for (auto& [route, metric] : bucket->second)
+        {
             /* if interface is given, check the route will output on this interface */
-            if (!interface || interface == m_ipv6->GetNetDevice(j->GetInterface()))
+            if (interface && interface != m_ipv6->GetNetDevice(route->GetInterface()))
             {
-                if (maskLen < longestMask)
-                {
-                    NS_LOG_LOGIC("Previous match longer, skipping");
-                    continue;
-                }
-
-                if (maskLen > longestMask)
-                {
-                    shortestMetric = 0xffffffff;
-                }
-
-                longestMask = maskLen;
-                if (metric > shortestMetric)
-                {
-                    NS_LOG_LOGIC("Equal mask length, but previous metric shorter, skipping");
-                    continue;
-                }
-
-                shortestMetric = metric;
-                Ipv6RoutingTableEntry* route = j;
-                uint32_t interfaceIdx = route->GetInterface();
-                rtentry = Create<Ipv6Route>();
-
-                if (route->GetGateway().IsAny() || !route->GetDest().IsAny())
-                {
-                    rtentry->SetSource(
-                        m_ipv6->SourceAddressSelection(interfaceIdx, route->GetDest()));
-                }
-                else
-                {
-                    // Default route
-                    rtentry->SetSource(m_ipv6->SourceAddressSelection(
-                        interfaceIdx,
-                        route->GetPrefixToUse().IsAny() ? dst : route->GetPrefixToUse()));
-                }
-
-                rtentry->SetDestination(route->GetDest());
-                rtentry->SetGateway(route->GetGateway());
-                rtentry->SetOutputDevice(m_ipv6->GetNetDevice(interfaceIdx));
-                if (maskLen == 128)
-                {
-                    break;
-                }
+                NS_LOG_LOGIC("Not on requested interface, skipping");
+                continue;
             }
+            if (metric > shortestMetric)
+            {
+                NS_LOG_LOGIC("Equal mask length, but previous metric shorter, skipping");
+                continue;
+            }
+            shortestMetric = metric;
+            best = route;
+        }
+        if (best)
+        {
+            longestMask = maskLen;
+            NS_LOG_LOGIC("Found global network route " << *best << ", mask length " << longestMask
+                                                       << ", metric " << shortestMetric);
+            uint32_t interfaceIdx = best->GetInterface();
+            rtentry = Create<Ipv6Route>();
+
+            if (best->GetGateway().IsAny() || !best->GetDest().IsAny())
+            {
+                rtentry->SetSource(m_ipv6->SourceAddressSelection(interfaceIdx, best->GetDest()));
+            }
+            else
+            {
+                // Default route
+                rtentry->SetSource(m_ipv6->SourceAddressSelection(
+                    interfaceIdx,
+                    best->GetPrefixToUse().IsAny() ? dst : best->GetPrefixToUse()));
+            }
+
+            rtentry->SetDestination(best->GetDest());
+            rtentry->SetGateway(best->GetGateway());
+            rtentry->SetOutputDevice(m_ipv6->GetNetDevice(interfaceIdx));
+            // Any match at a shorter prefix length would be less specific.
+            break;
         }
     }
 
@@ -475,6 +481,8 @@ Ipv6StaticRouting::DoDispose()
         delete j->first;
     }
     m_networkRoutes.clear();
+    m_routesByPrefix.clear();
+    m_prefixIndexValid = false;
 
     for (auto i = m_multicastRoutes.begin(); i != m_multicastRoutes.end();
          i = m_multicastRoutes.erase(i))
@@ -633,6 +641,7 @@ Ipv6StaticRouting::RemoveRoute(uint32_t index)
         {
             delete it->first;
             m_networkRoutes.erase(it);
+            m_prefixIndexValid = false;
             return;
         }
         tmp++;
@@ -656,6 +665,7 @@ Ipv6StaticRouting::RemoveRoute(Ipv6Address network,
         {
             delete it->first;
             m_networkRoutes.erase(it);
+            m_prefixIndexValid = false;
             return;
         }
     }
@@ -798,6 +808,7 @@ Ipv6StaticRouting::NotifyInterfaceDown(uint32_t i)
         {
             delete it->first;
             it = m_networkRoutes.erase(it);
+            m_prefixIndexValid = false;
         }
         else
         {
@@ -836,6 +847,7 @@ Ipv6StaticRouting::NotifyRemoveAddress(uint32_t interface, Ipv6InterfaceAddress 
         {
             delete it->first;
             it = m_networkRoutes.erase(it);
+            m_prefixIndexValid = false;
         }
         else
         {
@@ -894,6 +906,7 @@ Ipv6StaticRouting::NotifyRemoveRoute(Ipv6Address dst,
             {
                 delete j->first;
                 j = m_networkRoutes.erase(j);
+                m_prefixIndexValid = false;
             }
             else
             {
