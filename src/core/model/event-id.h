@@ -98,16 +98,34 @@ class EventId
      * @name Scheduler Helpers.
      * @brief These methods are normally invoked only by
      * subclasses of the Scheduler base class.
+     *
+     * These are inlined for performance.
      */
     /**@{*/
     /** @return The underlying EventImpl pointer. */
-    EventImpl* PeekEventImpl() const;
+    EventImpl* PeekEventImpl() const
+    {
+        return PeekPointer(m_eventImpl);
+    }
+
     /** @return The virtual time stamp. */
-    uint64_t GetTs() const;
+    uint64_t GetTs() const
+    {
+        return m_ts;
+    }
+
     /** @return The event context. */
-    uint32_t GetContext() const;
+    uint32_t GetContext() const
+    {
+        return m_context;
+    }
+
     /** @return The unique id. */
-    uint32_t GetUid() const;
+    uint32_t GetUid() const
+    {
+        return m_uid;
+    }
+
     /**@}*/
 
     /**
