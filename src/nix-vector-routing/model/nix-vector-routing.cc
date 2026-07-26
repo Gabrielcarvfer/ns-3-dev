@@ -124,6 +124,8 @@ NixVectorRouting<T>::DoDispose()
 
     m_node = nullptr;
     m_ip = nullptr;
+    m_parentVector.clear();
+    m_bfsTouched.clear();
 
     T::DoDispose();
 }
@@ -209,7 +211,7 @@ NixVectorRouting<T>::GetNixVector(Ptr<Node> source, IpAddress dest, Ptr<NetDevic
     {
         // otherwise proceed as normal
         // and build the nix vector
-        std::vector<Ptr<Node>> parentVector;
+        std::vector<Ptr<Node>>& parentVector = m_parentVector;
 
         if (BFS(NodeList::GetNNodes(), source, destNode, parentVector, oif))
         {
@@ -1124,12 +1126,26 @@ NixVectorRouting<T>::BFS(uint32_t numberOfNodes,
     NS_LOG_LOGIC("Going from Node " << source->GetId() << " to Node " << dest->GetId());
     std::queue<Ptr<Node>> greyNodeList; // discovered nodes with unexplored children
 
-    // reset the parent vector
-    parentVector.assign(numberOfNodes, nullptr); // initialize to 0
+    // Reset the parent vector.  Only the entries touched by the previous
+    // run are cleared, so short routes in large topologies do not pay a
+    // fill proportional to the total node count.
+    if (parentVector.size() != numberOfNodes)
+    {
+        parentVector.assign(numberOfNodes, nullptr);
+    }
+    else
+    {
+        for (uint32_t touched : m_bfsTouched)
+        {
+            parentVector[touched] = nullptr;
+        }
+    }
+    m_bfsTouched.clear();
 
     // Add the source node to the queue, set its parent to itself
     greyNodeList.push(source);
     parentVector.at(source->GetId()) = source;
+    m_bfsTouched.push_back(source->GetId());
 
     // BFS loop
     while (!greyNodeList.empty())
@@ -1195,6 +1211,7 @@ NixVectorRouting<T>::BFS(uint32_t numberOfNodes,
                 if (!parentVector.at(remoteNode->GetId()))
                 {
                     parentVector.at(remoteNode->GetId()) = currNode;
+                    m_bfsTouched.push_back(remoteNode->GetId());
                     greyNodeList.push(remoteNode);
                 }
             }
@@ -1258,6 +1275,7 @@ NixVectorRouting<T>::BFS(uint32_t numberOfNodes,
                     if (!parentVector.at(remoteNode->GetId()))
                     {
                         parentVector.at(remoteNode->GetId()) = currNode;
+                        m_bfsTouched.push_back(remoteNode->GetId());
                         greyNodeList.push(remoteNode);
                     }
                 }
