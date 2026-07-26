@@ -809,7 +809,8 @@ Ipv4L3Protocol::Send(Ptr<Packet> packet,
             // ANY source matches any interface
             bool sendIt = source.IsAny();
             // check if some specific address on outInterface matches
-            for (uint32_t index = 0; !sendIt && index < outInterface->GetNAddresses(); index++)
+            const uint32_t nAddresses = outInterface->GetNAddresses();
+            for (uint32_t index = 0; !sendIt && index < nAddresses; index++)
             {
                 if (outInterface->GetAddress(index).GetLocal() == source)
                 {
@@ -837,9 +838,10 @@ Ipv4L3Protocol::Send(Ptr<Packet> packet,
     {
         Ptr<Ipv4Interface> outInterface = *ifaceIter;
         uint32_t ifaceIndex = GetInterfaceForDevice(outInterface->GetDevice());
-        for (uint32_t j = 0; j < GetNAddresses(ifaceIndex); j++)
+        const uint32_t nAddresses = GetNAddresses(ifaceIndex);
+        for (uint32_t j = 0; j < nAddresses; j++)
         {
-            Ipv4InterfaceAddress ifAddr = GetAddress(ifaceIndex, j);
+            const Ipv4InterfaceAddress& ifAddr = GetAddress(ifaceIndex, j);
             NS_LOG_LOGIC("Testing address " << ifAddr.GetLocal() << " with mask "
                                             << ifAddr.GetMask());
             if (destination.IsSubnetDirectedBroadcast(ifAddr.GetMask()) &&

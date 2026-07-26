@@ -125,6 +125,7 @@ ArpL3Protocol::DoDispose()
         cache->Dispose();
     }
     m_cacheList.clear();
+    m_cacheByDevice.clear();
     m_node = nullptr;
     m_tc = nullptr;
     Object::DoDispose();
@@ -141,6 +142,7 @@ ArpL3Protocol::CreateCache(Ptr<NetDevice> device, Ptr<Ipv4Interface> interface)
     device->AddLinkChangeCallback(MakeCallback(&ArpCache::Flush, cache));
     cache->SetArpRequestCallback(MakeCallback(&ArpL3Protocol::SendArpRequest, this));
     m_cacheList.push_back(cache);
+    m_cacheByDevice[PeekPointer(device)] = cache;
     return cache;
 }
 
@@ -148,12 +150,10 @@ Ptr<ArpCache>
 ArpL3Protocol::FindCache(Ptr<NetDevice> device)
 {
     NS_LOG_FUNCTION(this << device);
-    for (auto i = m_cacheList.begin(); i != m_cacheList.end(); i++)
+    auto it = m_cacheByDevice.find(PeekPointer(device));
+    if (it != m_cacheByDevice.end())
     {
-        if ((*i)->GetDevice() == device)
-        {
-            return *i;
-        }
+        return it->second;
     }
     NS_ASSERT(false);
     // quiet compiler
@@ -195,9 +195,11 @@ ArpL3Protocol::Receive(Ptr<NetDevice> device,
                                   << (arp.IsRequest() ? "request" : "reply") << " from "
                                   << arp.GetSourceIpv4Address() << " for address "
                                   << arp.GetDestinationIpv4Address() << "; we have addresses: ");
-    for (uint32_t i = 0; i < cache->GetInterface()->GetNAddresses(); i++)
+    Ptr<Ipv4Interface> cacheInterface = cache->GetInterface();
+    const uint32_t nAddresses = cacheInterface->GetNAddresses();
+    for (uint32_t i = 0; i < nAddresses; i++)
     {
-        NS_LOG_LOGIC(cache->GetInterface()->GetAddress(i).GetLocal() << ", ");
+        NS_LOG_LOGIC(cacheInterface->GetAddress(i).GetLocal() << ", ");
     }
 
     /**
@@ -206,10 +208,10 @@ ArpL3Protocol::Receive(Ptr<NetDevice> device,
      *  from an unknown node. See \bugid{107}
      */
     bool found = false;
-    for (uint32_t i = 0; i < cache->GetInterface()->GetNAddresses(); i++)
+    for (uint32_t i = 0; i < nAddresses; i++)
     {
         if (arp.IsRequest() &&
-            arp.GetDestinationIpv4Address() == cache->GetInterface()->GetAddress(i).GetLocal())
+            arp.GetDestinationIpv4Address() == cacheInterface->GetAddress(i).GetLocal())
         {
             found = true;
             NS_LOG_LOGIC("node=" << m_node->GetId() << ", got request from "
@@ -221,8 +223,7 @@ ArpL3Protocol::Receive(Ptr<NetDevice> device,
             break;
         }
         else if (arp.IsReply() &&
-                 arp.GetDestinationIpv4Address() ==
-                     cache->GetInterface()->GetAddress(i).GetLocal() &&
+                 arp.GetDestinationIpv4Address() == cacheInterface->GetAddress(i).GetLocal() &&
                  arp.GetDestinationHardwareAddress() == device->GetAddress())
         {
             found = true;
