@@ -1088,8 +1088,13 @@ class GlobalRouteManagerImpl
      *
      * @param l the global routing link record
      * @param v the vertex
+     * @param localHint the local address of the paired point-to-point link
+     *                  record, used to find the outgoing interface when the
+     *                  stub is one of the root's own point-to-point networks
      */
-    void SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l, SPFVertex<T>* v);
+    void SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l,
+                         SPFVertex<T>* v,
+                         IpAddress localHint = IpAddress());
 
     /**
      * @brief Add an external route to the routing tables

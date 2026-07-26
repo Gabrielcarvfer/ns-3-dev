@@ -1760,15 +1760,24 @@ GlobalRouteManagerImpl<T>::SPFProcessStubs(SPFVertex<T>* v)
     {
         GlobalRoutingLSA<IpManager>* rlsa = v->GetLSA();
         NS_LOG_LOGIC("Processing router LSA with id " << rlsa->GetLinkStateId());
+        // A point-to-point link record is immediately followed by the stub
+        // record of its network; its link data (the local interface address)
+        // identifies the outgoing interface of the root's own stubs.
+        IpAddress lastP2pLocal;
         for (uint32_t i = 0; i < rlsa->GetNLinkRecords(); i++)
         {
             NS_LOG_LOGIC("Examining link " << i << " of " << v->GetVertexId() << "'s "
                                            << v->GetLSA()->GetNLinkRecords() << " link records");
             GlobalRoutingLinkRecord<IpManager>* l = v->GetLSA()->GetLinkRecord(i);
+            if (l->GetLinkType() == GlobalRoutingLinkRecord<IpManager>::PointToPoint)
+            {
+                lastP2pLocal = l->GetLinkData();
+            }
             if (l->GetLinkType() == GlobalRoutingLinkRecord<IpManager>::StubNetwork)
             {
                 NS_LOG_LOGIC("Found a Stub record to " << l->GetLinkId());
-                SPFIntraAddStub(l, v);
+                SPFIntraAddStub(l, v, lastP2pLocal);
+                lastP2pLocal = IpAddress();
                 continue;
             }
         }
@@ -1787,22 +1796,21 @@ GlobalRouteManagerImpl<T>::SPFProcessStubs(SPFVertex<T>* v)
 
 template <typename T>
 void
-GlobalRouteManagerImpl<T>::SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l, SPFVertex<T>* v)
+GlobalRouteManagerImpl<T>::SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l,
+                                           SPFVertex<T>* v,
+                                           IpAddress localHint)
 {
     NS_LOG_FUNCTION(this << l << v);
 
     NS_ASSERT_MSG(m_spfroot, "GlobalRouteManagerImpl::SPFIntraAddStub (): Root pointer not set");
 
-    // XXX simplified logic for the moment.  There are two cases to consider:
-    // 1) the stub network is on this router; do nothing for now
-    //    (already handled above)
+    // There are two cases to consider:
+    // 1) the stub network is on this router; install it as a directly
+    //    connected network route (needed when the connected routes of the
+    //    node do not cover the network, e.g. point-to-point links with a
+    //    /32 netmask)
     // 2) the stub network is on a remote router, so I should use the
     // same next hop that I use to get to vertex v
-    if (v->GetVertexId() == m_spfroot->GetVertexId())
-    {
-        NS_LOG_LOGIC("Stub is on local host: " << v->GetVertexId() << "; returning");
-        return;
-    }
     NS_LOG_LOGIC("Stub is on remote host: " << v->GetVertexId() << "; installing");
     //
     // The root of the Shortest Path First tree is the router to which we are
@@ -1897,6 +1905,28 @@ GlobalRouteManagerImpl<T>::SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l
 
         Ptr<GlobalRouting<IpRoutingProtocol>> gr = router->GetRoutingProtocol();
         NS_ASSERT(gr);
+        if (v == m_spfroot)
+        {
+            // The root's own stub networks are its directly connected
+            // networks: install them as direct network routes (the root has
+            // no exit directions toward itself). This covers destinations
+            // such as the neighbor address on a point-to-point link with a
+            // /32 netmask, which no connected route covers.
+            int32_t outIf = FindOutgoingInterfaceId(l->GetLinkId(), tempmask);
+            if (outIf < 0 && localHint != IpAddress())
+            {
+                // Point-to-point stub: find the interface through the local
+                // address of the paired point-to-point link record.
+                outIf = FindOutgoingInterfaceId(localHint);
+            }
+            if (outIf >= 0)
+            {
+                gr->AddNetworkRouteTo(tempip, tempmask, outIf);
+                NS_LOG_LOGIC("Node " << node->GetId() << " add direct network route to " << tempip
+                                     << " via interface " << outIf);
+            }
+            return;
+        }
         // walk through all next-hop-IPs and out-going-interfaces for reaching
         // the stub network gateway 'v' from the root node
         for (uint32_t i = 0; i < v->GetNRootExitDirections(); i++)
@@ -2123,6 +2153,13 @@ GlobalRouteManagerImpl<T>::SPFIntraAddRouter(SPFVertex<T>* v)
             }
             Ptr<GlobalRouting<IpRoutingProtocol>> gr = router->GetRoutingProtocol();
             NS_ASSERT(gr);
+            if (!gr->InstallHostRoutes())
+            {
+                // The remote interface addresses are covered by the network
+                // routes of the stub links advertised for every link
+                // (RFC 2328, 12.4.1.1); only install those.
+                continue;
+            }
             // walk through all available exit directions due to ECMP,
             // and add host route for each of the exit direction toward
             // the vertex 'v'

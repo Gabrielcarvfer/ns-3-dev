@@ -574,16 +574,16 @@ LinkRoutesTestCase::DoRun()
     // check that all the routes in the routing table are correct for node 2
     std::vector<Ipv4Address> expecteddests;
     std::vector<Ipv4Address> expectedgws;
-    expecteddests.emplace_back("10.1.1.1");
-    expecteddests.emplace_back("10.1.2.1");
-    expecteddests.emplace_back("10.1.3.2");
+    expecteddests.emplace_back("10.1.1.0");
+    expecteddests.emplace_back("10.1.2.0");
+    expecteddests.emplace_back("10.1.3.0");
     expecteddests.emplace_back("10.1.1.0");
     expecteddests.emplace_back("10.1.2.0");
     expecteddests.emplace_back("10.1.3.0");
 
-    expectedgws.emplace_back("10.1.1.1");
-    expectedgws.emplace_back("10.1.2.1");
-    expectedgws.emplace_back("10.1.3.2");
+    expectedgws.emplace_back("0.0.0.0");
+    expectedgws.emplace_back("0.0.0.0");
+    expectedgws.emplace_back("0.0.0.0");
     expectedgws.emplace_back("10.1.1.1");
     expectedgws.emplace_back("10.1.2.1");
     expectedgws.emplace_back("10.1.3.2");
@@ -633,16 +633,16 @@ LinkRoutesTestCase::DoRun()
     // check that all the routes in the routing table are correct for node 2
     std::vector<Ipv6Address> expecteddestsv6;
     std::vector<Ipv6Address> expectedgwsv6;
-    expecteddestsv6.emplace_back("2001:1::200:ff:fe00:1");
-    expecteddestsv6.emplace_back("2001:2::200:ff:fe00:3");
-    expecteddestsv6.emplace_back("2001:3::200:ff:fe00:6");
+    expecteddestsv6.emplace_back("2001:1::");
+    expecteddestsv6.emplace_back("2001:2::");
+    expecteddestsv6.emplace_back("2001:3::");
     expecteddestsv6.emplace_back("2001:1::");
     expecteddestsv6.emplace_back("2001:2::");
     expecteddestsv6.emplace_back("2001:3::");
 
-    expectedgwsv6.emplace_back("fe80::200:ff:fe00:1");
-    expectedgwsv6.emplace_back("fe80::200:ff:fe00:3");
-    expectedgwsv6.emplace_back("fe80::200:ff:fe00:6");
+    expectedgwsv6.emplace_back("::");
+    expectedgwsv6.emplace_back("::");
+    expectedgwsv6.emplace_back("::");
     expectedgwsv6.emplace_back("fe80::200:ff:fe00:1");
     expectedgwsv6.emplace_back("fe80::200:ff:fe00:3");
     expectedgwsv6.emplace_back("fe80::200:ff:fe00:6");
@@ -1518,7 +1518,7 @@ RandomEcmpTestCase::DoRun()
     // check that the correct number of routes were built
 
     uint32_t nRoutes0 = globalRouting0->GetNRoutes();
-    NS_TEST_ASSERT_MSG_EQ(nRoutes0, 14, "Error-- incorrect number of routes found on node 0");
+    NS_TEST_ASSERT_MSG_EQ(nRoutes0, 8, "Error-- incorrect number of routes found on node 0");
 
     // check that the routes are correct
     std::vector<Ipv4Address> expectedDests;
@@ -1529,14 +1529,8 @@ RandomEcmpTestCase::DoRun()
     // entries in order. The test will fail if we reorder the vector entries.
 
     // For Routing table of Node 0 we check the following Destinations and Gateways
-    expectedDests.emplace_back("10.1.1.2");
-    expectedDests.emplace_back("10.1.3.1");
-    expectedDests.emplace_back("10.1.2.2");
-    expectedDests.emplace_back("10.1.4.1");
-    expectedDests.emplace_back("10.1.3.2");
-    expectedDests.emplace_back("10.1.3.2");
-    expectedDests.emplace_back("10.1.4.2");
-    expectedDests.emplace_back("10.1.4.2");
+    expectedDests.emplace_back("10.1.1.0");
+    expectedDests.emplace_back("10.1.2.0");
     expectedDests.emplace_back("10.1.1.0");
     expectedDests.emplace_back("10.1.3.0");
     expectedDests.emplace_back("10.1.3.0");
@@ -1544,14 +1538,8 @@ RandomEcmpTestCase::DoRun()
     expectedDests.emplace_back("10.1.4.0");
     expectedDests.emplace_back("10.1.2.0");
 
-    expectedNextHops.emplace_back("10.1.1.2");
-    expectedNextHops.emplace_back("10.1.1.2");
-    expectedNextHops.emplace_back("10.1.2.2");
-    expectedNextHops.emplace_back("10.1.2.2");
-    expectedNextHops.emplace_back("10.1.1.2");
-    expectedNextHops.emplace_back("10.1.2.2");
-    expectedNextHops.emplace_back("10.1.1.2");
-    expectedNextHops.emplace_back("10.1.2.2");
+    expectedNextHops.emplace_back("0.0.0.0");
+    expectedNextHops.emplace_back("0.0.0.0");
     expectedNextHops.emplace_back("10.1.1.2");
     expectedNextHops.emplace_back("10.1.1.2");
     expectedNextHops.emplace_back("10.1.2.2");
@@ -1595,7 +1583,7 @@ RandomEcmpTestCase::DoRun()
     globalRouting0v6->AssignStreams(0);
     // check that the correct number of routes were built
     uint32_t nRoutes0v6 = globalRouting0v6->GetNRoutes();
-    NS_TEST_ASSERT_MSG_EQ(nRoutes0v6, 14, "Error-- incorrect number of routes found on node 0");
+    NS_TEST_ASSERT_MSG_EQ(nRoutes0v6, 8, "Error-- incorrect number of routes found on node 0");
 
     // check that the routes are correct
     std::vector<Ipv6Address> expectedDestsv6;
@@ -1606,14 +1594,8 @@ RandomEcmpTestCase::DoRun()
     // entries in order. The test will fail if we reorder the vector entries.
 
     // For Routing table of Node 0 we check the following Destinations and Gateways
-    expectedDestsv6.emplace_back("2001:1::200:ff:fe00:2");
-    expectedDestsv6.emplace_back("2001:3::200:ff:fe00:7");
-    expectedDestsv6.emplace_back("2001:2::200:ff:fe00:6");
-    expectedDestsv6.emplace_back("2001:4::200:ff:fe00:3");
-    expectedDestsv6.emplace_back("2001:3::200:ff:fe00:8");
-    expectedDestsv6.emplace_back("2001:3::200:ff:fe00:8");
-    expectedDestsv6.emplace_back("2001:4::200:ff:fe00:4");
-    expectedDestsv6.emplace_back("2001:4::200:ff:fe00:4");
+    expectedDestsv6.emplace_back("2001:1::");
+    expectedDestsv6.emplace_back("2001:2::");
     expectedDestsv6.emplace_back("2001:1::");
     expectedDestsv6.emplace_back("2001:3::");
     expectedDestsv6.emplace_back("2001:3::");
@@ -1621,14 +1603,8 @@ RandomEcmpTestCase::DoRun()
     expectedDestsv6.emplace_back("2001:4::");
     expectedDestsv6.emplace_back("2001:2::");
 
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:2");
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:2");
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:6");
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:6");
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:2");
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:6");
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:2");
-    expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:6");
+    expectedNextHopsv6.emplace_back("::");
+    expectedNextHopsv6.emplace_back("::");
     expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:2");
     expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:2");
     expectedNextHopsv6.emplace_back("fe80::200:ff:fe00:6");

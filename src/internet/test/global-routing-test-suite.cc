@@ -463,18 +463,18 @@ TwoLinkTest::DoRun()
     // Test that the right number of routes found
     uint32_t nRoutesv41 = globalRoutingv41->GetNRoutes();
     NS_LOG_DEBUG("TwoLinkTest nRoutes1 " << nRoutesv41);
-    NS_TEST_ASSERT_MSG_EQ(nRoutesv41, 4, "Error-- not one route");
+    NS_TEST_ASSERT_MSG_EQ(nRoutesv41, 4, "Error-- not four routes");
 
     routev4 = globalRoutingv41->GetRoute(0);
     NS_LOG_DEBUG("TwoLinkTest entry dest " << routev4->GetDest() << " gw "
                                            << routev4->GetGateway());
-    NS_TEST_ASSERT_MSG_EQ(routev4->GetDest(), Ipv4Address("10.1.1.1"), "Error-- wrong destination");
-    NS_TEST_ASSERT_MSG_EQ(routev4->GetGateway(), Ipv4Address("10.1.1.1"), "Error-- wrong gateway");
+    NS_TEST_ASSERT_MSG_EQ(routev4->GetDest(), Ipv4Address("10.1.1.0"), "Error-- wrong destination");
+    NS_TEST_ASSERT_MSG_EQ(routev4->GetGateway(), Ipv4Address("0.0.0.0"), "Error-- wrong gateway");
     routev4 = globalRoutingv41->GetRoute(1);
     NS_LOG_DEBUG("TwoLinkTest entry dest " << routev4->GetDest() << " gw "
                                            << routev4->GetGateway());
-    NS_TEST_ASSERT_MSG_EQ(routev4->GetDest(), Ipv4Address("10.1.2.2"), "Error-- wrong destination");
-    NS_TEST_ASSERT_MSG_EQ(routev4->GetGateway(), Ipv4Address("10.1.2.2"), "Error-- wrong gateway");
+    NS_TEST_ASSERT_MSG_EQ(routev4->GetDest(), Ipv4Address("10.1.2.0"), "Error-- wrong destination");
+    NS_TEST_ASSERT_MSG_EQ(routev4->GetGateway(), Ipv4Address("0.0.0.0"), "Error-- wrong gateway");
     routev4 = globalRoutingv41->GetRoute(2);
     NS_LOG_DEBUG("TwoLinkTest entry dest " << routev4->GetDest() << " gw "
                                            << routev4->GetGateway());
@@ -534,34 +534,14 @@ TwoLinkTest::DoRun()
     // Test that the right number of routes found
     uint32_t nRoutesv61 = globalRoutingv61->GetNRoutes();
     NS_LOG_DEBUG("TwoLinkTest nRoutes1 " << nRoutesv61);
-    NS_TEST_ASSERT_MSG_EQ(nRoutesv61, 4, "Error-- not one route");
+    NS_TEST_ASSERT_MSG_EQ(nRoutesv61, 4, "Error-- not four routes");
 
     routev6 = globalRoutingv61->GetRoute(0);
-    NS_LOG_DEBUG("TwoLinkTest entry dest " << routev6->GetDest() << " gw "
-                                           << routev6->GetGateway());
-    NS_TEST_ASSERT_MSG_EQ(routev6->GetDest(),
-                          Ipv6Address("2001::200:ff:fe00:1"),
-                          "Error-- wrong destination");
-    NS_TEST_ASSERT_MSG_EQ(routev6->GetDestNetworkPrefix(),
-                          Ipv6Prefix(128),
-                          "Error-- wrong destination mask");
-    NS_TEST_ASSERT_MSG_EQ(routev6->GetGateway(),
-                          Ipv6Address("fe80::200:ff:fe00:1"),
-                          "Error-- wrong gateway");
-
+    NS_TEST_ASSERT_MSG_EQ(routev6->GetDest(), Ipv6Address("2001::"), "Error-- wrong destination");
+    NS_TEST_ASSERT_MSG_EQ(routev6->GetGateway(), Ipv6Address("::"), "Error-- wrong gateway");
     routev6 = globalRoutingv61->GetRoute(1);
-    NS_LOG_DEBUG("TwoLinkTest entry dest " << routev6->GetDest() << " gw "
-                                           << routev6->GetGateway());
-    NS_TEST_ASSERT_MSG_EQ(routev6->GetDest(),
-                          Ipv6Address("2001:1::200:ff:fe00:4"),
-                          "Error-- wrong destination");
-    NS_TEST_ASSERT_MSG_EQ(routev6->GetDestNetworkPrefix(),
-                          Ipv6Prefix(128),
-                          "Error-- wrong destination mask");
-    NS_TEST_ASSERT_MSG_EQ(routev6->GetGateway(),
-                          Ipv6Address("fe80::200:ff:fe00:4"),
-                          "Error-- wrong gateway");
-
+    NS_TEST_ASSERT_MSG_EQ(routev6->GetDest(), Ipv6Address("2001:1::"), "Error-- wrong destination");
+    NS_TEST_ASSERT_MSG_EQ(routev6->GetGateway(), Ipv6Address("::"), "Error-- wrong gateway");
     routev6 = globalRoutingv61->GetRoute(2);
     NS_LOG_DEBUG("TwoLinkTest entry dest " << routev6->GetDest() << " gw "
                                            << routev6->GetGateway());
