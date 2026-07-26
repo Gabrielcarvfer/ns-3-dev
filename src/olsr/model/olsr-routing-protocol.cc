@@ -1564,6 +1564,7 @@ RoutingProtocol::ProcessMid(const olsr::MessageHeader& msg, const Ipv4Address& s
         twoHopNeighbor->neighborMainAddr = GetMainAddress(twoHopNeighbor->neighborMainAddr);
         twoHopNeighbor->twoHopNeighborAddr = GetMainAddress(twoHopNeighbor->twoHopNeighborAddr);
     }
+    m_state.InvalidateTwoHopNeighborIndex();
     NS_LOG_DEBUG("Node " << m_mainAddress << " ProcessMid from " << senderIface << " -> END.");
 }
 
@@ -2191,22 +2192,6 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
 
     NS_LOG_DEBUG("Olsr node " << m_mainAddress << ": PopulateTwoHopNeighborSet BEGIN");
 
-    // Index the originator's existing 2-hop tuples by 2-hop address, so each
-    // HELLO-listed address resolves in O(1) instead of scanning the whole set.
-    TwoHopNeighborSet& twoHopSet = m_state.GetTwoHopNeighbors();
-    std::unordered_map<Ipv4Address, size_t> twoHopIndexByAddr;
-    auto rebuildTwoHopIndex = [&]() {
-        twoHopIndexByAddr.clear();
-        for (size_t i = 0; i < twoHopSet.size(); i++)
-        {
-            if (twoHopSet[i].neighborMainAddr == msg.GetOriginatorAddress())
-            {
-                twoHopIndexByAddr[twoHopSet[i].twoHopNeighborAddr] = i;
-            }
-        }
-    };
-    rebuildTwoHopIndex();
-
     for (auto link_tuple = m_state.GetLinks().begin(); link_tuple != m_state.GetLinks().end();
          link_tuple++)
     {
@@ -2256,19 +2241,17 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
                     }
 
                     // Otherwise, a 2-hop tuple is created
-                    auto indexIter = twoHopIndexByAddr.find(nb2hop_addr);
+                    TwoHopNeighborTuple* existing =
+                        m_state.FindTwoHopNeighborTuple(msg.GetOriginatorAddress(), nb2hop_addr);
                     NS_LOG_LOGIC("Adding the 2-hop neighbor"
-                                 << (indexIter != twoHopIndexByAddr.end()
-                                         ? " (refreshing existing entry)"
-                                         : ""));
-                    if (indexIter == twoHopIndexByAddr.end())
+                                 << (existing ? " (refreshing existing entry)" : ""));
+                    if (!existing)
                     {
                         TwoHopNeighborTuple new_nb2hop_tuple;
                         new_nb2hop_tuple.neighborMainAddr = msg.GetOriginatorAddress();
                         new_nb2hop_tuple.twoHopNeighborAddr = nb2hop_addr;
                         new_nb2hop_tuple.expirationTime = now + msg.GetVTime();
                         AddTwoHopNeighborTuple(new_nb2hop_tuple);
-                        twoHopIndexByAddr[nb2hop_addr] = twoHopSet.size() - 1;
                         // Schedules nb2hop tuple deletion
                         m_events.Track(Simulator::Schedule(DELAY(new_nb2hop_tuple.expirationTime),
                                                            &RoutingProtocol::Nb2hopTupleTimerExpire,
@@ -2278,7 +2261,7 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
                     }
                     else
                     {
-                        twoHopSet[indexIter->second].expirationTime = now + msg.GetVTime();
+                        existing->expirationTime = now + msg.GetVTime();
                     }
                 }
                 else if (neighborType == NeighborType::NOT_NEIGH)
@@ -2291,7 +2274,6 @@ RoutingProtocol::PopulateTwoHopNeighborSet(const olsr::MessageHeader& msg,
                     NS_LOG_LOGIC(
                         "2-hop neighbor is NOT_NEIGH => deleting matching 2-hop neighbor state");
                     m_state.EraseTwoHopNeighborTuples(msg.GetOriginatorAddress(), nb2hop_addr);
-                    rebuildTwoHopIndex();
                 }
                 else
                 {

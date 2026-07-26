@@ -177,17 +177,39 @@ OlsrState::InsertNeighborTuple(const NeighborTuple& tuple)
 
 /********** Neighbor 2 Hop Set Manipulation **********/
 
+/**
+ * Combine a (neighbor, 2-hop neighbor) address pair into a 64-bit index key.
+ * @param neighborMainAddr The neighbor main address.
+ * @param twoHopNeighborAddr The 2-hop neighbor main address.
+ * @returns The combined key.
+ */
+static uint64_t
+TwoHopIndexKey(const Ipv4Address& neighborMainAddr, const Ipv4Address& twoHopNeighborAddr)
+{
+    return (static_cast<uint64_t>(neighborMainAddr.Get()) << 32) | twoHopNeighborAddr.Get();
+}
+
 TwoHopNeighborTuple*
 OlsrState::FindTwoHopNeighborTuple(const Ipv4Address& neighborMainAddr,
                                    const Ipv4Address& twoHopNeighborAddr)
 {
-    for (auto it = m_twoHopNeighborSet.begin(); it != m_twoHopNeighborSet.end(); it++)
+    if (!m_twoHopIndexValid)
     {
-        if (it->neighborMainAddr == neighborMainAddr &&
-            it->twoHopNeighborAddr == twoHopNeighborAddr)
+        m_twoHopIndex.clear();
+        for (size_t i = 0; i < m_twoHopNeighborSet.size(); i++)
         {
-            return &(*it);
+            // emplace keeps the first occurrence, matching the linear scan
+            m_twoHopIndex.emplace(TwoHopIndexKey(m_twoHopNeighborSet[i].neighborMainAddr,
+                                                 m_twoHopNeighborSet[i].twoHopNeighborAddr),
+                                  i);
         }
+        m_twoHopIndexValid = true;
+    }
+
+    auto it = m_twoHopIndex.find(TwoHopIndexKey(neighborMainAddr, twoHopNeighborAddr));
+    if (it != m_twoHopIndex.end())
+    {
+        return &m_twoHopNeighborSet[it->second];
     }
     return nullptr;
 }
@@ -196,6 +218,7 @@ void
 OlsrState::EraseTwoHopNeighborTuple(const TwoHopNeighborTuple& tuple)
 {
     m_version++;
+    m_twoHopIndexValid = false;
     for (auto it = m_twoHopNeighborSet.begin(); it != m_twoHopNeighborSet.end(); it++)
     {
         if (*it == tuple)
@@ -211,6 +234,7 @@ OlsrState::EraseTwoHopNeighborTuples(const Ipv4Address& neighborMainAddr,
                                      const Ipv4Address& twoHopNeighborAddr)
 {
     m_version++;
+    m_twoHopIndexValid = false;
     for (auto it = m_twoHopNeighborSet.begin(); it != m_twoHopNeighborSet.end();)
     {
         if (it->neighborMainAddr == neighborMainAddr &&
@@ -229,6 +253,7 @@ void
 OlsrState::EraseTwoHopNeighborTuples(const Ipv4Address& neighborMainAddr)
 {
     m_version++;
+    m_twoHopIndexValid = false;
     for (auto it = m_twoHopNeighborSet.begin(); it != m_twoHopNeighborSet.end();)
     {
         if (it->neighborMainAddr == neighborMainAddr)
@@ -247,6 +272,12 @@ OlsrState::InsertTwoHopNeighborTuple(const TwoHopNeighborTuple& tuple)
 {
     m_version++;
     m_twoHopNeighborSet.push_back(tuple);
+    if (m_twoHopIndexValid)
+    {
+        // emplace keeps an already indexed duplicate, matching the linear scan
+        m_twoHopIndex.emplace(TwoHopIndexKey(tuple.neighborMainAddr, tuple.twoHopNeighborAddr),
+                              m_twoHopNeighborSet.size() - 1);
+    }
 }
 
 /********** MPR Set Manipulation **********/
