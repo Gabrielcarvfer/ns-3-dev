@@ -461,7 +461,6 @@ PfFfMacScheduler::DoSchedDlTriggerReq(
     std::vector<bool> rbgMap;                                // global RBGs map
     uint16_t rbgAllocatedNum = 0;
     std::set<uint16_t> rntiAllocated;
-    rbgMap.resize(m_cschedCellConfig.m_dlBandwidth / rbgSize, false);
 
     rbgMap = m_ffrSapProvider->GetAvailableDlRbg();
     for (auto it = rbgMap.begin(); it != rbgMap.end(); it++)
@@ -484,7 +483,6 @@ PfFfMacScheduler::DoSchedDlTriggerReq(
 
     // RACH Allocation
     std::vector<bool> ulRbMap;
-    ulRbMap.resize(m_cschedCellConfig.m_ulBandwidth, false);
     ulRbMap = m_ffrSapProvider->GetAvailableUlRbg();
     uint8_t maxContinuousUlBandwidth = 0;
     uint8_t tmpMinBandwidth = 0;
@@ -889,8 +887,7 @@ PfFfMacScheduler::DoSchedDlTriggerReq(
             }
         }
     }
-    m_dlInfoListBuffered.clear();
-    m_dlInfoListBuffered = dlInfoListUntxed;
+    m_dlInfoListBuffered = std::move(dlInfoListUntxed);
 
     if (rbgAllocatedNum == rbgNum)
     {

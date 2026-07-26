@@ -1119,7 +1119,7 @@ LteMiErrorModel::GetTbDecodificationStats(const SpectrumValue& sinr,
                                           const std::vector<int>& map,
                                           uint16_t size,
                                           uint8_t mcs,
-                                          HarqProcessInfoList_t miHistory)
+                                          const HarqProcessInfoList_t& miHistory)
 {
     NS_LOG_FUNCTION(sinr << &map << (uint32_t)size << (uint32_t)mcs);
 

@@ -14,6 +14,7 @@
 
 #include "ns3/event-id.h"
 
+#include <deque>
 #include <map>
 #include <vector>
 
@@ -119,7 +120,7 @@ class LteRlcAm : public LteRlc
         Time m_waitingSince; ///< Layer arrival time
     };
 
-    std::vector<TxPdu> m_txonBuffer; ///< Transmission buffer
+    std::deque<TxPdu> m_txonBuffer; ///< Transmission buffer
 
     /// RetxPdu structure
     struct RetxPdu

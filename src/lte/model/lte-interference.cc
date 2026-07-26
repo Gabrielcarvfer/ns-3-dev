@@ -172,13 +172,21 @@ LteInterference::ConditionallyEvaluateChunk()
         NS_LOG_LOGIC(this << " signal = " << *m_rxSignal << " allSignals = " << *m_allSignals
                           << " noise = " << *m_noise);
 
-        SpectrumValue interf = (*m_allSignals) - (*m_rxSignal) + (*m_noise);
+        // Compute in place to avoid extra full-bandwidth temporaries
+        SpectrumValue interf = *m_allSignals;
+        interf -= *m_rxSignal;
+        interf += *m_noise;
 
-        SpectrumValue sinr = (*m_rxSignal) / interf;
         Time duration = Now() - m_lastChangeTime;
-        for (auto it = m_sinrChunkProcessorList.begin(); it != m_sinrChunkProcessorList.end(); ++it)
+        if (!m_sinrChunkProcessorList.empty())
         {
-            (*it)->EvaluateChunk(sinr, duration);
+            SpectrumValue sinr = *m_rxSignal;
+            sinr /= interf;
+            for (auto it = m_sinrChunkProcessorList.begin(); it != m_sinrChunkProcessorList.end();
+                 ++it)
+            {
+                (*it)->EvaluateChunk(sinr, duration);
+            }
         }
         for (auto it = m_interfChunkProcessorList.begin(); it != m_interfChunkProcessorList.end();
              ++it)

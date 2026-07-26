@@ -51,7 +51,13 @@ LteChunkProcessor::EvaluateChunk(const SpectrumValue& sinr, Time duration)
     {
         m_sumValues = Create<SpectrumValue>(sinr.GetSpectrumModel());
     }
-    (*m_sumValues) += sinr * duration.GetSeconds();
+    // Accumulate in place to avoid a full-bandwidth temporary per chunk
+    const double seconds = duration.GetSeconds();
+    auto sumIt = m_sumValues->ValuesBegin();
+    for (auto sinrIt = sinr.ConstValuesBegin(); sinrIt != sinr.ConstValuesEnd(); ++sinrIt, ++sumIt)
+    {
+        *sumIt += (*sinrIt) * seconds;
+    }
     m_totDuration += duration;
 }
 

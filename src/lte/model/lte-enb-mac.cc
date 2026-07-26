@@ -554,7 +554,7 @@ LteEnbMac::DoSubframeIndication(uint32_t frameNo, uint32_t subframeNo)
     // Forward DL HARQ Feedbacks collected during last TTI
     if (!m_dlInfoListReceived.empty())
     {
-        dlparams.m_dlInfoList = m_dlInfoListReceived;
+        dlparams.m_dlInfoList = std::move(m_dlInfoListReceived);
         // empty local buffer
         m_dlInfoListReceived.clear();
     }
@@ -608,7 +608,7 @@ LteEnbMac::DoSubframeIndication(uint32_t frameNo, uint32_t subframeNo)
     // Forward DL HARQ Feedbacks collected during last TTI
     if (!m_ulInfoListReceived.empty())
     {
-        ulparams.m_ulInfoList = m_ulInfoListReceived;
+        ulparams.m_ulInfoList = std::move(m_ulInfoListReceived);
         // empty local buffer
         m_ulInfoListReceived.clear();
     }
