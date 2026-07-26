@@ -53,7 +53,14 @@ GlobalRouting<T>::GetTypeId()
                     "Interface notification events (up/down, or add/remove address)",
                     BooleanValue(false),
                     MakeBooleanAccessor(&GlobalRouting<T>::m_respondToInterfaceEvents),
-                    MakeBooleanChecker());
+                    MakeBooleanChecker())
+                .AddAttribute("InstallHostRoutes",
+                              "Also install a host route for every remote router interface address "
+                              "(the historical behavior). By default only network (prefix) routes "
+                              "are installed, as a real OSPF router would populate its table.",
+                              BooleanValue(false),
+                              MakeBooleanAccessor(&GlobalRouting<T>::m_installHostRoutes),
+                              MakeBooleanChecker());
         return tid;
     }
     else
@@ -76,7 +83,14 @@ GlobalRouting<T>::GetTypeId()
                     "Interface notification events (up/down, or add/remove address)",
                     BooleanValue(false),
                     MakeBooleanAccessor(&GlobalRouting<T>::m_respondToInterfaceEvents),
-                    MakeBooleanChecker());
+                    MakeBooleanChecker())
+                .AddAttribute("InstallHostRoutes",
+                              "Also install a host route for every remote router interface address "
+                              "(the historical behavior). By default only network (prefix) routes "
+                              "are installed, as a real OSPF router would populate its table.",
+                              BooleanValue(false),
+                              MakeBooleanAccessor(&GlobalRouting<T>::m_installHostRoutes),
+                              MakeBooleanChecker());
         return tid;
     }
 }
@@ -84,7 +98,8 @@ GlobalRouting<T>::GetTypeId()
 template <typename T>
 GlobalRouting<T>::GlobalRouting()
     : m_randomEcmpRouting(false),
-      m_respondToInterfaceEvents(false)
+      m_respondToInterfaceEvents(false),
+      m_installHostRoutes(false)
 {
     NS_LOG_FUNCTION(this);
 
@@ -149,7 +164,7 @@ GlobalRouting<T>::AddNetworkRouteTo(IpAddress network,
     NS_LOG_FUNCTION(this << network << networkMask << nextHop << interface);
     auto route = new IpRoutingTableEntry();
     *route = IpRoutingTableEntry::CreateNetworkRouteTo(network, networkMask, nextHop, interface);
-    auto& sameNetworkRoutes = m_networkRoutesByDest[network];
+    auto& sameNetworkRoutes = m_networkRoutesByPrefix[networkMask.GetPrefixLength()][network];
     for (auto routePointer : sameNetworkRoutes)
     {
         if (*routePointer == *route)
@@ -172,7 +187,7 @@ GlobalRouting<T>::AddNetworkRouteTo(IpAddress network,
     NS_LOG_FUNCTION(this << network << networkMask << interface);
     auto route = new IpRoutingTableEntry();
     *route = IpRoutingTableEntry::CreateNetworkRouteTo(network, networkMask, interface);
-    auto& sameNetworkRoutes = m_networkRoutesByDest[network];
+    auto& sameNetworkRoutes = m_networkRoutesByPrefix[networkMask.GetPrefixLength()][network];
     for (auto routePointer : sameNetworkRoutes)
     {
         if (*routePointer == *route)
@@ -241,49 +256,44 @@ GlobalRouting<T>::LookupGlobal(IpAddress dest, Ptr<NetDevice> oif)
     if (allRoutes.empty()) // if no host route is found
     {
         NS_LOG_LOGIC("Number of m_networkRoutes" << m_networkRoutes.size());
-        // store the length of the longest mask.
-        uint16_t longest_mask = 0;
-        for (auto j = m_networkRoutes.begin(); j != m_networkRoutes.end(); j++)
+        // Longest prefix match: try each prefix length present in the
+        // routing table, longest first, with one hash probe per length.
+        // Matches at equal prefix length necessarily share the same network,
+        // so a bucket is a complete equal-cost candidate set.
+        for (auto& [masklen, networks] : m_networkRoutesByPrefix)
         {
-            IpMaskOrPrefix mask;
+            IpAddress maskedDest;
             if constexpr (IsIpv4)
             {
-                mask = (*j)->GetDestNetworkMask();
+                const Ipv4Mask lengthMask(masklen == 0 ? 0 : (~uint32_t(0) << (32 - masklen)));
+                maskedDest = dest.CombineMask(lengthMask);
             }
             else
             {
-                mask = (*j)->GetDestNetworkPrefix();
+                maskedDest = dest.CombinePrefix(Ipv6Prefix(static_cast<uint8_t>(masklen)));
             }
-            uint16_t masklen = mask.GetPrefixLength();
-
-            IpAddress entry = (*j)->GetDestNetwork();
-            if (mask.IsMatch(dest, entry))
+            auto bucket = networks.find(maskedDest);
+            if (bucket == networks.end())
+            {
+                continue;
+            }
+            for (IpRoutingTableEntry* route : bucket->second)
             {
                 if (oif)
                 {
-                    if (oif != m_ip->GetNetDevice((*j)->GetInterface()))
+                    if (oif != m_ip->GetNetDevice(route->GetInterface()))
                     {
                         NS_LOG_LOGIC("Not on requested interface, skipping");
                         continue;
                     }
                 }
-                NS_LOG_LOGIC(allRoutes.size() << "Found global network route" << *j);
-                if (masklen < longest_mask) // Not interested if got shorter mask
-                {
-                    NS_LOG_LOGIC("Previous match longer, skipping");
-                    continue;
-                }
-                else if (masklen == longest_mask)
-                {
-                    NS_LOG_LOGIC("Equal mask length, adding this to the list");
-                    allRoutes.push_back(*j);
-                }
-                else
-                {
-                    NS_LOG_LOGIC("Longer mask length found, clearing the list and adding");
-                    allRoutes.clear();
-                    allRoutes.push_back(*j);
-                }
+                NS_LOG_LOGIC(allRoutes.size() << "Found global network route" << route);
+                allRoutes.push_back(route);
+            }
+            if (!allRoutes.empty())
+            {
+                // Any match at a shorter prefix length would be less specific.
+                break;
             }
         }
     }
@@ -453,15 +463,32 @@ GlobalRouting<T>::RemoveRoute(uint32_t index)
         if (tmp == index)
         {
             NS_LOG_LOGIC("Removing route " << index << "; size = " << m_networkRoutes.size());
-            auto sameNetworkRoutes = m_networkRoutesByDest.find((*j)->GetDestNetwork());
-            if (sameNetworkRoutes != m_networkRoutesByDest.end())
+            uint16_t prefixLength;
+            if constexpr (IsIpv4)
             {
-                auto& networkRoutes = sameNetworkRoutes->second;
-                networkRoutes.erase(std::remove(networkRoutes.begin(), networkRoutes.end(), *j),
-                                    networkRoutes.end());
-                if (networkRoutes.empty())
+                prefixLength = (*j)->GetDestNetworkMask().GetPrefixLength();
+            }
+            else
+            {
+                prefixLength = (*j)->GetDestNetworkPrefix().GetPrefixLength();
+            }
+            auto lengthBucket = m_networkRoutesByPrefix.find(prefixLength);
+            if (lengthBucket != m_networkRoutesByPrefix.end())
+            {
+                auto sameNetworkRoutes = lengthBucket->second.find((*j)->GetDestNetwork());
+                if (sameNetworkRoutes != lengthBucket->second.end())
                 {
-                    m_networkRoutesByDest.erase(sameNetworkRoutes);
+                    auto& networkRoutes = sameNetworkRoutes->second;
+                    networkRoutes.erase(std::remove(networkRoutes.begin(), networkRoutes.end(), *j),
+                                        networkRoutes.end());
+                    if (networkRoutes.empty())
+                    {
+                        lengthBucket->second.erase(sameNetworkRoutes);
+                        if (lengthBucket->second.empty())
+                        {
+                            m_networkRoutesByPrefix.erase(lengthBucket);
+                        }
+                    }
                 }
             }
             delete *j;
@@ -505,7 +532,7 @@ GlobalRouting<T>::DoDispose()
 {
     NS_LOG_FUNCTION(this);
     m_hostRoutesByDest.clear();
-    m_networkRoutesByDest.clear();
+    m_networkRoutesByPrefix.clear();
     for (auto i = m_hostRoutes.begin(); i != m_hostRoutes.end(); i = m_hostRoutes.erase(i))
     {
         delete (*i);
