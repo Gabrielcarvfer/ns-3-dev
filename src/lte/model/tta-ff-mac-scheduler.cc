@@ -806,8 +806,7 @@ TtaFfMacScheduler::DoSchedDlTriggerReq(
             }
         }
     }
-    m_dlInfoListBuffered.clear();
-    m_dlInfoListBuffered = dlInfoListUntxed;
+    m_dlInfoListBuffered = std::move(dlInfoListUntxed);
 
     if (rbgAllocatedNum == rbgNum)
     {
