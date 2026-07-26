@@ -721,7 +721,7 @@ class InterferenceHelper : public Object
                                         const NiChanges& ni,
                                         MHz_u channelWidth,
                                         const WifiSpectrumBandInfo& band,
-                                        PhyHeaderSections phyHeaderSections) const;
+                                        const PhyHeaderSections& phyHeaderSections) const;
 
     double m_noiseFigure;                 //!< noise figure (linear)
     Ptr<ErrorRateModel> m_errorRateModel; //!< error rate model

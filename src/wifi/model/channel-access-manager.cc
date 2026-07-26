@@ -17,6 +17,7 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 
@@ -771,9 +772,25 @@ ChannelAccessManager::GetAccessGrantStart(bool ignoreNav) const
 {
     NS_LOG_FUNCTION(this << ignoreNav);
 
-    auto timeReasonMap = DoGetAccessGrantStart(ignoreNav);
-    NS_ASSERT(!timeReasonMap.empty());
-    const auto accessGrantedStart = timeReasonMap.crbegin()->first;
+    // Take the maximum of the same times collected by DoGetAccessGrantStart,
+    // without paying for a container allocation on every backoff update.
+    const auto now = Simulator::Now();
+    auto rxAccessStart = m_lastRx.end;
+    if ((m_lastRx.end <= now) && !m_lastRxReceivedOk)
+    {
+        rxAccessStart += GetEifsNoDifs();
+    }
+    const auto accessGrantedStart =
+        std::max({m_lastBusyEnd.at(WIFI_CHANLIST_PRIMARY),
+                  rxAccessStart,
+                  m_lastTxEnd,
+                  ignoreNav ? Time{0} : m_lastNavEnd,
+                  m_lastAckTimeoutEnd,
+                  m_lastCtsTimeoutEnd,
+                  m_lastSwitchingEnd,
+                  m_phy ? m_lastNoPhy.end : now,
+                  m_lastSleep.start > m_lastSleep.end ? now : m_lastSleep.end,
+                  m_lastOff.start > m_lastOff.end ? now : m_lastOff.end});
     NS_LOG_INFO("access grant start=" << accessGrantedStart.As(Time::US));
 
     return accessGrantedStart + GetSifs();

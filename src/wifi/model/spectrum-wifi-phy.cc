@@ -646,7 +646,7 @@ SpectrumWifiPhy::StartRx(Ptr<SpectrumSignalParameters> rxParams,
     NS_LOG_INFO("Received Wi-Fi signal");
     // Use ScheduleNow so StartReceivePreamble runs after all cleanup callbacks
     // Capture by value to avoid dangling references after this function returns
-    Simulator::ScheduleNow([this, ppdu, rxPowers, rxDuration]() mutable {
+    Simulator::ScheduleNow([this, ppdu, rxPowers = std::move(rxPowers), rxDuration]() mutable {
         StartReceivePreamble(ppdu, rxPowers, rxDuration);
     });
 }

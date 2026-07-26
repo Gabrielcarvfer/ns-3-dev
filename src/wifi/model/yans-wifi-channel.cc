@@ -91,7 +91,7 @@ YansWifiChannel::Send(Ptr<YansWifiPhy> sender, Ptr<const WifiPpdu> ppdu, dBm_u t
                 continue;
             }
 
-            auto receiverMobility = (*i)->GetMobility()->GetObject<MobilityModel>();
+            auto receiverMobility = (*i)->GetMobility();
             const auto delay = m_delay->GetDelay(senderMobility, receiverMobility);
             const dBm_u rxPower{m_loss->CalcRxPower(txPower, senderMobility, receiverMobility)};
             NS_LOG_DEBUG("propagation: txPower="
