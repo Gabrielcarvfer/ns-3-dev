@@ -281,10 +281,13 @@ class TypeId
     /**
      * Get Attribute information by index.
      *
+     * The reference remains valid only until an attribute is added to or
+     * modified on this TypeId.
+     *
      * @param [in] i Index into attribute array
      * @returns The information associated to attribute whose index is \pname{i}.
      */
-    TypeId::AttributeInformation GetAttribute(std::size_t i) const;
+    const TypeId::AttributeInformation& GetAttribute(std::size_t i) const;
     /**
      * Get the Attribute name by index.
      *

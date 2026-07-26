@@ -15,6 +15,8 @@
 #include "string.h"
 #include "trace-source-accessor.h"
 
+#include <cstdlib>
+
 /**
  * @file
  * @ingroup object
@@ -82,11 +84,18 @@ ObjectBase::ConstructSelf(const AttributeConstructionList& attributes)
     // loop over the inheritance tree back to the Object base class.
     NS_LOG_FUNCTION(this << &attributes);
     TypeId tid = GetInstanceTypeId();
-    TypeId objectTid;
     // the TypeId of a class derived from Object is initialized to "ns3::Object"; for a class
     // deriving from Object, check that this function is called after that the correct TypeId is set
     // to ensure that the attributes of the class are initialized
-    NS_ABORT_MSG_IF(TypeId::LookupByNameFailSafe("ns3::Object", &objectTid) && tid == objectTid,
+    // Resolved once; function-local static initialization is thread-safe, and
+    // the result is immutable afterwards.
+    static const TypeId objectTid = []() {
+        TypeId found;
+        NS_ABORT_MSG_UNLESS(TypeId::LookupByNameFailSafe("ns3::Object", &found),
+                            "The ns3::Object TypeId is not registered");
+        return found;
+    }();
+    NS_ABORT_MSG_IF(tid == objectTid,
                     "ObjectBase::ConstructSelf() has been called on an object of a class derived "
                     "from the Object class, but the TypeId is still set to ns3::Object.\n"
                     "This is known to happen in two cases:\n"
@@ -99,9 +108,10 @@ ObjectBase::ConstructSelf(const AttributeConstructionList& attributes)
     {
         // loop over all attributes in object type
         NS_LOG_DEBUG("construct tid=" << tid.GetName() << ", params=" << tid.GetAttributeN());
-        for (uint32_t i = 0; i < tid.GetAttributeN(); i++)
+        const uint32_t nAttributes = tid.GetAttributeN();
+        for (uint32_t i = 0; i < nAttributes; i++)
         {
-            TypeId::AttributeInformation info = tid.GetAttribute(i);
+            const TypeId::AttributeInformation& info = tid.GetAttribute(i);
             NS_LOG_DEBUG("try to construct \"" << tid.GetName() << "::" << info.name << "\"");
             // is this attribute stored in this AttributeConstructionList instance ?
             Ptr<const AttributeValue> value = attributes.Find(info.checker);
@@ -131,7 +141,9 @@ ObjectBase::ConstructSelf(const AttributeConstructionList& attributes)
                 }
             }
 
-            if (!value)
+            // Only pay for the full attribute name construction and lookup
+            // when default overrides are present in the environment.
+            if (!value && std::getenv("NS_ATTRIBUTE_DEFAULT"))
             {
                 NS_LOG_DEBUG("trying to set from environment variable NS_ATTRIBUTE_DEFAULT");
                 auto [found, val] =
