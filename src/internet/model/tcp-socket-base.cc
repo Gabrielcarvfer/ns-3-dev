@@ -323,56 +323,25 @@ TcpSocketBase::TcpSocketBase()
 
     m_tcb->m_sendEmptyPacketCallback = MakeCallback(&TcpSocketBase::SendEmptyPacket, this);
 
-    bool ok;
-
-    ok = m_tcb->TraceConnectWithoutContext(
-        "PacingRate",
+    // Connect directly to the TracedValue members: this code runs for every
+    // socket (including sockets forked on connection accept), and the
+    // by-name TraceConnectWithoutContext string lookups dominate socket
+    // construction in simulations with very many connections.
+    m_tcb->m_pacingRate.ConnectWithoutContext(
         MakeCallback(&TcpSocketBase::UpdatePacingRateTrace, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source PacingRate");
-
-    ok = m_tcb->TraceConnectWithoutContext("CongestionWindow",
-                                           MakeCallback(&TcpSocketBase::UpdateCwnd, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source CongestionWindow");
-
-    ok = m_tcb->TraceConnectWithoutContext("CongestionWindowInflated",
-                                           MakeCallback(&TcpSocketBase::UpdateCwndInfl, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source CongestionWindowInflated");
-
-    ok = m_tcb->TraceConnectWithoutContext("SlowStartThreshold",
-                                           MakeCallback(&TcpSocketBase::UpdateSsThresh, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source SlowStartThreshold");
-
-    ok = m_tcb->TraceConnectWithoutContext("CongState",
-                                           MakeCallback(&TcpSocketBase::UpdateCongState, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source CongState");
-
-    ok = m_tcb->TraceConnectWithoutContext("EcnState",
-                                           MakeCallback(&TcpSocketBase::UpdateEcnState, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source EcnState");
-
-    ok =
-        m_tcb->TraceConnectWithoutContext("NextTxSequence",
-                                          MakeCallback(&TcpSocketBase::UpdateNextTxSequence, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source NextTxSequence");
-
-    ok = m_tcb->TraceConnectWithoutContext("HighestSequence",
-                                           MakeCallback(&TcpSocketBase::UpdateHighTxMark, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source HighestSequence");
-
-    ok = m_tcb->TraceConnectWithoutContext("BytesInFlight",
-                                           MakeCallback(&TcpSocketBase::UpdateBytesInFlight, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source BytesInFlight");
-
-    ok = m_tcb->TraceConnectWithoutContext("FackAwnd",
-                                           MakeCallback(&TcpSocketBase::UpdateFackAwnd, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source FackAwnd");
-
-    ok = m_tcb->TraceConnectWithoutContext("RTT", MakeCallback(&TcpSocketBase::UpdateRtt, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source RTT");
-
-    ok = m_tcb->TraceConnectWithoutContext("LastRTT",
-                                           MakeCallback(&TcpSocketBase::UpdateLastRtt, this));
-    NS_ASSERT_MSG(ok, "Could not connect trace source LastRTT");
+    m_tcb->m_cWnd.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateCwnd, this));
+    m_tcb->m_cWndInfl.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateCwndInfl, this));
+    m_tcb->m_ssThresh.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateSsThresh, this));
+    m_tcb->m_congState.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateCongState, this));
+    m_tcb->m_ecnState.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateEcnState, this));
+    m_tcb->m_nextTxSequence.ConnectWithoutContext(
+        MakeCallback(&TcpSocketBase::UpdateNextTxSequence, this));
+    m_tcb->m_highTxMark.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateHighTxMark, this));
+    m_tcb->m_bytesInFlight.ConnectWithoutContext(
+        MakeCallback(&TcpSocketBase::UpdateBytesInFlight, this));
+    m_tcb->m_fackAwnd.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateFackAwnd, this));
+    m_tcb->m_srtt.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateRtt, this));
+    m_tcb->m_lastRtt.ConnectWithoutContext(MakeCallback(&TcpSocketBase::UpdateLastRtt, this));
 }
 
 void
