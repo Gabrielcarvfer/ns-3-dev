@@ -18,7 +18,10 @@
 #include "ns3/object.h"
 #include "ns3/ptr.h"
 
+#include <functional>
 #include <map>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ns3
@@ -285,8 +288,26 @@ class FlowMonitor : public Object
     /// FlowId --> FlowStats
     FlowStatsContainer m_flowStats;
 
-    /// (FlowId,PacketId) --> TrackedPacket
-    typedef std::map<std::pair<FlowId, FlowPacketId>, TrackedPacket> TrackedPacketMap;
+    /// Hasher for the (FlowId, FlowPacketId) key of the tracked packet index.
+    struct TrackedPacketHasher
+    {
+        /**
+         * Combine the hashes of both key components.
+         * @param key The (FlowId, FlowPacketId) pair.
+         * @returns The hash of the pair.
+         */
+        std::size_t operator()(const std::pair<FlowId, FlowPacketId>& key) const
+        {
+            std::size_t h1 = std::hash<FlowId>{}(key.first);
+            std::size_t h2 = std::hash<FlowPacketId>{}(key.second);
+            // Golden-ratio bit mixing, as in Boost's hash_combine.
+            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+        }
+    };
+
+    /// (FlowId,PacketId) --> TrackedPacket; hashed, as it is updated per probed packet
+    typedef std::unordered_map<std::pair<FlowId, FlowPacketId>, TrackedPacket, TrackedPacketHasher>
+        TrackedPacketMap;
     TrackedPacketMap m_trackedPackets; //!< Tracked packets
     Time m_maxPerHopDelay;             //!< Minimum per-hop delay
     FlowProbeContainer m_flowProbes;   //!< all the FlowProbes

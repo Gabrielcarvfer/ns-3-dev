@@ -172,8 +172,7 @@ FlowMonitor::ReportForwarding(Ptr<FlowProbe> probe,
         NS_LOG_DEBUG("FlowMonitor not enabled; returning");
         return;
     }
-    std::pair<FlowId, FlowPacketId> key(flowId, packetId);
-    auto tracked = m_trackedPackets.find(key);
+    auto tracked = m_trackedPackets.find(std::make_pair(flowId, packetId));
     if (tracked == m_trackedPackets.end())
     {
         NS_LOG_WARN("Received packet forward report (flowId="
