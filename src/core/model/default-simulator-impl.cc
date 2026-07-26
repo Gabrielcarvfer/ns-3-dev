@@ -113,6 +113,12 @@ DefaultSimulatorImpl::GetSystemId() const
     return 0;
 }
 
+const uint64_t*
+DefaultSimulatorImpl::CurrentTimeStep() const
+{
+    return &m_currentTs;
+}
+
 void
 DefaultSimulatorImpl::ProcessOneEvent()
 {

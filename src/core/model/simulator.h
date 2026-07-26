@@ -516,6 +516,17 @@ class Simulator
 
   private:
     /**
+     * Get the SimulatorImpl singleton, creating it on first use.
+     *
+     * A private member rather than a free function so that it can reach
+     * SimulatorImpl::CurrentTimeStep, which is reserved for Simulator.
+     *
+     * @return The singleton pointer.
+     * @see Simulator::GetImplementation()
+     */
+    static SimulatorImpl* GetImpl();
+
+    /**
      * Implementation of the various Schedule methods.
      * @param [in] delay Delay until the event should execute.
      * @param [in] event The event to execute.
