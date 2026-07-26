@@ -79,6 +79,7 @@ Ipv4Interface::DoDispose()
     m_device = nullptr;
     m_tc = nullptr;
     m_cache = nullptr;
+    m_arp = nullptr;
     Object::DoDispose();
 }
 
@@ -95,6 +96,7 @@ Ipv4Interface::SetDevice(Ptr<NetDevice> device)
 {
     NS_LOG_FUNCTION(this << device);
     m_device = device;
+    m_isLoopback = DynamicCast<LoopbackNetDevice>(device) != nullptr;
     DoSetup();
 }
 
@@ -117,8 +119,8 @@ Ipv4Interface::DoSetup()
     {
         return;
     }
-    Ptr<ArpL3Protocol> arp = m_node->GetObject<ArpL3Protocol>();
-    m_cache = arp->CreateCache(m_device, this);
+    m_arp = m_node->GetObject<ArpL3Protocol>();
+    m_cache = m_arp->CreateCache(m_device, this);
 }
 
 Ptr<NetDevice>
@@ -224,7 +226,7 @@ Ipv4Interface::Send(Ptr<Packet> p, const Ipv4Header& hdr, Ipv4Address dest)
 
     // Check for a loopback device, if it's the case we don't pass through
     // traffic control layer
-    if (DynamicCast<LoopbackNetDevice>(m_device))
+    if (m_isLoopback)
     {
         /// @todo additional checks needed here (such as whether multicast
         /// goes to loopback)?
@@ -255,7 +257,10 @@ Ipv4Interface::Send(Ptr<Packet> p, const Ipv4Header& hdr, Ipv4Address dest)
     if (m_device->NeedsArp())
     {
         NS_LOG_LOGIC("Needs ARP " << dest);
-        Ptr<ArpL3Protocol> arp = m_node->GetObject<ArpL3Protocol>();
+        if (!m_arp)
+        {
+            m_arp = m_node->GetObject<ArpL3Protocol>();
+        }
         Address hardwareDestination;
         bool found = false;
         if (dest.IsBroadcast())
@@ -289,7 +294,7 @@ Ipv4Interface::Send(Ptr<Packet> p, const Ipv4Header& hdr, Ipv4Address dest)
             if (!found)
             {
                 NS_LOG_LOGIC("ARP Lookup");
-                found = arp->Lookup(p, hdr, dest, m_device, m_cache, &hardwareDestination);
+                found = m_arp->Lookup(p, hdr, dest, m_device, m_cache, &hardwareDestination);
             }
         }
 

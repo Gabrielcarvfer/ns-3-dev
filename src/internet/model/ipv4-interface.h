@@ -23,6 +23,7 @@ class NetDevice;
 class Packet;
 class Node;
 class ArpCache;
+class ArpL3Protocol;
 class Ipv4InterfaceAddress;
 class Ipv4Address;
 class Ipv4Header;
@@ -229,12 +230,14 @@ class Ipv4Interface : public Object
 
     bool m_ifup;                        //!< The state of this interface
     bool m_forwarding;                  //!< Forwarding state.
+    bool m_isLoopback{false};           //!< Whether the device is a loopback device
     uint16_t m_metric;                  //!< Interface metric
     Ipv4InterfaceAddressList m_ifaddrs; //!< Address list
     Ptr<Node> m_node;                   //!< The associated node
     Ptr<NetDevice> m_device;            //!< The associated NetDevice
     Ptr<TrafficControlLayer> m_tc;      //!< The associated TrafficControlLayer
     Ptr<ArpCache> m_cache;              //!< ARP cache
+    Ptr<ArpL3Protocol> m_arp;           //!< Cached ARP protocol of the node
     Callback<void, Ptr<Ipv4Interface>, Ipv4InterfaceAddress>
         m_removeAddressCallback; //!< remove address callback
     Callback<void, Ptr<Ipv4Interface>, Ipv4InterfaceAddress>
