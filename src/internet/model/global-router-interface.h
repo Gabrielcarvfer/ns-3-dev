@@ -28,6 +28,7 @@
 
 #include <list>
 #include <stdint.h>
+#include <vector>
 
 namespace ns3
 {
@@ -638,7 +639,7 @@ class GlobalRoutingLSA
     /**
      * A convenience typedef to avoid too much writers cramp.
      */
-    typedef std::list<GlobalRoutingLinkRecord<T>*> ListOfLinkRecords_t;
+    typedef std::vector<GlobalRoutingLinkRecord<T>*> ListOfLinkRecords_t;
 
     /**
      * Each Link State Advertisement contains a number of Link Records that

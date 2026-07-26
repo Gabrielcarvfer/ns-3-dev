@@ -1442,6 +1442,16 @@ GlobalRouteManagerImpl<T>::SPFCalculate(IpAddress root)
     m_spfroot = v;
     v->SetDistanceFromRoot(0);
     v->GetLSA()->SetStatus(GlobalRoutingLSA<IpManager>::LSA_SPF_IN_SPFTREE);
+    if (Ptr<Node> rootNode = v->GetNode())
+    {
+        m_rootRouter = rootNode->GetObject<GlobalRouter<IpManager>>();
+        m_rootIp = rootNode->GetObject<Ip>();
+    }
+    else
+    {
+        m_rootRouter = nullptr;
+        m_rootIp = nullptr;
+    }
     NS_LOG_LOGIC("Starting SPFCalculate for node " << root);
 
     //
@@ -1648,7 +1658,7 @@ GlobalRouteManagerImpl<T>::SPFAddASExternal(GlobalRoutingLSA<IpManager>* extlsa,
     // to QI for that interface.  If there's no GlobalRouter interface, the node
     // in question cannot be the router we want, so we continue.
     //
-    Ptr<GlobalRouter<T>> router = node->GetObject<GlobalRouter<T>>();
+    Ptr<GlobalRouter<T>> router = m_rootRouter;
     NS_ASSERT_MSG(router, "No GlobalRouter interface on SPF root node " << node->GetId());
     //
     // If the router ID of the current node is equal to the router ID of the
@@ -1663,7 +1673,7 @@ GlobalRouteManagerImpl<T>::SPFAddASExternal(GlobalRoutingLSA<IpManager>* extlsa,
         // for that interface.  If the node is acting as an IP version 4 router, it
         // should absolutely have an Ipv4 interface.
         //
-        Ptr<Ip> ipv4 = node->GetObject<Ip>();
+        Ptr<Ip> ipv4 = m_rootIp;
         NS_ASSERT_MSG(ipv4,
                       "GlobalRouteManagerImpl::SPFIntraAddRouter (): "
                       "QI for <Ipv4> interface failed");
@@ -1701,7 +1711,7 @@ GlobalRouteManagerImpl<T>::SPFAddASExternal(GlobalRoutingLSA<IpManager>* extlsa,
         // Similarly, the vertex <v> has an m_rootOif (outbound interface index) to
         // which the packets should be send for forwarding.
         //
-        Ptr<GlobalRouter<IpManager>> router = node->GetObject<GlobalRouter<IpManager>>();
+        Ptr<GlobalRouter<IpManager>> router = m_rootRouter;
 
         NS_ASSERT_MSG(router, "No GlobalRouter interface on node " << node->GetId());
 
@@ -1827,7 +1837,7 @@ GlobalRouteManagerImpl<T>::SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l
     // to QI for that interface.  If there's no GlobalRouter interface, the node
     // in question cannot be the router we want, so we continue.
     //
-    Ptr<GlobalRouter<T>> router = node->GetObject<GlobalRouter<T>>();
+    Ptr<GlobalRouter<T>> router = m_rootRouter;
     NS_ASSERT_MSG(router, "No GlobalRouter interface on node " << node->GetId());
     //
     // If the router ID of the current node is equal to the router ID of the
@@ -1842,7 +1852,7 @@ GlobalRouteManagerImpl<T>::SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l
         // for that interface.  If the node is acting as an IP version 4 router, it
         // should absolutely have an Ipv4 interface.
         //
-        Ptr<Ip> ip = node->GetObject<Ip>();
+        Ptr<Ip> ip = m_rootIp;
         NS_ASSERT_MSG(ip,
                       "GlobalRouteManagerImpl::SPFIntraAddRouter (): "
                       "QI for <Ipv4> interface failed");
@@ -1891,7 +1901,7 @@ GlobalRouteManagerImpl<T>::SPFIntraAddStub(GlobalRoutingLinkRecord<IpManager>* l
         // which the packets should be send for forwarding.
         //
 
-        Ptr<GlobalRouter<T>> router = node->GetObject<GlobalRouter<T>>();
+        Ptr<GlobalRouter<T>> router = m_rootRouter;
 
         Ptr<GlobalRouting<IpRoutingProtocol>> gr = router->GetRoutingProtocol();
         NS_ASSERT(gr);
@@ -1981,7 +1991,7 @@ GlobalRouteManagerImpl<T>::FindOutgoingInterfaceId(IpAddress a, IpMaskOrPrefix a
         return -1;
     }
 
-    Ptr<GlobalRouter<IpManager>> rtr = node->GetObject<GlobalRouter<IpManager>>();
+    Ptr<GlobalRouter<IpManager>> rtr = m_rootRouter;
     NS_ASSERT_MSG(rtr, "No GlobalRouter interface on node " << node->GetId());
     //
     // If the node doesn't have a GlobalRouter interface it can't be the one
@@ -1996,7 +2006,7 @@ GlobalRouteManagerImpl<T>::FindOutgoingInterfaceId(IpAddress a, IpMaskOrPrefix a
         // is participating in routing IP version 4 packets, it certainly must have
         // an Ipv4 interface.
         //
-        Ptr<Ip> ip = node->GetObject<Ip>();
+        Ptr<Ip> ip = m_rootIp;
         NS_ASSERT_MSG(ip,
                       "GlobalRouteManagerImpl::FindOutgoingInterfaceId (): "
                       "GetObject for <Ipv4> interface failed");
@@ -2071,7 +2081,7 @@ GlobalRouteManagerImpl<T>::SPFIntraAddRouter(SPFVertex<T>* v)
     // to GetObject for that interface.  If there's no GlobalRouter interface,
     // the node in question cannot be the router we want, so we continue.
     //
-    Ptr<GlobalRouter<T>> rtr = node->GetObject<GlobalRouter<T>>();
+    Ptr<GlobalRouter<T>> rtr = m_rootRouter;
     NS_ASSERT_MSG(rtr, "No GlobalRouter interface on node " << node->GetId());
     //
     // If the router ID of the current node is equal to the router ID of the
@@ -2083,11 +2093,10 @@ GlobalRouteManagerImpl<T>::SPFIntraAddRouter(SPFVertex<T>* v)
     {
         NS_LOG_LOGIC("Setting routes for node " << node->GetId());
         //
-        // Routing information is updated using the Ipv4 interface.  We need to
-        // GetObject for that interface.  If the node is acting as an IP version 4
-        // router, it should absolutely have an Ipv4 interface.
+        // Routing information is updated using the Ipv4 interface, resolved
+        // once per SPF run.
         //
-        Ptr<Ip> ip = node->GetObject<Ip>();
+        Ptr<Ip> ip = m_rootIp;
         NS_ASSERT_MSG(ip,
                       "GlobalRouteManagerImpl::SPFIntraAddRouter (): "
                       "GetObject for <Ipv4> interface failed");
@@ -2137,7 +2146,7 @@ GlobalRouteManagerImpl<T>::SPFIntraAddRouter(SPFVertex<T>* v)
             // Similarly, the vertex <v> has an m_rootOif (outbound interface index) to
             // which the packets should be send for forwarding.
             //
-            Ptr<GlobalRouter<IpManager>> router = node->GetObject<GlobalRouter<IpManager>>();
+            Ptr<GlobalRouter<IpManager>> router = m_rootRouter;
             if (!router)
             {
                 continue;
@@ -2228,7 +2237,7 @@ GlobalRouteManagerImpl<T>::SPFIntraAddTransit(SPFVertex<T>* v)
     // to GetObject for that interface.  If there's no GlobalRouter interface,
     // the node in question cannot be the router we want, so we continue.
     //
-    Ptr<GlobalRouter<T>> rtr = node->GetObject<GlobalRouter<T>>();
+    Ptr<GlobalRouter<T>> rtr = m_rootRouter;
     NS_ASSERT_MSG(rtr, "No GlobalRouter interface on node " << node->GetId());
     //
     // If the router ID of the current node is equal to the router ID of the
@@ -2268,7 +2277,7 @@ GlobalRouteManagerImpl<T>::SPFIntraAddTransit(SPFVertex<T>* v)
         {
             tempip = tempip.CombinePrefix(tempmask);
         }
-        Ptr<GlobalRouter<T>> router = node->GetObject<GlobalRouter<T>>();
+        Ptr<GlobalRouter<T>> router = m_rootRouter;
         Ptr<GlobalRouting<IpRoutingProtocol>> gr = router->GetRoutingProtocol();
         NS_ASSERT(gr);
         // walk through all available exit directions due to ECMP,
