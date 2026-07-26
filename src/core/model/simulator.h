@@ -444,7 +444,14 @@ class Simulator
      * @returns The current virtual time.
      * @hidecaller
      */
+#ifdef _WIN32
     static Time Now();
+#else
+    static Time Now()
+    {
+        return TimeStep(s_currentTs);
+    }
+#endif
 
     /**
      * Get the remaining time until this event will execute.
@@ -515,6 +522,32 @@ class Simulator
     static uint32_t GetSystemId();
 
   private:
+    friend class SimulatorImpl;
+
+    /**
+     * Current time step of the active implementation, published by it
+     * through SimulatorImpl::PublishCurrentTs whenever its time advances,
+     * so that Now can be a plain inline read.
+     *
+     * @internal
+     *
+     * On Windows, accessing a static data member from outside the DLL
+     * that defines it is an access violation, so Now stays out of line
+     * there (see Time::MarkingTimes).
+     */
+    static uint64_t s_currentTs;
+
+    /**
+     * Get the SimulatorImpl singleton, creating it on first use.
+     *
+     * A private member rather than a free function so that it can publish
+     * the implementation's time through SimulatorImpl::PublishCurrentTs.
+     *
+     * @return The singleton pointer.
+     * @see Simulator::GetImplementation()
+     */
+    static SimulatorImpl* GetImpl();
+
     /**
      * Implementation of the various Schedule methods.
      * @param [in] delay Delay until the event should execute.
@@ -557,7 +590,15 @@ class Simulator
  * @return The current simulation time.
  * @hidecaller
  */
+#ifdef _WIN32
 Time Now();
+#else
+inline Time
+Now()
+{
+    return Simulator::Now();
+}
+#endif
 
 } // namespace ns3
 

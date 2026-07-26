@@ -98,6 +98,22 @@ class SimulatorImpl : public Object
     virtual void PreEventHook(const EventId& id)
     {
     }
+
+  protected:
+    /**
+     * Publish the current simulation time step to Simulator::Now.
+     *
+     * Every implementation must call this whenever its current time
+     * changes, so that Simulator::Now, an inline read of the published
+     * value, always equals Now(). Simulator itself publishes the
+     * implementation's time when installing it and resets it on
+     * Simulator::Destroy.
+     *
+     * @param [in] ts The current time step, in units of Time resolution.
+     */
+    static void PublishCurrentTs(uint64_t ts);
+
+    friend class Simulator;
 };
 
 } // namespace ns3
