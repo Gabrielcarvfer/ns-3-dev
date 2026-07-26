@@ -20,6 +20,7 @@
 #include <list>
 #include <map>
 #include <stdint.h>
+#include <vector>
 
 namespace ns3
 {
@@ -461,6 +462,16 @@ class NdiscCache : public Object
      * @brief A list of Entry.
      */
     Cache m_ndCache;
+
+    /**
+     * Reverse (MAC address to entries) index used by LookupInverse.
+     *
+     * Rebuilt lazily on the first inverse lookup after any change to the
+     * cache membership or to an entry's MAC address, so the common
+     * per-packet inverse lookup does not scan the whole cache.
+     */
+    std::map<Address, std::vector<NdiscCache::Entry*>> m_reverseIndex;
+    bool m_reverseIndexValid{false}; //!< whether m_reverseIndex is up to date
 
   private:
     /**
