@@ -2541,6 +2541,7 @@ SixLowPanNetDevice::Fragments::Fragments()
 {
     NS_LOG_FUNCTION(this);
     m_packetSize = 0;
+    m_frontier = m_fragments.end();
 }
 
 SixLowPanNetDevice::Fragments::~Fragments()
@@ -2572,7 +2573,27 @@ SixLowPanNetDevice::Fragments::AddFragment(Ptr<Packet> fragment, uint16_t fragme
     }
     if (!duplicate)
     {
-        m_fragments.insert(it, std::make_pair(fragment, fragmentOffset));
+        auto inserted = m_fragments.insert(it, std::make_pair(fragment, fragmentOffset));
+
+        // Update the contiguity frontier.  A fragment starting at the edge of
+        // the contiguous region extends it, possibly absorbing previously
+        // received fragments beyond the old gap; each fragment is absorbed at
+        // most once, so the check is amortized constant time.
+        if (fragmentOffset <= m_contiguousEnd)
+        {
+            m_contiguousEnd = std::max(m_contiguousEnd, fragmentOffset + fragment->GetSize());
+            while (m_frontier != m_fragments.end() && m_frontier->second <= m_contiguousEnd)
+            {
+                m_contiguousEnd =
+                    std::max(m_contiguousEnd, m_frontier->second + m_frontier->first->GetSize());
+                ++m_frontier;
+            }
+        }
+        else if (m_frontier == m_fragments.end() || fragmentOffset < m_frontier->second)
+        {
+            // New first gap-side fragment.
+            m_frontier = inserted;
+        }
     }
 }
 
@@ -2589,28 +2610,8 @@ SixLowPanNetDevice::Fragments::IsEntire() const
 {
     NS_LOG_FUNCTION(this);
 
-    bool ret = !m_fragments.empty();
-    uint16_t lastEndOffset = 0;
-
-    if (ret)
-    {
-        for (auto it = m_fragments.begin(); it != m_fragments.end(); it++)
-        {
-            // overlapping fragments should not exist
-            NS_LOG_LOGIC("Checking overlaps " << lastEndOffset << " - " << it->second);
-
-            if (lastEndOffset < it->second)
-            {
-                ret = false;
-                break;
-            }
-            // fragments might overlap in strange ways
-            uint16_t fragmentEnd = it->first->GetSize() + it->second;
-            lastEndOffset = std::max(lastEndOffset, fragmentEnd);
-        }
-    }
-
-    return ret && lastEndOffset == m_packetSize;
+    return !m_fragments.empty() && m_frontier == m_fragments.end() &&
+           m_contiguousEnd == m_packetSize;
 }
 
 Ptr<Packet>

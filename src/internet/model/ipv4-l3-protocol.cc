@@ -1577,6 +1577,7 @@ Ipv4L3Protocol::Fragments::Fragments()
     : m_moreFragment(false)
 {
     NS_LOG_FUNCTION(this);
+    m_frontier = m_fragments.end();
 }
 
 void
@@ -1601,7 +1602,28 @@ Ipv4L3Protocol::Fragments::AddFragment(Ptr<Packet> fragment,
         m_moreFragment = moreFragment;
     }
 
-    m_fragments.insert(it, std::pair<Ptr<Packet>, uint16_t>(fragment, fragmentOffset));
+    auto inserted =
+        m_fragments.insert(it, std::pair<Ptr<Packet>, uint16_t>(fragment, fragmentOffset));
+
+    // Update the contiguity frontier.  A fragment starting inside the
+    // contiguous region extends it (overlaps do exist), possibly absorbing
+    // previously received fragments beyond the old gap; each fragment is
+    // absorbed at most once, so the check is amortized constant time.
+    if (fragmentOffset <= m_contiguousEnd)
+    {
+        m_contiguousEnd = std::max(m_contiguousEnd, fragmentOffset + fragment->GetSize());
+        while (m_frontier != m_fragments.end() && m_frontier->second <= m_contiguousEnd)
+        {
+            m_contiguousEnd =
+                std::max(m_contiguousEnd, m_frontier->second + m_frontier->first->GetSize());
+            ++m_frontier;
+        }
+    }
+    else if (m_frontier == m_fragments.end() || fragmentOffset < m_frontier->second)
+    {
+        // New first gap-side fragment.
+        m_frontier = inserted;
+    }
 }
 
 bool
@@ -1609,29 +1631,7 @@ Ipv4L3Protocol::Fragments::IsEntire() const
 {
     NS_LOG_FUNCTION(this);
 
-    bool ret = !m_moreFragment && !m_fragments.empty();
-
-    if (ret)
-    {
-        uint16_t lastEndOffset = 0;
-
-        for (auto it = m_fragments.begin(); it != m_fragments.end(); it++)
-        {
-            // overlapping fragments do exist
-            NS_LOG_LOGIC("Checking overlaps " << lastEndOffset << " - " << it->second);
-
-            if (lastEndOffset < it->second)
-            {
-                ret = false;
-                break;
-            }
-            // fragments might overlap in strange ways
-            uint16_t fragmentEnd = it->first->GetSize() + it->second;
-            lastEndOffset = std::max(lastEndOffset, fragmentEnd);
-        }
-    }
-
-    return ret;
+    return !m_moreFragment && !m_fragments.empty() && m_frontier == m_fragments.end();
 }
 
 Ptr<Packet>
