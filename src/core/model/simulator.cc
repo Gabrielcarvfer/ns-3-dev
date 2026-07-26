@@ -78,13 +78,14 @@ PeekImpl()
 }
 
 /**
- * @ingroup simulator
- * @brief Get the SimulatorImpl singleton.
- * @return The singleton pointer.
- * @see Simulator::GetImplementation()
+ * Direct pointer to the active simulator implementation's current
+ * time step, when the implementation exposes one; lets Simulator::Now
+ * skip the implementation lookup and the virtual call on the fast path.
  */
-static SimulatorImpl*
-GetImpl()
+static const uint64_t* g_currentTsPointer = nullptr;
+
+SimulatorImpl*
+Simulator::GetImpl()
 {
     SimulatorImpl** pimpl = PeekImpl();
     /* Please, don't include any calls to logging macros in this function
@@ -117,6 +118,8 @@ GetImpl()
         //
         LogSetTimePrinter(&DefaultTimePrinter);
         LogSetNodePrinter(&DefaultNodePrinter);
+
+        g_currentTsPointer = (*pimpl)->CurrentTimeStep();
     }
     return *pimpl;
 }
@@ -138,6 +141,7 @@ Simulator::Destroy()
      */
     LogSetTimePrinter(nullptr);
     LogSetNodePrinter(nullptr);
+    g_currentTsPointer = nullptr;
     (*pimpl)->Destroy();
     (*pimpl)->Unref();
     *pimpl = nullptr;
@@ -193,6 +197,10 @@ Simulator::Now()
     /* Please, don't include any calls to logging macros in this function
      * or pay the price, that is, stack explosions.
      */
+    if (g_currentTsPointer)
+    {
+        return TimeStep(*g_currentTsPointer);
+    }
     return GetImpl()->Now();
 }
 
@@ -335,6 +343,7 @@ Simulator::SetImplementation(Ptr<SimulatorImpl> impl)
             "Call Simulator::SetImplementation earlier or after Simulator::Destroy.");
     }
     *PeekImpl() = GetPointer(impl);
+    g_currentTsPointer = impl->CurrentTimeStep();
     // Set the default scheduler
     ObjectFactory factory;
     StringValue s;

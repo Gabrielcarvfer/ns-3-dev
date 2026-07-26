@@ -64,6 +64,7 @@ class DefaultSimulatorImpl : public SimulatorImpl
     Time GetMaximumSimulationTime() const override;
     void SetScheduler(ObjectFactory schedulerFactory) override;
     uint32_t GetSystemId() const override;
+    const uint64_t* CurrentTimeStep() const override;
     uint32_t GetContext() const override;
     uint64_t GetEventCount() const override;
 

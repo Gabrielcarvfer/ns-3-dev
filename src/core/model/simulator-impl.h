@@ -98,6 +98,26 @@ class SimulatorImpl : public Object
     virtual void PreEventHook(const EventId& id)
     {
     }
+
+  private:
+    friend class Simulator;
+
+    /**
+     * Pointer to the current simulation time step, in units of Time
+     * resolution, or nullptr if this implementation cannot expose one.
+     *
+     * Used by Simulator::Now to read the current time without a virtual
+     * call; when non-null, the pointed-to value must always equal
+     * Now().GetTimeStep(). Not part of the public API: it hands out a
+     * pointer into the implementation's internal state, so it is reserved
+     * for Simulator, while implementations may still override it.
+     *
+     * @return The time step pointer, or nullptr.
+     */
+    virtual const uint64_t* CurrentTimeStep() const
+    {
+        return nullptr;
+    }
 };
 
 } // namespace ns3
