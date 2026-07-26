@@ -605,6 +605,19 @@ class Ipv4L3Protocol : public Ipv4
         std::list<std::pair<Ptr<Packet>, uint16_t>> m_fragments;
 
         /**
+         * First fragment (in offset order) not yet known to be contiguous
+         * with the start of the packet.  Together with m_contiguousEnd it
+         * makes the gap check in IsEntire amortized constant time instead
+         * of a scan of all fragments on every fragment arrival.
+         */
+        std::list<std::pair<Ptr<Packet>, uint16_t>>::iterator m_frontier;
+
+        /**
+         * @brief Number of bytes known to be contiguous from offset zero.
+         */
+        uint32_t m_contiguousEnd{0};
+
+        /**
          * @brief Timeout iterator to "event" handler
          */
         FragmentsTimeoutsListI_t m_timeoutIter;
