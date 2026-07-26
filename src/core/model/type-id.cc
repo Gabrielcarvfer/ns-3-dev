@@ -12,6 +12,7 @@
 #include "singleton.h"
 #include "trace-source-accessor.h"
 
+#include <deque>
 #include <map>
 #include <vector>
 
@@ -228,7 +229,7 @@ class IidManager : public Singleton<IidManager>
      * @param [in] i Index into attribute array
      * @returns The information associated to attribute whose index is \pname{i}.
      */
-    TypeId::AttributeInformation GetAttribute(uint16_t uid, std::size_t i) const;
+    const TypeId::AttributeInformation& GetAttribute(uint16_t uid, std::size_t i) const;
     /**
      * Record a new TraceSource.
      * @param [in] uid The id.
@@ -333,8 +334,14 @@ class IidManager : public Singleton<IidManager>
      */
     IidManager::IidInformation* LookupInformation(uint16_t uid) const;
 
-    /** The container of all type id records. */
-    std::vector<IidInformation> m_information;
+    /**
+     * The container of all type id records.
+     *
+     * A deque so that references to an IidInformation (e.g. attribute
+     * information handed out by reference) stay valid when new type ids
+     * are registered.
+     */
+    std::deque<IidInformation> m_information;
 
     /** Type of the by-name index. */
     typedef std::map<std::string, uint16_t> namemap_t;
@@ -739,7 +746,7 @@ IidManager::GetAttributeN(uint16_t uid) const
     return size;
 }
 
-TypeId::AttributeInformation
+const TypeId::AttributeInformation&
 IidManager::GetAttribute(uint16_t uid, std::size_t i) const
 {
     NS_LOG_FUNCTION(IID << uid << i);
@@ -1198,7 +1205,7 @@ TypeId::GetAttributeN() const
     return n;
 }
 
-TypeId::AttributeInformation
+const TypeId::AttributeInformation&
 TypeId::GetAttribute(std::size_t i) const
 {
     NS_LOG_FUNCTION(this << i);
@@ -1209,7 +1216,7 @@ std::string
 TypeId::GetAttributeFullName(std::size_t i) const
 {
     NS_LOG_FUNCTION(this << i);
-    TypeId::AttributeInformation info = GetAttribute(i);
+    const TypeId::AttributeInformation& info = GetAttribute(i);
     return GetName() + "::" + info.name;
 }
 
