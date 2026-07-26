@@ -298,16 +298,8 @@ GlobalRoutingLinkRecord<T>*
 GlobalRoutingLSA<T>::GetLinkRecord(uint32_t n) const
 {
     NS_LOG_FUNCTION(this << n);
-    uint32_t j = 0;
-    for (auto i = m_linkRecords.begin(); i != m_linkRecords.end(); i++, j++)
-    {
-        if (j == n)
-        {
-            return *i;
-        }
-    }
-    NS_ASSERT_MSG(false, "GlobalRoutingLSA::GetLinkRecord (): invalid index");
-    return nullptr;
+    NS_ASSERT_MSG(n < m_linkRecords.size(), "GlobalRoutingLSA::GetLinkRecord (): invalid index");
+    return m_linkRecords[n];
 }
 
 template <typename T>
