@@ -21,6 +21,8 @@
 #include "ns3/traced-callback.h"
 
 #include <list>
+#include <unordered_map>
+#include <vector>
 
 class Ipv6L3ProtocolTestCase;
 
@@ -33,6 +35,7 @@ class IpL4Protocol;
 class Ipv6Route;
 class Ipv6MulticastRoute;
 class Ipv6RawSocketImpl;
+class Ipv6ExtensionDemux;
 class Icmpv6L4Protocol;
 class Ipv6AutoconfiguredPrefix;
 
@@ -480,6 +483,15 @@ class Ipv6L3Protocol : public Ipv6
      */
     bool ReachabilityHint(uint32_t ipInterfaceIndex, Ipv6Address address);
 
+    /**
+     * @brief Invalidate the local address index.
+     *
+     * Called by Ipv6Interface whenever an address is added to or removed
+     * from an interface, so per-packet local address checks can rely on
+     * the index being up to date.
+     */
+    void InvalidateLocalAddressIndex();
+
   protected:
     /**
      * @brief Dispose object.
@@ -726,6 +738,24 @@ class Ipv6L3Protocol : public Ipv6
      * @brief Path MTU Cache.
      */
     Ptr<Ipv6PmtuCache> m_pmtuCache;
+
+    /**
+     * Local unicast addresses indexed by address, mapping to the interfaces
+     * carrying them.
+     *
+     * Rebuilt lazily on the first per-packet local address check after any
+     * address change, replacing a scan of all interfaces and addresses on
+     * every received and transmitted packet.
+     */
+    std::unordered_map<Ipv6Address, std::vector<uint32_t>> m_localAddresses;
+    bool m_localAddressIndexValid{false}; //!< whether m_localAddresses is up to date
+
+    Ptr<Ipv6ExtensionDemux> m_extensionDemux; //!< Cached extension demux of the node
+
+    /**
+     * @brief Rebuild the local address index from the current interfaces.
+     */
+    void BuildLocalAddressIndex();
 
     /**
      * @brief List of transport protocol.

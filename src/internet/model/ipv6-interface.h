@@ -24,6 +24,7 @@ class NetDevice;
 class Packet;
 class Node;
 class NdiscCache;
+class Icmpv6L4Protocol;
 class Ipv6InterfaceAddress;
 class Ipv6Address;
 class Ipv6Header;
@@ -336,6 +337,17 @@ class Ipv6Interface : public Object
     bool m_forwarding;
 
     /**
+     * @brief Whether the associated NetDevice is a loopback device.
+     */
+    bool m_isLoopback{false};
+
+    /**
+     * @brief Tell the node's Ipv6L3Protocol that this interface's address
+     * set changed, so it can invalidate its local address index.
+     */
+    void NotifyAddressChanged();
+
+    /**
      * @brief The metric.
      */
     uint16_t m_metric;
@@ -359,6 +371,11 @@ class Ipv6Interface : public Object
      * @brief Neighbor cache.
      */
     Ptr<NdiscCache> m_ndCache;
+
+    /**
+     * @brief Cached ICMPv6 protocol of the node.
+     */
+    Ptr<Icmpv6L4Protocol> m_icmpv6;
 
     /**
      * @brief Current hop limit.

@@ -73,6 +73,7 @@ Ipv6Interface::DoDispose()
     m_device = nullptr;
     m_tc = nullptr;
     m_ndCache = nullptr;
+    m_icmpv6 = nullptr;
     Object::DoDispose();
 }
 
@@ -105,6 +106,7 @@ Ipv6Interface::DoSetup()
         m_node->GetObject<Ipv6>()->GetProtocol(Icmpv6L4Protocol::GetStaticProtocolNumber(),
                                                interfaceId));
 
+    m_icmpv6 = icmpv6;
     if (icmpv6 && !m_ndCache)
     {
         m_ndCache = icmpv6->CreateCache(m_device, this);
@@ -123,6 +125,7 @@ Ipv6Interface::SetDevice(Ptr<NetDevice> device)
 {
     NS_LOG_FUNCTION(this << device);
     m_device = device;
+    m_isLoopback = DynamicCast<LoopbackNetDevice>(device) != nullptr;
 }
 
 void
@@ -192,6 +195,7 @@ Ipv6Interface::SetDown()
     NS_LOG_FUNCTION(this);
     m_ifup = false;
     m_addresses.clear();
+    NotifyAddressChanged();
     m_ndCache->Flush();
 
     Ptr<Ipv6> ip = m_node->GetObject<Ipv6>();
@@ -214,6 +218,18 @@ Ipv6Interface::SetForwarding(bool forwarding)
     m_forwarding = forwarding;
 }
 
+void
+Ipv6Interface::NotifyAddressChanged()
+{
+    if (m_node)
+    {
+        if (Ptr<Ipv6L3Protocol> ipv6 = m_node->GetObject<Ipv6L3Protocol>())
+        {
+            ipv6->InvalidateLocalAddressIndex();
+        }
+    }
+}
+
 bool
 Ipv6Interface::AddAddress(Ipv6InterfaceAddress iface)
 {
@@ -233,6 +249,7 @@ Ipv6Interface::AddAddress(Ipv6InterfaceAddress iface)
 
         Ipv6Address solicited = Ipv6Address::MakeSolicitedAddress(iface.GetAddress());
         m_addresses.emplace_back(iface, solicited);
+        NotifyAddressChanged();
         if (!m_addAddressCallback.IsNull())
         {
             m_addAddressCallback(this, addr);
@@ -336,6 +353,7 @@ Ipv6Interface::RemoveAddress(uint32_t index)
         {
             Ipv6InterfaceAddress iface = it->first;
             m_addresses.erase(it);
+            NotifyAddressChanged();
             if (!m_removeAddressCallback.IsNull())
             {
                 m_removeAddressCallback(this, iface);
@@ -367,6 +385,7 @@ Ipv6Interface::RemoveAddress(Ipv6Address address)
         {
             Ipv6InterfaceAddress iface = it->first;
             m_addresses.erase(it);
+            NotifyAddressChanged();
             if (!m_removeAddressCallback.IsNull())
             {
                 m_removeAddressCallback(this, iface);
@@ -407,11 +426,9 @@ Ipv6Interface::Send(Ptr<Packet> p, const Ipv6Header& hdr, Ipv6Address dest)
         return;
     }
 
-    Ptr<Ipv6L3Protocol> ipv6 = m_node->GetObject<Ipv6L3Protocol>();
-
     /* check if destination is localhost (::1), if yes we don't pass through
      * traffic control layer */
-    if (DynamicCast<LoopbackNetDevice>(m_device))
+    if (m_isLoopback)
     {
         /** @todo additional checks needed here (such as whether multicast
          * goes to loopback)?
@@ -446,10 +463,14 @@ Ipv6Interface::Send(Ptr<Packet> p, const Ipv6Header& hdr, Ipv6Address dest)
     {
         NS_LOG_LOGIC("Needs NDISC " << dest);
 
-        int32_t interfaceId = m_node->GetObject<Ipv6>()->GetInterfaceForDevice(m_device);
-        Ptr<Icmpv6L4Protocol> icmpv6 = DynamicCast<Icmpv6L4Protocol>(
-            m_node->GetObject<Ipv6>()->GetProtocol(Icmpv6L4Protocol::GetStaticProtocolNumber(),
-                                                   interfaceId));
+        if (!m_icmpv6)
+        {
+            int32_t interfaceId = m_node->GetObject<Ipv6>()->GetInterfaceForDevice(m_device);
+            m_icmpv6 = DynamicCast<Icmpv6L4Protocol>(
+                m_node->GetObject<Ipv6>()->GetProtocol(Icmpv6L4Protocol::GetStaticProtocolNumber(),
+                                                       interfaceId));
+        }
+        Ptr<Icmpv6L4Protocol> icmpv6 = m_icmpv6;
 
         Address hardwareDestination;
         bool found = false;
