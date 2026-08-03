@@ -35,4 +35,10 @@ NetDevice::GetAddressFor(const Address& /*remoteAddr*/) const
     return GetAddress();
 }
 
+uint16_t
+NetDevice::GetPaddingThreshold() const
+{
+    return 0;
+}
+
 } // namespace ns3

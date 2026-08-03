@@ -148,6 +148,20 @@ class NetDevice : public Object
      */
     virtual uint16_t GetMtu() const = 0;
     /**
+     * @brief Returns the padding threshold.
+     *
+     * Payloads shorter than this value in bytes are padded to this length,
+     * and the padding may be delivered to the receiver as data. Layers
+     * that infer upper-layer lengths from the frame size (e.g., 6LoWPAN
+     * header compression) can use this value to avoid emitting frames
+     * that would be padded.
+     *
+     * @return the payload size in bytes below which the device model may
+     *         deliver padding bytes as data on the receiver, or zero if
+     *         the link never delivers padding bytes as data.
+     */
+    virtual uint16_t GetPaddingThreshold() const;
+    /**
      * @return true if link is up; false otherwise
      */
     virtual bool IsLinkUp() const = 0;

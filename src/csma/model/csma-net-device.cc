@@ -250,6 +250,20 @@ CsmaNetDevice::GetMtu() const
     return m_mtu;
 }
 
+uint16_t
+CsmaNetDevice::GetPaddingThreshold() const
+{
+    // AddHeader pads the data field to 46 octets in both modes to meet
+    // the 64-octet minimum frame size.
+    if (m_encapMode == LLC)
+    {
+        // The 802.3 length field lets the receiver strip the padding.
+        return 0;
+    }
+    // With DIX framing the receiver cannot remove the padding.
+    return 46;
+}
+
 void
 CsmaNetDevice::SetSendEnable(bool sendEnable)
 {
