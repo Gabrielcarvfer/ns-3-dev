@@ -19,9 +19,13 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (core) The `Time` class now declares an explicit `operator==` on MSVC builds (guarded by `NS_MSVC`), to work around an MSVC 18 (2026) STL issue that otherwise breaks compilation. It is semantically identical to the defaulted comparison and has no behavioral effect on any platform.
 * Centralization of ``PPP`` and ``IEEE802`` numbers. These are now contained in network model in ``iana-ppp-numbers.h`` and ``iana-ieee802-numbers.h`` respectively.
 * (core) The new `NS_OBJECT_TEMPLATE_CLASS_WITH_NS_DEFINE`  macro enables the registration of template classes inside a namespace.
+
 * Added the `nlohmann/json` library to enable JSON parsing and serialization within ns-3.
 * (network) `NetDevice` gained a `GetPaddingThreshold()` virtual method with a default implementation (returning 0) suitable for almost all existing devices. Payloads below this length may be padded by the link, with the padding delivered to the receiver as data. `CsmaNetDevice` and `FdNetDevice` override it (46 octets for Ethernet framing), and `SixLowPanNetDevice` uses it as a floor for its `CompressionThreshold` attribute so that small packets are sent uncompressed on padding links.
 * (zigbee) It is now possible to send ZDO commands. The inclusion of ZDO in the Zigbee stack is optional and can be removed via helper configuration.
+
+* (sixlowpan) Added `SixLowPanMeshUnderRouting`, an abstract base class for pluggable mesh-under forwarding policies, and `SixLowPanSimpleFlooding`, the default policy preserving the historical flooding behavior. A policy can be selected per device through the new `SixLowPanNetDevice` attribute `MeshUnderRouting` or with `SixLowPanHelper::SetMeshUnderRouting()`.
+* (sixlowpan) Added the `SixLowPanNetDevice` attribute `ForwardMesh` (default true), controlling whether a node relays received mesh-under packets, and the drop reason `DROP_MESH_NOT_ENABLED`.
 
 ### Changes to existing API
 
@@ -31,10 +35,13 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (wifi) `WifiRemoteStationManager::GetCtsToSelfTxVector()` now takes the channel width of the data frame being protected, so that the returned TXVECTOR covers that bandwidth (using the non-HT duplicate format if wider than 20 MHz).
 * (network) `Buffer::Serialize`, `ByteTagList::Serialize`, `NixVector::Serialize`, `PacketMetadata::Serialize`, `PacketTagList::Serialize` and `Packet::Serialize` functions return now the number of serialized bytes instead of just `1` for a successful serialization.
 * (network) `Buffer::Deserialize`, `ByteTagList::Deserialize`, `PacketMetadata::Deserialize`, `PacketTagList::Deserialize` and `Packet::Deserialize` functions return now the number of deserialized bytes instead of just `1` for a successful deserialization.
+* (sixlowpan) The `SixLowPanNetDevice` attributes `MeshUnderJitter` and `MeshCacheLength` moved to the mesh-under forwarding policy: use `SixLowPanSimpleFlooding::MeshUnderJitter` and `SixLowPanMeshUnderRouting::MeshCacheLength`, reachable through the device's `MeshUnderRouting` attribute (e.g., `MeshUnderRouting/MeshUnderJitter` in a `Config` path). The old device attributes are deprecated and forward to the current policy.
 
 ### Changes to build system
 
 ### Changed behavior
+
+* (sixlowpan) Mesh-under forwarding on the receive path is no longer unconditional. A node relays received mesh-under packets only when both `UseMeshUnder` and `ForwardMesh` are enabled; a node with `UseMeshUnder` alone decodes and delivers mesh packets without relaying them; a node without `UseMeshUnder` receiving a mesh-under packet drops it with a warning (`DROP_MESH_NOT_ENABLED` in the drop trace), as this is a network misconfiguration. Previously, every node relayed mesh-under packets regardless of its configuration.
 
 ## Changes from ns-3.47 to ns-3.48
 

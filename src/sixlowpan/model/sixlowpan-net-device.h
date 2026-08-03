@@ -28,6 +28,7 @@ namespace ns3
 class Node;
 class UniformRandomVariable;
 class EventId;
+class SixLowPanMeshUnderRouting;
 
 /**
  * @defgroup sixlowpan 6LoWPAN
@@ -73,6 +74,7 @@ class SixLowPanNetDevice : public NetDevice
         DROP_DISALLOWED_COMPRESSION,         //!< HC1 while in IPHC mode or vice-versa
         DROP_SATETFUL_DECOMPRESSION_PROBLEM, //!< Decompression failed due to missing or expired
                                              //!< context
+        DROP_MESH_NOT_ENABLED, //!< Mesh-under packet received with UseMeshUnder disabled
     };
 
     /**
@@ -151,6 +153,26 @@ class SixLowPanNetDevice : public NetDevice
      * @param [in] device A smart pointer to the NetDevice to be proxied.
      */
     void SetNetDevice(Ptr<NetDevice> device);
+
+    /**
+     * @brief Set the mesh-under forwarding policy.
+     *
+     * The forwarding policy decides whether (and when) to rebroadcast
+     * a mesh-under packet. The MeshUnderRouting attribute default gives
+     * each device its own SixLowPanSimpleFlooding instance at construction,
+     * preserving the historical unconditional-rebroadcast behavior; this
+     * method (used, e.g., by the helper) replaces that instance.
+     *
+     * @param [in] routing A smart pointer to the policy object.
+     */
+    void SetMeshUnderRouting(Ptr<SixLowPanMeshUnderRouting> routing);
+
+    /**
+     * @brief Get the current mesh-under forwarding policy.
+     *
+     * @return A smart pointer to the active policy.
+     */
+    Ptr<SixLowPanMeshUnderRouting> GetMeshUnderRouting() const;
 
     /**
      * Assign a fixed random variable stream number to the random variables
@@ -256,6 +278,7 @@ class SixLowPanNetDevice : public NetDevice
     void RemoveContext(uint8_t contextId);
 
   protected:
+    void DoInitialize() override;
     void DoDispose() override;
 
   private:
@@ -294,6 +317,21 @@ class SixLowPanNetDevice : public NetDevice
                 const Address& dest,
                 uint16_t protocolNumber,
                 bool doSendFrom);
+
+    /**
+     * @brief Forward a previously assembled mesh-under packet.
+     *
+     * Used by the mesh-under routing policy. The packet must already
+     * carry MESH and BC0 headers
+     * (with the decremented hop count); this method simply hands it
+     * to the underlying NetDevice for broadcast transmission. The
+     * protocol number is bound at callback creation to the value the
+     * frame was received with.
+     *
+     * @param [in] protocol The L2 protocol number to send with.
+     * @param [in] packet The fully assembled mesh-under packet.
+     */
+    void ForwardMeshPacket(uint16_t protocol, Ptr<Packet> packet);
 
     /**
      * The callback used to notify higher layers that a packet has been received.
@@ -643,14 +681,34 @@ class SixLowPanNetDevice : public NetDevice
 
     CompressionType_e m_compressionType; //!< Compression type
 
-    bool m_meshUnder;            //!< Use a mesh-under routing.
+    bool m_meshUnder;            //!< The node is part of a mesh-under network (UseMeshUnder).
+    bool m_forwardMesh;          //!< The node forwards received mesh-under packets.
     uint8_t m_bc0Serial;         //!< Serial number used in BC0 header.
     uint8_t m_meshUnderHopsLeft; //!< Start value for mesh-under hops left.
-    uint16_t m_meshCacheLength;  //!< length of the cache for each source.
-    Ptr<RandomVariableStream>
-        m_meshUnderJitter; //!< Random variable for the mesh-under packet retransmission.
-    std::map<Address /* OriginatorAddress */, std::list<uint8_t /* SequenceNumber */>>
-        m_seenPkts; //!< Seen packets, memorized by OriginatorAddress, SequenceNumber.
+    Ptr<SixLowPanMeshUnderRouting>
+        m_meshUnderRouting; //!< Pluggable mesh-under forwarding policy. The MeshUnderRouting
+                            //!< attribute default creates a SixLowPanSimpleFlooding per device.
+
+    /**
+     * @brief Set the policy's MeshUnderJitter (deprecated device attribute).
+     * @param jitter The forwarding jitter random variable.
+     */
+    void SetDeprecatedMeshUnderJitter(Ptr<RandomVariableStream> jitter);
+    /**
+     * @brief Get the policy's MeshUnderJitter (deprecated device attribute).
+     * @return The forwarding jitter random variable, or nullptr.
+     */
+    Ptr<RandomVariableStream> GetDeprecatedMeshUnderJitter() const;
+    /**
+     * @brief Set the policy's MeshCacheLength (deprecated device attribute).
+     * @param length The duplicate-cache length.
+     */
+    void SetDeprecatedMeshCacheLength(uint16_t length);
+    /**
+     * @brief Get the policy's MeshCacheLength (deprecated device attribute).
+     * @return The duplicate-cache length.
+     */
+    uint16_t GetDeprecatedMeshCacheLength() const;
 
     Ptr<Node> m_node;           //!< Smart pointer to the Node.
     Ptr<NetDevice> m_netDevice; //!< Smart pointer to the underlying NetDevice.

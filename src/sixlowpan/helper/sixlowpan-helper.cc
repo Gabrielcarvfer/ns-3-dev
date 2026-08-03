@@ -19,6 +19,7 @@
 #include "ns3/net-device.h"
 #include "ns3/node-list.h"
 #include "ns3/node.h"
+#include "ns3/sixlowpan-mesh-under-routing.h"
 #include "ns3/sixlowpan-nd-protocol.h"
 #include "ns3/sixlowpan-net-device.h"
 #include "ns3/uinteger.h"
@@ -64,6 +65,11 @@ SixLowPanHelper::Install(const NetDeviceContainer c)
         devs.Add(dev);
         node->AddDevice(dev);
         dev->SetNetDevice(device);
+
+        if (m_meshUnderRoutingConfigured)
+        {
+            dev->SetMeshUnderRouting(m_meshUnderRoutingFactory.Create<SixLowPanMeshUnderRouting>());
+        }
     }
     return devs;
 }

@@ -11,6 +11,8 @@
 #include "sixlowpan-net-device.h"
 
 #include "sixlowpan-header.h"
+#include "sixlowpan-mesh-under-routing.h"
+#include "sixlowpan-simple-flooding.h"
 
 #include "ns3/boolean.h"
 #include "ns3/channel.h"
@@ -79,26 +81,54 @@ SixLowPanNetDevice::GetTypeId()
                           MakeUintegerAccessor(&SixLowPanNetDevice::m_compressionThreshold),
                           MakeUintegerChecker<uint32_t>())
             .AddAttribute("UseMeshUnder",
-                          "Use a mesh-under routing protocol.",
+                          "The node is part of a mesh-under network: MESH and BC0 "
+                          "headers are added to sent packets, and received mesh-under "
+                          "packets are decoded.",
                           BooleanValue(false),
                           MakeBooleanAccessor(&SixLowPanNetDevice::m_meshUnder),
+                          MakeBooleanChecker())
+            .AddAttribute("ForwardMesh",
+                          "The node participates in mesh-under forwarding: received "
+                          "mesh-under packets are relayed according to the "
+                          "MeshUnderRouting policy. Effective only with UseMeshUnder.",
+                          BooleanValue(true),
+                          MakeBooleanAccessor(&SixLowPanNetDevice::m_forwardMesh),
                           MakeBooleanChecker())
             .AddAttribute("MeshUnderRadius",
                           "Hops Left to use in mesh-under.",
                           UintegerValue(10),
                           MakeUintegerAccessor(&SixLowPanNetDevice::m_meshUnderHopsLeft),
                           MakeUintegerChecker<uint8_t>())
+            .AddAttribute("MeshUnderRouting",
+                          "The mesh-under forwarding policy. Each device gets its own "
+                          "instance of the default policy unless one is set explicitly.",
+                          StringValue("ns3::SixLowPanSimpleFlooding"),
+                          MakePointerAccessor(&SixLowPanNetDevice::m_meshUnderRouting),
+                          MakePointerChecker<SixLowPanMeshUnderRouting>())
+            // Attributes moved to the mesh-under forwarding policy: the deprecated
+            // device attributes forward to the current policy.
+            // NS_DEPRECATED_3_49
+            .AddAttribute("MeshUnderJitter",
+                          "The jitter (in ms) a node uses to forward mesh-under packets.",
+                          TypeId::ATTR_GET | TypeId::ATTR_SET, // do not set at construction time
+                          StringValue("ns3::UniformRandomVariable[Min=0.0|Max=10.0]"),
+                          MakePointerAccessor(&SixLowPanNetDevice::SetDeprecatedMeshUnderJitter,
+                                              &SixLowPanNetDevice::GetDeprecatedMeshUnderJitter),
+                          MakePointerChecker<RandomVariableStream>(),
+                          TypeId::SupportLevel::DEPRECATED,
+                          "Use SixLowPanSimpleFlooding::MeshUnderJitter through the "
+                          "MeshUnderRouting attribute instead")
+            // NS_DEPRECATED_3_49
             .AddAttribute("MeshCacheLength",
                           "Length of the cache for each source.",
+                          TypeId::ATTR_GET | TypeId::ATTR_SET, // do not set at construction time
                           UintegerValue(10),
-                          MakeUintegerAccessor(&SixLowPanNetDevice::m_meshCacheLength),
-                          MakeUintegerChecker<uint16_t>())
-            .AddAttribute("MeshUnderJitter",
-                          "The jitter in ms a node uses to forward mesh-under packets - used to "
-                          "prevent collisions",
-                          StringValue("ns3::UniformRandomVariable[Min=0.0|Max=10.0]"),
-                          MakePointerAccessor(&SixLowPanNetDevice::m_meshUnderJitter),
-                          MakePointerChecker<RandomVariableStream>())
+                          MakeUintegerAccessor(&SixLowPanNetDevice::SetDeprecatedMeshCacheLength,
+                                               &SixLowPanNetDevice::GetDeprecatedMeshCacheLength),
+                          MakeUintegerChecker<uint16_t>(),
+                          TypeId::SupportLevel::DEPRECATED,
+                          "Use SixLowPanMeshUnderRouting::MeshCacheLength through the "
+                          "MeshUnderRouting attribute instead")
             .AddTraceSource("Tx",
                             "Send - packet (including 6LoWPAN header), "
                             "SixLoWPanNetDevice Ptr, interface index.",
@@ -171,13 +201,90 @@ SixLowPanNetDevice::SetNetDevice(Ptr<NetDevice> device)
                                     false);
 }
 
+void
+SixLowPanNetDevice::SetMeshUnderRouting(Ptr<SixLowPanMeshUnderRouting> routing)
+{
+    NS_LOG_FUNCTION(this << routing);
+    m_meshUnderRouting = routing;
+}
+
+Ptr<SixLowPanMeshUnderRouting>
+SixLowPanNetDevice::GetMeshUnderRouting() const
+{
+    NS_LOG_FUNCTION(this);
+    return m_meshUnderRouting;
+}
+
+void
+SixLowPanNetDevice::SetDeprecatedMeshUnderJitter(Ptr<RandomVariableStream> jitter)
+{
+    NS_LOG_FUNCTION(this << jitter);
+    if (m_meshUnderRouting)
+    {
+        m_meshUnderRouting->SetAttributeFailSafe("MeshUnderJitter", PointerValue(jitter));
+    }
+}
+
+Ptr<RandomVariableStream>
+SixLowPanNetDevice::GetDeprecatedMeshUnderJitter() const
+{
+    PointerValue value;
+    if (m_meshUnderRouting && m_meshUnderRouting->GetAttributeFailSafe("MeshUnderJitter", value))
+    {
+        return value.Get<RandomVariableStream>();
+    }
+    return nullptr;
+}
+
+void
+SixLowPanNetDevice::SetDeprecatedMeshCacheLength(uint16_t length)
+{
+    NS_LOG_FUNCTION(this << length);
+    if (m_meshUnderRouting)
+    {
+        m_meshUnderRouting->SetAttributeFailSafe("MeshCacheLength", UintegerValue(length));
+    }
+}
+
+uint16_t
+SixLowPanNetDevice::GetDeprecatedMeshCacheLength() const
+{
+    UintegerValue value;
+    if (m_meshUnderRouting && m_meshUnderRouting->GetAttributeFailSafe("MeshCacheLength", value))
+    {
+        return static_cast<uint16_t>(value.Get());
+    }
+    return 0;
+}
+
 int64_t
 SixLowPanNetDevice::AssignStreams(int64_t stream)
 {
     NS_LOG_FUNCTION(this << stream);
     m_rng->SetStream(stream);
-    m_meshUnderJitter->SetStream(stream + 1);
-    return 2;
+    int64_t streamsUsed = 1;
+    if (m_meshUnderRouting)
+    {
+        streamsUsed += m_meshUnderRouting->AssignStreams(stream + streamsUsed);
+    }
+    return streamsUsed;
+}
+
+void
+SixLowPanNetDevice::DoInitialize()
+{
+    NS_LOG_FUNCTION(this);
+
+    // The policy is created at construction (MeshUnderRouting attribute
+    // default) or replaced through the helper. Policy-specific
+    // configuration (jitter RNG, cache length, ...) is owned by the
+    // policy, not by this device.
+    if (m_meshUnderRouting)
+    {
+        m_meshUnderRouting->Initialize();
+    }
+
+    NetDevice::DoInitialize();
 }
 
 void
@@ -187,6 +294,12 @@ SixLowPanNetDevice::DoDispose()
 
     m_netDevice = nullptr;
     m_node = nullptr;
+    if (m_meshUnderRouting)
+    {
+        // The device is the effective owner of the policy.
+        m_meshUnderRouting->Dispose();
+        m_meshUnderRouting = nullptr;
+    }
 
     m_timeoutEventList.clear();
     if (m_timeoutEvent.IsPending())
@@ -257,19 +370,32 @@ SixLowPanNetDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
             return;
         }
 
-        if (find(m_seenPkts[meshHdr.GetOriginator()].begin(),
-                 m_seenPkts[meshHdr.GetOriginator()].end(),
-                 bc0Hdr.GetSequenceNumber()) != m_seenPkts[meshHdr.GetOriginator()].end())
+        // A node outside the mesh-under network (UseMeshUnder disabled) that
+        // receives a mesh frame is a network misconfiguration: it could
+        // decode the packet, but it could never reply through the mesh.
+        // Report and drop.
+        if (!m_meshUnder)
         {
+            NS_LOG_WARN("Received a mesh-under packet but UseMeshUnder is disabled: "
+                        "network misconfiguration, dropping.");
+            m_dropTrace(DROP_MESH_NOT_ENABLED, copyPkt, this, GetIfIndex());
+            return;
+        }
+
+        NS_ABORT_MSG_IF(!m_meshUnderRouting,
+                        "Received a mesh-under frame but the MeshUnderRouting policy is null");
+
+        const Address originator = meshHdr.GetOriginator();
+        const uint8_t seqNo = bc0Hdr.GetSequenceNumber();
+
+        if (m_meshUnderRouting->IsDuplicate(originator, seqNo))
+        {
+            m_meshUnderRouting->OnDuplicateReceived(originator, seqNo);
             NS_LOG_LOGIC("We have already seen this, no further processing.");
             return;
         }
 
-        m_seenPkts[meshHdr.GetOriginator()].push_back(bc0Hdr.GetSequenceNumber());
-        if (m_seenPkts[meshHdr.GetOriginator()].size() > m_meshCacheLength)
-        {
-            m_seenPkts[meshHdr.GetOriginator()].pop_front();
-        }
+        m_meshUnderRouting->RecordPacket(originator, seqNo);
 
         NS_ABORT_MSG_IF(!Mac16Address::IsMatchingType(meshHdr.GetFinalDst()),
                         "SixLowPan mesh-under flooding can not currently handle extended address "
@@ -292,22 +418,31 @@ SixLowPanNetDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
             {
                 NS_LOG_LOGIC("Not forwarding packet -- hop limit reached");
             }
-            else if (meshHdr.GetOriginator() == Get16MacFrom48Mac(m_netDevice->GetAddress()))
+            else if (originator == Get16MacFrom48Mac(m_netDevice->GetAddress()))
             {
                 NS_LOG_LOGIC("Not forwarding packet -- I am the originator");
             }
+            else if (!m_forwardMesh)
+            {
+                NS_LOG_LOGIC("Not forwarding packet -- ForwardMesh is disabled on this node");
+            }
             else
             {
+                // Pre-assemble the packet (with decremented hops) and hand it to
+                // the policy along with a forward callback. The policy decides
+                // when (or whether) to invoke the callback.
                 meshHdr.SetHopsLeft(hopsLeft - 1);
                 Ptr<Packet> sendPkt = copyPkt->Copy();
                 sendPkt->AddHeader(bc0Hdr);
                 sendPkt->AddHeader(meshHdr);
-                Simulator::Schedule(MilliSeconds(m_meshUnderJitter->GetValue()),
-                                    &NetDevice::Send,
-                                    m_netDevice,
-                                    sendPkt,
-                                    m_netDevice->GetBroadcast(),
-                                    protocol);
+                // Forward with the same protocol the frame arrived with; bind it
+                // into the callback so the policy stays oblivious to it.
+                m_meshUnderRouting->OnPacketForward(
+                    sendPkt,
+                    originator,
+                    seqNo,
+                    static_cast<uint8_t>(hopsLeft - 1),
+                    MakeCallback(&SixLowPanNetDevice::ForwardMeshPacket, this).Bind(protocol));
             }
 
             if (!finalDst.IsBroadcast() && !finalDst.IsMulticast())
@@ -412,6 +547,16 @@ SixLowPanNetDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
         NS_LOG_INFO("Drop packet due to no protocol handler");
         m_macRxDropTrace(copyPkt);
     }
+}
+
+void
+SixLowPanNetDevice::ForwardMeshPacket(uint16_t protocol, Ptr<Packet> packet)
+{
+    NS_LOG_FUNCTION(this << protocol << packet);
+    // Pending forward events are not run after Simulator::Destroy, so the
+    // reachable failure here is a call after DoDispose.
+    NS_ASSERT_MSG(m_netDevice, "ForwardMeshPacket called after DoDispose");
+    m_netDevice->Send(packet, m_netDevice->GetBroadcast(), protocol);
 }
 
 void

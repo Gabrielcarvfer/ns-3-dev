@@ -37,8 +37,11 @@ been tested on Linux. As of this release, the latest known version to work with 
 ### New user-visible features
 
 - (network) IANA protocol and link types are now centralized in network module headers.
+
 - Added support for `nlohmann/json`, a header-only C++ third-party library for JSON parsing and serialization.
 - (zigbee) !2964 Added basic support for Zigbee Device Object (ZDO)
+
+- (sixlowpan) !2873 The mesh-under forwarding decision is now delegated to a pluggable policy (`SixLowPanMeshUnderRouting`); the default `SixLowPanSimpleFlooding` preserves the historical flooding behavior. The `MeshUnderJitter` and `MeshCacheLength` attributes moved from `SixLowPanNetDevice` to the policy. Mesh-under membership and relaying are now controlled separately by the `UseMeshUnder` and `ForwardMesh` attributes.
 
 ### Bugs fixed
 

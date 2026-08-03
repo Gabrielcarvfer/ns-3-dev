@@ -9,11 +9,13 @@
 #ifndef SIXLOWPAN_HELPER_H
 #define SIXLOWPAN_HELPER_H
 
+#include "ns3/abort.h"
 #include "ns3/net-device-container.h"
 #include "ns3/nstime.h"
 #include "ns3/object-factory.h"
 #include "ns3/output-stream-wrapper.h"
 #include "ns3/ptr.h"
+#include "ns3/sixlowpan-mesh-under-routing.h"
 
 #include <string>
 
@@ -46,6 +48,30 @@ class SixLowPanHelper
      * @param v1 [in] The value of the attribute to set.
      */
     void SetDeviceAttribute(std::string n1, const AttributeValue& v1);
+
+    /**
+     * @brief Select the mesh-under forwarding policy for installed devices.
+     *
+     * Each SixLowPanNetDevice created by a subsequent Install() call is
+     * given its own instance of the chosen policy (a subclass of
+     * SixLowPanMeshUnderRouting). If this method is never called, devices
+     * keep the default from the MeshUnderRouting attribute
+     * (SixLowPanSimpleFlooding).
+     *
+     * The policy governs the forwarding of received mesh-under frames.
+     * A device takes part in a mesh-under network when its UseMeshUnder
+     * attribute is enabled (MESH and BC0 headers on sent packets, received
+     * mesh frames decoded), and it relays received mesh frames only when
+     * ForwardMesh is also enabled. A device without UseMeshUnder receiving a
+     * mesh frame reports a misconfiguration and drops it.
+     *
+     * @tparam Args Name/AttributeValue argument pairs.
+     * @param [in] type The policy TypeId, e.g. "ns3::SixLowPanSimpleFlooding".
+     * @param [in] args Optional name/AttributeValue pairs forwarded to the
+     *                  policy's ObjectFactory.
+     */
+    template <typename... Args>
+    void SetMeshUnderRouting(std::string type, Args&&... args);
 
     /**
      * @brief Install the SixLoWPAN stack on top of an existing NetDevice.
@@ -236,8 +262,28 @@ class SixLowPanHelper
      */
     std::string PrintRovr(const std::vector<uint8_t>& rovr);
 
-    ObjectFactory m_deviceFactory; //!< Object factory.
+    ObjectFactory m_deviceFactory;            //!< Object factory.
+    ObjectFactory m_meshUnderRoutingFactory;  //!< Factory for the mesh-under forwarding policy.
+    bool m_meshUnderRoutingConfigured{false}; //!< True once SetMeshUnderRouting() has been called.
 };
+
+template <typename... Args>
+void
+SixLowPanHelper::SetMeshUnderRouting(std::string type, Args&&... args)
+{
+    TypeId tid;
+    NS_ABORT_MSG_UNLESS(TypeId::LookupByNameFailSafe(type, &tid),
+                        "SetMeshUnderRouting: unknown TypeId \"" << type << "\"");
+    NS_ABORT_MSG_UNLESS(tid.IsChildOf(SixLowPanMeshUnderRouting::GetTypeId()),
+                        "SetMeshUnderRouting: \"" << type
+                                                  << "\" is not a SixLowPanMeshUnderRouting");
+    m_meshUnderRoutingFactory.SetTypeId(tid);
+    if constexpr (sizeof...(args) > 0)
+    {
+        m_meshUnderRoutingFactory.Set(std::forward<Args>(args)...);
+    }
+    m_meshUnderRoutingConfigured = true;
+}
 
 } // namespace ns3
 

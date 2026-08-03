@@ -67,29 +67,52 @@ Routing Handling
 1. Mesh-under routing
 2. Route over routing
 
-**Mesh-under routing**
+Mesh-under routing
+~~~~~~~~~~~~~~~~~~
 
-A mesh-under routing approach indicates that a routing system is implemented below IP and 6lowPAN will make the packet routing decisions based on layer 2 addresses.
-The 6lowPAN |ns3| module provides a very simple mesh-under routing, implemented as a flooding
+A mesh-under routing approach indicates that a routing system is implemented below IP, and 6lowPAN makes the packet forwarding decisions based on layer 2 addresses.
 
-At node level, each packet is re-broadcasted if its BC0 sequence number is not in the cache of the
-recently seen packets. The cache length (by default 10) can be changed through the ``MeshCacheLength`` attribute. This functionality can be activated through the ``UseMeshUnder`` attribute and fine-tuned using
-the ``MeshUnderRadius`` and ``MeshUnderJitter`` attributes.
+A node takes part in a mesh-under network when its ``UseMeshUnder`` attribute is enabled: MESH and BC0 headers are added to sent packets (with the initial hop limit set by ``MeshUnderRadius``), and received mesh-under packets are decoded and delivered. Whether the node also relays received mesh-under packets is controlled by the ``ForwardMesh`` attribute (enabled by default): encoding and decoding the MESH and BC0 headers is a simple operation, while forwarding requires per-packet state, so constrained nodes can take part in the mesh without relaying. The forwarding decision itself is delegated to a pluggable forwarding policy derived from ``SixLowPanMeshUnderRouting``, so the forwarding policy can be changed without modifying ``SixLowPanNetDevice``.
+
+A node with ``UseMeshUnder`` disabled that receives a mesh-under packet is a network misconfiguration (the node could decode the packet, but it could never reply through the mesh): the packet is dropped, the drop is logged in the drop trace as ``DROP_MESH_NOT_ENABLED``, and a warning is issued. This is a deliberate fix of the historical behavior, where every node relayed mesh-under packets regardless of its own configuration.
+
+Duplicate detection is common to all policies: each packet carries a BC0 sequence number, and a per-originator cache drops packets already seen. The cache length (by default 10) can be changed through the policy's ``MeshCacheLength`` attribute.
+
+The available forwarding policies are:
+
+* ``SixLowPanSimpleFlooding`` (default): every non-duplicate packet is re-broadcast after a uniform random jitter, set by its ``MeshUnderJitter`` attribute. This preserves the historical behavior, and existing simulations are unaffected.
+
+Each device exposes its policy through the ``MeshUnderRouting`` attribute. The policy attributes can be reached, e.g., through ``Config::Set`` with a path like::
+
+    /NodeList/*/DeviceList/*/$ns3::SixLowPanNetDevice/MeshUnderRouting/MeshUnderJitter
+
+A policy is selected through the helper, optionally passing policy attributes::
+
+    SixLowPanHelper sixlowpan;
+    sixlowpan.SetMeshUnderRouting("ns3::SixLowPanSimpleFlooding",
+                                  "MeshUnderJitter",
+                                  StringValue("ns3::UniformRandomVariable[Min=0.0|Max=5.0]"));
+    sixlowpan.Install(devices);
+
+A new forwarding policy is created by subclassing ``SixLowPanMeshUnderRouting`` and implementing ``OnPacketForward()``, which decides if and when to invoke the supplied forward callback. The optional ``OnDuplicateReceived()`` hook is invoked for every duplicate reception and can be used to modify the decisions on if / when to forward the packet.
 
 .. note::
     Flooding in a PAN generates a lot of overhead, which is often not wanted. Moreover, when using the mesh-under facility, ALL the packets are sent without acknowledgment because, at lower level, they are sent to a broadcast address.
 
-The current mesh-under flooding routing mechanism could be improved by providing the following:
+The mesh-under forwarding could be further improved by providing the following:
 
 * Adaptive hop-limit calculation,
 * Adaptive forwarding jitter,
 * Use of direct (non mesh) transmission for packets directed to 1-hop neighbors.
 
-**Route-over routing**
+Route-over routing
+~~~~~~~~~~~~~~~~~~
 
 The routing decisions are made at the network layer (over IP) and use IPv6 addresses for routing like traditional IP networks.
 The usage of route-over routing requires more processing at each hop as the IPV6 and other headers needs to be processed.
 However, it is more flexible than the mesh-under approach as you can use one or more routing mechanism to reach the destination.
+
+Route-over is not a device option: it is simply what happens when mesh-under is not used. With ``UseMeshUnder`` disabled (the default), the 6LoWPAN device performs only compression and fragmentation, and packet routing is entirely handled by the IPv6 routing protocols installed on the nodes.
 
 Examples of routing protocols used with 6lowPAN route-over include protocols such as the Routing protocol for Low-Power and Lossy Networks (RPL) and
 the Ad-hoc On-Demand Distance Vector for IPV6 (AODVv6).
@@ -275,10 +298,15 @@ The 6lowPAN provide some attributes:
 * ``FragmentReassemblyListSize``: (integer, default 0), indicating the number of packets that can be reassembled at the same time. If the limit is reached, the oldest packet is discarded. Zero means infinite.
 * ``FragmentExpirationTimeout``: (Time, default 60 seconds), being the timeout to wait for further fragments before discarding a partial packet.
 * ``CompressionThreshold``: (unsigned 32 bits integer, default 0), minimum compressed payload size.
-* ``UseMeshUnder``: (boolean, default false), it enables mesh-under flood routing.
+* ``UseMeshUnder``: (boolean, default false), the node takes part in a mesh-under network.
+* ``ForwardMesh``: (boolean, default true), the node relays received mesh-under packets (effective only with ``UseMeshUnder``).
 * ``MeshUnderRadius``: (unsigned 8 bits integer, default 10), the maximum number of hops that a packet will be forwarded.
-* ``MeshCacheLength``: (unsigned 16 bits integer, default 10), the length of the cache for each source.
-* ``MeshUnderJitter``: (ns3::UniformRandomVariable[Min=0.0|Max=10.0]), the jitter in ms a node uses to forward mesh-under packets - used to prevent collisions.
+* ``MeshUnderRouting``: (pointer, default a ``SixLowPanSimpleFlooding`` instance per device), the mesh-under forwarding policy.
+
+The mesh-under forwarding policies provide further attributes:
+
+* ``MeshCacheLength``: (unsigned 16 bits integer, default 10), the length of the cache for each source (``SixLowPanMeshUnderRouting``, common to all policies).
+* ``MeshUnderJitter``: (ns3::UniformRandomVariable[Min=0.0|Max=10.0]), the jitter in ms a node uses to forward mesh-under packets - used to prevent collisions (``SixLowPanSimpleFlooding``).
 
 The CompressionThreshold attribute is similar to Contiki's SICSLOWPAN_CONF_MIN_MAC_PAYLOAD
 option. If a compressed packet size is less than the threshold, the uncompressed version is
