@@ -72,7 +72,9 @@ SixLowPanNetDevice::GetTypeId()
                 MakeTimeAccessor(&SixLowPanNetDevice::m_fragmentExpirationTimeout),
                 MakeTimeChecker())
             .AddAttribute("CompressionThreshold",
-                          "The minimum MAC layer payload size.",
+                          "The minimum MAC layer payload size; packets whose compressed size "
+                          "is smaller are sent uncompressed. The underlying device minimum "
+                          "padding threshold is always honored as a floor.",
                           UintegerValue(0x0),
                           MakeUintegerAccessor(&SixLowPanNetDevice::m_compressionThreshold),
                           MakeUintegerChecker<uint32_t>())
@@ -650,7 +652,14 @@ SixLowPanNetDevice::DoSend(Ptr<Packet> packet,
         pktSize += extraHdrSize;
     }
 
-    if (pktSize < m_compressionThreshold)
+    // Frames below the device padding threshold get padded by the link
+    // layer, and the padding corrupts the reconstruction of the elided
+    // IPv6 Payload Length on the receiver. Send those uncompressed: the
+    // full IPv6 header carries its own length, making padding harmless.
+    uint32_t compressionThreshold =
+        std::max<uint32_t>(m_compressionThreshold, m_netDevice->GetPaddingThreshold());
+
+    if (pktSize < compressionThreshold)
     {
         NS_LOG_LOGIC("Compressed packet too short, using uncompressed one");
         packet = origPacket;

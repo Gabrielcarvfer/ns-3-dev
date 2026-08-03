@@ -29,6 +29,7 @@ build_lib(
   TEST_SOURCES
     ${example_as_test_suite}
     test/mock-net-device.cc
+    test/sixlowpan-compression-threshold-test.cc
     test/sixlowpan-fragmentation-test.cc
     test/sixlowpan-hc1-test.cc
     test/sixlowpan-iphc-stateful-test.cc
