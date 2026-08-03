@@ -723,6 +723,15 @@ FdNetDevice::GetMtu() const
     return m_mtu;
 }
 
+uint16_t
+FdNetDevice::GetPaddingThreshold() const
+{
+    // All encapsulation modes are Ethernet framings: the peer pads the
+    // data field to 46 octets and this device does not strip the padding
+    // on reception.
+    return 46;
+}
+
 bool
 FdNetDevice::IsLinkUp() const
 {
