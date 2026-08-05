@@ -430,6 +430,10 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_recoverActive(sock.m_recoverActive),
       m_retxThresh(sock.m_retxThresh),
       m_limitedTx(sock.m_limitedTx),
+      m_sndUrgentPoint(sock.m_sndUrgentPoint),
+      m_rcvUrgentPoint(sock.m_rcvUrgentPoint),
+      m_sndUrgentArmed(sock.m_sndUrgentArmed),
+      m_rcvUrgentArmed(sock.m_rcvUrgentArmed),
       m_advertisedMss(sock.m_advertisedMss),
       m_segmentSizeAdjusted(sock.m_segmentSizeAdjusted),
       m_txTrace(sock.m_txTrace),
@@ -934,8 +938,9 @@ TcpSocketBase::ShutdownRecv()
 int
 TcpSocketBase::Send(Ptr<Packet> p, uint32_t flags)
 {
-    NS_LOG_FUNCTION(this << p);
-    NS_ABORT_MSG_IF(flags, "use of flags is not supported in TcpSocketBase::Send()");
+    NS_LOG_FUNCTION(this << p << flags);
+    NS_ABORT_MSG_IF(flags & ~static_cast<uint32_t>(MSG_FLAG_OOB),
+                    "only MSG_FLAG_OOB is supported in TcpSocketBase::Send()");
     if (m_state == ESTABLISHED || m_state == SYN_SENT || m_state == CLOSE_WAIT)
     {
         // Store the packet into Tx buffer
@@ -943,6 +948,17 @@ TcpSocketBase::Send(Ptr<Packet> p, uint32_t flags)
         { // TxBuffer overflow, send failed
             m_errno = ERROR_MSGSIZE;
             return -1;
+        }
+
+        if (flags & MSG_FLAG_OOB)
+        {
+            // The urgent pointer points to the sequence number of the octet
+            // following the urgent data (RFC 9293, Section 3.8.5, MUST-62).
+            // Advancing it segment after segment supports a sequence of urgent
+            // data of any length (MUST-31)
+            m_sndUrgentPoint = m_txBuffer->TailSequence();
+            m_sndUrgentArmed = true;
+            NS_LOG_INFO("Urgent data up to " << m_sndUrgentPoint);
         }
         if (m_shutdownSend)
         {
@@ -1494,6 +1510,16 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
     }
 
     m_rxTrace(packet, tcpHeader, this);
+
+    if ((tcpHeader.GetFlags() & TcpHeader::URG) && !(tcpHeader.GetFlags() & TcpHeader::RST) &&
+        (m_state == ESTABLISHED || m_state == FIN_WAIT_1 || m_state == FIN_WAIT_2))
+    {
+        // The urgent field is processed for every incoming segment of a
+        // synchronized connection, even when the receive window is zero
+        // (RFC 9293, Section 3.8.4, MUST-66), as long as the segment lies in
+        // the window (Section 3.10.7.4), which ForwardUp checked already
+        ProcessUrgentPointer(tcpHeader);
+    }
 
     if (tcpHeader.GetFlags() & TcpHeader::SYN)
     {
@@ -3487,7 +3513,24 @@ TcpSocketBase::SendDataPacket(SequenceNumber32 seq, uint32_t maxSize, bool withA
             m_state = LAST_ACK;
         }
     }
+    if (m_sndUrgentArmed && m_sndUrgentPoint <= m_txBuffer->HeadSequence())
+    {
+        // The urgent data was acknowledged whole: the urgent point is no
+        // longer comparable to the live sequence numbers once they wrap
+        // around, so it is disarmed
+        m_sndUrgentArmed = false;
+    }
+
     TcpHeader header;
+    if (m_sndUrgentArmed && m_sndUrgentPoint > seq)
+    {
+        // Urgent data reaches beyond the start of this segment: flag it and
+        // point past its last octet, saturating the 16 bit field for urgent
+        // data longer than that (RFC 9293, Section 3.8.5)
+        flags |= TcpHeader::URG;
+        uint32_t offset = (m_sndUrgentPoint - seq);
+        header.SetUrgentPointer(static_cast<uint16_t>(std::min(offset, 65535U)));
+    }
     header.SetFlags(flags);
     header.SetSequenceNumber(seq);
     header.SetAckNumber(m_tcb->m_rxBuffer->NextRxSequence());
@@ -4692,6 +4735,59 @@ TcpSocketBase::ProcessOptionSack(const Ptr<const TcpOption> option)
     }
 
     return m_txBuffer->Update(s->GetSackList(), MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
+}
+
+void
+TcpSocketBase::ProcessUrgentPointer(const TcpHeader& header)
+{
+    NS_LOG_FUNCTION(this << header);
+
+    // The urgent pointer is an offset from the sequence number of the segment
+    // and points past the last octet of urgent data (RFC 9293, Section 3.8.5)
+    SequenceNumber32 urgentPoint = header.GetSequenceNumber() + header.GetUrgentPointer();
+
+    if (m_rcvUrgentArmed && m_rcvUrgentPoint <= m_tcb->m_rxBuffer->NextRxSequence())
+    {
+        // The urgent data was consumed: the urgent point is no longer
+        // comparable to the live sequence numbers once they wrap around, so
+        // it is disarmed before the new pointer is looked at
+        m_rcvUrgentArmed = false;
+    }
+
+    if (m_rcvUrgentArmed && urgentPoint <= m_rcvUrgentPoint)
+    {
+        // The urgent pointer cannot recede, but a receiver has to be robust
+        // against invalid values (RFC 9293, Section 3.8.5)
+        NS_LOG_LOGIC("Ignoring an urgent pointer which does not advance");
+        return;
+    }
+
+    m_rcvUrgentPoint = urgentPoint;
+    m_rcvUrgentArmed = true;
+    NS_LOG_INFO("Urgent data pending up to " << m_rcvUrgentPoint);
+
+    // The application is informed whenever an urgent pointer is received and
+    // there was previously no pending urgent data, or whenever the urgent
+    // pointer advances (RFC 9293, Section 3.8.5, MUST-32): the pointer got
+    // here only if it advanced, so both cases end up notified
+    NotifyUrgentData();
+}
+
+bool
+TcpSocketBase::HasPendingUrgentData() const
+{
+    return m_rcvUrgentArmed && m_rcvUrgentPoint > m_tcb->m_rxBuffer->NextRxSequence();
+}
+
+uint32_t
+TcpSocketBase::GetUrgentDataSize() const
+{
+    NS_LOG_FUNCTION(this);
+    if (!HasPendingUrgentData())
+    {
+        return 0;
+    }
+    return m_rcvUrgentPoint - m_tcb->m_rxBuffer->NextRxSequence();
 }
 
 SequenceNumber32

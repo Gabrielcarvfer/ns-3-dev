@@ -643,7 +643,8 @@ class TcpSocketBase : public TcpSocket
     int Close() override;        // Close by app: Kill socket upon tx buffer emptied
     int ShutdownSend() override; // Assert the m_shutdownSend flag to prevent send to network
     int ShutdownRecv() override; // Assert the m_shutdownRecv flag to prevent forward to app
-    int Send(Ptr<Packet> p, uint32_t flags) override; // Call by app to send data to network
+    int Send(Ptr<Packet> p, uint32_t flags) override;
+    uint32_t GetUrgentDataSize() const override;
     int SendTo(Ptr<Packet> p,
                uint32_t flags,
                const Address& toAddress) override; // Same as Send(), toAddress is insignificant
@@ -1289,6 +1290,20 @@ class TcpSocketBase : public TcpSocket
     uint8_t CalculateWScale() const;
 
     /**
+     * @brief Process the urgent pointer of an incoming segment
+     *
+     * @param header The TCP header of the segment.
+     */
+    void ProcessUrgentPointer(const TcpHeader& header);
+
+    /**
+     * @brief Check whether urgent data is pending on the connection
+     *
+     * @return true if urgent data has not been consumed yet.
+     */
+    bool HasPendingUrgentData() const;
+
+    /**
      * @brief Generate the initial sequence number of a connection
      *
      * @RFC{9293}, Section 3.4.1 (MUST-8) requires the initial sequence number
@@ -1528,6 +1543,12 @@ class TcpSocketBase : public TcpSocket
     Ptr<TcpRateOps> m_rateOps;                 //!< Rate operations
 
     // Guesses over the other connection end
+    SequenceNumber32 m_sndUrgentPoint{0}; //!< Sequence number past the urgent data being sent
+    SequenceNumber32 m_rcvUrgentPoint{0}; //!< Sequence number past the urgent data received
+    bool m_sndUrgentArmed{false};         //!< True once urgent data has been sent, since the
+                                          //!< urgent points are only comparable to the live
+                                          //!< sequence numbers after being set from one
+    bool m_rcvUrgentArmed{false};         //!< True once an urgent pointer has been received
     uint32_t m_advertisedMss{0}; //!< MSS advertised in the MSS option (our configured segment size)
     bool m_segmentSizeAdjusted{
         false}; //!< True if the segment size has been reduced by the size of the TCP options

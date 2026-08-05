@@ -320,6 +320,45 @@ class Socket : public Object
     virtual uint32_t GetTxAvailable() const = 0;
 
     /**
+     * @brief Flags accepted by Send()
+     *
+     * Not every socket accepts every flag: TcpSocketBase accepts MSG_FLAG_OOB
+     * in Send() only, and the urgent data is delivered in the ordinary
+     * sequence-number order rather than out-of-band (see
+     * SetUrgentDataCallback).
+     */
+    enum SocketMsgFlags
+    {
+        MSG_FLAG_NONE = 0, //!< No flag
+        MSG_FLAG_OOB = 1   //!< Process out-of-band (urgent) data
+    };
+
+    /**
+     * @brief Specify a callback to be notified of pending urgent data
+     *
+     * @RFC{9293}, Section 3.8.5 (MUST-32) requires the application layer to be
+     * informed asynchronously whenever an urgent pointer is received and there
+     * was previously no pending urgent data, or whenever the urgent pointer
+     * advances in the data stream. Sockets which do not implement the urgent
+     * mechanism never invoke the callback. Note that @RFC{6093} deprecates
+     * the use of urgent data in new applications.
+     *
+     * @param urgentData Callback invoked when urgent data becomes pending.
+     */
+    virtual void SetUrgentDataCallback(Callback<void, Ptr<Socket>> urgentData);
+
+    /**
+     * @brief Get the amount of urgent data pending on the socket
+     *
+     * @RFC{9293}, Section 3.8.5 (MUST-33) requires a way for the application
+     * to learn how much urgent data remains to be read from the connection.
+     *
+     * @return The number of bytes of pending urgent data, zero for sockets
+     *         which do not implement the urgent mechanism.
+     */
+    virtual uint32_t GetUrgentDataSize() const;
+
+    /**
      * @brief Send data (or dummy data) to the remote host
      *
      * This function matches closely in semantics to the send() function
@@ -352,10 +391,9 @@ class Socket : public Object
      * split the Packet (based on information obtained from
      * GetTxAvailable) and reattempt to send the data.
      *
-     * The flags argument is formed by or'ing one or more of the values:
-     *        MSG_OOB        process out-of-band data
-     *        MSG_DONTROUTE  bypass routing, use direct interface
-     * These flags are _unsupported_ as of ns-3.1.
+     * The flags argument is formed by or'ing one or more of the values of
+     * SocketMsgFlags; whether a socket honors them depends on its type (see
+     * SocketMsgFlags).
      *
      * @param p ns3::Packet to send
      * @param flags Socket control flags
@@ -425,10 +463,10 @@ class Socket : public Object
      * are delivered in order, and on-the-wire packet boundaries are
      * not preserved.
      *
-     * The flags argument is formed by or'ing one or more of the values:
-     *        MSG_OOB             process out-of-band data
-     *        MSG_PEEK            peek at incoming message
-     * None of these flags are supported for now.
+     * The flags argument is formed by or'ing one or more of the values of
+     * SocketMsgFlags; no flag is supported on the receive side for now, and
+     * the urgent data of a stream socket is read in the ordinary sequence
+     * order (see SocketMsgFlags).
      *
      * Some variants of Recv() are supported as additional API,
      * including RecvFrom(), overloaded Recv() without arguments,
@@ -1026,6 +1064,11 @@ class Socket : public Object
     void NotifyNewConnectionCreated(Ptr<Socket> socket, const Address& from);
 
     /**
+     * @brief Notify through the callback (if set) that urgent data is pending
+     */
+    void NotifyUrgentData();
+
+    /**
      * @brief Notify through the callback (if set) that some data have been sent.
      *
      * @param size number of sent bytes.
@@ -1074,6 +1117,7 @@ class Socket : public Object
     Ipv6Address m_ipv6MulticastGroupAddress; //!< IPv6 multicast group address.
 
   private:
+    Callback<void, Ptr<Socket>> m_urgentDataCallback;  //!< Urgent data pending callback
     Callback<void, Ptr<Socket>> m_connectionSucceeded; //!< connection succeeded callback
     Callback<void, Ptr<Socket>> m_connectionFailed;    //!< connection failed callback
     Callback<void, Ptr<Socket>> m_normalClose;         //!< connection closed callback
