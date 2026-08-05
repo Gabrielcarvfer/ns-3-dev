@@ -25,6 +25,7 @@
 #include "ns3/uinteger.h"
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <vector>
 
@@ -37,55 +38,56 @@
  * Section 3.9.3. The status of each of them in ns-3, and whether this suite
  * covers it, is the following.
  *
- * | Clause             | Requirement                             | ns-3     | Test  |
- * | :----------------- | :-------------------------------------- | :------- | :---- |
- * | MUST-1             | Window treated as unsigned              | yes      | no    |
- * | MUST-2, MUST-3     | Checksum generated and checked          | optional | no    |
- * | MUST-4 to MUST-6   | Options received, unknown ones ignored  | yes      | yes   |
- * | MUST-7             | Illegal option length handled           | yes      | yes   |
- * | MUST-8, MUST-9     | Clock driven initial sequence numbers   | optional | yes   |
- * | MUST-10, MUST-11   | Simultaneous open, active open tracked  | yes      | yes   |
- * | MUST-12            | Normal close told apart from an abort   | yes      | yes   |
- * | MUST-13            | TIME-WAIT lasts 2xMSL                   | yes      | no    |
- * | MUST-14 to MUST-16 | MSS option, defaults and effective MSS  | yes      | yes   |
- * | MUST-17            | Nagle can be disabled                   | yes      | no    |
- * | MUST-18, MUST-19   | RTO estimation, congestion control      | yes      | other |
- * | MUST-20 to MUST-23 | Retransmission limits, R2 configurable  | yes      | other |
- * | MUST-24 to MUST-29 | Keep-alives                             | absent   | n/a   |
- * | MUST-30 to MUST-33 | Urgent mechanism and its notification   | yes      | yes   |
- * | MUST-34 to MUST-37 | Window shrinking and zero window probes | yes      | no    |
- * | MUST-38, MUST-39   | SWS avoidance, sender and receiver      | yes      | no    |
- * | MUST-40            | Delayed ACK below 0.5 s                 | yes      | no    |
- * | MUST-41, MUST-42   | Passive open independent of other ones  | yes      | no    |
- * | MUST-43 to MUST-45 | Local address specified or asked to IP  | yes      | no    |
- * | MUST-46            | Invalid remote address rejected         | yes      | yes   |
- * | MUST-47            | Soft errors reported to the application | yes      | no    |
- * | MUST-48, MUST-49   | Diffserv field and TTL configurable     | yes      | no    |
- * | MUST-50            | IP options ignored by TCP               | n/a      | n/a   |
- * | MUST-51 to MUST-53 | IP source routes                        | no       | no    |
- * | MUST-54            | ICMP errors acted upon                  | yes      | yes   |
- * | MUST-55            | ICMP Source Quench discarded            | yes      | yes   |
- * | MUST-56            | Soft ICMP errors do not abort           | yes      | yes   |
- * | MUST-57, MUST-63   | SYN to or from an invalid address       | IP layer | no    |
- * | MUST-58, MUST-59   | ACK segments aggregated                 | yes      | no    |
- * | MUST-60, MUST-61   | Data not buffered forever, PSH on last  | yes      | no    |
- * | MUST-62            | Urgent pointer past the urgent data     | yes      | yes   |
- * | MUST-64            | Options off a word boundary handled     | yes      | yes   |
- * | MUST-65            | No MSS option on non-SYN segments       | yes      | yes   |
- * | MUST-66            | RST and URG at a zero receive window    | yes      | yes   |
- * | MUST-67            | Advertised MSS bounded by the buffer    | yes      | no    |
- * | MUST-68            | Options carry a length field            | yes      | yes   |
- * | MUST-69            | Padding after EOL is zeroed             | yes      | yes   |
+ * | Clause     | Requirement                                               | ns-3 | Test  |
+ * | :--------- | :-------------------------------------------------------- | :--- | :---- |
+ * | MUST 1     | Window treated as unsigned                                | yes  | no    |
+ * | MUST 2,3   | Checksum generated and checked                            | opt  | no    |
+ * | MUST 4-6   | Options received in any segment, unknown ones ignored     | yes  | yes   |
+ * | MUST 7     | Illegal option length handled                             | yes  | yes   |
+ * | MUST 8,9   | Initial sequence numbers driven by a clock and a secret   | opt  | yes   |
+ * | MUST 10,11 | Simultaneous open, and how SYN-RECEIVED was reached       | yes  | yes   |
+ * | MUST 12    | Normal close told apart from an abort                     | yes  | yes   |
+ * | MUST 13    | TIME-WAIT lasts 2xMSL                                     | yes  | no    |
+ * | MUST 14-16 | MSS option, its defaults and the effective send MSS       | yes  | yes   |
+ * | MUST 17    | Nagle algorithm can be disabled                           | yes  | no    |
+ * | MUST 18,19 | RTO estimation and congestion control                     | yes  | other |
+ * | MUST 20-23 | Retransmission limits, R2 configurable and large for SYNs | yes  | other |
+ * | MUST 24-29 | Keep-alives                                               | no   | n/a   |
+ * | MUST 30-33 | Urgent mechanism, its notification and its pending size   | yes  | yes   |
+ * | MUST 34-37 | Window shrinking and zero window probing                  | yes  | no    |
+ * | MUST 38,39 | SWS avoidance in the sender and in the receiver           | yes  | no    |
+ * | MUST 40    | Delayed ACK below 0.5 s                                   | yes  | no    |
+ * | MUST 41,42 | Passive open independent of the other connections         | yes  | yes   |
+ * | MUST 43-45 | Local address specified, or asked to the IP layer         | yes  | yes   |
+ * | MUST 46    | Invalid remote address rejected                           | yes  | yes   |
+ * | MUST 47    | Soft errors reported to the application                   | yes  | no    |
+ * | MUST 48,49 | Differentiated services field and TTL configurable        | yes  | no    |
+ * | MUST 50    | IP options ignored by TCP                                 | n/a  | n/a   |
+ * | MUST 51-53 | IP source routes specified, saved and preferred           | no   | no    |
+ * | MUST 54    | ICMP errors acted upon                                    | yes  | yes   |
+ * | MUST 55    | ICMP Source Quench discarded                              | yes  | yes   |
+ * | MUST 56    | Soft ICMP errors do not abort the connection              | yes  | yes   |
+ * | MUST 57,63 | SYN towards or coming from an invalid address ignored     | IP*  | no    |
+ * | MUST 58,59 | ACK segments aggregated                                   | yes  | no    |
+ * | MUST 60,61 | Data not buffered forever, PSH set on the last segment    | yes  | no    |
+ * | MUST 62    | Urgent pointer past the last octet of urgent data         | yes  | yes   |
+ * | MUST 64    | Options not starting on a word boundary handled           | yes  | yes   |
+ * | MUST 65    | MSS option absent from the non-SYN segments               | yes  | yes   |
+ * | MUST 66    | RST and URG processed with a zero receive window          | yes  | yes   |
+ * | MUST 67    | Advertised MSS bounded by the reassembly buffer           | yes  | no    |
+ * | MUST 68    | Options other than EOL and NOP carry a length             | yes  | yes   |
+ * | MUST 69    | Padding after the End of Option List is zeroed            | yes  | yes   |
  *
- * Every clause of @RFC{9293} appears above. The rows marked "other" are
- * covered by other suites of this module: MUST-18 by tcp-rtt-estimation and
- * tcp-rto-test, MUST-19 by tcp-slow-start-test, tcp-cong-avoid-test and
- * tcp-rto-test, and MUST-20 to MUST-23 by tcp-syn-connection-failed-test,
- * which exercises giving up on a connection after the retransmissions of its
- * SYN. The rows marked "n/a" bind an implementation offering a feature ns-3
- * does not: keep-alives are not implemented, and TCP cannot be handed IP
- * options which ns-3 never generates.
- *
+ * Every clause of @RFC{9293} appears above. "opt" marks what an attribute
+ * enables, and "IP*" what the IP layer takes care of rather than TCP. The
+ * rows marked "other" are covered by other suites of this module: MUST 18 by
+ * tcp-rtt-estimation and tcp-rto-test, MUST 19 by tcp-slow-start-test,
+ * tcp-cong-avoid-test and tcp-rto-test, and MUST 20 to MUST 23 by
+ * tcp-syn-connection-failed-test, which exercises giving up on a connection
+ * after the retransmissions of its SYN. The rows marked "n/a" bind an
+ * implementation offering a feature ns-3 does not: keep-alives are not
+ * implemented, and TCP cannot be handed IP options which ns-3 never
+ * generates.
  * The segment crafting test cases follow the tcpreq conformance testing
  * framework (https://github.com/TheJokr/tcpreq), whose probes are injected
  * through a raw socket here instead of being sent to a remote host.
@@ -1505,6 +1507,221 @@ TcpCloseNotificationTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that a passive open is independent of the other connections
+ *
+ * @RFC{9293}, Section 3.9.1.1 requires a passive OPEN to create a new
+ * connection record without affecting the previously created ones (MUST-41),
+ * and an application to be allowed to listen on a port while a connection
+ * block with the same local port is in SYN-SENT or SYN-RECEIVED (MUST-42).
+ */
+class TcpPassiveOpenTestCase : public TestCase
+{
+  public:
+    TcpPassiveOpenTestCase()
+        : TestCase("A passive open leaves the other connections alone (MUST-41, MUST-42)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * State trace sink of the connecting socket.
+     * @param oldState The previous state.
+     * @param newState The new state.
+     */
+    void PendingState(TcpSocket::TcpStates_t oldState, TcpSocket::TcpStates_t newState);
+
+    /**
+     * Accept callback of the listening socket.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    TcpSocket::TcpStates_t m_pendingState{TcpSocket::CLOSED}; //!< State of the pending connection
+    uint32_t m_accepted{0};                                   //!< Number of accepted connections
+};
+
+void
+TcpPassiveOpenTestCase::PendingState(TcpSocket::TcpStates_t oldState,
+                                     TcpSocket::TcpStates_t newState)
+{
+    m_pendingState = newState;
+}
+
+void
+TcpPassiveOpenTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    m_accepted++;
+}
+
+void
+TcpPassiveOpenTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9701;
+
+    // A connection towards a host which does not answer stays in SYN-SENT
+    Ptr<Socket> pending = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    pending->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    pending->TraceConnectWithoutContext("State",
+                                        MakeCallback(&TcpPassiveOpenTestCase::PendingState, this));
+    pending->Connect(InetSocketAddress(Ipv4Address("10.1.1.99"), port));
+
+    NS_TEST_ASSERT_MSG_EQ(m_pendingState,
+                          TcpSocket::SYN_SENT,
+                          "The pending connection is not in SYN-SENT");
+
+    // Listening on the same local port must be allowed while it is pending
+    Ptr<Socket> listening = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    NS_TEST_ASSERT_MSG_EQ(listening->Bind(InetSocketAddress(Ipv4Address::GetAny(), port)),
+                          0,
+                          "Binding a listener to the port of a pending connection failed");
+    NS_TEST_ASSERT_MSG_EQ(listening->Listen(), 0, "Listening on that port failed");
+    listening->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                                 MakeCallback(&TcpPassiveOpenTestCase::Accepted, this));
+
+    // The listener serves a connection of its own
+    Ptr<Socket> peer = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    peer->Bind();
+    Simulator::Schedule(Seconds(1),
+                        &Socket::Connect,
+                        peer,
+                        InetSocketAddress(interfaces.GetAddress(0), port));
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(m_accepted, 1, "The listener did not accept a connection");
+    NS_TEST_ASSERT_MSG_EQ(m_pendingState,
+                          TcpSocket::SYN_SENT,
+                          "The passive open disturbed the pending connection");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test the selection of the local address of a connection
+ *
+ * @RFC{9293}, Section 3.9.1.1 requires the local IP address to be
+ * specifiable (MUST-43), the IP layer to be asked for one when the
+ * application did not specify it (MUST-44), and the specified one to be used
+ * otherwise (MUST-45). The addresses are observed on the multihomed peer,
+ * which the two interfaces of the local node both reach.
+ */
+class TcpLocalAddressTestCase : public TestCase
+{
+  public:
+    TcpLocalAddressTestCase()
+        : TestCase("The local address is specifiable or asked to IP (MUST-43 to MUST-45)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Record the source address of the segments reaching the peer.
+     * @param socket The raw socket of the peer.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    std::map<uint16_t, Ipv4Address> m_sources; //!< Source address seen per source port
+};
+
+void
+TcpLocalAddressTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return;
+    }
+
+    TcpHeader tcp;
+    packet->RemoveHeader(tcp);
+    m_sources.emplace(tcp.GetSourcePort(), ipv4.GetSource());
+}
+
+void
+TcpLocalAddressTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    // Two links, so that the local node has an address the routing protocol
+    // would not select to reach the peer over the first one
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer first = devHelper.Install(nodes);
+    NetDeviceContainer second = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer firstIfs = address.Assign(first);
+    address.SetBase("10.1.2.0", "255.255.255.0");
+    Ipv4InterfaceContainer secondIfs = address.Assign(second);
+
+    const uint16_t boundPort = 9801;
+    const uint16_t unboundPort = 9802;
+
+    Ptr<Socket> sniffer = Socket::CreateSocket(nodes.Get(1), Ipv4RawSocketFactory::GetTypeId());
+    sniffer->SetAttribute("Protocol", UintegerValue(6));
+    sniffer->Bind();
+    sniffer->SetRecvCallback(MakeCallback(&TcpLocalAddressTestCase::ReceiveRaw, this));
+
+    // Bound to the address of the second link, but connecting over the first
+    Ptr<Socket> bound = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    bound->Bind(InetSocketAddress(secondIfs.GetAddress(0), boundPort));
+    bound->Connect(InetSocketAddress(firstIfs.GetAddress(1), 9803));
+
+    // Not bound to any address, so the IP layer selects one
+    Ptr<Socket> unbound = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    unbound->Bind(InetSocketAddress(Ipv4Address::GetAny(), unboundPort));
+    unbound->Connect(InetSocketAddress(firstIfs.GetAddress(1), 9804));
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(m_sources.count(boundPort), 1, "The bound socket sent no segment");
+    NS_TEST_ASSERT_MSG_EQ(m_sources[boundPort],
+                          secondIfs.GetAddress(0),
+                          "The specified local address was not the source of the segments");
+
+    NS_TEST_ASSERT_MSG_EQ(m_sources.count(unboundPort), 1, "The unbound socket sent no segment");
+    NS_TEST_ASSERT_MSG_EQ(m_sources[unboundPort],
+                          firstIfs.GetAddress(0),
+                          "The IP layer did not select the address of the outgoing interface");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -1525,6 +1742,8 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpAdvertisedMssTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpSimultaneousOpenTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpCloseNotificationTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpPassiveOpenTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpLocalAddressTestCase(), TestCase::Duration::QUICK);
     }
 };
 

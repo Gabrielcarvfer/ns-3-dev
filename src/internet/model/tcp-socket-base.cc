@@ -3227,7 +3227,13 @@ TcpSocketBase::SetupEndpoint()
         return -1;
     }
     NS_LOG_LOGIC("Route exists");
-    m_endPoint->SetLocalAddress(route->GetSource());
+    if (m_endPoint->GetLocalAddress() == Ipv4Address::GetAny())
+    {
+        // The application did not specify a local address, so the IP layer is
+        // asked to select one (RFC 9293, Section 3.9.1.1, MUST-44). Otherwise
+        // the address it bound is the one to use (MUST-43 and MUST-45)
+        m_endPoint->SetLocalAddress(route->GetSource());
+    }
     return 0;
 }
 
@@ -3257,7 +3263,11 @@ TcpSocketBase::SetupEndpoint6()
         return -1;
     }
     NS_LOG_LOGIC("Route exists");
-    m_endPoint6->SetLocalAddress(route->GetSource());
+    if (m_endPoint6->GetLocalAddress() == Ipv6Address::GetAny())
+    {
+        // See the IPv4 variant: RFC 9293, Section 3.9.1.1, MUST-43 to MUST-45
+        m_endPoint6->SetLocalAddress(route->GetSource());
+    }
     return 0;
 }
 
