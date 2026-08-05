@@ -320,6 +320,39 @@ class Socket : public Object
     virtual uint32_t GetTxAvailable() const = 0;
 
     /**
+     * @brief Flags accepted by Send() and Recv()
+     */
+    enum SocketMsgFlags
+    {
+        MSG_FLAG_NONE = 0, //!< No flag
+        MSG_FLAG_OOB = 1   //!< Process out-of-band (urgent) data
+    };
+
+    /**
+     * @brief Specify a callback to be notified of pending urgent data
+     *
+     * @RFC{9293}, Section 3.8.5 (MUST-32) requires the application layer to be
+     * informed asynchronously whenever an urgent pointer is received and there
+     * was previously no pending urgent data, or whenever the urgent pointer
+     * advances in the data stream. Sockets which do not implement the urgent
+     * mechanism never invoke the callback.
+     *
+     * @param urgentData Callback invoked when urgent data becomes pending.
+     */
+    virtual void SetUrgentDataCallback(Callback<void, Ptr<Socket>> urgentData);
+
+    /**
+     * @brief Get the amount of urgent data pending on the socket
+     *
+     * @RFC{9293}, Section 3.8.5 (MUST-33) requires a way for the application
+     * to learn how much urgent data remains to be read from the connection.
+     *
+     * @return The number of bytes of pending urgent data, zero for sockets
+     *         which do not implement the urgent mechanism.
+     */
+    virtual uint32_t GetUrgentDataSize() const;
+
+    /**
      * @brief Send data (or dummy data) to the remote host
      *
      * This function matches closely in semantics to the send() function
@@ -1026,6 +1059,11 @@ class Socket : public Object
     void NotifyNewConnectionCreated(Ptr<Socket> socket, const Address& from);
 
     /**
+     * @brief Notify through the callback (if set) that urgent data is pending
+     */
+    void NotifyUrgentData();
+
+    /**
      * @brief Notify through the callback (if set) that some data have been sent.
      *
      * @param size number of sent bytes.
@@ -1074,6 +1112,7 @@ class Socket : public Object
     Ipv6Address m_ipv6MulticastGroupAddress; //!< IPv6 multicast group address.
 
   private:
+    Callback<void, Ptr<Socket>> m_urgentDataCallback;  //!< Urgent data pending callback
     Callback<void, Ptr<Socket>> m_connectionSucceeded; //!< connection succeeded callback
     Callback<void, Ptr<Socket>> m_connectionFailed;    //!< connection failed callback
     Callback<void, Ptr<Socket>> m_normalClose;         //!< connection closed callback

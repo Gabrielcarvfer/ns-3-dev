@@ -585,6 +585,166 @@ TcpInitialSequenceNumberTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the urgent mechanism
+ *
+ * @RFC{9293}, Section 3.8.5 requires TCP implementations to support the
+ * urgent mechanism (MUST-30) for a sequence of urgent data of any length
+ * (MUST-31), with the urgent pointer pointing to the sequence number of the
+ * octet following the urgent data (MUST-62). The receiver must inform the
+ * application asynchronously when urgent data becomes pending (MUST-32) and
+ * must provide a way to learn how much urgent data is pending (MUST-33).
+ */
+class TcpUrgentDataTestCase : public TestCase
+{
+  public:
+    TcpUrgentDataTestCase();
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Urgent data callback of the receiving socket.
+     * @param socket The receiving socket.
+     */
+    void UrgentDataPending(Ptr<Socket> socket);
+
+    /**
+     * Trace sink of the segments sent by the sender.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The sending socket.
+     */
+    void SegmentSent(Ptr<const Packet> packet,
+                     const TcpHeader& header,
+                     Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Send the urgent data.
+     * @param socket The sending socket.
+     */
+    void SendUrgent(Ptr<Socket> socket);
+
+    /**
+     * Send ordinary data.
+     * @param socket The sending socket.
+     */
+    void SendNormal(Ptr<Socket> socket);
+
+    /**
+     * Set the urgent data callback on the socket forked on accept.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void AcceptedSocket(Ptr<Socket> socket, const Address& from);
+
+    uint32_t m_notifications{0};   //!< Number of urgent data notifications
+    uint32_t m_notifiedSize{0};    //!< Pending urgent bytes reported at the first notification
+    uint32_t m_urgentSegments{0};  //!< Number of segments carrying the URG flag
+    uint16_t m_urgentPointer{0};   //!< Urgent pointer of the first urgent segment
+    uint32_t m_urgentPayload{500}; //!< Size of the urgent data
+};
+
+TcpUrgentDataTestCase::TcpUrgentDataTestCase()
+    : TestCase("Urgent data is flagged, pointed at and notified (MUST-30 to MUST-33, MUST-62)")
+{
+}
+
+void
+TcpUrgentDataTestCase::AcceptedSocket(Ptr<Socket> socket, const Address& from)
+{
+    socket->SetUrgentDataCallback(MakeCallback(&TcpUrgentDataTestCase::UrgentDataPending, this));
+}
+
+void
+TcpUrgentDataTestCase::UrgentDataPending(Ptr<Socket> socket)
+{
+    if (m_notifications == 0)
+    {
+        m_notifiedSize = socket->GetUrgentDataSize();
+    }
+    m_notifications++;
+}
+
+void
+TcpUrgentDataTestCase::SegmentSent(Ptr<const Packet> packet,
+                                   const TcpHeader& header,
+                                   Ptr<const TcpSocketBase> socket)
+{
+    if (header.GetFlags() & TcpHeader::URG)
+    {
+        if (m_urgentSegments == 0)
+        {
+            m_urgentPointer = header.GetUrgentPointer();
+        }
+        m_urgentSegments++;
+    }
+}
+
+void
+TcpUrgentDataTestCase::SendNormal(Ptr<Socket> socket)
+{
+    socket->Send(Create<Packet>(100), 0);
+}
+
+void
+TcpUrgentDataTestCase::SendUrgent(Ptr<Socket> socket)
+{
+    socket->Send(Create<Packet>(m_urgentPayload), Socket::MSG_FLAG_OOB);
+}
+
+void
+TcpUrgentDataTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9301;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    // The urgent data callback is inherited by the socket forked on accept
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpUrgentDataTestCase::AcceptedSocket, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->TraceConnectWithoutContext("Tx",
+                                       MakeCallback(&TcpUrgentDataTestCase::SegmentSent, this));
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    Simulator::Schedule(Seconds(1), &TcpUrgentDataTestCase::SendNormal, this, client);
+    Simulator::Schedule(Seconds(2), &TcpUrgentDataTestCase::SendUrgent, this, client);
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_urgentSegments, 0, "No segment carried the URG flag");
+    NS_TEST_ASSERT_MSG_EQ(m_urgentPointer,
+                          m_urgentPayload,
+                          "The urgent pointer does not point past the urgent data");
+    NS_TEST_ASSERT_MSG_GT(m_notifications, 0, "The application was not notified of urgent data");
+    NS_TEST_ASSERT_MSG_EQ(m_notifiedSize,
+                          m_urgentPayload,
+                          "Wrong amount of pending urgent data reported");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -597,6 +757,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpIcmpSourceQuenchTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpMalformedOptionsResetTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpInitialSequenceNumberTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpUrgentDataTestCase(), TestCase::Duration::QUICK);
     }
 };
 
