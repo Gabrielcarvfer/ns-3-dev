@@ -1302,6 +1302,12 @@ TcpSocketBase::ForwardUp(Ptr<Packet> packet,
     TcpHeader tcpHeader;
     uint32_t bytesRemoved = packet->PeekHeader(tcpHeader);
 
+    if (tcpHeader.IsMalformed())
+    {
+        AbortOnMalformedSegment();
+        return;
+    }
+
     if (!IsValidTcpSegment(tcpHeader.GetSequenceNumber(),
                            bytesRemoved,
                            packet->GetSize() - bytesRemoved))
@@ -1341,6 +1347,12 @@ TcpSocketBase::ForwardUp6(Ptr<Packet> packet,
 
     TcpHeader tcpHeader;
     uint32_t bytesRemoved = packet->PeekHeader(tcpHeader);
+
+    if (tcpHeader.IsMalformed())
+    {
+        AbortOnMalformedSegment();
+        return;
+    }
 
     if (!IsValidTcpSegment(tcpHeader.GetSequenceNumber(),
                            bytesRemoved,
@@ -1396,6 +1408,26 @@ TcpSocketBase::ForwardIcmp6(Ipv6Address icmpSource,
     {
         m_icmpCallback6(icmpSource, icmpTtl, icmpType, icmpCode, icmpInfo);
     }
+}
+
+void
+TcpSocketBase::AbortOnMalformedSegment()
+{
+    NS_LOG_FUNCTION(this);
+    if (m_state == LISTEN || m_state == CLOSED)
+    {
+        // No connection to abort: the segment was reset by the protocol layer
+        return;
+    }
+
+    // The connection is reset upon an illegal option (RFC 9293, Section 3.1,
+    // MUST-7), on this end as well as on the peer, which the protocol layer
+    // sent a RST to already
+    NS_LOG_WARN("Aborting the connection upon a segment with malformed options");
+    m_errno = ERROR_NOTCONN;
+    NotifyErrorClose();
+    m_closeNotified = true;
+    CloseAndNotify();
 }
 
 bool

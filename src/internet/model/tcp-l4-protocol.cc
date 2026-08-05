@@ -475,6 +475,36 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
         return checksumControl;
     }
 
+    if (incomingTcpHeader.IsMalformed())
+    {
+        // An illegal option length is handled by resetting the connection and
+        // logging the error cause (RFC 9293, Section 3.1, MUST-7), which also
+        // covers a non-zero padding after the End of Option List option
+        // (MUST-69)
+        NS_LOG_ERROR("Malformed TCP options received from " << incomingIpHeader.GetSource()
+                                                            << "; resetting the connection");
+        // The connection on this end, if any, is aborted by its socket, which
+        // is handed the segment for that purpose alone
+        Ipv4EndPointDemux::EndPoints endPoints =
+            m_endPoints->Lookup(incomingIpHeader.GetDestination(),
+                                incomingTcpHeader.GetDestinationPort(),
+                                incomingIpHeader.GetSource(),
+                                incomingTcpHeader.GetSourcePort(),
+                                incomingInterface);
+        if (!endPoints.empty())
+        {
+            (*endPoints.begin())
+                ->ForwardUp(packet,
+                            incomingIpHeader,
+                            incomingTcpHeader.GetSourcePort(),
+                            incomingInterface);
+        }
+        NoEndPointsFound(incomingTcpHeader,
+                         incomingIpHeader.GetSource(),
+                         incomingIpHeader.GetDestination());
+        return IpL4Protocol::RX_ENDPOINT_CLOSED;
+    }
+
     Ipv4EndPointDemux::EndPoints endPoints;
     endPoints = m_endPoints->Lookup(incomingIpHeader.GetDestination(),
                                     incomingTcpHeader.GetDestinationPort(),
@@ -549,6 +579,28 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
     if (checksumControl != IpL4Protocol::RX_OK)
     {
         return checksumControl;
+    }
+
+    if (incomingTcpHeader.IsMalformed())
+    {
+        // See the IPv4 variant: RFC 9293, Section 3.1, MUST-7 and MUST-69
+        NS_LOG_ERROR("Malformed TCP options received from " << incomingIpHeader.GetSource()
+                                                            << "; resetting the connection");
+        Ipv6EndPointDemux::EndPoints endPoints =
+            m_endPoints6->Lookup(incomingIpHeader.GetDestination(),
+                                 incomingTcpHeader.GetDestinationPort(),
+                                 incomingIpHeader.GetSource(),
+                                 incomingTcpHeader.GetSourcePort(),
+                                 interface);
+        if (!endPoints.empty())
+        {
+            (*endPoints.begin())
+                ->ForwardUp(packet, incomingIpHeader, incomingTcpHeader.GetSourcePort(), interface);
+        }
+        NoEndPointsFound(incomingTcpHeader,
+                         incomingIpHeader.GetSource(),
+                         incomingIpHeader.GetDestination());
+        return IpL4Protocol::RX_ENDPOINT_CLOSED;
     }
 
     Ipv6EndPointDemux::EndPoints endPoints =
