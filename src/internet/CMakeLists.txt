@@ -373,6 +373,7 @@ set(test_sources
     test/tcp-pkts-acked-test.cc
     test/tcp-prr-recovery-test.cc
     test/tcp-rate-ops-test.cc
+    test/tcp-rfc9293-test.cc
     test/tcp-rto-test.cc
     test/tcp-rtt-estimation.cc
     test/tcp-rx-buffer-test.cc
