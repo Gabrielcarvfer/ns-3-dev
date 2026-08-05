@@ -1501,6 +1501,111 @@ TcpSocketBase::IsValidTcpSegment(const SequenceNumber32 seq,
 }
 
 void
+TcpSocketBase::ProcessSynOptions(const TcpHeader& tcpHeader)
+{
+    NS_LOG_FUNCTION(this << tcpHeader);
+
+    /* The window field in a segment where the SYN bit is set (i.e., a <SYN>
+     * or <SYN,ACK>) MUST NOT be scaled (from RFC 7323 page 9). But should be
+     * saved anyway..
+     */
+    m_rWnd = tcpHeader.GetWindowSize();
+
+    if (tcpHeader.HasOption(TcpOption::WINSCALE) && m_winScalingEnabled)
+    {
+        ProcessOptionWScale(tcpHeader.GetOption(TcpOption::WINSCALE));
+    }
+    else
+    {
+        m_winScalingEnabled = false;
+    }
+
+    if (tcpHeader.HasOption(TcpOption::SACKPERMITTED) && m_sackEnabled)
+    {
+        ProcessOptionSackPermitted(tcpHeader.GetOption(TcpOption::SACKPERMITTED));
+    }
+    else
+    {
+        m_sackEnabled = false;
+        m_txBuffer->SetSackEnabled(false);
+    }
+    // Mirror the negotiated SACK state into the shared TcpSocketState so that
+    // recovery algorithms (e.g. PRR) can distinguish SACK from non-SACK
+    // DeliveredData accounting.
+    m_tcb->m_sackEnabled = m_sackEnabled;
+
+    if (m_advertisedMss == 0)
+    {
+        // Save the value to advertise in the MSS option before it is
+        // reduced below: the advertised MSS reflects our configured
+        // segment size regardless of the peer MSS and of the size of the
+        // TCP options (RFC 6691, Section 2)
+        m_advertisedMss = m_tcb->m_segmentSize;
+    }
+
+    if (tcpHeader.HasOption(TcpOption::MSS))
+    {
+        ProcessOptionMss(tcpHeader.GetOption(TcpOption::MSS));
+    }
+    else
+    {
+        // No MSS option received: assume the default maximum segment size
+        // of 536 bytes for IPv4 and 1220 bytes for IPv6 (RFC 9293,
+        // Section 3.7.1)
+        uint32_t defaultMss = (m_endPoint != nullptr) ? 536 : 1220;
+        m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, defaultMss);
+    }
+
+    // When receiving a <SYN> or <SYN-ACK> we should adapt TS to the other end
+    if (tcpHeader.HasOption(TcpOption::TS) && m_timestampEnabled)
+    {
+        Ptr<const TcpOption> ts = tcpHeader.GetOption(TcpOption::TS);
+        ProcessOptionTimestamp(ts, tcpHeader.GetSequenceNumber());
+        // The timestamp of the opening segment is always the one to echo,
+        // whatever its sequence number (RFC 7323, Section 3.2)
+        m_timestampToEcho = DynamicCast<const TcpOptionTS>(ts)->GetTimestamp();
+    }
+    else
+    {
+        m_timestampEnabled = false;
+    }
+
+    if (m_timestampEnabled && !m_segmentSizeAdjusted)
+    {
+        // The MSS counts only data octets, it does not count the TCP
+        // header or the TCP options, so the sender must reduce the TCP data
+        // length to account for the options it includes (RFC 6691, Section
+        // 2): decrease the segment size by the size of the timestamp
+        // option (and its padding to a word), which is carried by every
+        // segment. The segment size may have been clamped by the MSS the
+        // peer advertised, so a tiny value cannot bring it to zero.
+        // 10 bytes of option, padded to a 4 byte boundary
+        const uint32_t tsOptionSize =
+            ((CreateObject<TcpOptionTS>()->GetSerializedSize() + 3) / 4) * 4;
+        if (m_tcb->m_segmentSize > tsOptionSize)
+        {
+            m_tcb->m_segmentSize -= tsOptionSize;
+        }
+        else
+        {
+            m_tcb->m_segmentSize = 1;
+        }
+        m_segmentSizeAdjusted = true;
+        NS_LOG_INFO("Decreased the segment size to " << m_tcb->m_segmentSize
+                                                     << " to accommodate the TCP options");
+    }
+
+    // Initialize cWnd and ssThresh
+    m_tcb->m_cWnd = GetInitialCwnd() * GetSegSize();
+    m_tcb->m_cWndInfl = m_tcb->m_cWnd;
+    m_tcb->m_ssThresh = GetInitialSSThresh();
+
+    // The transmission buffer sizes the segments it hands out, and tells a
+    // loss apart from reordering, in units of the negotiated segment size
+    m_txBuffer->SetSegmentSize(m_tcb->m_segmentSize);
+}
+
+void
 TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const Address& toAddress)
 {
     // in case the packet still has a priority tag attached, remove it
@@ -1549,91 +1654,14 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
          */
         m_rWnd = tcpHeader.GetWindowSize();
 
-        if (tcpHeader.HasOption(TcpOption::WINSCALE) && m_winScalingEnabled)
+        if (m_state != LISTEN)
         {
-            ProcessOptionWScale(tcpHeader.GetOption(TcpOption::WINSCALE));
+            // A listening socket is left untouched by the SYNs which reach
+            // it: the options of each one are negotiated by the socket forked
+            // for its connection (see CompleteFork), so that neither the
+            // listener nor the connections accepted later inherit them
+            ProcessSynOptions(tcpHeader);
         }
-        else
-        {
-            m_winScalingEnabled = false;
-        }
-
-        if (tcpHeader.HasOption(TcpOption::SACKPERMITTED) && m_sackEnabled)
-        {
-            ProcessOptionSackPermitted(tcpHeader.GetOption(TcpOption::SACKPERMITTED));
-        }
-        else
-        {
-            m_sackEnabled = false;
-            m_txBuffer->SetSackEnabled(false);
-        }
-        // Mirror the negotiated SACK state into the shared TcpSocketState so that
-        // recovery algorithms (e.g. PRR) can distinguish SACK from non-SACK
-        // DeliveredData accounting.
-        m_tcb->m_sackEnabled = m_sackEnabled;
-
-        if (m_advertisedMss == 0)
-        {
-            // Save the value to advertise in the MSS option before it is
-            // reduced below: the advertised MSS reflects our configured
-            // segment size regardless of the peer MSS and of the size of the
-            // TCP options (RFC 6691, Section 2)
-            m_advertisedMss = m_tcb->m_segmentSize;
-        }
-
-        if (tcpHeader.HasOption(TcpOption::MSS))
-        {
-            ProcessOptionMss(tcpHeader.GetOption(TcpOption::MSS));
-        }
-        else
-        {
-            // No MSS option received: assume the default maximum segment size
-            // of 536 bytes for IPv4 and 1220 bytes for IPv6 (RFC 9293,
-            // Section 3.7.1)
-            uint32_t defaultMss = (m_endPoint != nullptr) ? 536 : 1220;
-            m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, defaultMss);
-        }
-
-        // When receiving a <SYN> or <SYN-ACK> we should adapt TS to the other end
-        if (tcpHeader.HasOption(TcpOption::TS) && m_timestampEnabled)
-        {
-            ProcessOptionTimestamp(tcpHeader.GetOption(TcpOption::TS),
-                                   tcpHeader.GetSequenceNumber());
-        }
-        else
-        {
-            m_timestampEnabled = false;
-        }
-
-        if (m_timestampEnabled && !m_segmentSizeAdjusted)
-        {
-            // The MSS counts only data octets, it does not count the TCP
-            // header or the TCP options, so the sender must reduce the TCP data
-            // length to account for the options it includes (RFC 6691, Section
-            // 2): decrease the segment size by the size of the timestamp
-            // option (and its padding to a word), which is carried by every
-            // segment. The segment size may have been clamped by the MSS the
-            // peer advertised, so a tiny value cannot bring it to zero.
-            // 10 bytes of option, padded to a 4 byte boundary
-            const uint32_t tsOptionSize =
-                ((CreateObject<TcpOptionTS>()->GetSerializedSize() + 3) / 4) * 4;
-            if (m_tcb->m_segmentSize > tsOptionSize)
-            {
-                m_tcb->m_segmentSize -= tsOptionSize;
-            }
-            else
-            {
-                m_tcb->m_segmentSize = 1;
-            }
-            m_segmentSizeAdjusted = true;
-            NS_LOG_INFO("Decreased the segment size to " << m_tcb->m_segmentSize
-                                                         << " to accommodate the TCP options");
-        }
-
-        // Initialize cWnd and ssThresh
-        m_tcb->m_cWnd = GetInitialCwnd() * GetSegSize();
-        m_tcb->m_cWndInfl = m_tcb->m_cWnd;
-        m_tcb->m_ssThresh = GetInitialSSThresh();
 
         if (tcpHeader.GetFlags() & TcpHeader::ACK)
         {
@@ -3309,7 +3337,13 @@ TcpSocketBase::SetupEndpoint()
         return -1;
     }
     NS_LOG_LOGIC("Route exists");
-    m_endPoint->SetLocalAddress(route->GetSource());
+    if (m_endPoint->GetLocalAddress() == Ipv4Address::GetAny())
+    {
+        // The application did not specify a local address, so the IP layer is
+        // asked to select one (RFC 9293, Section 3.9.1.1, MUST-44). Otherwise
+        // the address it bound is the one to use (MUST-43 and MUST-45)
+        m_endPoint->SetLocalAddress(route->GetSource());
+    }
     return 0;
 }
 
@@ -3339,7 +3373,11 @@ TcpSocketBase::SetupEndpoint6()
         return -1;
     }
     NS_LOG_LOGIC("Route exists");
-    m_endPoint6->SetLocalAddress(route->GetSource());
+    if (m_endPoint6->GetLocalAddress() == Ipv6Address::GetAny())
+    {
+        // See the IPv4 variant: RFC 9293, Section 3.9.1.1, MUST-43 to MUST-45
+        m_endPoint6->SetLocalAddress(route->GetSource());
+    }
     return 0;
 }
 
@@ -3392,6 +3430,10 @@ TcpSocketBase::CompleteFork(Ptr<Packet> p [[maybe_unused]],
         m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
     }
     m_tcb->m_rxBuffer->SetNextRxSequence(h.GetSequenceNumber() + SequenceNumber32(1));
+
+    // The options of the SYN are negotiated by this socket, not by the
+    // listener it was forked from
+    ProcessSynOptions(h);
 
     /* Check if we received an ECN SYN packet. Change the ECN state of receiver to ECN_IDLE if
      * sender has sent an ECN SYN packet and the traffic is ECN Capable
@@ -4894,7 +4936,12 @@ TcpSocketBase::ProcessOptionMss(const Ptr<const TcpOption> option)
 
     Ptr<const TcpOptionMSS> mss = DynamicCast<const TcpOptionMSS>(option);
     NS_LOG_INFO(m_node->GetId() << " Received a MSS option with value " << mss->GetMSS());
-    m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, static_cast<uint32_t>(mss->GetMSS()));
+    // A tiny MSS would leave no room for the options, or for any data at all,
+    // and stall the connection: the floor is the one Linux applies
+    // (TCP_MIN_SND_MSS)
+    constexpr uint32_t MIN_PEER_MSS = 48;
+    uint32_t peerMss = std::max(static_cast<uint32_t>(mss->GetMSS()), MIN_PEER_MSS);
+    m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, peerMss);
 }
 
 void

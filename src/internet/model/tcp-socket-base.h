@@ -1252,6 +1252,20 @@ class TcpSocketBase : public TcpSocket
     void AddOptions(TcpHeader& tcpHeader);
 
     /**
+     * @brief Negotiate the options carried by a SYN or a SYN+ACK
+     *
+     * Window scaling, SACK, the MSS and the timestamps are settled once per
+     * connection from the opening segment; the initial congestion window
+     * follows from the negotiated segment size. A listening socket never
+     * negotiates: the socket forked for each connection does, so that the
+     * connections are independent of each other (RFC 9293, Section 3.9.1.1,
+     * MUST-41).
+     *
+     * @param tcpHeader The header of the opening segment.
+     */
+    void ProcessSynOptions(const TcpHeader& tcpHeader);
+
+    /**
      * @brief Read TCP options before Ack processing
      *
      * Timestamp and Window scale are managed in other pieces of code.
@@ -1342,7 +1356,9 @@ class TcpSocketBase : public TcpSocket
      * The MSS option should be sent in every SYN segment when the receive
      * MSS differs from the default, and may be sent always (@RFC{9293},
      * Section 3.7.1, SHLD-5 and MAY-3): it is always sent. The advertised
-     * value is our current segment size.
+     * value is the configured segment size, regardless of the one the peer
+     * advertised or of the options in use, bounded by the MTU of the
+     * interface (MUST-67).
      *
      * @param header TcpHeader where the method should add the option
      */
