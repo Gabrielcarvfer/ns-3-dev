@@ -38,6 +38,7 @@
 #include "ns3/packet-socket-factory.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
+#include "ns3/tcp-l4-protocol.h"
 #include "ns3/traffic-control-layer.h"
 
 #include <limits>
@@ -260,6 +261,11 @@ InternetStackHelper::AssignStreams(NodeContainer c, int64_t stream)
             {
                 currentStream += icmpv6L4Protocol->AssignStreams(currentStream);
             }
+        }
+        Ptr<TcpL4Protocol> tcp = node->GetObject<TcpL4Protocol>();
+        if (tcp)
+        {
+            currentStream += tcp->AssignStreams(currentStream);
         }
     }
     // The below is intentionally left out of the above loop, to avoid some stream

@@ -1279,6 +1279,20 @@ class TcpSocketBase : public TcpSocket
     uint8_t CalculateWScale() const;
 
     /**
+     * @brief Generate the initial sequence number of a connection
+     *
+     * @RFC{9293}, Section 3.4.1 (MUST-8) requires the initial sequence number
+     * to be selected from a clock, so that the sequence numbers of distinct
+     * connections between the same pair of sockets do not overlap. The value
+     * is the 4 microsecond clock plus a hash of the connection identifying
+     * parameters and of a per-node secret, which is not computable from the
+     * outside (MUST-9).
+     *
+     * @return The initial sequence number.
+     */
+    SequenceNumber32 GenerateIsn() const;
+
+    /**
      * @brief Read the MSS option from other side
      *
      * The maximum segment size to use when sending data is set to the

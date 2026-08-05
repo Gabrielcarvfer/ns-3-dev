@@ -13,6 +13,7 @@
 
 #include "ns3/ipv4-address.h"
 #include "ns3/ipv6-address.h"
+#include "ns3/random-variable-stream.h"
 #include "ns3/sequence-number.h"
 
 #include <stdint.h>
@@ -222,6 +223,42 @@ class TcpL4Protocol : public IpL4Protocol
                     Ptr<NetDevice> oif = nullptr) const;
 
     /**
+     * @brief Assign a fixed random variable stream number to the random
+     *        variables used by this model
+     *
+     * No stream is used while the ClockDrivenIsn attribute is disabled, so
+     * that the stream assignment of the simulations which do not enable it is
+     * left untouched.
+     *
+     * @param stream First stream index to use.
+     * @return The number of stream indices assigned by this model.
+     */
+    int64_t AssignStreams(int64_t stream);
+
+    /**
+     * @brief Check whether the initial sequence numbers are clock driven
+     *
+     * Selecting them from a clock is what @RFC{9293}, Section 3.4.1 (MUST-8)
+     * requires, but it is disabled by default: starting every connection from
+     * sequence number zero keeps the traces easier to read, and the reference
+     * response vectors valid.
+     *
+     * @return true if the initial sequence numbers are clock driven.
+     */
+    bool IsClockDrivenIsnEnabled() const;
+
+    /**
+     * @brief Get the secret used to generate the initial sequence numbers
+     *
+     * @RFC{9293}, Section 3.4.1 (MUST-9) requires the function generating the
+     * initial sequence numbers not to be computable from the outside: the
+     * secret is drawn once per node from the random number generator.
+     *
+     * @return The secret.
+     */
+    uint32_t GetIsnSecret() const;
+
+    /**
      * @brief Make a socket fully operational
      *
      * Called after a socket has been bound, it is inserted in an internal vector.
@@ -327,12 +364,17 @@ class TcpL4Protocol : public IpL4Protocol
                           const Address& incomingDAddr);
 
   private:
-    Ptr<Node> m_node;                //!< the node this stack is associated with
-    Ipv4EndPointDemux* m_endPoints;  //!< A list of IPv4 end points.
-    Ipv6EndPointDemux* m_endPoints6; //!< A list of IPv6 end points.
-    TypeId m_rttTypeId;              //!< The RTT Estimator TypeId
-    TypeId m_congestionTypeId;       //!< The socket TypeId
-    TypeId m_recoveryTypeId;         //!< The recovery TypeId
+    Ptr<Node> m_node;
+    bool m_clockDrivenIsn{false}; //!< Select the initial sequence numbers from a clock
+    mutable Ptr<UniformRandomVariable> m_isnSecretStream; //!< Stream the ISN secret is drawn from
+    mutable uint32_t m_isnSecret{0};      //!< Secret used to generate the initial sequence numbers
+    mutable bool m_isnSecretDrawn{false}; //!< True once the ISN secret has been drawn //!< the node
+                                          //!< this stack is associated with
+    Ipv4EndPointDemux* m_endPoints;       //!< A list of IPv4 end points.
+    Ipv6EndPointDemux* m_endPoints6;      //!< A list of IPv6 end points.
+    TypeId m_rttTypeId;                   //!< The RTT Estimator TypeId
+    TypeId m_congestionTypeId;            //!< The socket TypeId
+    TypeId m_recoveryTypeId;              //!< The recovery TypeId
     std::unordered_map<uint64_t, Ptr<TcpSocketBase>>
         m_sockets;             //!< Unordered map of socket IDs and corresponding sockets
     uint64_t m_socketIndex{0}; //!< index of the next socket to be created

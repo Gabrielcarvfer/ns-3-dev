@@ -29,14 +29,17 @@
 #include "ns3/assert.h"
 #include "ns3/boolean.h"
 #include "ns3/iana-internet-protocol-numbers.h"
+#include "ns3/integer.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/nstime.h"
 #include "ns3/object-map.h"
 #include "ns3/packet.h"
+#include "ns3/random-variable-stream.h"
 #include "ns3/simulator.h"
 
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
@@ -76,6 +79,13 @@ TcpL4Protocol::GetTypeId()
                           TypeIdValue(RttMeanDeviation::GetTypeId()),
                           MakeTypeIdAccessor(&TcpL4Protocol::m_rttTypeId),
                           MakeTypeIdChecker())
+            .AddAttribute("ClockDrivenIsn",
+                          "Select the initial sequence numbers from a clock, as RFC 9293 "
+                          "(Section 3.4.1, MUST-8) requires, instead of starting every "
+                          "connection from sequence number zero",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpL4Protocol::m_clockDrivenIsn),
+                          MakeBooleanChecker())
             .AddAttribute("SocketType",
                           "Socket type of TCP objects.",
                           TypeIdValue(TcpCubic::GetTypeId()),
@@ -416,6 +426,52 @@ TcpL4Protocol::PacketReceived(Ptr<Packet> packet,
     }
 
     return IpL4Protocol::RX_OK;
+}
+
+int64_t
+TcpL4Protocol::AssignStreams(int64_t stream)
+{
+    NS_LOG_FUNCTION(this << stream);
+
+    if (!m_clockDrivenIsn)
+    {
+        // No stream is consumed while the initial sequence numbers start from
+        // zero, so that this model does not shift the stream assignment of the
+        // simulations which do not enable it
+        return 0;
+    }
+
+    // Created with an explicit stream number: creating a RandomVariableStream
+    // without one consumes an index of the automatic stream assignment
+    m_isnSecretStream =
+        CreateObjectWithAttributes<UniformRandomVariable>("Stream", IntegerValue(stream));
+    return 1;
+}
+
+bool
+TcpL4Protocol::IsClockDrivenIsnEnabled() const
+{
+    return m_clockDrivenIsn;
+}
+
+uint32_t
+TcpL4Protocol::GetIsnSecret() const
+{
+    if (!m_isnSecretDrawn)
+    {
+        if (!m_isnSecretStream)
+        {
+            // Only reached with ClockDrivenIsn enabled and no stream assigned:
+            // the automatic assignment is consumed here rather than when the
+            // protocol is created, so that a simulation leaving the attribute
+            // disabled keeps the stream numbering it had
+            m_isnSecretStream = CreateObject<UniformRandomVariable>();
+        }
+        // Drawn once, on the first connection of the node
+        m_isnSecret = m_isnSecretStream->GetInteger(0, std::numeric_limits<uint32_t>::max());
+        m_isnSecretDrawn = true;
+    }
+    return m_isnSecret;
 }
 
 void

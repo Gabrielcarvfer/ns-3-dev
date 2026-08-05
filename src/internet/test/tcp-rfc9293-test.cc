@@ -2,7 +2,9 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
+#include "ns3/boolean.h"
 #include "ns3/callback.h"
+#include "ns3/config.h"
 #include "ns3/icmpv4.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
@@ -19,6 +21,10 @@
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/test.h"
 #include "ns3/uinteger.h"
+
+#include <algorithm>
+#include <set>
+#include <vector>
 
 using namespace ns3;
 
@@ -435,6 +441,150 @@ TcpMalformedOptionsResetTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that the initial sequence numbers are clock driven
+ *
+ * @RFC{9293}, Section 3.4.1 (MUST-8) requires the initial sequence number of
+ * a connection to be selected from a clock, so that the sequence numbers of
+ * distinct connections between the same pair of sockets do not overlap. The
+ * SYN segments are injected through a raw socket, so that several connections
+ * towards the same listening socket can be opened from the test.
+ *
+ * Clock driven initial sequence numbers are optional, so the test enables
+ * them.
+ */
+class TcpInitialSequenceNumberTestCase : public TestCase
+{
+  public:
+    TcpInitialSequenceNumberTestCase();
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Receive a segment on the raw socket of the prober.
+     * @param socket The raw socket.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    /**
+     * Inject a SYN segment from the given source port.
+     * @param socket The raw socket.
+     * @param dst The destination address.
+     * @param sport The source port.
+     */
+    void SendSyn(Ptr<Socket> socket, Ipv4Address dst, uint16_t sport);
+
+    std::vector<uint32_t> m_isns; //!< Initial sequence numbers of the target
+    uint16_t m_targetPort{9101};  //!< Port the target listens on
+};
+
+TcpInitialSequenceNumberTestCase::TcpInitialSequenceNumberTestCase()
+    : TestCase("The initial sequence numbers are clock driven (MUST-8)")
+{
+}
+
+void
+TcpInitialSequenceNumberTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return;
+    }
+
+    TcpHeader tcp;
+    packet->RemoveHeader(tcp);
+    if ((tcp.GetFlags() & (TcpHeader::SYN | TcpHeader::ACK)) == (TcpHeader::SYN | TcpHeader::ACK))
+    {
+        m_isns.push_back(tcp.GetSequenceNumber().GetValue());
+    }
+}
+
+void
+TcpInitialSequenceNumberTestCase::SendSyn(Ptr<Socket> socket, Ipv4Address dst, uint16_t sport)
+{
+    Ptr<Packet> packet = Create<Packet>();
+
+    TcpHeader tcp;
+    tcp.SetSourcePort(sport);
+    tcp.SetDestinationPort(m_targetPort);
+    tcp.SetSequenceNumber(SequenceNumber32(1));
+    tcp.SetAckNumber(SequenceNumber32(0));
+    tcp.SetFlags(TcpHeader::SYN);
+    tcp.SetWindowSize(4096);
+    packet->AddHeader(tcp);
+
+    socket->SendTo(packet, 0, InetSocketAddress(dst, 0));
+}
+
+void
+TcpInitialSequenceNumberTestCase::DoRun()
+{
+    Config::SetDefault("ns3::TcpL4Protocol::ClockDrivenIsn", BooleanValue(true));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_targetPort));
+    server->Listen();
+
+    Ptr<Socket> prober = Socket::CreateSocket(nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
+    prober->SetAttribute("Protocol", UintegerValue(6));
+    prober->Bind(InetSocketAddress(interfaces.GetAddress(0), 0));
+    prober->SetRecvCallback(MakeCallback(&TcpInitialSequenceNumberTestCase::ReceiveRaw, this));
+
+    // Open three connections from different source ports, spaced in time so
+    // that the clock component of the initial sequence number advances
+    const uint16_t ports[3] = {9201, 9202, 9203};
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        Simulator::Schedule(Seconds(1 + i),
+                            &TcpInitialSequenceNumberTestCase::SendSyn,
+                            this,
+                            prober,
+                            interfaces.GetAddress(1),
+                            ports[i]);
+    }
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT_OR_EQ(m_isns.size(), 3, "Not every SYN was answered with a SYN+ACK");
+
+    // The initial sequence numbers must not be the constant zero of a
+    // sequence-number-agnostic implementation
+    uint32_t zeros = std::count(m_isns.begin(), m_isns.end(), 0);
+    NS_TEST_ASSERT_MSG_EQ(zeros, 0, "An initial sequence number was zero");
+
+    // Distinct connections must not reuse the same initial sequence number
+    std::set<uint32_t> distinct(m_isns.begin(), m_isns.end());
+    NS_TEST_ASSERT_MSG_EQ(distinct.size(),
+                          m_isns.size(),
+                          "Two connections shared an initial sequence number");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -446,6 +596,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpInvalidRemoteAddressTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpIcmpSourceQuenchTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpMalformedOptionsResetTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpInitialSequenceNumberTestCase(), TestCase::Duration::QUICK);
     }
 };
 

@@ -40,6 +40,7 @@
 #include "ns3/abort.h"
 #include "ns3/data-rate.h"
 #include "ns3/double.h"
+#include "ns3/hash.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
 #include "ns3/log.h"
@@ -1178,6 +1179,15 @@ TcpSocketBase::DoConnect()
     if (m_state == CLOSED || m_state == LISTEN || m_state == SYN_SENT || m_state == LAST_ACK ||
         m_state == CLOSE_WAIT)
     { // send a SYN packet and change state into SYN_SENT
+        if (m_tcp->IsClockDrivenIsnEnabled())
+        {
+            // Pick the initial sequence number from the clock (RFC 9293,
+            // Section 3.4.1, MUST-8)
+            m_tcb->m_nextTxSequence = GenerateIsn();
+            m_tcb->m_highTxMark = m_tcb->m_nextTxSequence;
+            m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+        }
+
         // send a SYN packet with ECE and CWR flags set if sender is ECN capable
         if (m_tcb->m_useEcn == TcpSocketState::On)
         {
@@ -3247,6 +3257,14 @@ TcpSocketBase::CompleteFork(Ptr<Packet> p [[maybe_unused]],
     m_dataRetrCount = m_dataRetries;
     SetupCallback();
     // Set the sequence number and send SYN+ACK
+    if (m_tcp->IsClockDrivenIsnEnabled())
+    {
+        // The initial sequence number is picked from the clock (RFC 9293,
+        // Section 3.4.1, MUST-8)
+        m_tcb->m_nextTxSequence = GenerateIsn();
+        m_tcb->m_highTxMark = m_tcb->m_nextTxSequence;
+        m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+    }
     m_tcb->m_rxBuffer->SetNextRxSequence(h.GetSequenceNumber() + SequenceNumber32(1));
 
     /* Check if we received an ECN SYN packet. Change the ECN state of receiver to ECN_IDLE if
@@ -4644,6 +4662,33 @@ TcpSocketBase::ProcessOptionSack(const Ptr<const TcpOption> option)
     }
 
     return m_txBuffer->Update(s->GetSackList(), MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
+}
+
+SequenceNumber32
+TcpSocketBase::GenerateIsn() const
+{
+    NS_LOG_FUNCTION(this);
+
+    // M, the 4 microsecond clock (RFC 9293, Section 3.4.1)
+    uint32_t clock = static_cast<uint32_t>(Simulator::Now().GetMicroSeconds() / 4);
+
+    // F(), a hash of the connection identifying parameters and of a secret key
+    std::ostringstream identity;
+    if (m_endPoint != nullptr)
+    {
+        identity << m_endPoint->GetLocalAddress() << ":" << m_endPoint->GetLocalPort() << ":"
+                 << m_endPoint->GetPeerAddress() << ":" << m_endPoint->GetPeerPort();
+    }
+    else if (m_endPoint6 != nullptr)
+    {
+        identity << m_endPoint6->GetLocalAddress() << ":" << m_endPoint6->GetLocalPort() << ":"
+                 << m_endPoint6->GetPeerAddress() << ":" << m_endPoint6->GetPeerPort();
+    }
+    identity << ":" << m_tcp->GetIsnSecret();
+
+    SequenceNumber32 isn(clock + Hash32(identity.str()));
+    NS_LOG_LOGIC("Generated the initial sequence number " << isn);
+    return isn;
 }
 
 void
