@@ -223,6 +223,12 @@ TcpHeader::CalculateHeaderChecksum(uint16_t size) const
 }
 
 bool
+TcpHeader::IsMalformed() const
+{
+    return m_malformed;
+}
+
+bool
 TcpHeader::IsChecksumOk() const
 {
     return m_goodChecksum;
@@ -333,15 +339,42 @@ TcpHeader::Deserialize(Buffer::Iterator start)
 
     // Deserialize options if they exist
     m_options.clear();
+    m_malformed = false;
     uint32_t optionLen = (m_length - 5) * 4;
     if (optionLen > m_maxOptionsLen)
     {
         NS_LOG_ERROR("Illegal TCP option length " << optionLen << "; options discarded");
+        m_malformed = true;
         return 20;
     }
     while (optionLen)
     {
         uint8_t kind = i.PeekU8();
+        if (kind != TcpOption::END && kind != TcpOption::NOP)
+        {
+            // Every option except END and NOP carries a length field, which
+            // must fit in the remaining option space: deserializing an option
+            // whose declared length lies beyond it would read past the buffer
+            // (RFC 9293, Section 3.1, MUST-7 and MUST-68)
+            if (optionLen < 2)
+            {
+                NS_LOG_ERROR("TCP option without a length field; options discarded");
+                m_malformed = true;
+                break;
+            }
+
+            Buffer::Iterator lengthIterator = i;
+            lengthIterator.Next(1);
+            uint8_t declaredLen = lengthIterator.PeekU8();
+            if (declaredLen < 2 || declaredLen > optionLen)
+            {
+                NS_LOG_ERROR("Illegal TCP option length " << static_cast<int>(declaredLen)
+                                                          << "; options discarded");
+                m_malformed = true;
+                break;
+            }
+        }
+
         Ptr<TcpOption> op;
         uint32_t optionSize;
         if (TcpOption::IsKindKnown(kind))
@@ -357,6 +390,7 @@ TcpHeader::Deserialize(Buffer::Iterator start)
         if (optionSize != op->GetSerializedSize())
         {
             NS_LOG_ERROR("Option did not deserialize correctly");
+            m_malformed = true;
             break;
         }
         if (optionLen >= optionSize)
@@ -369,13 +403,21 @@ TcpHeader::Deserialize(Buffer::Iterator start)
         else
         {
             NS_LOG_ERROR("Option exceeds TCP option space; option discarded");
+            m_malformed = true;
             break;
         }
         if (op->GetKind() == TcpOption::END)
         {
             while (optionLen)
             {
-                // Discard padding bytes without adding to option list
+                // The content of the header beyond the End of Option List
+                // option must be header padding of zeros (RFC 9293,
+                // Section 3.1, MUST-69)
+                if (i.PeekU8() != 0)
+                {
+                    NS_LOG_ERROR("Non-zero padding after the End of Option List option");
+                    m_malformed = true;
+                }
                 i.Next(1);
                 --optionLen;
                 ++m_optionsLen;

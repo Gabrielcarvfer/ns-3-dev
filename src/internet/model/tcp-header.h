@@ -293,6 +293,18 @@ class TcpHeader : public Header
     bool IsChecksumOk() const;
 
     /**
+     * @brief Check if the header was malformed
+     *
+     * A header is malformed when its options cannot be parsed: an illegal
+     * option length, an option exceeding the option space, or a non-zero
+     * padding after the End of Option List option. @RFC{9293}, Section 3.1
+     * (MUST-7 and MUST-69) prescribes resetting the connection in that case.
+     *
+     * @returns true if the header was malformed
+     */
+    bool IsMalformed() const;
+
+    /**
      * Comparison operator
      * @param lhs left operand
      * @param rhs right operand
@@ -332,6 +344,7 @@ class TcpHeader : public Header
     uint8_t m_protocol{6}; //!< Protocol number
 
     bool m_calcChecksum{false}; //!< Flag to calculate checksum
+    bool m_malformed{false};    //!< Flag to indicate that the header could not be parsed
     bool m_goodChecksum{true};  //!< Flag to indicate that checksum is correct
 
     static const uint8_t m_maxOptionsLen = 40; //!< Maximum options length

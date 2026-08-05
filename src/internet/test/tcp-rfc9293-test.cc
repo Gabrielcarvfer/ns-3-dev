@@ -8,14 +8,17 @@
 #include "ns3/inet6-socket-address.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
+#include "ns3/ipv4-raw-socket-factory.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simulator.h"
+#include "ns3/tcp-header.h"
 #include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/test.h"
+#include "ns3/uinteger.h"
 
 using namespace ns3;
 
@@ -276,6 +279,162 @@ TcpIcmpSourceQuenchTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that a segment with malformed options resets the connection
+ *
+ * @RFC{9293}, Section 3.1 (MUST-7) prescribes handling an illegal option
+ * length by resetting the connection and logging the error cause. The
+ * segment is injected through a raw socket, so that an option length which
+ * the ns-3 TCP implementation would never generate can be exercised.
+ */
+class TcpMalformedOptionsResetTestCase : public TestCase
+{
+  public:
+    TcpMalformedOptionsResetTestCase();
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Receive a segment on the raw socket of the prober.
+     * @param socket The raw socket.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    /**
+     * Inject a SYN segment carrying an option with an illegal length.
+     * @param socket The raw socket.
+     * @param dst The destination address.
+     */
+    void SendMalformedSyn(Ptr<Socket> socket, Ipv4Address dst);
+
+    uint32_t m_rstCount{0};      //!< Number of RST segments received by the prober
+    uint32_t m_synAckCount{0};   //!< Number of SYN+ACK segments received by the prober
+    uint16_t m_proberPort{9000}; //!< Source port used by the prober
+    uint16_t m_targetPort{9001}; //!< Port the target listens on
+};
+
+TcpMalformedOptionsResetTestCase::TcpMalformedOptionsResetTestCase()
+    : TestCase("A segment with malformed options resets the connection (MUST-7)")
+{
+}
+
+void
+TcpMalformedOptionsResetTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return;
+    }
+
+    TcpHeader tcp;
+    packet->RemoveHeader(tcp);
+    if (tcp.GetDestinationPort() != m_proberPort)
+    {
+        return;
+    }
+
+    if (tcp.GetFlags() & TcpHeader::RST)
+    {
+        m_rstCount++;
+    }
+    else if ((tcp.GetFlags() & TcpHeader::SYN) && (tcp.GetFlags() & TcpHeader::ACK))
+    {
+        m_synAckCount++;
+    }
+}
+
+void
+TcpMalformedOptionsResetTestCase::SendMalformedSyn(Ptr<Socket> socket, Ipv4Address dst)
+{
+    // The segment is built byte by byte: TcpHeader derives its data offset
+    // from the options it carries, so an option with an illegal length cannot
+    // be expressed through it. The header claims one word of options holding
+    // a timestamp option (kind 8) which announces a length of 10 bytes, more
+    // than the option space it lies in
+    const uint8_t segment[24] = {
+        static_cast<uint8_t>(m_proberPort >> 8),
+        static_cast<uint8_t>(m_proberPort & 0xff), // source port
+        static_cast<uint8_t>(m_targetPort >> 8),
+        static_cast<uint8_t>(m_targetPort & 0xff), // destination port
+        0x00,
+        0x00,
+        0x00,
+        0x01, // sequence number
+        0x00,
+        0x00,
+        0x00,
+        0x00,           // acknowledgment number
+        0x60,           // data offset: 6 words
+        TcpHeader::SYN, // flags
+        0x10,
+        0x00, // window size
+        0x00,
+        0x00, // checksum
+        0x00,
+        0x00, // urgent pointer
+        0x08,
+        0x0a,
+        0x00,
+        0x00 // malformed timestamp option
+    };
+
+    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    socket->SendTo(packet, 0, InetSocketAddress(dst, 0));
+}
+
+void
+TcpMalformedOptionsResetTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    // The target listens, so that a well-formed SYN would be answered with a
+    // SYN+ACK rather than with a RST
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_targetPort));
+    server->Listen();
+
+    Ptr<Socket> prober = Socket::CreateSocket(nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
+    prober->SetAttribute("Protocol", UintegerValue(6));
+    prober->Bind(InetSocketAddress(interfaces.GetAddress(0), 0));
+    prober->SetRecvCallback(MakeCallback(&TcpMalformedOptionsResetTestCase::ReceiveRaw, this));
+
+    Simulator::Schedule(Seconds(1),
+                        &TcpMalformedOptionsResetTestCase::SendMalformedSyn,
+                        this,
+                        prober,
+                        interfaces.GetAddress(1));
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(m_synAckCount,
+                          0,
+                          "The connection was established despite the malformed options");
+    NS_TEST_ASSERT_MSG_EQ(m_rstCount, 1, "The malformed options did not reset the connection");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -286,6 +445,7 @@ class TcpRfc9293TestSuite : public TestSuite
     {
         AddTestCase(new TcpInvalidRemoteAddressTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpIcmpSourceQuenchTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpMalformedOptionsResetTestCase(), TestCase::Duration::QUICK);
     }
 };
 

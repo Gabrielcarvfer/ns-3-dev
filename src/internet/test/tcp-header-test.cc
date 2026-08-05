@@ -443,6 +443,83 @@ TcpHeaderFlagsToString::DoRun()
 /**
  * @ingroup internet-test
  *
+ * @brief Test the detection of malformed TCP options
+ *
+ * @RFC{9293}, Section 3.1 requires implementations to be prepared to handle
+ * an illegal option length (MUST-7), and requires the content of the header
+ * beyond the End of Option List option to be padding of zeros (MUST-69).
+ * Both cases must be flagged as malformed, so that the connection can be
+ * reset.
+ */
+class TcpHeaderMalformedOptionsTestCase : public TestCase
+{
+  public:
+    TcpHeaderMalformedOptionsTestCase()
+        : TestCase("Malformed TCP options are detected")
+    {
+    }
+
+    void DoRun() override
+    {
+        // A well-formed header with a NOP and an End of Option List option,
+        // padded with zeros, is not malformed
+        NS_TEST_ASSERT_MSG_EQ(Deserialize({0x01, 0x00, 0x00, 0x00}).IsMalformed(),
+                              false,
+                              "A well-formed header was flagged as malformed");
+
+        // Non-zero padding after the End of Option List option (MUST-69)
+        NS_TEST_ASSERT_MSG_EQ(Deserialize({0x01, 0x00, 0x00, 0x42}).IsMalformed(),
+                              true,
+                              "Non-zero padding after the End of Option List was accepted");
+
+        // Illegal option length: the length field of the timestamp option
+        // (kind 8) is zero instead of 10 (MUST-7)
+        NS_TEST_ASSERT_MSG_EQ(
+            Deserialize({0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
+                .IsMalformed(),
+            true,
+            "An option with an illegal length was accepted");
+
+        // Option whose length exceeds the remaining option space (MUST-7)
+        NS_TEST_ASSERT_MSG_EQ(Deserialize({0x08, 0x0a, 0x00, 0x00}).IsMalformed(),
+                              true,
+                              "An option exceeding the option space was accepted");
+    }
+
+  private:
+    /**
+     * Deserialize a header carrying the given raw option bytes.
+     *
+     * @param options The raw option bytes, whose size must be a multiple of 4.
+     * @return The deserialized header.
+     */
+    TcpHeader Deserialize(const std::vector<uint8_t>& options)
+    {
+        NS_ASSERT(options.size() % 4 == 0);
+        const uint8_t headerLength = 5 + options.size() / 4;
+
+        Buffer buffer;
+        buffer.AddAtStart(20 + options.size());
+        Buffer::Iterator i = buffer.Begin();
+        i.WriteHtonU16(1000);               // source port
+        i.WriteHtonU16(2000);               // destination port
+        i.WriteHtonU32(1);                  // sequence number
+        i.WriteHtonU32(0);                  // ack number
+        i.WriteHtonU16(headerLength << 12); // data offset and flags
+        i.WriteHtonU16(4096);               // window size
+        i.WriteHtonU16(0);                  // checksum
+        i.WriteHtonU16(0);                  // urgent pointer
+        i.Write(options.data(), options.size());
+
+        TcpHeader header;
+        header.Deserialize(buffer.Begin());
+        return header;
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP header TestSuite
  */
 /**
@@ -502,6 +579,7 @@ class TcpHeaderTestSuite : public TestSuite
         AddTestCase(new TcpHeaderWithRFC793OptionTestCase("Test for options in RFC 793"),
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpHeaderDuplicateOptionTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpHeaderMalformedOptionsTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpHeaderFlagsToString("Test flags to string function"),
                     TestCase::Duration::QUICK);
     }
