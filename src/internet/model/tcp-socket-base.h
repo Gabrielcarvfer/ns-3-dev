@@ -793,6 +793,16 @@ class TcpSocketBase : public TcpSocket
     // Helper functions: Transfer operation
 
     /**
+     * @brief Abort the connection upon a segment with malformed options
+     *
+     * The protocol layer resets the peer of a segment with an illegal
+     * option (@RFC{9293}, Section 3.1, MUST-7) and hands the segment over,
+     * so that this end of the connection is torn down as well and the
+     * application told of the abort.
+     */
+    void AbortOnMalformedSegment();
+
+    /**
      * @brief Checks whether the given TCP segment is valid or not.
      *
      * @param seq the sequence number of packet's TCP header
