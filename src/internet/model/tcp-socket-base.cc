@@ -753,6 +753,16 @@ TcpSocketBase::Connect(const Address& address)
     // If haven't do so, Bind() this socket first
     if (InetSocketAddress::IsMatchingType(address))
     {
+        // A local OPEN call for an invalid remote IP address must be rejected
+        // as an error (RFC 9293, Section 3.9.1.5, MUST-46)
+        Ipv4Address peer = InetSocketAddress::ConvertFrom(address).GetIpv4();
+        if (peer.IsBroadcast() || peer.IsMulticast())
+        {
+            NS_LOG_ERROR("Cannot connect to the broadcast or multicast address " << peer);
+            m_errno = ERROR_INVAL;
+            return -1;
+        }
+
         if (m_endPoint == nullptr)
         {
             if (Bind() == -1)
@@ -784,6 +794,15 @@ TcpSocketBase::Connect(const Address& address)
         {
             Ipv4Address v4Addr = v6Addr.GetIpv4MappedAddress();
             return Connect(InetSocketAddress(v4Addr, transport.GetPort()));
+        }
+
+        // A local OPEN call for an invalid remote IP address must be rejected
+        // as an error (RFC 9293, Section 3.9.1.5, MUST-46)
+        if (v6Addr.IsMulticast())
+        {
+            NS_LOG_ERROR("Cannot connect to the multicast address " << v6Addr);
+            m_errno = ERROR_INVAL;
+            return -1;
         }
 
         if (m_endPoint6 == nullptr)
