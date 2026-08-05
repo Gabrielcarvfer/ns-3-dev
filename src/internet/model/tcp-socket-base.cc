@@ -430,6 +430,7 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_recoverActive(sock.m_recoverActive),
       m_retxThresh(sock.m_retxThresh),
       m_limitedTx(sock.m_limitedTx),
+      m_activeOpen(sock.m_activeOpen),
       m_sndUrgentPoint(sock.m_sndUrgentPoint),
       m_rcvUrgentPoint(sock.m_rcvUrgentPoint),
       m_sndUrgentArmed(sock.m_sndUrgentArmed),
@@ -1194,6 +1195,10 @@ TcpSocketBase::DoConnect()
     if (m_state == CLOSED || m_state == LISTEN || m_state == SYN_SENT || m_state == LAST_ACK ||
         m_state == CLOSE_WAIT)
     { // send a SYN packet and change state into SYN_SENT
+        // The connection is being opened actively, which has to be told apart
+        // from a passive open (RFC 9293, Section 3.5, MUST-11)
+        m_activeOpen = true;
+
         if (m_tcp->IsClockDrivenIsnEnabled())
         {
             // Pick the initial sequence number from the clock (RFC 9293,
@@ -1434,6 +1439,21 @@ TcpSocketBase::ForwardIcmp6(Ipv6Address icmpSource,
     {
         m_icmpCallback6(icmpSource, icmpTtl, icmpType, icmpCode, icmpInfo);
     }
+}
+
+void
+TcpSocketBase::NotifyReset()
+{
+    NS_LOG_FUNCTION(this);
+    if (m_closeNotified)
+    {
+        return;
+    }
+    // A connection closed by a RST was aborted, and the application is told
+    // apart from a normal close (RFC 9293, Section 3.6, MUST-12)
+    m_errno = ERROR_NOTCONN;
+    NotifyErrorClose();
+    m_closeNotified = true;
 }
 
 void
@@ -1801,6 +1821,10 @@ TcpSocketBase::ProcessEstablished(Ptr<Packet> packet, const TcpHeader& tcpHeader
             NS_LOG_LOGIC("Illegal flag " << TcpHeader::FlagsToString(tcpflags)
                                          << " received. Reset packet is sent.");
             SendRST();
+        }
+        else
+        {
+            NotifyReset();
         }
         CloseAndNotify();
     }
@@ -2661,7 +2685,15 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
     uint8_t tcpflags =
         tcpHeader.GetFlags() & ~(TcpHeader::PSH | TcpHeader::URG | TcpHeader::CWR | TcpHeader::ECE);
 
-    if (tcpflags == 0 ||
+    // A SYN+ACK acknowledging our SYN completes a simultaneous open (RFC 9293,
+    // Section 3.5, MUST-10): its SYN repeats the one which brought us here,
+    // and only an endpoint which opened the connection actively can receive it
+    bool simultaneousOpen =
+        m_activeOpen && tcpflags == (TcpHeader::SYN | TcpHeader::ACK) &&
+        m_tcb->m_nextTxSequence + SequenceNumber32(1) == tcpHeader.GetAckNumber() &&
+        tcpHeader.GetSequenceNumber() + SequenceNumber32(1) == m_tcb->m_rxBuffer->NextRxSequence();
+
+    if (tcpflags == 0 || simultaneousOpen ||
         (tcpflags == TcpHeader::ACK &&
          m_tcb->m_nextTxSequence + SequenceNumber32(1) == tcpHeader.GetAckNumber()))
     { // If it is bare data, accept it and move to ESTABLISHED state. This is
@@ -2688,7 +2720,17 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
         // Always respond to first data packet to speed up the connection.
         // Remove to get the behaviour of old NS-3 code.
         m_delAckCount = m_delAckMaxCount;
-        NotifyNewConnectionCreated(this, fromAddress);
+        if (m_activeOpen)
+        {
+            // The connection was opened actively, so the application which
+            // called Connect() is the one to notify (RFC 9293, Section 3.5,
+            // MUST-11)
+            NotifyConnectionSucceeded();
+        }
+        else
+        {
+            NotifyNewConnectionCreated(this, fromAddress);
+        }
         ReceivedAck(packet, tcpHeader);
         // Update the pacing rate based on RTT measurement so far
         UpdatePacingRate();
@@ -2737,14 +2779,36 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
                 m_endPoint6->SetPeer(Inet6SocketAddress::ConvertFrom(fromAddress).GetIpv6(),
                                      Inet6SocketAddress::ConvertFrom(fromAddress).GetPort());
             }
-            NotifyNewConnectionCreated(this, fromAddress);
+            if (m_activeOpen)
+            {
+                // The application which called Connect() is the one to
+                // notify (RFC 9293, Section 3.5, MUST-11)
+                NotifyConnectionSucceeded();
+            }
+            else
+            {
+                NotifyNewConnectionCreated(this, fromAddress);
+            }
             PeerClose(packet, tcpHeader);
         }
     }
     else
     { // Other in-sequence input
+        if (tcpflags == TcpHeader::RST && m_activeOpen)
+        {
+            // The connection came from SYN-SENT: a RST means it was refused,
+            // which the application which called Connect() is told through
+            // the connection failure callback (RFC 9293, Section 3.10.7.4)
+            NS_LOG_LOGIC("RST received in SYN_RCVD after an active open: connection refused");
+            m_errno = ERROR_NOTCONN;
+            NotifyConnectionFailed();
+            m_closeNotified = true;
+            CloseAndNotify();
+            return;
+        }
         if (tcpflags != TcpHeader::RST)
-        { // When (1) rx of SYN+ACK; (2) rx of FIN; (3) rx of bad flags
+        { // When (1) rx of a SYN+ACK not acknowledging our SYN; (2) rx of FIN;
+            // (3) rx of bad flags
             NS_LOG_LOGIC("Illegal flag " << TcpHeader::FlagsToString(tcpflags)
                                          << " received. Reset packet is sent.");
             if (m_endPoint)
@@ -2806,6 +2870,10 @@ TcpSocketBase::ProcessWait(Ptr<Packet> packet, const TcpHeader& tcpHeader)
             NS_LOG_LOGIC("Illegal flag " << TcpHeader::FlagsToString(tcpflags)
                                          << " received. Reset packet is sent.");
             SendRST();
+        }
+        else
+        {
+            NotifyReset();
         }
         CloseAndNotify();
         return;
@@ -3309,6 +3377,8 @@ TcpSocketBase::CompleteFork(Ptr<Packet> p [[maybe_unused]],
     // Change the cloned socket from LISTEN state to SYN_RCVD
     NS_LOG_DEBUG("LISTEN -> SYN_RCVD");
     m_state = SYN_RCVD;
+    // Reached through a passive open (RFC 9293, Section 3.5, MUST-11)
+    m_activeOpen = false;
     m_synCount = m_synRetries;
     m_dataRetrCount = m_dataRetries;
     SetupCallback();

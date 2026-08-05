@@ -794,6 +794,14 @@ class TcpSocketBase : public TcpSocket
     // Helper functions: Transfer operation
 
     /**
+     * @brief Tell the application the connection was reset by the peer
+     *
+     * The abort is told apart from a normal close (@RFC{9293}, Section 3.6,
+     * MUST-12), unless the application was told of a close already.
+     */
+    void NotifyReset();
+
+    /**
      * @brief Abort the connection upon a segment with malformed options
      *
      * The protocol layer resets the peer of a segment with an illegal
@@ -1543,6 +1551,7 @@ class TcpSocketBase : public TcpSocket
     Ptr<TcpRateOps> m_rateOps;                 //!< Rate operations
 
     // Guesses over the other connection end
+    bool m_activeOpen{false};             //!< True if SYN_RCVD was reached through an active open
     SequenceNumber32 m_sndUrgentPoint{0}; //!< Sequence number past the urgent data being sent
     SequenceNumber32 m_rcvUrgentPoint{0}; //!< Sequence number past the urgent data received
     bool m_sndUrgentArmed{false};         //!< True once urgent data has been sent, since the
