@@ -431,6 +431,7 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_retxThresh(sock.m_retxThresh),
       m_limitedTx(sock.m_limitedTx),
       m_isFirstPartialAck(sock.m_isFirstPartialAck),
+      m_activeOpen(sock.m_activeOpen),
       m_sndUrgentPoint(sock.m_sndUrgentPoint),
       m_rcvUrgentPoint(sock.m_rcvUrgentPoint),
       m_advertisedMss(sock.m_advertisedMss),
@@ -1192,6 +1193,10 @@ TcpSocketBase::DoConnect()
     if (m_state == CLOSED || m_state == LISTEN || m_state == SYN_SENT || m_state == LAST_ACK ||
         m_state == CLOSE_WAIT)
     { // send a SYN packet and change state into SYN_SENT
+        // The connection is being opened actively, which has to be told apart
+        // from a passive open (RFC 9293, Section 3.5, MUST-11)
+        m_activeOpen = true;
+
         if (m_tcp->IsClockDrivenIsnEnabled())
         {
             // Pick the initial sequence number from the clock (RFC 9293,
@@ -2625,7 +2630,14 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
     uint8_t tcpflags =
         tcpHeader.GetFlags() & ~(TcpHeader::PSH | TcpHeader::URG | TcpHeader::CWR | TcpHeader::ECE);
 
-    if (tcpflags == 0 ||
+    // A SYN+ACK acknowledging our SYN completes a simultaneous open (RFC 9293,
+    // Section 3.5, MUST-10): its SYN repeats the one which brought us here,
+    // and only an endpoint which opened the connection actively can receive it
+    bool simultaneousOpen =
+        m_activeOpen && tcpflags == (TcpHeader::SYN | TcpHeader::ACK) &&
+        m_tcb->m_nextTxSequence + SequenceNumber32(1) == tcpHeader.GetAckNumber();
+
+    if (tcpflags == 0 || simultaneousOpen ||
         (tcpflags == TcpHeader::ACK &&
          m_tcb->m_nextTxSequence + SequenceNumber32(1) == tcpHeader.GetAckNumber()))
     { // If it is bare data, accept it and move to ESTABLISHED state. This is
@@ -2652,7 +2664,17 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
         // Always respond to first data packet to speed up the connection.
         // Remove to get the behaviour of old NS-3 code.
         m_delAckCount = m_delAckMaxCount;
-        NotifyNewConnectionCreated(this, fromAddress);
+        if (m_activeOpen)
+        {
+            // The connection was opened actively, so the application which
+            // called Connect() is the one to notify (RFC 9293, Section 3.5,
+            // MUST-11)
+            NotifyConnectionSucceeded();
+        }
+        else
+        {
+            NotifyNewConnectionCreated(this, fromAddress);
+        }
         ReceivedAck(packet, tcpHeader);
         // Update the pacing rate based on RTT measurement so far
         UpdatePacingRate();
@@ -3273,6 +3295,8 @@ TcpSocketBase::CompleteFork(Ptr<Packet> p [[maybe_unused]],
     // Change the cloned socket from LISTEN state to SYN_RCVD
     NS_LOG_DEBUG("LISTEN -> SYN_RCVD");
     m_state = SYN_RCVD;
+    // Reached through a passive open (RFC 9293, Section 3.5, MUST-11)
+    m_activeOpen = false;
     m_synCount = m_synRetries;
     m_dataRetrCount = m_dataRetries;
     SetupCallback();

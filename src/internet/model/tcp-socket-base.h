@@ -1534,6 +1534,7 @@ class TcpSocketBase : public TcpSocket
 
     // Guesses over the other connection end
     bool m_isFirstPartialAck{true}; //!< First partial ACK after a retransmission timeout (CA_LOSS)
+    bool m_activeOpen{false};       //!< True if SYN_RCVD was reached through an active open
     SequenceNumber32 m_sndUrgentPoint{0}; //!< Sequence number past the urgent data being sent
     SequenceNumber32 m_rcvUrgentPoint{0}; //!< Sequence number past the urgent data received
     uint32_t m_advertisedMss{0}; //!< MSS advertised in the MSS option (our configured segment size)

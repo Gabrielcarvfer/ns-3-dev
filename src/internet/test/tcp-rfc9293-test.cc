@@ -13,6 +13,7 @@
 #include "ns3/ipv4-raw-socket-factory.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
+#include "ns3/nstime.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simulator.h"
 #include "ns3/tcp-header.h"
@@ -36,42 +37,54 @@
  * Section 3.9.3. The status of each of them in ns-3, and whether this suite
  * covers it, is the following.
  *
- * | Clause             | Requirement                             | ns-3     | Test |
- * | :----------------- | :-------------------------------------- | :------- | :--- |
- * | MUST-1             | Window treated as unsigned              | yes      | no   |
- * | MUST-2, MUST-3     | Checksum generated and checked          | optional | no   |
- * | MUST-4 to MUST-6   | Options received, unknown ones ignored  | yes      | yes  |
- * | MUST-7             | Illegal option length handled           | yes      | yes  |
- * | MUST-8, MUST-9     | Clock driven initial sequence numbers   | optional | yes  |
- * | MUST-13            | TIME-WAIT lasts 2xMSL                   | yes      | no   |
- * | MUST-14 to MUST-16 | MSS option, defaults and effective MSS  | yes      | yes  |
- * | MUST-17            | Nagle can be disabled                   | yes      | no   |
- * | MUST-30 to MUST-33 | Urgent mechanism and its notification   | yes      | yes  |
- * | MUST-34 to MUST-37 | Window shrinking and zero window probes | yes      | no   |
- * | MUST-38, MUST-39   | SWS avoidance, sender and receiver      | yes      | no   |
- * | MUST-40            | Delayed ACK below 0.5 s                 | yes      | no   |
- * | MUST-46            | Invalid remote address rejected         | yes      | yes  |
- * | MUST-47            | Soft errors reported to the application | yes      | no   |
- * | MUST-48, MUST-49   | Diffserv field and TTL configurable     | yes      | no   |
- * | MUST-51 to MUST-53 | IP source routes                        | no       | no   |
- * | MUST-54            | ICMP errors acted upon                  | yes      | yes  |
- * | MUST-55            | ICMP Source Quench discarded            | yes      | yes  |
- * | MUST-56            | Soft ICMP errors do not abort           | yes      | yes  |
- * | MUST-57, MUST-63   | SYN to or from an invalid address       | IP layer | no   |
- * | MUST-58, MUST-59   | ACK segments aggregated                 | yes      | no   |
- * | MUST-60, MUST-61   | Data not buffered forever, PSH on last  | yes      | no   |
- * | MUST-62            | Urgent pointer past the urgent data     | yes      | yes  |
- * | MUST-64            | Options off a word boundary handled     | yes      | yes  |
- * | MUST-65            | No MSS option on non-SYN segments       | yes      | yes  |
- * | MUST-66            | RST and URG at a zero receive window    | yes      | yes  |
- * | MUST-67            | Advertised MSS bounded by the buffer    | yes      | no   |
- * | MUST-68            | Options carry a length field            | yes      | yes  |
- * | MUST-69            | Padding after EOL is zeroed             | yes      | yes  |
+ * | Clause             | Requirement                             | ns-3     | Test  |
+ * | :----------------- | :-------------------------------------- | :------- | :---- |
+ * | MUST-1             | Window treated as unsigned              | yes      | no    |
+ * | MUST-2, MUST-3     | Checksum generated and checked          | optional | no    |
+ * | MUST-4 to MUST-6   | Options received, unknown ones ignored  | yes      | yes   |
+ * | MUST-7             | Illegal option length handled           | yes      | yes   |
+ * | MUST-8, MUST-9     | Clock driven initial sequence numbers   | optional | yes   |
+ * | MUST-10, MUST-11   | Simultaneous open, active open tracked  | yes      | yes   |
+ * | MUST-12            | Normal close told apart from an abort   | yes      | yes   |
+ * | MUST-13            | TIME-WAIT lasts 2xMSL                   | yes      | no    |
+ * | MUST-14 to MUST-16 | MSS option, defaults and effective MSS  | yes      | yes   |
+ * | MUST-17            | Nagle can be disabled                   | yes      | no    |
+ * | MUST-18, MUST-19   | RTO estimation, congestion control      | yes      | other |
+ * | MUST-20 to MUST-23 | Retransmission limits, R2 configurable  | yes      | other |
+ * | MUST-24 to MUST-29 | Keep-alives                             | absent   | n/a   |
+ * | MUST-30 to MUST-33 | Urgent mechanism and its notification   | yes      | yes   |
+ * | MUST-34 to MUST-37 | Window shrinking and zero window probes | yes      | no    |
+ * | MUST-38, MUST-39   | SWS avoidance, sender and receiver      | yes      | no    |
+ * | MUST-40            | Delayed ACK below 0.5 s                 | yes      | no    |
+ * | MUST-41, MUST-42   | Passive open independent of other ones  | yes      | no    |
+ * | MUST-43 to MUST-45 | Local address specified or asked to IP  | yes      | no    |
+ * | MUST-46            | Invalid remote address rejected         | yes      | yes   |
+ * | MUST-47            | Soft errors reported to the application | yes      | no    |
+ * | MUST-48, MUST-49   | Diffserv field and TTL configurable     | yes      | no    |
+ * | MUST-50            | IP options ignored by TCP               | n/a      | n/a   |
+ * | MUST-51 to MUST-53 | IP source routes                        | no       | no    |
+ * | MUST-54            | ICMP errors acted upon                  | yes      | yes   |
+ * | MUST-55            | ICMP Source Quench discarded            | yes      | yes   |
+ * | MUST-56            | Soft ICMP errors do not abort           | yes      | yes   |
+ * | MUST-57, MUST-63   | SYN to or from an invalid address       | IP layer | no    |
+ * | MUST-58, MUST-59   | ACK segments aggregated                 | yes      | no    |
+ * | MUST-60, MUST-61   | Data not buffered forever, PSH on last  | yes      | no    |
+ * | MUST-62            | Urgent pointer past the urgent data     | yes      | yes   |
+ * | MUST-64            | Options off a word boundary handled     | yes      | yes   |
+ * | MUST-65            | No MSS option on non-SYN segments       | yes      | yes   |
+ * | MUST-66            | RST and URG at a zero receive window    | yes      | yes   |
+ * | MUST-67            | Advertised MSS bounded by the buffer    | yes      | no    |
+ * | MUST-68            | Options carry a length field            | yes      | yes   |
+ * | MUST-69            | Padding after EOL is zeroed             | yes      | yes   |
  *
- * The clauses left out of the table (MUST-10 to MUST-12, MUST-18 to MUST-29,
- * MUST-41 to MUST-45 and MUST-50) govern the connection state machine and the
- * semantics of the OPEN, SEND, RECEIVE, CLOSE, ABORT and STATUS calls, which
- * this suite does not exercise.
+ * Every clause of @RFC{9293} appears above. The rows marked "other" are
+ * covered by other suites of this module: MUST-18 by tcp-rtt-estimation and
+ * tcp-rto-test, MUST-19 by tcp-slow-start-test, tcp-cong-avoid-test and
+ * tcp-rto-test, and MUST-20 to MUST-23 by tcp-syn-connection-failed-test,
+ * which exercises giving up on a connection after the retransmissions of its
+ * SYN. The rows marked "n/a" bind an implementation offering a feature ns-3
+ * does not: keep-alives are not implemented, and TCP cannot be handed IP
+ * options which ns-3 never generates.
  *
  * The segment crafting test cases follow the tcpreq conformance testing
  * framework (https://github.com/TheJokr/tcpreq), whose probes are injected
@@ -1290,6 +1303,208 @@ TcpAdvertisedMssTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the simultaneous open of a connection
+ *
+ * @RFC{9293}, Section 3.5 (MUST-10) requires the simultaneous open sequence
+ * to be supported, in which both endpoints actively open the connection and
+ * no listening socket is involved. The endpoint also has to keep track of
+ * whether SYN-RECEIVED was reached from a passive or an active open
+ * (MUST-11), which the connection succeeding on both ends shows here.
+ */
+class TcpSimultaneousOpenTestCase : public TestCase
+{
+  public:
+    TcpSimultaneousOpenTestCase()
+        : TestCase("A simultaneous open establishes the connection (MUST-10, MUST-11)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Connection succeeded callback.
+     * @param socket The connected socket.
+     */
+    void Connected(Ptr<Socket> socket);
+
+    /**
+     * Connection failed callback.
+     * @param socket The socket which failed to connect.
+     */
+    void Failed(Ptr<Socket> socket);
+
+    uint32_t m_connected{0}; //!< Number of endpoints which reached ESTABLISHED
+    uint32_t m_failed{0};    //!< Number of endpoints which gave up
+};
+
+void
+TcpSimultaneousOpenTestCase::Connected(Ptr<Socket> socket)
+{
+    m_connected++;
+}
+
+void
+TcpSimultaneousOpenTestCase::Failed(Ptr<Socket> socket)
+{
+    m_failed++;
+}
+
+void
+TcpSimultaneousOpenTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    // The link needs a delay, so that the two SYN segments cross each other
+    // instead of the first one arriving before the second one is sent
+    SimpleNetDeviceHelper devHelper;
+    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t portA = 9601;
+    const uint16_t portB = 9602;
+
+    // Neither endpoint listens: both open the connection actively, towards
+    // the port the other one is bound to
+    Ptr<Socket> a = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    a->Bind(InetSocketAddress(Ipv4Address::GetAny(), portA));
+    a->SetConnectCallback(MakeCallback(&TcpSimultaneousOpenTestCase::Connected, this),
+                          MakeCallback(&TcpSimultaneousOpenTestCase::Failed, this));
+
+    Ptr<Socket> b = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    b->Bind(InetSocketAddress(Ipv4Address::GetAny(), portB));
+    b->SetConnectCallback(MakeCallback(&TcpSimultaneousOpenTestCase::Connected, this),
+                          MakeCallback(&TcpSimultaneousOpenTestCase::Failed, this));
+
+    Simulator::Schedule(Seconds(1),
+                        &Socket::Connect,
+                        a,
+                        InetSocketAddress(interfaces.GetAddress(1), portB));
+    Simulator::Schedule(Seconds(1),
+                        &Socket::Connect,
+                        b,
+                        InetSocketAddress(interfaces.GetAddress(0), portA));
+
+    Simulator::Stop(Seconds(20));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(m_failed, 0, "An endpoint of the simultaneous open gave up");
+    NS_TEST_ASSERT_MSG_EQ(m_connected, 2, "The simultaneous open did not establish both ends");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that a normal close is told apart from an abort
+ *
+ * @RFC{9293}, Section 3.6 (MUST-12) requires the application to be informed
+ * whether the connection was closed normally or was aborted, when the remote
+ * side closes it with a FIN or with a RST respectively.
+ */
+class TcpCloseNotificationTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpCloseNotificationTestCase()
+        : TcpCraftedSegmentTestCase("A normal close is told apart from an abort (MUST-12)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Normal close callback.
+     * @param socket The closed socket.
+     */
+    void NormalClose(Ptr<Socket> socket);
+
+    /**
+     * Error close callback.
+     * @param socket The aborted socket.
+     */
+    void ErrorClose(Ptr<Socket> socket);
+
+    /**
+     * Accept callback, which installs the close callbacks on the forked socket.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    /**
+     * Close the peer socket.
+     * @param socket The socket to close.
+     */
+    void CloseSocket(Ptr<Socket> socket);
+
+    uint32_t m_normalCloses{0}; //!< Number of normal close notifications
+    uint32_t m_errorCloses{0};  //!< Number of error close notifications
+};
+
+void
+TcpCloseNotificationTestCase::NormalClose(Ptr<Socket> socket)
+{
+    m_normalCloses++;
+}
+
+void
+TcpCloseNotificationTestCase::ErrorClose(Ptr<Socket> socket)
+{
+    m_errorCloses++;
+}
+
+void
+TcpCloseNotificationTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->SetCloseCallbacks(MakeCallback(&TcpCloseNotificationTestCase::NormalClose, this),
+                              MakeCallback(&TcpCloseNotificationTestCase::ErrorClose, this));
+}
+
+void
+TcpCloseNotificationTestCase::CloseSocket(Ptr<Socket> socket)
+{
+    socket->Close();
+}
+
+void
+TcpCloseNotificationTestCase::DoRun()
+{
+    // A peer closing with a FIN notifies a normal close
+    {
+        SetupTopology();
+
+        m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                                    MakeCallback(&TcpCloseNotificationTestCase::Accepted, this));
+
+        Ptr<Socket> peer = Socket::CreateSocket(m_nodes.Get(0), TcpSocketFactory::GetTypeId());
+        peer->Bind();
+        peer->Connect(InetSocketAddress(m_interfaces.GetAddress(1), m_targetPort));
+        Simulator::Schedule(Seconds(2), &TcpCloseNotificationTestCase::CloseSocket, this, peer);
+
+        Simulator::Stop(Seconds(10));
+        Simulator::Run();
+        Simulator::Destroy();
+    }
+
+    NS_TEST_ASSERT_MSG_EQ(m_normalCloses, 1, "A close with a FIN was not notified as normal");
+    NS_TEST_ASSERT_MSG_EQ(m_errorCloses, 0, "A close with a FIN was notified as an abort");
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -1308,6 +1523,8 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpReservedFlagsTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpResetAckTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpAdvertisedMssTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpSimultaneousOpenTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpCloseNotificationTestCase(), TestCase::Duration::QUICK);
     }
 };
 
