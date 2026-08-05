@@ -7,6 +7,7 @@
 #include "ns3tcp-socket-writer.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
 #include "ns3/error-model.h"
@@ -68,6 +69,15 @@ class Ns3TcpLossTestCase : public TestCase
      */
     Ns3TcpLossTestCase(std::string tcpModel, uint32_t testCase);
 
+    /**
+     * Constructor.
+     *
+     * @param tcpModel The TCP model name.
+     * @param testCase Testcase number.
+     * @param clockDrivenIsn Whether the initial sequence numbers are clock driven.
+     */
+    Ns3TcpLossTestCase(std::string tcpModel, uint32_t testCase, bool clockDrivenIsn);
+
     ~Ns3TcpLossTestCase() override
     {
     }
@@ -88,6 +98,7 @@ class Ns3TcpLossTestCase : public TestCase
     bool m_writeLogging;            //!< True if write logging.
     bool m_needToClose;             //!< Check if the sending socket need to be closed.
     std::string m_tcpModel;         //!< The TCP model name.
+    bool m_clockDrivenIsn{false};   //!< True if the initial sequence numbers are clock driven.
 
     /**
      * Check that the transmitted packets are consistent with the trace.
@@ -140,6 +151,11 @@ Ns3TcpLossTestCase::Ns3TcpLossTestCase()
 }
 
 Ns3TcpLossTestCase::Ns3TcpLossTestCase(std::string tcpModel, uint32_t testCase)
+    : Ns3TcpLossTestCase(tcpModel, testCase, false)
+{
+}
+
+Ns3TcpLossTestCase::Ns3TcpLossTestCase(std::string tcpModel, uint32_t testCase, bool clockDrivenIsn)
     : TestCase("Check the behaviour of TCP upon packet losses"),
       m_testCase(testCase),
       m_totalTxBytes(200000),
@@ -148,7 +164,8 @@ Ns3TcpLossTestCase::Ns3TcpLossTestCase(std::string tcpModel, uint32_t testCase)
       m_writeResults(WRITE_PCAP),
       m_writeLogging(WRITE_LOGGING),
       m_needToClose(true),
-      m_tcpModel(tcpModel)
+      m_tcpModel(tcpModel),
+      m_clockDrivenIsn(clockDrivenIsn)
 {
 }
 
@@ -168,7 +185,10 @@ Ns3TcpLossTestCase::DoSetup()
     // the data directory
     //
     std::ostringstream oss;
-    oss << "ns3tcp-loss-" << m_tcpModel << m_testCase << "-response-vectors.pcap";
+    Config::SetDefault("ns3::TcpL4Protocol::ClockDrivenIsn", BooleanValue(m_clockDrivenIsn));
+
+    oss << "ns3tcp-loss-" << m_tcpModel << m_testCase << (m_clockDrivenIsn ? "-isn" : "")
+        << "-response-vectors.pcap";
     m_pcapFilename = CreateDataDirFilename(oss.str());
 
     if (m_writeVectors)
@@ -516,6 +536,16 @@ Ns3TcpLossTestSuite::Ns3TcpLossTestSuite()
     AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 2), TestCase::Duration::QUICK);
     AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 3), TestCase::Duration::QUICK);
     AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 4), TestCase::Duration::QUICK);
+
+    // The same cases with clock driven initial sequence numbers, whose
+    // response vectors are held apart
+    for (const std::string& model : {"NewReno", "WestwoodPlus"})
+    {
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            AddTestCase(new Ns3TcpLossTestCase(model, i, true), TestCase::Duration::QUICK);
+        }
+    }
 }
 
 /// Do not forget to allocate an instance of this TestSuite.
