@@ -268,6 +268,30 @@ Socket::NotifyNewConnectionCreated(Ptr<Socket> socket, const Address& from)
 }
 
 void
+Socket::SetUrgentDataCallback(Callback<void, Ptr<Socket>> urgentData)
+{
+    NS_LOG_FUNCTION(this << &urgentData);
+    m_urgentDataCallback = urgentData;
+}
+
+uint32_t
+Socket::GetUrgentDataSize() const
+{
+    NS_LOG_FUNCTION(this);
+    return 0;
+}
+
+void
+Socket::NotifyUrgentData()
+{
+    NS_LOG_FUNCTION(this);
+    if (!m_urgentDataCallback.IsNull())
+    {
+        m_urgentDataCallback(this);
+    }
+}
+
+void
 Socket::NotifyDataSent(uint32_t size)
 {
     NS_LOG_FUNCTION(this << size);
