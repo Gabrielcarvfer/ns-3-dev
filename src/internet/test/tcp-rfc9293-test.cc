@@ -17,6 +17,7 @@
 #include "ns3/simulator.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-l4-protocol.h"
+#include "ns3/tcp-option.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/test.h"
@@ -26,9 +27,239 @@
 #include <set>
 #include <vector>
 
+/**
+ * @file
+ *
+ * @brief Conformance tests for the requirements of @RFC{9293}
+ *
+ * The requirements of @RFC{9293} are labelled MUST-1 to MUST-69 in its
+ * Section 3.9.3. The status of each of them in ns-3, and whether this suite
+ * covers it, is the following.
+ *
+ * | Clause             | Requirement                             | ns-3     | Test |
+ * | :----------------- | :-------------------------------------- | :------- | :--- |
+ * | MUST-1             | Window treated as unsigned              | yes      | no   |
+ * | MUST-2, MUST-3     | Checksum generated and checked          | optional | no   |
+ * | MUST-4 to MUST-6   | Options received, unknown ones ignored  | yes      | yes  |
+ * | MUST-7             | Illegal option length handled           | yes      | yes  |
+ * | MUST-8, MUST-9     | Clock driven initial sequence numbers   | optional | yes  |
+ * | MUST-13            | TIME-WAIT lasts 2xMSL                   | yes      | no   |
+ * | MUST-14 to MUST-16 | MSS option, defaults and effective MSS  | yes      | yes  |
+ * | MUST-17            | Nagle can be disabled                   | yes      | no   |
+ * | MUST-30 to MUST-33 | Urgent mechanism and its notification   | yes      | yes  |
+ * | MUST-34 to MUST-37 | Window shrinking and zero window probes | yes      | no   |
+ * | MUST-38, MUST-39   | SWS avoidance, sender and receiver      | yes      | no   |
+ * | MUST-40            | Delayed ACK below 0.5 s                 | yes      | no   |
+ * | MUST-46            | Invalid remote address rejected         | yes      | yes  |
+ * | MUST-47            | Soft errors reported to the application | yes      | no   |
+ * | MUST-48, MUST-49   | Diffserv field and TTL configurable     | yes      | no   |
+ * | MUST-51 to MUST-53 | IP source routes                        | no       | no   |
+ * | MUST-54            | ICMP errors acted upon                  | yes      | yes  |
+ * | MUST-55            | ICMP Source Quench discarded            | yes      | yes  |
+ * | MUST-56            | Soft ICMP errors do not abort           | yes      | yes  |
+ * | MUST-57, MUST-63   | SYN to or from an invalid address       | IP layer | no   |
+ * | MUST-58, MUST-59   | ACK segments aggregated                 | yes      | no   |
+ * | MUST-60, MUST-61   | Data not buffered forever, PSH on last  | yes      | no   |
+ * | MUST-62            | Urgent pointer past the urgent data     | yes      | yes  |
+ * | MUST-64            | Options off a word boundary handled     | yes      | yes  |
+ * | MUST-65            | No MSS option on non-SYN segments       | yes      | yes  |
+ * | MUST-66            | RST and URG at a zero receive window    | yes      | yes  |
+ * | MUST-67            | Advertised MSS bounded by the buffer    | yes      | no   |
+ * | MUST-68            | Options carry a length field            | yes      | yes  |
+ * | MUST-69            | Padding after EOL is zeroed             | yes      | yes  |
+ *
+ * The clauses left out of the table (MUST-10 to MUST-12, MUST-18 to MUST-29,
+ * MUST-41 to MUST-45 and MUST-50) govern the connection state machine and the
+ * semantics of the OPEN, SEND, RECEIVE, CLOSE, ABORT and STATUS calls, which
+ * this suite does not exercise.
+ *
+ * The segment crafting test cases follow the tcpreq conformance testing
+ * framework (https://github.com/TheJokr/tcpreq), whose probes are injected
+ * through a raw socket here instead of being sent to a remote host.
+ */
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpRfc9293TestSuite");
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Base class of the test cases injecting crafted TCP segments
+ *
+ * Builds a two node topology in which the probing node sends hand built
+ * segments through an IPv4 raw socket, so that header contents which the ns-3
+ * TCP implementation would never generate can be exercised, and collects the
+ * segments the target replies with.
+ */
+class TcpCraftedSegmentTestCase : public TestCase
+{
+  public:
+    /**
+     * Constructor.
+     * @param name The name of the test case.
+     */
+    TcpCraftedSegmentTestCase(std::string name);
+
+  protected:
+    /**
+     * Build the topology, and make the target listen unless told otherwise.
+     * @param listen Whether the target listens on the target port.
+     */
+    void SetupTopology(bool listen = true);
+
+    /**
+     * Inject a segment towards the target.
+     *
+     * @param flags The TCP flags.
+     * @param options The raw option bytes, whose size must be a multiple of 4.
+     * @param reserved The reserved bits, in the four least significant bits.
+     * @param sport The source port.
+     */
+    void SendSegment(uint8_t flags,
+                     const std::vector<uint8_t>& options = {},
+                     uint8_t reserved = 0,
+                     uint16_t sport = 0);
+
+    /**
+     * Get the segments received from the target.
+     * @return The headers of the received segments.
+     */
+    const std::vector<TcpHeader>& GetReplies() const;
+
+    /**
+     * Count the received segments carrying all the given flags.
+     * @param flags The flags to look for.
+     * @return The number of matching segments.
+     */
+    uint32_t CountReplies(uint8_t flags) const;
+
+    Ipv4InterfaceContainer m_interfaces; //!< The interfaces of the two nodes
+    NodeContainer m_nodes;               //!< The probing and the target node
+    Ptr<Socket> m_prober;                //!< The raw socket of the probing node
+    Ptr<Socket> m_target;                //!< The TCP socket of the target node
+    uint16_t m_targetPort{9401};         //!< The port the target listens on
+    uint16_t m_proberPort{9402};         //!< The port the probes come from
+
+  private:
+    /**
+     * Receive a segment on the raw socket.
+     * @param socket The raw socket.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    std::vector<TcpHeader> m_replies; //!< The headers of the received segments
+};
+
+TcpCraftedSegmentTestCase::TcpCraftedSegmentTestCase(std::string name)
+    : TestCase(name)
+{
+}
+
+void
+TcpCraftedSegmentTestCase::SetupTopology(bool listen)
+{
+    m_nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(m_nodes);
+
+    InternetStackHelper stack;
+    stack.Install(m_nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    m_interfaces = address.Assign(devices);
+
+    if (listen)
+    {
+        m_target = Socket::CreateSocket(m_nodes.Get(1), TcpSocketFactory::GetTypeId());
+        m_target->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_targetPort));
+        m_target->Listen();
+    }
+
+    m_prober = Socket::CreateSocket(m_nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
+    m_prober->SetAttribute("Protocol", UintegerValue(6));
+    m_prober->Bind(InetSocketAddress(m_interfaces.GetAddress(0), 0));
+    m_prober->SetRecvCallback(MakeCallback(&TcpCraftedSegmentTestCase::ReceiveRaw, this));
+}
+
+void
+TcpCraftedSegmentTestCase::SendSegment(uint8_t flags,
+                                       const std::vector<uint8_t>& options,
+                                       uint8_t reserved,
+                                       uint16_t sport)
+{
+    NS_ASSERT(options.size() % 4 == 0);
+    if (sport == 0)
+    {
+        sport = m_proberPort;
+    }
+    const uint8_t dataOffset = 5 + options.size() / 4;
+
+    // The segment is built byte by byte: TcpHeader derives its data offset
+    // from the options it holds, and drops the reserved bits, so neither an
+    // illegal option nor a reserved bit can be expressed through it
+    std::vector<uint8_t> segment = {
+        static_cast<uint8_t>(sport >> 8),
+        static_cast<uint8_t>(sport & 0xff),
+        static_cast<uint8_t>(m_targetPort >> 8),
+        static_cast<uint8_t>(m_targetPort & 0xff),
+        0x00,
+        0x00,
+        0x00,
+        0x01, // sequence number
+        0x00,
+        0x00,
+        0x00,
+        0x00,                                                       // acknowledgment number
+        static_cast<uint8_t>((dataOffset << 4) | (reserved & 0xf)), // offset and reserved bits
+        flags,
+        0x10,
+        0x00, // window size
+        0x00,
+        0x00, // checksum
+        0x00,
+        0x00 // urgent pointer
+    };
+    segment.insert(segment.end(), options.begin(), options.end());
+
+    Ptr<Packet> packet = Create<Packet>(segment.data(), segment.size());
+    m_prober->SendTo(packet, 0, InetSocketAddress(m_interfaces.GetAddress(1), 0));
+}
+
+void
+TcpCraftedSegmentTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return;
+    }
+
+    TcpHeader tcp;
+    packet->RemoveHeader(tcp);
+    m_replies.push_back(tcp);
+}
+
+const std::vector<TcpHeader>&
+TcpCraftedSegmentTestCase::GetReplies() const
+{
+    return m_replies;
+}
+
+uint32_t
+TcpCraftedSegmentTestCase::CountReplies(uint8_t flags) const
+{
+    return std::count_if(m_replies.begin(), m_replies.end(), [flags](const TcpHeader& h) {
+        return (h.GetFlags() & flags) == flags;
+    });
+}
 
 /**
  * @ingroup internet-test
@@ -745,6 +976,320 @@ TcpUrgentDataTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the support for the End of Option List and NOP options
+ *
+ * Ported from the OptionSupportTest of tcpreq. @RFC{9293}, Section 3.1
+ * requires the two legacy options to be supported (MUST-4), receivers to be
+ * prepared to process options which do not begin on a word boundary
+ * (MUST-64), and the padding after the End of Option List option to be zeroed
+ * (MUST-69): a SYN carrying them must still open a connection.
+ */
+class TcpLegacyOptionsTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpLegacyOptionsTestCase()
+        : TcpCraftedSegmentTestCase("Legacy options are supported (MUST-4, MUST-64)")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        SetupTopology();
+
+        // NOP, NOP, End of Option List, and one byte of zeroed padding: the
+        // option list does not begin on a word boundary
+        Simulator::Schedule(Seconds(1),
+                            &TcpLegacyOptionsTestCase::SendSegment,
+                            this,
+                            TcpHeader::SYN,
+                            std::vector<uint8_t>{0x01, 0x01, 0x00, 0x00},
+                            0,
+                            0);
+
+        Simulator::Stop(Seconds(5));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::SYN | TcpHeader::ACK),
+                              1,
+                              "A SYN with legacy options was not answered with a SYN+ACK");
+        NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::RST),
+                              0,
+                              "A SYN with legacy options was reset");
+
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that an unknown option is ignored without error
+ *
+ * Ported from the UnknownOptionTest of tcpreq. @RFC{9293}, Section 3.1
+ * (MUST-6) requires any option which is not implemented to be ignored without
+ * error, as long as it has a length field (MUST-68), so a SYN carrying one
+ * must still open a connection.
+ */
+class TcpUnknownOptionTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpUnknownOptionTestCase()
+        : TcpCraftedSegmentTestCase("Unknown options are ignored without error (MUST-6)")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        SetupTopology();
+
+        // Option kind 158 is reserved by IANA, and is the one tcpreq probes
+        // with: kind, length, three bytes of data, and one byte of padding
+        Simulator::Schedule(Seconds(1),
+                            &TcpUnknownOptionTestCase::SendSegment,
+                            this,
+                            TcpHeader::SYN,
+                            std::vector<uint8_t>{158, 0x05, 0x58, 0xfa, 0x89, 0x01, 0x01, 0x00},
+                            0,
+                            0);
+
+        Simulator::Stop(Seconds(5));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::SYN | TcpHeader::ACK),
+                              1,
+                              "A SYN with an unknown option was not answered with a SYN+ACK");
+        NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::RST),
+                              0,
+                              "A SYN with an unknown option was reset");
+
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that the reserved bits of the header are ignored
+ *
+ * Ported from the ReservedFlagsTest of tcpreq. The bits reserved for future
+ * use in the header of @RFC{9293}, Section 3.1 must be ignored by a receiver
+ * which does not implement whatever uses them, so a SYN setting one must
+ * still open a connection.
+ */
+class TcpReservedFlagsTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpReservedFlagsTestCase()
+        : TcpCraftedSegmentTestCase("Reserved header bits are ignored")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        SetupTopology();
+
+        // The third reserved bit, as tcpreq probes with
+        Simulator::Schedule(Seconds(1),
+                            &TcpReservedFlagsTestCase::SendSegment,
+                            this,
+                            TcpHeader::SYN,
+                            std::vector<uint8_t>{},
+                            0x4,
+                            0);
+
+        Simulator::Stop(Seconds(5));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::SYN | TcpHeader::ACK),
+                              1,
+                              "A SYN with a reserved bit set was not answered with a SYN+ACK");
+
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test the reset answering a SYN towards a closed port
+ *
+ * Ported from the RSTACKTest of tcpreq. @RFC{9293}, Section 3.10.7.1 requires
+ * a segment towards a port with no listener to be answered with a reset,
+ * which acknowledges the incoming sequence number when the incoming segment
+ * carries no ACK of its own.
+ */
+class TcpResetAckTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpResetAckTestCase()
+        : TcpCraftedSegmentTestCase("A SYN towards a closed port is reset")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        // Nobody listens on the target port
+        SetupTopology(false);
+
+        Simulator::Schedule(Seconds(1),
+                            &TcpResetAckTestCase::SendSegment,
+                            this,
+                            TcpHeader::SYN,
+                            std::vector<uint8_t>{},
+                            0,
+                            0);
+
+        Simulator::Stop(Seconds(5));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(GetReplies().size(), 1, "The SYN was not answered exactly once");
+
+        const TcpHeader& rst = GetReplies().front();
+        NS_TEST_ASSERT_MSG_NE(rst.GetFlags() & TcpHeader::RST, 0, "The answer is not a reset");
+        NS_TEST_ASSERT_MSG_NE(rst.GetFlags() & TcpHeader::ACK,
+                              0,
+                              "The reset answering a segment without ACK does not acknowledge");
+        // The probes carry sequence number 1 and no payload
+        NS_TEST_ASSERT_MSG_EQ(rst.GetAckNumber(),
+                              SequenceNumber32(2),
+                              "The reset does not acknowledge the sequence number of the SYN");
+
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that the peer honors the advertised MSS
+ *
+ * Ported from the MSSSupportTest of tcpreq, which opens a connection
+ * advertising a small MSS and checks the size of the segments it receives.
+ * @RFC{9293}, Section 3.7.1 requires the effective send MSS to be the smaller
+ * of the send MSS and the largest transmissible payload (MUST-16), and the
+ * MSS option not to be sent on non-SYN segments (MUST-65).
+ */
+class TcpAdvertisedMssTestCase : public TestCase
+{
+  public:
+    TcpAdvertisedMssTestCase();
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Trace sink of the segments received by the receiver.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void SegmentReceived(Ptr<const Packet> packet,
+                         const TcpHeader& header,
+                         Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Accept callback of the sender, which starts sending upon accept.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    uint32_t m_advertisedMss{515}; //!< MSS advertised by the receiver
+    uint32_t m_largestPayload{0};  //!< Largest payload received
+    uint32_t m_dataSegments{0};    //!< Number of data segments received
+    uint32_t m_lateMssOptions{0};  //!< MSS options seen on non-SYN segments
+};
+
+TcpAdvertisedMssTestCase::TcpAdvertisedMssTestCase()
+    : TestCase("The peer honors the advertised MSS (MUST-16, MUST-65)")
+{
+}
+
+void
+TcpAdvertisedMssTestCase::SegmentReceived(Ptr<const Packet> packet,
+                                          const TcpHeader& header,
+                                          Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() > 0)
+    {
+        m_dataSegments++;
+        m_largestPayload = std::max(m_largestPayload, packet->GetSize());
+    }
+
+    if (!(header.GetFlags() & TcpHeader::SYN) && header.HasOption(TcpOption::MSS))
+    {
+        m_lateMssOptions++;
+    }
+}
+
+void
+TcpAdvertisedMssTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->Send(Create<Packet>(20000), 0);
+}
+
+void
+TcpAdvertisedMssTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9501;
+
+    // The sender is free to use a large segment size: the MSS advertised by
+    // the receiver is what must bound the segments it sends
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1400));
+
+    Ptr<Socket> sender = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    sender->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    sender->Listen();
+    sender->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpAdvertisedMssTestCase::Accepted, this));
+
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(m_advertisedMss));
+
+    Ptr<Socket> receiver = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    receiver->Bind();
+    receiver->TraceConnectWithoutContext(
+        "Rx",
+        MakeCallback(&TcpAdvertisedMssTestCase::SegmentReceived, this));
+    receiver->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    Simulator::Stop(Seconds(20));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_dataSegments, 0, "No data segment was received");
+    NS_TEST_ASSERT_MSG_LT_OR_EQ(m_largestPayload,
+                                m_advertisedMss,
+                                "A segment larger than the advertised MSS was received");
+    NS_TEST_ASSERT_MSG_EQ(m_lateMssOptions, 0, "An MSS option was carried by a non-SYN segment");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -758,6 +1303,11 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpMalformedOptionsResetTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpInitialSequenceNumberTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpUrgentDataTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpLegacyOptionsTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpUnknownOptionTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpReservedFlagsTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpResetAckTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpAdvertisedMssTestCase(), TestCase::Duration::QUICK);
     }
 };
 
