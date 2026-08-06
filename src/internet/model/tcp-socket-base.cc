@@ -3883,6 +3883,17 @@ TcpSocketBase::AdvertisedWindowSize(bool scale) const
                                   m_tcb->m_rxBuffer->NextRxSequence());
     }
 
+    // Silly window syndrome avoidance in the receiver (RFC 9293, Section
+    // 3.8.6.2.2, MUST-39): the window is not reopened for the few bytes the
+    // application read, but kept where it is until the space it frees is
+    // worth a segment or half of the buffer
+    uint32_t threshold = std::min(m_tcb->m_segmentSize, m_tcb->m_rxBuffer->MaxBufferSize() / 2);
+    if (w > m_advWnd && w < threshold)
+    {
+        NS_LOG_LOGIC("Not growing the advertised window to " << w << ", below " << threshold);
+        w = m_advWnd;
+    }
+
     // Ugly, but we are not modifying the state, that variable
     // is used only for tracing purpose.
     if (w != m_advWnd)

@@ -1722,6 +1722,235 @@ TcpLocalAddressTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the zero window probing and the silly window avoidance
+ *
+ * @RFC{9293}, Section 3.8.6 requires a window which shrank to zero to be
+ * probed in the standard way (MUST-35), the probing of zero windows to be
+ * supported (MUST-36), the connection to stay open as long as the peer
+ * answers the probes (MUST-37), and a silly window syndrome avoidance
+ * algorithm in the sender (MUST-38) and in the receiver (MUST-39), which
+ * keeps the receiver from advertising the tiny windows its application frees.
+ */
+class TcpZeroWindowProbeTestCase : public TestCase
+{
+  public:
+    TcpZeroWindowProbeTestCase()
+        : TestCase("Zero window probing and silly window avoidance (MUST-35 to MUST-39)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Trace sink of the segments the sender sends.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The sending socket.
+     */
+    void SegmentSent(Ptr<const Packet> packet,
+                     const TcpHeader& header,
+                     Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Trace sink of the segments the sender receives.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void SegmentReceived(Ptr<const Packet> packet,
+                         const TcpHeader& header,
+                         Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Send the data.
+     * @param socket The sending socket.
+     * @param bytes The amount of data.
+     */
+    void SendData(Ptr<Socket> socket, uint32_t bytes);
+
+    /**
+     * Read a small amount of data, freeing a small part of the receive buffer.
+     */
+    void ReadALittle();
+
+    /**
+     * Accept callback, holding the accepted socket without reading from it.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    Ptr<Socket> m_accepted;      //!< The socket of the receiver
+    uint32_t m_probes{0};        //!< Segments sent while the peer window was zero
+    uint32_t m_zeroWindows{0};   //!< Zero windows advertised by the receiver
+    uint32_t m_tinyWindows{0};   //!< Non-zero windows below one segment
+    uint32_t m_runtSegments{0};  //!< Data segments below one segment while more data waits
+    bool m_windowIsZero{false};  //!< True while the last advertised window was zero
+    uint32_t m_segmentSize{500}; //!< Segment size of the connection
+    uint32_t m_lastWindow{0};    //!< Last window advertised by the receiver
+    TcpSocket::TcpStates_t m_state{TcpSocket::CLOSED}; //!< State of the sender
+
+    /**
+     * State trace sink of the sender.
+     * @param oldState The previous state.
+     * @param newState The new state.
+     */
+    void StateChanged(TcpSocket::TcpStates_t oldState, TcpSocket::TcpStates_t newState);
+};
+
+void
+TcpZeroWindowProbeTestCase::StateChanged(TcpSocket::TcpStates_t oldState,
+                                         TcpSocket::TcpStates_t newState)
+{
+    m_state = newState;
+}
+
+void
+TcpZeroWindowProbeTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    // The application does not read, so the receive buffer fills up
+    m_accepted = socket;
+}
+
+void
+TcpZeroWindowProbeTestCase::SegmentSent(Ptr<const Packet> packet,
+                                        const TcpHeader& header,
+                                        Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() == 0)
+    {
+        return;
+    }
+
+    if (m_windowIsZero)
+    {
+        m_probes++;
+    }
+    else if (m_lastWindow > 0 && m_lastWindow < m_segmentSize && packet->GetSize() < m_segmentSize)
+    {
+        // A segment smaller than one full one, sent into a window which
+        // cannot hold a full one, is what the sender must avoid (MUST-38)
+        m_runtSegments++;
+    }
+}
+
+void
+TcpZeroWindowProbeTestCase::SegmentReceived(Ptr<const Packet> packet,
+                                            const TcpHeader& header,
+                                            Ptr<const TcpSocketBase> socket)
+{
+    uint32_t window = header.GetWindowSize();
+    m_windowIsZero = (window == 0);
+    m_lastWindow = window;
+
+    if (window == 0)
+    {
+        m_zeroWindows++;
+    }
+    else if (window < m_segmentSize)
+    {
+        m_tinyWindows++;
+    }
+}
+
+void
+TcpZeroWindowProbeTestCase::SendData(Ptr<Socket> socket, uint32_t bytes)
+{
+    socket->Send(Create<Packet>(bytes), 0);
+}
+
+void
+TcpZeroWindowProbeTestCase::ReadALittle()
+{
+    if (m_accepted)
+    {
+        m_accepted->Recv(10, 0);
+    }
+}
+
+void
+TcpZeroWindowProbeTestCase::DoRun()
+{
+    const uint32_t segmentSize = 500;
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(segmentSize));
+    // Without the timestamp option the payload is a whole segment, so that
+    // the receive buffer fills up exactly and the window reaches zero
+    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
+    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(segmentSize * 4));
+    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(50000));
+    Config::SetDefault("ns3::TcpSocketBase::PersistTimeout", TimeValue(Seconds(1)));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9905;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpZeroWindowProbeTestCase::Accepted, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->TraceConnectWithoutContext(
+        "Tx",
+        MakeCallback(&TcpZeroWindowProbeTestCase::SegmentSent, this));
+    client->TraceConnectWithoutContext(
+        "Rx",
+        MakeCallback(&TcpZeroWindowProbeTestCase::SegmentReceived, this));
+    client->TraceConnectWithoutContext(
+        "State",
+        MakeCallback(&TcpZeroWindowProbeTestCase::StateChanged, this));
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    // More data than the receive buffer holds, so the window closes
+    Simulator::Schedule(Seconds(1), &TcpZeroWindowProbeTestCase::SendData, this, client, 20000);
+
+    // The receiving application frees a few bytes at a time, which the
+    // receiver must not advertise as a usable window
+    for (uint32_t i = 0; i < 20; ++i)
+    {
+        Simulator::Schedule(Seconds(5) + MilliSeconds(100 * i),
+                            &TcpZeroWindowProbeTestCase::ReadALittle,
+                            this);
+    }
+
+    Simulator::Stop(Seconds(30));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_zeroWindows, 0, "The receiver never advertised a zero window");
+    NS_TEST_ASSERT_MSG_GT(m_probes, 0, "The sender never probed the zero window");
+    NS_TEST_ASSERT_MSG_EQ(m_state,
+                          TcpSocket::ESTABLISHED,
+                          "The connection did not stay open while the window was zero");
+    NS_TEST_ASSERT_MSG_EQ(m_tinyWindows,
+                          0,
+                          "The receiver advertised a window smaller than one segment");
+    NS_TEST_ASSERT_MSG_EQ(m_runtSegments,
+                          0,
+                          "The sender sent a runt segment into a window below one segment");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -1744,6 +1973,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpCloseNotificationTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPassiveOpenTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpLocalAddressTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpZeroWindowProbeTestCase(), TestCase::Duration::QUICK);
     }
 };
 
