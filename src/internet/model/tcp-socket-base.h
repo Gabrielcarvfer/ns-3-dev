@@ -732,6 +732,10 @@ class TcpSocketBase : public TcpSocket
     void SetTcpNoDelay(bool noDelay) override;
     bool GetTcpNoDelay() const override;
     void SetPersistTimeout(Time timeout) override;
+    void SetKeepAlive(bool keepAlive) override;
+    bool GetKeepAlive() const override;
+    void SetKeepAliveTime(Time keepAliveTime) override;
+    Time GetKeepAliveTime() const override;
     Time GetPersistTimeout() const override;
     bool SetAllowBroadcast(bool allowBroadcast) override;
     bool GetAllowBroadcast() const override;
@@ -1218,6 +1222,30 @@ class TcpSocketBase : public TcpSocket
     virtual void PersistTimeout();
 
     /**
+     * @brief Send a keep-alive, or drop a connection whose peer stopped answering
+     *
+     * @RFC{9293}, Section 3.8.4 allows an implementation to probe an idle
+     * connection, as long as the probes are sent when no data is outstanding
+     * and nothing was received for the configured interval (MUST-26), and as
+     * long as a single probe left unanswered is not read as a dead connection
+     * (MUST-29).
+     */
+    void KeepAliveTimeout();
+
+    /**
+     * @brief Send a keep-alive probe
+     */
+    void SendKeepAlive();
+
+    /**
+     * @brief Restart the keep-alive timer of an active connection
+     *
+     * Called whenever a segment is sent or received, since the keep-alives
+     * only probe the connections which are idle.
+     */
+    void RearmKeepAlive();
+
+    /**
      * @brief Retransmit the first segment marked as lost, without considering
      * available window nor pacing.
      */
@@ -1460,6 +1488,12 @@ class TcpSocketBase : public TcpSocket
     Time m_clockGranularity{Seconds(0.001)}; //!< Clock Granularity used in RTO calcs
     Time m_delAckTimeout;                    //!< Time to delay an ACK
     Time m_persistTimeout;                   //!< Time between sending 1-byte probes
+    bool m_keepAlive{false};                 //!< Keep-alives are enabled
+    Time m_keepAliveTime;                    //!< Idle time before the first keep-alive
+    Time m_keepAliveInterval;                //!< Time between unanswered keep-alives
+    uint32_t m_keepAliveRetries{0};          //!< Unanswered keep-alives before dropping
+    uint32_t m_keepAlivesSent{0};            //!< Keep-alives sent without an answer
+    EventId m_keepAliveEvent{};              //!< Keep-alive event
     Time m_cnTimeout;                        //!< Timeout for connection retry
 
     // History of RTT

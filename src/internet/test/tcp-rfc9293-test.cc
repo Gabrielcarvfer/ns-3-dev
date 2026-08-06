@@ -6,6 +6,7 @@
 #include "ns3/callback.h"
 #include "ns3/config.h"
 #include "ns3/double.h"
+#include "ns3/error-model.h"
 #include "ns3/global-value.h"
 #include "ns3/iana-internet-protocol-numbers.h"
 #include "ns3/icmpv4.h"
@@ -18,8 +19,10 @@
 #include "ns3/node-container.h"
 #include "ns3/node.h"
 #include "ns3/nstime.h"
+#include "ns3/pointer.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simulator.h"
+#include "ns3/string.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-option-rfc793.h"
@@ -57,7 +60,7 @@
  * | MUST 17    | Nagle algorithm can be disabled                           | yes  | yes   |
  * | MUST 18,19 | RTO estimation and congestion control                     | yes  | other |
  * | MUST 20-23 | Retransmission limits, R2 configurable and large for SYNs | yes  | other |
- * | MUST 24-29 | Keep-alives                                               | no   | n/a   |
+ * | MUST 24-29 | Keep-alives, off by default, two hours apart              | opt  | yes   |
  * | MUST 30-33 | Urgent mechanism, its notification and its pending size   | yes  | yes   |
  * | MUST 34    | Sender robust against a shrinking window                  | yes  | yes   |
  * | MUST 35-37 | Zero window probed, connection kept open                  | yes  | yes   |
@@ -89,10 +92,9 @@
  * tcp-rtt-estimation and tcp-rto-test, MUST 19 by tcp-slow-start-test,
  * tcp-cong-avoid-test and tcp-rto-test, and MUST 20 to MUST 23 by
  * tcp-syn-connection-failed-test, which exercises giving up on a connection
- * after the retransmissions of its SYN. The rows marked "n/a" bind an
- * implementation offering a feature ns-3 does not: keep-alives are not
- * implemented, and TCP cannot be handed IP options which ns-3 never
- * generates.
+ * after the retransmissions of its SYN. The row marked "n/a" binds an
+ * implementation which is handed IP options, which ns-3 never generates.
+ *
  * The segment crafting test cases follow the tcpreq conformance testing
  * framework (https://github.com/TheJokr/tcpreq), whose probes are injected
  * through a raw socket here instead of being sent to a remote host.
@@ -3125,6 +3127,295 @@ TcpShrinkingWindowTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the keep-alives of an idle connection
+ *
+ * @RFC{9293}, Section 3.8.4 requires the keep-alives to be turned on or off
+ * for each connection (MUST-24) and to default to off (MUST-25), to be sent
+ * only when no data is outstanding and nothing was received for the
+ * configured interval (MUST-26), which must be configurable (MUST-27) and
+ * default to no less than two hours (MUST-28), and requires a single
+ * unanswered probe not to be read as a dead connection (MUST-29).
+ */
+class TcpKeepAliveTestCase : public TestCase
+{
+  public:
+    TcpKeepAliveTestCase()
+        : TestCase("Keep-alives of an idle connection (MUST-24 to MUST-29)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Run an idle connection and count the keep-alives it carries.
+     *
+     * @param keepAlive Whether the keep-alives are enabled.
+     * @param busy Whether the connection keeps carrying data.
+     * @return The number of keep-alives the peer received.
+     */
+    uint32_t CountKeepAlives(bool keepAlive, bool busy);
+
+    /**
+     * Trace sink of the segments the peer receives.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void SegmentReceived(Ptr<const Packet> packet,
+                         const TcpHeader& header,
+                         Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Accept callback, tracing the accepted socket.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    /**
+     * Send a little data, keeping the connection busy.
+     * @param socket The sending socket.
+     */
+    void SendData(Ptr<Socket> socket);
+
+    /**
+     * Run a connection whose peer stops answering, and record when it is given up on.
+     *
+     * @param retries The number of unanswered keep-alives to allow.
+     * @return The instant the connection was closed, or zero if it stayed open.
+     */
+    Time RunUnansweredKeepAlives(uint32_t retries);
+
+    /**
+     * State trace sink of the probing socket.
+     * @param oldState The previous state.
+     * @param newState The new state.
+     */
+    void StateChanged(TcpSocket::TcpStates_t oldState, TcpSocket::TcpStates_t newState);
+
+    /**
+     * Stop the peer from answering, by dropping everything it receives.
+     * @param device The device of the peer.
+     */
+    void BreakThePath(Ptr<NetDevice> device);
+
+    SequenceNumber32 m_highestData{0}; //!< Highest sequence number of the data received
+    uint32_t m_keepAlives{0};          //!< Segments repeating an acknowledged sequence number
+    Time m_closed{Seconds(0)};         //!< Instant the probing socket gave up
+    TcpSocket::TcpStates_t m_state{TcpSocket::CLOSED}; //!< State of the probing socket
+};
+
+void
+TcpKeepAliveTestCase::StateChanged(TcpSocket::TcpStates_t oldState, TcpSocket::TcpStates_t newState)
+{
+    m_state = newState;
+    if (newState == TcpSocket::CLOSED && m_closed == Seconds(0))
+    {
+        m_closed = Simulator::Now();
+    }
+}
+
+void
+TcpKeepAliveTestCase::BreakThePath(Ptr<NetDevice> device)
+{
+    Ptr<RateErrorModel> error = CreateObject<RateErrorModel>();
+    error->SetAttribute("ErrorRate", DoubleValue(1.0));
+    error->SetAttribute("ErrorUnit", StringValue("ERROR_UNIT_PACKET"));
+    device->SetAttribute("ReceiveErrorModel", PointerValue(error));
+}
+
+Time
+TcpKeepAliveTestCase::RunUnansweredKeepAlives(uint32_t retries)
+{
+    m_closed = Seconds(0);
+    m_state = TcpSocket::CLOSED;
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9910;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->SetAttribute("KeepAlive", BooleanValue(true));
+    client->SetAttribute("KeepAliveTime", TimeValue(Seconds(2)));
+    client->SetAttribute("KeepAliveInterval", TimeValue(Seconds(1)));
+    client->SetAttribute("KeepAliveRetries", UintegerValue(retries));
+    client->TraceConnectWithoutContext("State",
+                                       MakeCallback(&TcpKeepAliveTestCase::StateChanged, this));
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    // The peer stops answering once the connection is up
+    Simulator::Schedule(Seconds(1), &TcpKeepAliveTestCase::BreakThePath, this, devices.Get(1));
+
+    Simulator::Stop(Seconds(60));
+    Simulator::Run();
+    Simulator::Destroy();
+
+    return m_closed;
+}
+
+void
+TcpKeepAliveTestCase::SegmentReceived(Ptr<const Packet> packet,
+                                      const TcpHeader& header,
+                                      Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() > 0)
+    {
+        m_highestData = std::max(m_highestData, header.GetSequenceNumber() + packet->GetSize());
+        return;
+    }
+
+    // A keep-alive holds no data and repeats the sequence number of the last
+    // octet the receiver acknowledged
+    if (m_highestData > SequenceNumber32(0) && header.GetSequenceNumber() < m_highestData)
+    {
+        m_keepAlives++;
+    }
+}
+
+void
+TcpKeepAliveTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->TraceConnectWithoutContext("Rx",
+                                       MakeCallback(&TcpKeepAliveTestCase::SegmentReceived, this));
+}
+
+void
+TcpKeepAliveTestCase::SendData(Ptr<Socket> socket)
+{
+    socket->Send(Create<Packet>(100), 0);
+}
+
+uint32_t
+TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy)
+{
+    m_keepAlives = 0;
+    m_highestData = SequenceNumber32(0);
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9909;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpKeepAliveTestCase::Accepted, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    // Turned on for this connection alone, with an interval short enough for
+    // the test to run (MUST-24 and MUST-27)
+    client->SetAttribute("KeepAlive", BooleanValue(keepAlive));
+    client->SetAttribute("KeepAliveTime", TimeValue(Seconds(2)));
+    client->SetAttribute("KeepAliveInterval", TimeValue(Seconds(1)));
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    Simulator::Schedule(Seconds(1), &TcpKeepAliveTestCase::SendData, this, client);
+    if (busy)
+    {
+        // Data flowing all along, so the connection is never idle
+        for (uint32_t i = 0; i < 20; ++i)
+        {
+            Simulator::Schedule(Seconds(2) + MilliSeconds(500 * i),
+                                &TcpKeepAliveTestCase::SendData,
+                                this,
+                                client);
+        }
+    }
+
+    Simulator::Stop(Seconds(13));
+    Simulator::Run();
+    Simulator::Destroy();
+
+    return m_keepAlives;
+}
+
+void
+TcpKeepAliveTestCase::DoRun()
+{
+    // The defaults leave the keep-alives off (MUST-25), no less than two
+    // hours apart (MUST-28)
+    TypeId::AttributeInformation info;
+    NS_TEST_ASSERT_MSG_EQ(
+        TypeId::LookupByName("ns3::TcpSocket").LookupAttributeByName("KeepAlive", &info),
+        true,
+        "The keep-alives cannot be turned on or off");
+    NS_TEST_ASSERT_MSG_EQ(DynamicCast<const BooleanValue>(info.initialValue)->Get(),
+                          false,
+                          "The keep-alives are enabled by default");
+
+    NS_TEST_ASSERT_MSG_EQ(
+        TypeId::LookupByName("ns3::TcpSocket").LookupAttributeByName("KeepAliveTime", &info),
+        true,
+        "The idle time before a keep-alive is not configurable");
+    NS_TEST_ASSERT_MSG_GT_OR_EQ(DynamicCast<const TimeValue>(info.initialValue)->Get(),
+                                Hours(2),
+                                "The keep-alives default to less than two hours apart");
+
+    uint32_t idle = CountKeepAlives(true, false);
+    uint32_t idleWithoutKeepAlive = CountKeepAlives(false, false);
+    uint32_t busy = CountKeepAlives(true, true);
+
+    NS_TEST_ASSERT_MSG_GT(idle, 1, "An idle connection was not kept alive");
+    // The connection outlives the probes it sends, since a peer which answers
+    // none of them is only given up on after the whole series (MUST-29)
+    NS_TEST_ASSERT_MSG_EQ(idleWithoutKeepAlive,
+                          0,
+                          "A connection was kept alive with the keep-alives disabled");
+    NS_TEST_ASSERT_MSG_EQ(busy, 0, "A connection carrying data was probed");
+
+    // A peer which answers nothing is given up on, but only after the whole
+    // series of keep-alives, never upon a single one (MUST-29)
+    Time fewRetries = RunUnansweredKeepAlives(1);
+    Time manyRetries = RunUnansweredKeepAlives(5);
+
+    NS_TEST_ASSERT_MSG_GT(fewRetries, Seconds(0), "The connection outlived every keep-alive");
+    NS_TEST_ASSERT_MSG_GT(manyRetries, Seconds(0), "The connection outlived every keep-alive");
+
+    // The first keep-alive leaves after the two idle seconds, and the next
+    // ones follow it every second: a connection dropped upon the first one
+    // would be gone by then
+    NS_TEST_ASSERT_MSG_GT(fewRetries,
+                          Seconds(3),
+                          "A single unanswered keep-alive was read as a dead peer");
+    // and allowing more of them keeps the connection alive for longer
+    NS_TEST_ASSERT_MSG_GT(manyRetries,
+                          fewRetries,
+                          "The number of keep-alives allowed did not matter");
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -3158,6 +3449,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpUnsignedWindowTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpChecksumTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpShrinkingWindowTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpKeepAliveTestCase(), TestCase::Duration::QUICK);
     }
 };
 

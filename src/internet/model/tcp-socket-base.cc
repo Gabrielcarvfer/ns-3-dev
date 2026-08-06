@@ -105,6 +105,16 @@ TcpSocketBase::GetTypeId()
             //                   EnumValue (CLOSED),
             //                   MakeEnumAccessor (&TcpSocketBase::m_state),
             //                   MakeEnumChecker (CLOSED, "Closed"))
+            .AddAttribute("KeepAliveInterval",
+                          "Time between the keep-alives which are not answered",
+                          TimeValue(Seconds(75)),
+                          MakeTimeAccessor(&TcpSocketBase::m_keepAliveInterval),
+                          MakeTimeChecker())
+            .AddAttribute("KeepAliveRetries",
+                          "Number of unanswered keep-alives before the connection is dropped",
+                          UintegerValue(9),
+                          MakeUintegerAccessor(&TcpSocketBase::m_keepAliveRetries),
+                          MakeUintegerChecker<uint32_t>())
             .AddAttribute("MaxSegLifetime",
                           "Maximum segment lifetime in seconds, use for TIME_WAIT state transition "
                           "to CLOSED state",
@@ -1481,6 +1491,9 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
     }
 
     m_rxTrace(packet, tcpHeader, this);
+
+    // Something came in, so the connection is not idle
+    RearmKeepAlive();
 
     if (tcpHeader.GetFlags() & TcpHeader::URG)
     {
@@ -4630,6 +4643,132 @@ TcpSocketBase::SetPersistTimeout(Time timeout)
 {
     NS_LOG_FUNCTION(this << timeout);
     m_persistTimeout = timeout;
+}
+
+void
+TcpSocketBase::SetKeepAlive(bool keepAlive)
+{
+    NS_LOG_FUNCTION(this << keepAlive);
+    m_keepAlive = keepAlive;
+    if (m_keepAlive)
+    {
+        RearmKeepAlive();
+    }
+    else
+    {
+        m_keepAliveEvent.Cancel();
+    }
+}
+
+bool
+TcpSocketBase::GetKeepAlive() const
+{
+    return m_keepAlive;
+}
+
+void
+TcpSocketBase::SetKeepAliveTime(Time keepAliveTime)
+{
+    NS_LOG_FUNCTION(this << keepAliveTime);
+    m_keepAliveTime = keepAliveTime;
+}
+
+Time
+TcpSocketBase::GetKeepAliveTime() const
+{
+    return m_keepAliveTime;
+}
+
+void
+TcpSocketBase::RearmKeepAlive()
+{
+    if (!m_keepAlive)
+    {
+        return;
+    }
+
+    m_keepAliveEvent.Cancel();
+    m_keepAlivesSent = 0;
+    m_keepAliveEvent = Simulator::Schedule(m_keepAliveTime, &TcpSocketBase::KeepAliveTimeout, this);
+}
+
+void
+TcpSocketBase::KeepAliveTimeout()
+{
+    NS_LOG_FUNCTION(this);
+
+    if (m_state != ESTABLISHED)
+    {
+        return;
+    }
+
+    if (BytesInFlight() > 0 || m_txBuffer->SizeFromSequence(m_tcb->m_nextTxSequence) > 0)
+    {
+        // Sent data is still outstanding, so the connection is not idle and
+        // the retransmissions are the ones probing the peer (RFC 9293,
+        // Section 3.8.4, MUST-26)
+        m_keepAliveEvent =
+            Simulator::Schedule(m_keepAliveTime, &TcpSocketBase::KeepAliveTimeout, this);
+        return;
+    }
+
+    if (m_keepAlivesSent > m_keepAliveRetries)
+    {
+        // Only a whole series of unanswered keep-alives tells a dead
+        // connection apart from a lost probe (RFC 9293, Section 3.8.4,
+        // MUST-29)
+        NS_LOG_LOGIC("The peer answered none of the " << m_keepAlivesSent << " keep-alives");
+        m_errno = ERROR_NOTCONN;
+        SendRST();
+        CloseAndNotify();
+        return;
+    }
+
+    SendKeepAlive();
+    m_keepAlivesSent++;
+    m_keepAliveEvent =
+        Simulator::Schedule(m_keepAliveInterval, &TcpSocketBase::KeepAliveTimeout, this);
+}
+
+void
+TcpSocketBase::SendKeepAlive()
+{
+    NS_LOG_FUNCTION(this);
+
+    // The probe holds no data and takes the sequence number of the last octet
+    // the peer acknowledged, so that the answer to it is an acknowledgment
+    // (RFC 9293, Section 3.8.4)
+    Ptr<Packet> p = Create<Packet>();
+    TcpHeader header;
+    header.SetFlags(TcpHeader::ACK);
+    header.SetSequenceNumber(m_tcb->m_nextTxSequence - 1);
+    header.SetAckNumber(m_tcb->m_rxBuffer->NextRxSequence());
+    header.SetWindowSize(AdvertisedWindowSize());
+
+    if (m_endPoint != nullptr)
+    {
+        header.SetSourcePort(m_endPoint->GetLocalPort());
+        header.SetDestinationPort(m_endPoint->GetPeerPort());
+        AddOptions(header);
+        m_txTrace(p, header, this);
+        m_tcp->SendPacket(p,
+                          header,
+                          m_endPoint->GetLocalAddress(),
+                          m_endPoint->GetPeerAddress(),
+                          m_boundnetdevice);
+    }
+    else
+    {
+        header.SetSourcePort(m_endPoint6->GetLocalPort());
+        header.SetDestinationPort(m_endPoint6->GetPeerPort());
+        AddOptions(header);
+        m_txTrace(p, header, this);
+        m_tcp->SendPacket(p,
+                          header,
+                          m_endPoint6->GetLocalAddress(),
+                          m_endPoint6->GetPeerAddress(),
+                          m_boundnetdevice);
+    }
 }
 
 Time
