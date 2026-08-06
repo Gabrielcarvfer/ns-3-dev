@@ -6,6 +6,8 @@
 #include "ns3/callback.h"
 #include "ns3/config.h"
 #include "ns3/double.h"
+#include "ns3/global-value.h"
+#include "ns3/iana-internet-protocol-numbers.h"
 #include "ns3/icmpv4.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
@@ -14,6 +16,7 @@
 #include "ns3/ipv4-raw-socket-factory.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
+#include "ns3/node.h"
 #include "ns3/nstime.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simulator.h"
@@ -42,8 +45,8 @@
  *
  * | Clause     | Requirement                                               | ns-3 | Test  |
  * | :--------- | :-------------------------------------------------------- | :--- | :---- |
- * | MUST 1     | Window treated as unsigned                                | yes  | no    |
- * | MUST 2,3   | Checksum generated and checked                            | opt  | no    |
+ * | MUST 1     | Window treated as unsigned                                | yes  | yes   |
+ * | MUST 2,3   | Checksum generated and checked                            | opt  | yes   |
  * | MUST 4-6   | Options received in any segment, unknown ones ignored     | yes  | yes   |
  * | MUST 7     | Illegal option length handled                             | yes  | yes   |
  * | MUST 8,9   | Initial sequence numbers driven by a clock and a secret   | opt  | yes   |
@@ -56,7 +59,7 @@
  * | MUST 20-23 | Retransmission limits, R2 configurable and large for SYNs | yes  | other |
  * | MUST 24-29 | Keep-alives                                               | no   | n/a   |
  * | MUST 30-33 | Urgent mechanism, its notification and its pending size   | yes  | yes   |
- * | MUST 34    | Sender robust against a shrinking window                  | yes  | no    |
+ * | MUST 34    | Sender robust against a shrinking window                  | yes  | yes   |
  * | MUST 35-37 | Zero window probed, connection kept open                  | yes  | yes   |
  * | MUST 38,39 | SWS avoidance in the sender and in the receiver           | yes  | yes   |
  * | MUST 40    | Delayed ACK below 0.5 s                                   | yes  | yes   |
@@ -138,6 +141,21 @@ class TcpCraftedSegmentTestCase : public TestCase
                      const std::vector<uint8_t>& options = {},
                      uint8_t reserved = 0,
                      uint16_t sport = 0);
+
+    /**
+     * Inject a segment with the given sequence numbers and window.
+     *
+     * @param flags The TCP flags.
+     * @param seq The sequence number.
+     * @param ack The acknowledgment number.
+     * @param window The window to advertise.
+     * @param corruptChecksum Whether to send a checksum which does not match.
+     */
+    void SendSegmentFull(uint8_t flags,
+                         uint32_t seq,
+                         uint32_t ack,
+                         uint16_t window,
+                         bool corruptChecksum = false);
 
     /**
      * Get the segments received from the target.
@@ -243,6 +261,39 @@ TcpCraftedSegmentTestCase::SendSegment(uint8_t flags,
     segment.insert(segment.end(), options.begin(), options.end());
 
     Ptr<Packet> packet = Create<Packet>(segment.data(), segment.size());
+    m_prober->SendTo(packet, 0, InetSocketAddress(m_interfaces.GetAddress(1), 0));
+}
+
+void
+TcpCraftedSegmentTestCase::SendSegmentFull(uint8_t flags,
+                                           uint32_t seq,
+                                           uint32_t ack,
+                                           uint16_t window,
+                                           bool corruptChecksum)
+{
+    TcpHeader tcp;
+    tcp.SetSourcePort(m_proberPort);
+    tcp.SetDestinationPort(m_targetPort);
+    tcp.SetSequenceNumber(SequenceNumber32(seq));
+    tcp.SetAckNumber(SequenceNumber32(ack));
+    tcp.SetFlags(flags);
+    tcp.SetWindowSize(window);
+
+    Ptr<Packet> packet = Create<Packet>();
+    if (Node::ChecksumEnabled())
+    {
+        // The header computes the checksum over the pseudo header of the
+        // connection, which a corrupted one is built from by moving the
+        // destination address one host away
+        tcp.EnableChecksums();
+        Ipv4Address source = m_interfaces.GetAddress(0);
+        Ipv4Address destination = m_interfaces.GetAddress(1);
+        tcp.InitializeChecksum(source,
+                               corruptChecksum ? Ipv4Address("10.1.1.99") : destination,
+                               iana::internetprotocolnumbers::TCP);
+    }
+    packet->AddHeader(tcp);
+
     m_prober->SendTo(packet, 0, InetSocketAddress(m_interfaces.GetAddress(1), 0));
 }
 
@@ -2760,6 +2811,320 @@ TcpBroadcastSynTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that the window is treated as an unsigned number
+ *
+ * @RFC{9293}, Section 3.1 (MUST-1) requires the window size to be treated as
+ * an unsigned number, since a window above 32767 would otherwise look like a
+ * negative one and stall the connection. The window scale option is disabled
+ * here, so that the window travels in the 16 bit field of the header.
+ */
+class TcpUnsignedWindowTestCase : public TestCase
+{
+  public:
+    TcpUnsignedWindowTestCase()
+        : TestCase("The window is treated as an unsigned number (MUST-1)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Trace sink of the segments the sender receives.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void AckReceived(Ptr<const Packet> packet,
+                     const TcpHeader& header,
+                     Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Trace sink of the data the receiver gets.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void DataReceived(Ptr<const Packet> packet,
+                      const TcpHeader& header,
+                      Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Accept callback, tracing the accepted socket.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    /**
+     * Send the data.
+     * @param socket The sending socket.
+     * @param bytes The amount of data.
+     */
+    void SendData(Ptr<Socket> socket, uint32_t bytes);
+
+    uint32_t m_largestWindow{0}; //!< Largest window the sender was told about
+    uint32_t m_bytesReceived{0}; //!< Payload bytes which reached the receiver
+};
+
+void
+TcpUnsignedWindowTestCase::AckReceived(Ptr<const Packet> packet,
+                                       const TcpHeader& header,
+                                       Ptr<const TcpSocketBase> socket)
+{
+    m_largestWindow = std::max<uint32_t>(m_largestWindow, header.GetWindowSize());
+}
+
+void
+TcpUnsignedWindowTestCase::DataReceived(Ptr<const Packet> packet,
+                                        const TcpHeader& header,
+                                        Ptr<const TcpSocketBase> socket)
+{
+    m_bytesReceived += packet->GetSize();
+}
+
+void
+TcpUnsignedWindowTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->TraceConnectWithoutContext(
+        "Rx",
+        MakeCallback(&TcpUnsignedWindowTestCase::DataReceived, this));
+}
+
+void
+TcpUnsignedWindowTestCase::SendData(Ptr<Socket> socket, uint32_t bytes)
+{
+    socket->Send(Create<Packet>(bytes), 0);
+}
+
+void
+TcpUnsignedWindowTestCase::DoRun()
+{
+    // A receive buffer whose free space does not fit in a signed 16 bit value
+    const uint32_t bytes = 60000;
+    Config::SetDefault("ns3::TcpSocketBase::WindowScaling", BooleanValue(false));
+    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(bytes));
+    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(bytes));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(5)));
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9908;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpUnsignedWindowTestCase::Accepted, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->TraceConnectWithoutContext("Rx",
+                                       MakeCallback(&TcpUnsignedWindowTestCase::AckReceived, this));
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+    Simulator::Schedule(Seconds(1), &TcpUnsignedWindowTestCase::SendData, this, client, bytes);
+
+    Simulator::Stop(Seconds(30));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_largestWindow,
+                          32767,
+                          "The receiver never advertised a window above the signed 16 bit range");
+    // A window read as a negative number would stall the transfer
+    NS_TEST_ASSERT_MSG_EQ(m_bytesReceived, bytes, "The transfer did not complete");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that the checksum is generated and checked
+ *
+ * @RFC{9293}, Section 3.1 requires the sender to generate the checksum
+ * (MUST-2) and the receiver to check it (MUST-3). ns-3 computes checksums
+ * only when the ChecksumEnabled global value asks for it, which this test
+ * turns on.
+ */
+class TcpChecksumTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpChecksumTestCase()
+        : TcpCraftedSegmentTestCase("The checksum is generated and checked (MUST-2, MUST-3)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+TcpChecksumTestCase::DoRun()
+{
+    GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
+
+    SetupTopology();
+
+    // A SYN whose checksum does not match must be dropped without an answer
+    Simulator::Schedule(Seconds(1),
+                        &TcpChecksumTestCase::SendSegmentFull,
+                        this,
+                        TcpHeader::SYN,
+                        1,
+                        0,
+                        4096,
+                        true);
+    // The same SYN, with the checksum the receiver expects, is answered
+    Simulator::Schedule(Seconds(3),
+                        &TcpChecksumTestCase::SendSegmentFull,
+                        this,
+                        TcpHeader::SYN,
+                        1,
+                        0,
+                        4096,
+                        false);
+
+    Simulator::Stop(Seconds(6));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::SYN | TcpHeader::ACK),
+                          1,
+                          "The SYN with a valid checksum was not answered exactly once");
+    NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::RST),
+                          0,
+                          "A segment with a wrong checksum was answered with a reset");
+
+    Simulator::Destroy();
+    GlobalValue::Bind("ChecksumEnabled", BooleanValue(false));
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that the sender withstands a window which shrinks
+ *
+ * @RFC{9293}, Section 3.8.6 asks a receiver not to shrink the window
+ * (SHLD-14), but requires a sender to be robust against it (MUST-34), which
+ * can make its usable window negative. The connection is driven from a raw
+ * socket here, so that the right edge can be moved backwards, which the ns-3
+ * receiver would not do.
+ */
+class TcpShrinkingWindowTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpShrinkingWindowTestCase()
+        : TcpCraftedSegmentTestCase("The sender withstands a window which shrinks (MUST-34)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Complete the handshake and open a large window.
+     */
+    void CompleteHandshake();
+
+    /**
+     * Acknowledge nothing new while advertising a much smaller window.
+     */
+    void ShrinkWindow();
+
+    /**
+     * Accept callback, which sends data to the peer driving the connection.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    SequenceNumber32 m_targetIsn{0}; //!< Initial sequence number of the target
+    uint32_t m_largeWindow{6000};    //!< Window advertised during the handshake
+    uint32_t m_smallWindow{500};     //!< Window advertised afterwards
+    SequenceNumber32 m_rightEdge{0}; //!< Right edge the large window opened
+    uint32_t m_beyondRightEdge{0};   //!< Data segments sent beyond that edge
+};
+
+void
+TcpShrinkingWindowTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->Send(Create<Packet>(20000), 0);
+}
+
+void
+TcpShrinkingWindowTestCase::CompleteHandshake()
+{
+    NS_ASSERT_MSG(!GetReplies().empty(), "The SYN was not answered");
+    m_targetIsn = GetReplies().front().GetSequenceNumber();
+
+    // The ACK completing the handshake, opening a large window
+    SendSegmentFull(TcpHeader::ACK, 2, (m_targetIsn + 1).GetValue(), m_largeWindow);
+    m_rightEdge = m_targetIsn + 1 + m_largeWindow;
+}
+
+void
+TcpShrinkingWindowTestCase::ShrinkWindow()
+{
+    // The same acknowledgment, with a window which moves the right edge back
+    SendSegmentFull(TcpHeader::ACK, 2, (m_targetIsn + 1).GetValue(), m_smallWindow);
+}
+
+void
+TcpShrinkingWindowTestCase::DoRun()
+{
+    SetupTopology();
+    m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                                MakeCallback(&TcpShrinkingWindowTestCase::Accepted, this));
+
+    Simulator::Schedule(Seconds(1),
+                        &TcpShrinkingWindowTestCase::SendSegmentFull,
+                        this,
+                        TcpHeader::SYN,
+                        1,
+                        0,
+                        m_largeWindow,
+                        false);
+    Simulator::Schedule(Seconds(2), &TcpShrinkingWindowTestCase::CompleteHandshake, this);
+    Simulator::Schedule(Seconds(3), &TcpShrinkingWindowTestCase::ShrinkWindow, this);
+
+    Simulator::Stop(Seconds(20));
+    Simulator::Run();
+
+    // The sender keeps the connection: shrinking the window is not an error
+    NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::RST),
+                          0,
+                          "The sender reset the connection when the window shrank");
+
+    // and it does not send new data beyond the edge it was told about
+    for (const auto& reply : GetReplies())
+    {
+        if (reply.GetSequenceNumber() > m_rightEdge)
+        {
+            m_beyondRightEdge++;
+        }
+    }
+    NS_TEST_ASSERT_MSG_EQ(m_beyondRightEdge, 0, "The sender sent beyond the right edge");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -2790,6 +3155,9 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpPushFlagTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpAdvertisedMssBoundTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpBroadcastSynTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpUnsignedWindowTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpChecksumTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpShrinkingWindowTestCase(), TestCase::Duration::QUICK);
     }
 };
 
