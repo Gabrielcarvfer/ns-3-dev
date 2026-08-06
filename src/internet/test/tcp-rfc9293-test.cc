@@ -5,6 +5,7 @@
 #include "ns3/boolean.h"
 #include "ns3/callback.h"
 #include "ns3/config.h"
+#include "ns3/double.h"
 #include "ns3/icmpv4.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
@@ -18,6 +19,7 @@
 #include "ns3/simulator.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-l4-protocol.h"
+#include "ns3/tcp-option-rfc793.h"
 #include "ns3/tcp-option.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-socket-factory.h"
@@ -47,40 +49,40 @@
  * | MUST 8,9   | Initial sequence numbers driven by a clock and a secret   | opt  | yes   |
  * | MUST 10,11 | Simultaneous open, and how SYN-RECEIVED was reached       | yes  | yes   |
  * | MUST 12    | Normal close told apart from an abort                     | yes  | yes   |
- * | MUST 13    | TIME-WAIT lasts 2xMSL                                     | yes  | no    |
+ * | MUST 13    | TIME-WAIT lasts 2xMSL                                     | yes  | yes   |
  * | MUST 14-16 | MSS option, its defaults and the effective send MSS       | yes  | yes   |
- * | MUST 17    | Nagle algorithm can be disabled                           | yes  | no    |
+ * | MUST 17    | Nagle algorithm can be disabled                           | yes  | yes   |
  * | MUST 18,19 | RTO estimation and congestion control                     | yes  | other |
  * | MUST 20-23 | Retransmission limits, R2 configurable and large for SYNs | yes  | other |
  * | MUST 24-29 | Keep-alives                                               | no   | n/a   |
  * | MUST 30-33 | Urgent mechanism, its notification and its pending size   | yes  | yes   |
- * | MUST 34-37 | Window shrinking and zero window probing                  | yes  | no    |
- * | MUST 38,39 | SWS avoidance in the sender and in the receiver           | yes  | no    |
- * | MUST 40    | Delayed ACK below 0.5 s                                   | yes  | no    |
+ * | MUST 34    | Sender robust against a shrinking window                  | yes  | no    |
+ * | MUST 35-37 | Zero window probed, connection kept open                  | yes  | yes   |
+ * | MUST 38,39 | SWS avoidance in the sender and in the receiver           | yes  | yes   |
+ * | MUST 40    | Delayed ACK below 0.5 s                                   | yes  | yes   |
  * | MUST 41,42 | Passive open independent of the other connections         | yes  | yes   |
  * | MUST 43-45 | Local address specified, or asked to the IP layer         | yes  | yes   |
  * | MUST 46    | Invalid remote address rejected                           | yes  | yes   |
- * | MUST 47    | Soft errors reported to the application                   | yes  | no    |
- * | MUST 48,49 | Differentiated services field and TTL configurable        | yes  | no    |
+ * | MUST 47    | Soft errors reported to the application                   | yes  | yes   |
+ * | MUST 48,49 | Differentiated services field and TTL configurable        | yes  | yes   |
  * | MUST 50    | IP options ignored by TCP                                 | n/a  | n/a   |
  * | MUST 51-53 | IP source routes specified, saved and preferred           | no   | no    |
  * | MUST 54    | ICMP errors acted upon                                    | yes  | yes   |
  * | MUST 55    | ICMP Source Quench discarded                              | yes  | yes   |
  * | MUST 56    | Soft ICMP errors do not abort the connection              | yes  | yes   |
- * | MUST 57,63 | SYN towards or coming from an invalid address ignored     | IP*  | no    |
- * | MUST 58,59 | ACK segments aggregated                                   | yes  | no    |
- * | MUST 60,61 | Data not buffered forever, PSH set on the last segment    | yes  | no    |
+ * | MUST 57,63 | SYN towards or coming from an invalid address ignored     | yes  | yes   |
+ * | MUST 58,59 | ACK segments aggregated                                   | yes  | yes   |
+ * | MUST 60,61 | Data not buffered forever, PSH set on the last segment    | yes  | yes   |
  * | MUST 62    | Urgent pointer past the last octet of urgent data         | yes  | yes   |
  * | MUST 64    | Options not starting on a word boundary handled           | yes  | yes   |
  * | MUST 65    | MSS option absent from the non-SYN segments               | yes  | yes   |
  * | MUST 66    | RST and URG processed with a zero receive window          | yes  | yes   |
- * | MUST 67    | Advertised MSS bounded by the reassembly buffer           | yes  | no    |
+ * | MUST 67    | Advertised MSS bounded by the reassembly buffer           | yes  | yes   |
  * | MUST 68    | Options other than EOL and NOP carry a length             | yes  | yes   |
  * | MUST 69    | Padding after the End of Option List is zeroed            | yes  | yes   |
  *
  * Every clause of @RFC{9293} appears above. "opt" marks what an attribute
- * enables, and "IP*" what the IP layer takes care of rather than TCP. The
- * rows marked "other" are covered by other suites of this module: MUST 18 by
+ * enables. The rows marked "other" are covered by other suites of this module: MUST 18 by
  * tcp-rtt-estimation and tcp-rto-test, MUST 19 by tcp-slow-start-test,
  * tcp-cong-avoid-test and tcp-rto-test, and MUST 20 to MUST 23 by
  * tcp-syn-connection-failed-test, which exercises giving up on a connection
@@ -377,7 +379,8 @@ TcpInvalidRemoteAddressTestCase::DoRun()
  * @RFC{9293}, Section 3.9.2.2 (MUST-55) requires TCP implementations to
  * silently discard any received ICMP Source Quench message, while the other
  * ICMP error messages must be acted on (MUST-54) without aborting the
- * connection (MUST-56).
+ * connection (MUST-56). The callback they reach is also the mechanism
+ * reporting the soft error conditions to the application (MUST-47).
  */
 class TcpIcmpSourceQuenchTestCase : public TestCase
 {
@@ -1722,6 +1725,506 @@ TcpLocalAddressTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the duration of the TIME-WAIT state
+ *
+ * @RFC{9293}, Section 3.6 (MUST-13) requires a connection closed actively to
+ * linger in TIME-WAIT for twice the maximum segment lifetime. The lifetime is
+ * shortened here through the MaxSegLifetime attribute, so that the test does
+ * not have to run for the four minutes of its default.
+ */
+class TcpTimeWaitTestCase : public TestCase
+{
+  public:
+    TcpTimeWaitTestCase()
+        : TestCase("TIME-WAIT lasts twice the maximum segment lifetime (MUST-13)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * State trace sink of the closing socket.
+     * @param oldState The previous state.
+     * @param newState The new state.
+     */
+    void StateChanged(TcpSocket::TcpStates_t oldState, TcpSocket::TcpStates_t newState);
+
+    /**
+     * Accept callback, which closes the forked socket when the peer closes.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    /**
+     * Close the socket the peer closed, so that its FIN reaches the peer.
+     * @param socket The socket to close.
+     */
+    void PeerClosed(Ptr<Socket> socket);
+
+    Time m_enteredTimeWait{Seconds(0)}; //!< Instant TIME-WAIT was entered
+    Time m_closed{Seconds(0)};          //!< Instant CLOSED was reached
+};
+
+void
+TcpTimeWaitTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->SetCloseCallbacks(MakeCallback(&TcpTimeWaitTestCase::PeerClosed, this),
+                              MakeNullCallback<void, Ptr<Socket>>());
+}
+
+void
+TcpTimeWaitTestCase::PeerClosed(Ptr<Socket> socket)
+{
+    socket->Close();
+}
+
+void
+TcpTimeWaitTestCase::StateChanged(TcpSocket::TcpStates_t oldState, TcpSocket::TcpStates_t newState)
+{
+    if (newState == TcpSocket::TIME_WAIT)
+    {
+        m_enteredTimeWait = Simulator::Now();
+    }
+    else if (newState == TcpSocket::CLOSED && m_enteredTimeWait > Seconds(0))
+    {
+        m_closed = Simulator::Now();
+    }
+}
+
+void
+TcpTimeWaitTestCase::DoRun()
+{
+    const Time msl = Seconds(1);
+    Config::SetDefault("ns3::TcpSocketBase::MaxSegLifetime", DoubleValue(msl.GetSeconds()));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9901;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpTimeWaitTestCase::Accepted, this));
+
+    // The active close is the one which lingers in TIME-WAIT
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->TraceConnectWithoutContext("State",
+                                       MakeCallback(&TcpTimeWaitTestCase::StateChanged, this));
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+    Simulator::Schedule(Seconds(1), &Socket::Close, client);
+
+    Simulator::Stop(Seconds(20));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_enteredTimeWait, Seconds(0), "The socket never entered TIME-WAIT");
+    NS_TEST_ASSERT_MSG_GT(m_closed, Seconds(0), "The socket never left TIME-WAIT");
+    NS_TEST_ASSERT_MSG_EQ(m_closed - m_enteredTimeWait,
+                          Seconds(2) * msl.GetSeconds(),
+                          "TIME-WAIT did not last twice the maximum segment lifetime");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that the Nagle algorithm can be disabled
+ *
+ * @RFC{9293}, Section 3.7.4 (MUST-17) requires a way for an application to
+ * disable the Nagle algorithm on a connection, which the TcpNoDelay attribute
+ * of TcpSocket provides: small writes issued while data is unacknowledged are
+ * coalesced with it enabled, and sent as they come with it disabled.
+ */
+class TcpNagleTestCase : public TestCase
+{
+  public:
+    TcpNagleTestCase()
+        : TestCase("The Nagle algorithm can be disabled (MUST-17)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Run the scenario.
+     * @param noDelay Whether the Nagle algorithm is disabled.
+     * @return The number of data segments the receiver got.
+     */
+    uint32_t CountSegments(bool noDelay);
+
+    /**
+     * Trace sink of the segments received by the receiver.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void SegmentReceived(Ptr<const Packet> packet,
+                         const TcpHeader& header,
+                         Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Write a small amount of data.
+     * @param socket The sending socket.
+     */
+    void SendSmall(Ptr<Socket> socket);
+
+    /**
+     * Accept callback, tracing the accepted socket.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    uint32_t m_dataSegments{0}; //!< Data segments received
+};
+
+void
+TcpNagleTestCase::SegmentReceived(Ptr<const Packet> packet,
+                                  const TcpHeader& header,
+                                  Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() > 0)
+    {
+        m_dataSegments++;
+    }
+}
+
+void
+TcpNagleTestCase::SendSmall(Ptr<Socket> socket)
+{
+    socket->Send(Create<Packet>(10), 0);
+}
+
+void
+TcpNagleTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->TraceConnectWithoutContext("Rx",
+                                       MakeCallback(&TcpNagleTestCase::SegmentReceived, this));
+}
+
+uint32_t
+TcpNagleTestCase::CountSegments(bool noDelay)
+{
+    m_dataSegments = 0;
+    Config::SetDefault("ns3::TcpSocket::TcpNoDelay", BooleanValue(noDelay));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    // A link delay long enough for several writes to be issued while the
+    // previous data is still unacknowledged
+    SimpleNetDeviceHelper devHelper;
+    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(50)));
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9902;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpNagleTestCase::Accepted, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+        Simulator::Schedule(Seconds(1) + MilliSeconds(10 * i),
+                            &TcpNagleTestCase::SendSmall,
+                            this,
+                            client);
+    }
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+    Simulator::Destroy();
+    Config::Reset();
+
+    return m_dataSegments;
+}
+
+void
+TcpNagleTestCase::DoRun()
+{
+    uint32_t coalesced = CountSegments(false);
+    uint32_t immediate = CountSegments(true);
+
+    NS_TEST_ASSERT_MSG_GT(coalesced, 0, "No data reached the receiver with Nagle enabled");
+    NS_TEST_ASSERT_MSG_EQ(immediate, 5, "The writes were coalesced with Nagle disabled");
+    NS_TEST_ASSERT_MSG_LT(coalesced,
+                          immediate,
+                          "Nagle did not coalesce the writes issued while data was unacknowledged");
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test the delayed ACK and the aggregation of the acknowledgments
+ *
+ * @RFC{9293}, Section 3.8.6.3 requires an acknowledgment not to be delayed by
+ * more than 0.5 s (MUST-40), and Section 3.10.7 requires the received
+ * segments to be processed before the acknowledgments are sent (MUST-58),
+ * with all of them processed before any acknowledgment is sent (MUST-59), so
+ * that a burst of segments is not acknowledged one by one.
+ */
+class TcpDelayedAckTestCase : public TestCase
+{
+  public:
+    TcpDelayedAckTestCase()
+        : TestCase("Delayed and aggregated acknowledgments (MUST-40, MUST-58, MUST-59)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Trace sink of the segments the sender receives.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void AckReceived(Ptr<const Packet> packet,
+                     const TcpHeader& header,
+                     Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Trace sink of the segments the sender sends.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The sending socket.
+     */
+    void SegmentSent(Ptr<const Packet> packet,
+                     const TcpHeader& header,
+                     Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Send the data.
+     * @param socket The sending socket.
+     * @param bytes The amount of data.
+     */
+    void SendData(Ptr<Socket> socket, uint32_t bytes);
+
+    Time m_lastDataSent{Seconds(0)}; //!< Instant the last data segment was sent
+    Time m_ackDelay{Seconds(0)};     //!< Delay of the acknowledgment of a lone segment
+    uint32_t m_dataSegments{0};      //!< Data segments sent
+    uint32_t m_acks{0};              //!< Acknowledgments received
+};
+
+void
+TcpDelayedAckTestCase::SegmentSent(Ptr<const Packet> packet,
+                                   const TcpHeader& header,
+                                   Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() > 0)
+    {
+        m_dataSegments++;
+        m_lastDataSent = Simulator::Now();
+    }
+}
+
+void
+TcpDelayedAckTestCase::AckReceived(Ptr<const Packet> packet,
+                                   const TcpHeader& header,
+                                   Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() == 0 && (header.GetFlags() & TcpHeader::ACK) &&
+        !(header.GetFlags() & TcpHeader::SYN) && !(header.GetFlags() & TcpHeader::FIN))
+    {
+        m_acks++;
+        if (m_ackDelay == Seconds(0) && m_lastDataSent > Seconds(0))
+        {
+            m_ackDelay = Simulator::Now() - m_lastDataSent;
+        }
+    }
+}
+
+void
+TcpDelayedAckTestCase::SendData(Ptr<Socket> socket, uint32_t bytes)
+{
+    socket->Send(Create<Packet>(bytes), 0);
+}
+
+void
+TcpDelayedAckTestCase::DoRun()
+{
+    const uint32_t segmentSize = 500;
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(segmentSize));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9903;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->TraceConnectWithoutContext("Tx",
+                                       MakeCallback(&TcpDelayedAckTestCase::SegmentSent, this));
+    client->TraceConnectWithoutContext("Rx",
+                                       MakeCallback(&TcpDelayedAckTestCase::AckReceived, this));
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    // A lone segment, whose acknowledgment is the delayed one
+    Simulator::Schedule(Seconds(1), &TcpDelayedAckTestCase::SendData, this, client, segmentSize);
+    // A burst, which must not be acknowledged segment by segment
+    Simulator::Schedule(Seconds(3),
+                        &TcpDelayedAckTestCase::SendData,
+                        this,
+                        client,
+                        segmentSize * 10);
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_ackDelay, Seconds(0), "The lone segment was not acknowledged");
+    NS_TEST_ASSERT_MSG_LT(m_ackDelay,
+                          Seconds(0.5),
+                          "The acknowledgment of the lone segment was delayed by 0.5 s or more");
+
+    NS_TEST_ASSERT_MSG_GT(m_dataSegments, 10, "The burst was not sent");
+    NS_TEST_ASSERT_MSG_LT(m_acks, m_dataSegments, "The segments were acknowledged one by one");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that the differentiated services field and the TTL are settable
+ *
+ * @RFC{9293}, Section 3.9.1.9 requires the application to be able to specify
+ * the differentiated services field of the segments of a connection
+ * (MUST-48), and their TTL to be configurable (MUST-49). The values are read
+ * from the IP header of the segments reaching the peer.
+ */
+class TcpTosAndTtlTestCase : public TestCase
+{
+  public:
+    TcpTosAndTtlTestCase()
+        : TestCase("The differentiated services field and the TTL are settable (MUST-48, MUST-49)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Record the header fields of the segments reaching the peer.
+     * @param socket The raw socket of the peer.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    uint8_t m_tos{0}; //!< Differentiated services field seen on the segments
+    uint8_t m_ttl{0}; //!< TTL seen on the segments
+};
+
+void
+TcpTosAndTtlTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6 || m_ttl != 0)
+    {
+        return;
+    }
+
+    m_tos = ipv4.GetTos();
+    m_ttl = ipv4.GetTtl();
+}
+
+void
+TcpTosAndTtlTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9904;
+    const uint8_t tos = 0xb8; // Expedited forwarding
+    const uint8_t ttl = 33;
+
+    Ptr<Socket> sniffer = Socket::CreateSocket(nodes.Get(1), Ipv4RawSocketFactory::GetTypeId());
+    sniffer->SetAttribute("Protocol", UintegerValue(6));
+    sniffer->Bind();
+    sniffer->SetRecvCallback(MakeCallback(&TcpTosAndTtlTestCase::ReceiveRaw, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->SetIpTos(tos);
+    client->SetIpTtl(ttl);
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(m_ttl, ttl, "The TTL of the segments is not the one which was set");
+    NS_TEST_ASSERT_MSG_EQ(m_tos,
+                          tos,
+                          "The differentiated services field is not the one which was set");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief Test the zero window probing and the silly window avoidance
  *
  * @RFC{9293}, Section 3.8.6 requires a window which shrank to zero to be
@@ -2279,6 +2782,10 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpCloseNotificationTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPassiveOpenTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpLocalAddressTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpTimeWaitTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpNagleTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpDelayedAckTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpTosAndTtlTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpZeroWindowProbeTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPushFlagTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpAdvertisedMssBoundTestCase(), TestCase::Duration::QUICK);
