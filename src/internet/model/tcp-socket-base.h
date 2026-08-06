@@ -209,6 +209,28 @@ class TcpSocketBase : public TcpSocket
 {
   public:
     /**
+     * @brief Specify the source route the segments of this connection follow
+     *
+     * @RFC{9293}, Section 3.9.2.1 requires an application to be able to
+     * specify a source route when it opens a connection (MUST-51), and that
+     * route to take precedence over the one a received datagram recorded
+     * (MUST-52). The route is followed by the segments of an IPv4 connection
+     * only, and one set on a listening socket is inherited by every
+     * connection it accepts, in place of the way back those recorded. An
+     * empty route restores the default, i.e. the recorded way back if any.
+     *
+     * @param route The addresses of the route, up to Ipv4SourceRouteTag::MAX_HOPS;
+     *              the peer is appended when the route stops short of it.
+     */
+    void SetIpv4SourceRoute(const std::vector<Ipv4Address>& route);
+
+    /**
+     * @brief Get the source route the segments of this connection follow
+     * @return The addresses of the route.
+     */
+    std::vector<Ipv4Address> GetIpv4SourceRoute() const;
+
+    /**
      * Get the type ID.
      * @brief Get the type ID.
      * @return the object TypeId
@@ -1548,6 +1570,8 @@ class TcpSocketBase : public TcpSocket
     Time m_clockGranularity{Seconds(0.001)}; //!< Clock Granularity used in RTO calcs
     Time m_delAckTimeout;                    //!< Time to delay an ACK
     Time m_persistTimeout;                   //!< Time between sending 1-byte probes
+    std::vector<Ipv4Address> m_sourceRoute;  //!< Source route of the segments sent
+    bool m_appSourceRoute{false};            //!< The application specified the source route
     bool m_keepAlive{false};                 //!< Keep-alives are enabled
     Time m_keepAliveTime;                    //!< Idle time before the first keep-alive
     Time m_keepAliveInterval;                //!< Time between unanswered keep-alives
