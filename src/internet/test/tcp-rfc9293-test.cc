@@ -76,7 +76,7 @@
  * | MUST 47    | Soft errors reported to the application                   | yes  | yes   |
  * | MUST 48,49 | Differentiated services field and TTL configurable        | yes  | yes   |
  * | MUST 50    | IP options ignored by TCP                                 | n/a  | n/a   |
- * | MUST 51-53 | IP source routes specified, saved and preferred           | no   | no    |
+ * | MUST 51-53 | IP source routes specified, saved and preferred           | yes  | yes   |
  * | MUST 54    | ICMP errors acted upon                                    | yes  | yes   |
  * | MUST 55    | ICMP Source Quench discarded                              | yes  | yes   |
  * | MUST 56    | Soft ICMP errors do not abort the connection              | yes  | yes   |
@@ -4683,6 +4683,325 @@ TcpKeepAliveTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the source route of a connection
+ *
+ * @RFC{9293}, Section 3.9.2.1 requires an application to be able to specify a
+ * source route when it opens a connection (MUST-51), that route to take
+ * precedence over the one a received datagram carries (MUST-52), and a
+ * connection opened passively to answer along the route recorded by the
+ * datagram which opened it (MUST-53).
+ *
+ * The client and the server are joined by two distinct nodes in the middle,
+ * so that the way back a datagram records and the route the server
+ * application prefers can be told apart. The links are given an MTU which
+ * the full sized segments exceed once the option is added, and the checksums
+ * are enabled, so that the option survives fragmentation, reassembly and the
+ * checksum, and the client node has more than one interface, so that the
+ * datagram must be routed towards its first hop rather than its destination.
+ */
+class TcpSourceRouteTestCase : public TestCase
+{
+  public:
+    TcpSourceRouteTestCase()
+        : TestCase("The segments follow the source route (MUST-51 to MUST-53)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Record the headers of the datagrams reaching the peer.
+     * @param socket The raw socket of the peer.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    /**
+     * Record the route of the answers reaching the client.
+     * @param socket The raw socket of the client.
+     */
+    void ReceiveAnswer(Ptr<Socket> socket);
+
+    /**
+     * Accept callback, which keeps the accepted socket, gives it the route
+     * the server application prefers and answers with data.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    /**
+     * Receive callback of the accepted socket, counting the data delivered.
+     * @param socket The accepted socket.
+     */
+    void Received(Ptr<Socket> socket);
+
+    /**
+     * IP layer receive trace of the server, counting the fragments before
+     * they are reassembled.
+     * @param packet The received datagram, header included.
+     * @param ipv4 The IP layer.
+     * @param interface The incoming interface.
+     */
+    void DatagramReceived(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interface);
+
+    /**
+     * Send the data of the client.
+     * @param socket The client socket.
+     */
+    void SendData(Ptr<Socket> socket);
+
+    uint32_t m_routedSegments{0};           //!< Segments which carried a source route
+    uint32_t m_segments{0};                 //!< Segments which reached the peer
+    uint32_t m_delivered{0};                //!< Bytes the server application received
+    uint32_t m_fragments{0};                //!< Fragments which reached the peer
+    std::vector<Ipv4Address> m_seenRoute;   //!< Route carried by the first of them
+    std::vector<Ipv4Address> m_answerRoute; //!< Route carried by the first answer with data
+    std::vector<Ipv4Address> m_synAckRoute; //!< Route carried by the SYN+ACK
+    std::vector<Ipv4Address> m_ownRoute;    //!< Route the server application prefers
+    Ptr<Socket> m_accepted;                 //!< The socket of the passive open
+    uint32_t m_dataSize{20000};             //!< Bytes the client sends
+    BooleanValue m_previousChecksumEnabled; //!< The global value before the test
+
+    void DoTeardown() override;
+};
+
+void
+TcpSourceRouteTestCase::DoTeardown()
+{
+    GlobalValue::Bind("ChecksumEnabled", m_previousChecksumEnabled);
+}
+
+void
+TcpSourceRouteTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return;
+    }
+
+    m_segments++;
+    if (ipv4.HasLooseSourceRoute())
+    {
+        m_routedSegments++;
+        if (m_seenRoute.empty())
+        {
+            m_seenRoute = ipv4.GetLooseSourceRoute();
+        }
+    }
+}
+
+void
+TcpSourceRouteTestCase::ReceiveAnswer(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6 || !ipv4.HasLooseSourceRoute())
+    {
+        return;
+    }
+
+    TcpHeader tcp;
+    packet->RemoveHeader(tcp);
+    if ((tcp.GetFlags() & TcpHeader::SYN) && m_synAckRoute.empty())
+    {
+        // The SYN+ACK leaves the server before its application is told of
+        // the connection, along the recorded way back
+        m_synAckRoute = ipv4.GetLooseSourceRoute();
+    }
+    if (packet->GetSize() > 0 && m_answerRoute.empty())
+    {
+        // The first answer carrying data left the server after its
+        // application specified a route of its own
+        m_answerRoute = ipv4.GetLooseSourceRoute();
+    }
+}
+
+void
+TcpSourceRouteTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    m_accepted = socket;
+    socket->SetRecvCallback(MakeCallback(&TcpSourceRouteTestCase::Received, this));
+
+    // The route the server application prefers takes precedence over the
+    // recorded way back (MUST-52), which the data sent from here shows
+    DynamicCast<TcpSocketBase>(socket)->SetIpv4SourceRoute(m_ownRoute);
+    socket->Send(Create<Packet>(100), 0);
+}
+
+void
+TcpSourceRouteTestCase::Received(Ptr<Socket> socket)
+{
+    while (Ptr<Packet> packet = socket->Recv())
+    {
+        m_delivered += packet->GetSize();
+    }
+}
+
+void
+TcpSourceRouteTestCase::SendData(Ptr<Socket> socket)
+{
+    socket->Send(Create<Packet>(m_dataSize), 0);
+}
+
+void
+TcpSourceRouteTestCase::DatagramReceived(Ptr<const Packet> packet,
+                                         Ptr<Ipv4> ipv4,
+                                         uint32_t interface)
+{
+    Ipv4Header header;
+    packet->PeekHeader(header);
+    if (header.GetProtocol() != 6 || (header.IsLastFragment() && header.GetFragmentOffset() == 0))
+    {
+        return;
+    }
+    // The option is copied to every fragment (RFC 791)
+    m_fragments++;
+    NS_TEST_ASSERT_MSG_EQ(header.HasLooseSourceRoute(),
+                          true,
+                          "A fragment of a source routed datagram lost the option");
+}
+
+void
+TcpSourceRouteTestCase::DoRun()
+{
+    // The checksums cover the option, so they are verified along the way
+    GlobalValue::GetValueByName("ChecksumEnabled", m_previousChecksumEnabled);
+    GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
+
+    // Client (0) and server (2), joined through two nodes in the middle: the
+    // upper one (1) the client routes through, the lower one (3) the server
+    // application prefers
+    NodeContainer nodes;
+    nodes.Create(4);
+
+    NodeContainer left(nodes.Get(0), nodes.Get(1));
+    NodeContainer right(nodes.Get(1), nodes.Get(2));
+    NodeContainer lowerLeft(nodes.Get(0), nodes.Get(3));
+    NodeContainer lowerRight(nodes.Get(3), nodes.Get(2));
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer leftDevices = devHelper.Install(left);
+    NetDeviceContainer rightDevices = devHelper.Install(right);
+    NetDeviceContainer lowerLeftDevices = devHelper.Install(lowerLeft);
+    NetDeviceContainer lowerRightDevices = devHelper.Install(lowerRight);
+    for (auto devices : {leftDevices, rightDevices, lowerLeftDevices, lowerRightDevices})
+    {
+        for (auto device = devices.Begin(); device != devices.End(); ++device)
+        {
+            (*device)->SetMtu(1500);
+        }
+    }
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer leftIfs = address.Assign(leftDevices);
+    address.SetBase("10.1.2.0", "255.255.255.0");
+    Ipv4InterfaceContainer rightIfs = address.Assign(rightDevices);
+    address.SetBase("10.1.3.0", "255.255.255.0");
+    Ipv4InterfaceContainer lowerLeftIfs = address.Assign(lowerLeftDevices);
+    address.SetBase("10.1.4.0", "255.255.255.0");
+    Ipv4InterfaceContainer lowerRightIfs = address.Assign(lowerRightDevices);
+
+    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    const uint16_t port = 9911;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(2), TcpSocketFactory::GetTypeId());
+    // Full sized segments on both ends, which exceed the MTU once the option
+    // is added
+    server->SetAttribute("SegmentSize", UintegerValue(1460));
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpSourceRouteTestCase::Accepted, this));
+
+    Ptr<Socket> sniffer = Socket::CreateSocket(nodes.Get(2), Ipv4RawSocketFactory::GetTypeId());
+    sniffer->SetAttribute("Protocol", UintegerValue(6));
+    sniffer->Bind();
+    sniffer->SetRecvCallback(MakeCallback(&TcpSourceRouteTestCase::ReceiveRaw, this));
+    nodes.Get(2)->GetObject<Ipv4L3Protocol>()->TraceConnectWithoutContext(
+        "Rx",
+        MakeCallback(&TcpSourceRouteTestCase::DatagramReceived, this));
+
+    Ptr<Socket> answerSniffer =
+        Socket::CreateSocket(nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
+    answerSniffer->SetAttribute("Protocol", UintegerValue(6));
+    answerSniffer->Bind();
+    answerSniffer->SetRecvCallback(MakeCallback(&TcpSourceRouteTestCase::ReceiveAnswer, this));
+
+    // The route the application asks for: through the upper node in the
+    // middle, then on to the peer
+    std::vector<Ipv4Address> route = {leftIfs.GetAddress(1), rightIfs.GetAddress(1)};
+
+    // The route the server application prefers for its answers: through the
+    // lower node in the middle
+    m_ownRoute = {lowerRightIfs.GetAddress(0), lowerLeftIfs.GetAddress(0)};
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    Ptr<TcpSocketBase> tcpClient = DynamicCast<TcpSocketBase>(client);
+    client->SetAttribute("SegmentSize", UintegerValue(1460));
+    client->Bind();
+    tcpClient->SetIpv4SourceRoute(route);
+    client->Connect(InetSocketAddress(rightIfs.GetAddress(1), port));
+    Simulator::Schedule(Seconds(1), &TcpSourceRouteTestCase::SendData, this, client);
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+
+    // The segments were fragmented on the way, and reassembled whole
+    NS_TEST_ASSERT_MSG_GT(m_fragments, 0, "No segment was fragmented");
+    NS_TEST_ASSERT_MSG_EQ(m_delivered, m_dataSize, "The data did not reach the server whole");
+
+    NS_TEST_ASSERT_MSG_GT(m_segments, 0, "No segment reached the peer");
+    NS_TEST_ASSERT_MSG_EQ(m_routedSegments,
+                          m_segments,
+                          "A segment of the connection carried no source route");
+
+    // The first hop travels in the destination field, so the option holds one
+    // slot less than the route, and every hop writes the address it forwards
+    // the datagram from in the slot it took the next hop from (RFC 791): the
+    // option holds the way back when it arrives
+    NS_TEST_ASSERT_MSG_EQ(m_seenRoute.size(), route.size() - 1, "The route was not carried whole");
+    NS_TEST_ASSERT_MSG_EQ(m_seenRoute.empty() ? Ipv4Address() : m_seenRoute.front(),
+                          rightIfs.GetAddress(0),
+                          "The hop in the middle did not record the address it forwarded from");
+
+    // The connection opened passively answers along the way back (MUST-53):
+    // the SYN+ACK reaches the client through the upper node in the middle,
+    // whose address on the way back is the one facing the client
+    NS_TEST_ASSERT_MSG_NE(m_accepted, nullptr, "The connection was not established");
+    NS_TEST_ASSERT_MSG_EQ(m_synAckRoute.empty(), false, "The SYN+ACK carried no source route");
+    NS_TEST_ASSERT_MSG_EQ(m_synAckRoute.empty() ? Ipv4Address() : m_synAckRoute.front(),
+                          leftIfs.GetAddress(1),
+                          "The SYN+ACK did not follow the recorded way back");
+
+    // and the route its application specified took precedence over the
+    // recorded one (MUST-52): the data went through the lower node in the
+    // middle, which recorded the address it forwarded from
+    NS_TEST_ASSERT_MSG_EQ(m_answerRoute.empty(), false, "No answer carried the preferred route");
+    NS_TEST_ASSERT_MSG_EQ(m_answerRoute.empty() ? Ipv4Address() : m_answerRoute.front(),
+                          lowerLeftIfs.GetAddress(1),
+                          "The route of the application did not take precedence");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -4724,6 +5043,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpEmptyZeroWindowProbeTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpUrgentHighIsnTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpKeepAliveTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpSourceRouteTestCase(), TestCase::Duration::QUICK);
     }
 };
 

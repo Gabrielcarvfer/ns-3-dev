@@ -18,6 +18,7 @@
 #include "ipv4-end-point.h"
 #include "ipv4-route.h"
 #include "ipv4-routing-protocol.h"
+#include "ipv4-source-route-tag.h"
 #include "ipv4.h"
 #include "ipv6-end-point.h"
 #include "ipv6-l3-protocol.h"
@@ -411,6 +412,8 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_clockGranularity(sock.m_clockGranularity),
       m_delAckTimeout(sock.m_delAckTimeout),
       m_persistTimeout(sock.m_persistTimeout),
+      m_sourceRoute(sock.m_sourceRoute),
+      m_appSourceRoute(sock.m_appSourceRoute),
       m_keepAlive(sock.m_keepAlive),
       m_keepAliveTime(sock.m_keepAliveTime),
       m_keepAliveInterval(sock.m_keepAliveInterval),
@@ -1696,6 +1699,18 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
 
     m_rxTrace(packet, tcpHeader, this);
 
+    Ipv4SourceRouteTag returnRoute;
+    if (packet->RemovePacketTag(returnRoute) && !m_appSourceRoute && m_endPoint != nullptr)
+    {
+        // The way back recorded by the datagram which arrived, which the
+        // segments of this connection follow unless the application asked for
+        // a route of its own (RFC 9293, Section 3.9.2.1, MUST-52 and MUST-53).
+        // A listener keeps it only for the connection it forks for the SYN
+        // (see ProcessListen).
+        m_sourceRoute = returnRoute.GetRoute();
+        NS_LOG_LOGIC("Saved a return route of " << m_sourceRoute.size() << " hops");
+    }
+
     // Something came in, so the connection is not idle
     RearmKeepAlive();
 
@@ -2643,6 +2658,15 @@ TcpSocketBase::ProcessListen(Ptr<Packet> packet,
 
     // Fork a socket if received a SYN. Do nothing otherwise.
     // C.f.: the LISTEN part in tcp_v4_do_rcv() in tcp_ipv4.c in Linux kernel
+    // The way back recorded by the segment which arrived belongs to the
+    // connection forked for it alone, never to the listener, whatever
+    // becomes of the segment
+    std::vector<Ipv4Address> returnRoute;
+    if (!m_appSourceRoute)
+    {
+        returnRoute.swap(m_sourceRoute);
+    }
+
     if (tcpflags != TcpHeader::SYN)
     {
         return;
@@ -2657,6 +2681,10 @@ TcpSocketBase::ProcessListen(Ptr<Packet> packet,
     // Clone the socket, simulate fork
     Ptr<TcpSocketBase> newSock = Fork();
     NS_LOG_LOGIC("Cloned a TcpSocketBase " << newSock);
+    if (!m_appSourceRoute)
+    {
+        newSock->m_sourceRoute = returnRoute;
+    }
     Simulator::ScheduleNow(&TcpSocketBase::CompleteFork,
                            newSock,
                            packet,
@@ -3532,6 +3560,19 @@ TcpSocketBase::ConnectionSucceeded()
 void
 TcpSocketBase::AddSocketTags(const Ptr<Packet>& p, bool isEct) const
 {
+    if (!m_sourceRoute.empty() && m_endPoint != nullptr)
+    {
+        // The route the application asked for, or the one the opening segment
+        // of a passively opened connection recorded (RFC 9293, Section
+        // 3.9.2.1, MUST-51 and MUST-53). Note that the option enlarges the IP
+        // header, which the segment sizing does not account for: a full sized
+        // segment of a source routed connection exceeds the MTU and is
+        // fragmented.
+        Ipv4SourceRouteTag routeTag;
+        routeTag.SetRoute(m_sourceRoute);
+        p->AddPacketTag(routeTag);
+    }
+
     /*
      * Add tags for each socket option.
      * Note that currently the socket adds both IPv4 tag and IPv6 tag
@@ -4830,6 +4871,22 @@ TcpSocketBase::SetPersistTimeout(Time timeout)
 {
     NS_LOG_FUNCTION(this << timeout);
     m_persistTimeout = timeout;
+}
+
+void
+TcpSocketBase::SetIpv4SourceRoute(const std::vector<Ipv4Address>& route)
+{
+    NS_LOG_FUNCTION(this << route.size());
+    m_sourceRoute = route;
+    // A route the application specified takes precedence over the one a
+    // received datagram recorded (RFC 9293, Section 3.9.2.1, MUST-52)
+    m_appSourceRoute = !route.empty();
+}
+
+std::vector<Ipv4Address>
+TcpSocketBase::GetIpv4SourceRoute() const
+{
+    return m_sourceRoute;
 }
 
 void
