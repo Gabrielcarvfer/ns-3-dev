@@ -4349,8 +4349,15 @@ TcpSocketBase::PersistTimeout()
     NS_LOG_LOGIC("PersistTimeout expired at " << Simulator::Now().GetSeconds());
     m_persistTimeout =
         std::min(Seconds(60), Time(2 * m_persistTimeout)); // max persist timeout = 60s
-    Ptr<Packet> p = m_txBuffer->CopyFromSequence(1, m_tcb->m_nextTxSequence)->GetPacketCopy();
-    m_txBuffer->ResetLastSegmentSent();
+    // The probe carries one octet of data when there is one to send, and none
+    // when the buffer holds nothing beyond what was sent (RFC 9293, Section
+    // 3.8.6.1, which leaves the octet optional)
+    TcpTxItem* outItem = m_txBuffer->CopyFromSequence(1, m_tcb->m_nextTxSequence);
+    Ptr<Packet> p = outItem ? outItem->GetPacketCopy() : Create<Packet>();
+    if (outItem)
+    {
+        m_txBuffer->ResetLastSegmentSent();
+    }
     TcpHeader tcpHeader;
     tcpHeader.SetSequenceNumber(m_tcb->m_nextTxSequence);
     tcpHeader.SetAckNumber(m_tcb->m_rxBuffer->NextRxSequence());
