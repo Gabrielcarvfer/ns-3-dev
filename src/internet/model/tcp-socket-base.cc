@@ -105,6 +105,16 @@ TcpSocketBase::GetTypeId()
             //                   EnumValue (CLOSED),
             //                   MakeEnumAccessor (&TcpSocketBase::m_state),
             //                   MakeEnumChecker (CLOSED, "Closed"))
+            .AddAttribute("KeepAliveInterval",
+                          "Time between the keep-alives which are not answered",
+                          TimeValue(Seconds(75)),
+                          MakeTimeAccessor(&TcpSocketBase::m_keepAliveInterval),
+                          MakeTimeChecker())
+            .AddAttribute("KeepAliveRetries",
+                          "Number of unanswered keep-alives before the connection is dropped",
+                          UintegerValue(9),
+                          MakeUintegerAccessor(&TcpSocketBase::m_keepAliveRetries),
+                          MakeUintegerChecker<uint32_t>())
             .AddAttribute("MaxSegLifetime",
                           "Maximum segment lifetime in seconds, use for TIME_WAIT state transition "
                           "to CLOSED state",
@@ -401,6 +411,10 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_clockGranularity(sock.m_clockGranularity),
       m_delAckTimeout(sock.m_delAckTimeout),
       m_persistTimeout(sock.m_persistTimeout),
+      m_keepAlive(sock.m_keepAlive),
+      m_keepAliveTime(sock.m_keepAliveTime),
+      m_keepAliveInterval(sock.m_keepAliveInterval),
+      m_keepAliveRetries(sock.m_keepAliveRetries),
       m_cnTimeout(sock.m_cnTimeout),
       m_endPoint(nullptr),
       m_endPoint6(nullptr),
@@ -1344,6 +1358,7 @@ TcpSocketBase::ForwardUp(Ptr<Packet> packet,
     }
 
     if (!IsValidTcpSegment(tcpHeader.GetSequenceNumber(),
+                           tcpHeader.GetFlags(),
                            bytesRemoved,
                            packet->GetSize() - bytesRemoved))
     {
@@ -1390,6 +1405,7 @@ TcpSocketBase::ForwardUp6(Ptr<Packet> packet,
     }
 
     if (!IsValidTcpSegment(tcpHeader.GetSequenceNumber(),
+                           tcpHeader.GetFlags(),
                            bytesRemoved,
                            packet->GetSize() - bytesRemoved))
     {
@@ -1482,6 +1498,7 @@ TcpSocketBase::AbortOnMalformedSegment()
 
 bool
 TcpSocketBase::IsValidTcpSegment(const SequenceNumber32 seq,
+                                 const uint8_t flags,
                                  const uint32_t tcpHeaderSize,
                                  const uint32_t tcpPayloadSize)
 {
@@ -1501,7 +1518,42 @@ TcpSocketBase::IsValidTcpSegment(const SequenceNumber32 seq,
         SendEmptyPacket(TcpHeader::ACK);
         return false;
     }
+    else if (tcpPayloadSize == 0 && !(flags & (TcpHeader::SYN | TcpHeader::RST | TcpHeader::FIN)) &&
+             ZeroLengthOutOfRange(seq))
+    {
+        // A segment without data lying outside the window, such as a
+        // keep-alive probe repeating an acknowledged sequence number, is
+        // answered with an acknowledgment and dropped (RFC 9293,
+        // Section 3.10.7.4)
+        NS_LOG_WARN("At state " << TcpStateName[m_state] << " received an empty segment of seq "
+                                << seq << " out of range [" << m_tcb->m_rxBuffer->NextRxSequence()
+                                << ":" << m_tcb->m_rxBuffer->MaxRxSequence() << ")");
+        SendEmptyPacket(TcpHeader::ACK);
+        return false;
+    }
     return true;
+}
+
+bool
+TcpSocketBase::ZeroLengthOutOfRange(SequenceNumber32 seq) const
+{
+    if (m_state != ESTABLISHED && m_state != FIN_WAIT_1 && m_state != FIN_WAIT_2)
+    {
+        // The window is only meaningful while the peer may still send data:
+        // before the connection is up, the receive buffer is not initialized,
+        // and once the FIN of the peer is in, the buffer no longer accounts
+        // for the sequence number it took
+        return false;
+    }
+
+    SequenceNumber32 next = m_tcb->m_rxBuffer->NextRxSequence();
+    SequenceNumber32 max = m_tcb->m_rxBuffer->MaxRxSequence();
+    if (next == max)
+    {
+        // The window is closed: only a segment at RCV.NXT is acceptable
+        return seq != next;
+    }
+    return seq < next || max <= seq;
 }
 
 void
@@ -1643,6 +1695,9 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
     }
 
     m_rxTrace(packet, tcpHeader, this);
+
+    // Something came in, so the connection is not idle
+    RearmKeepAlive();
 
     if ((tcpHeader.GetFlags() & TcpHeader::URG) && !(tcpHeader.GetFlags() & TcpHeader::RST) &&
         (m_state == ESTABLISHED || m_state == FIN_WAIT_1 || m_state == FIN_WAIT_2))
@@ -4592,6 +4647,7 @@ TcpSocketBase::CancelAllTimers()
     m_timewaitEvent.Cancel();
     m_sendPendingDataEvent.Cancel();
     m_pacingTimer.Cancel();
+    m_keepAliveEvent.Cancel();
 }
 
 /* Move TCP to Time_Wait state and schedule a transition to Closed state */
@@ -4774,6 +4830,142 @@ TcpSocketBase::SetPersistTimeout(Time timeout)
 {
     NS_LOG_FUNCTION(this << timeout);
     m_persistTimeout = timeout;
+}
+
+void
+TcpSocketBase::SetKeepAlive(bool keepAlive)
+{
+    NS_LOG_FUNCTION(this << keepAlive);
+    m_keepAlive = keepAlive;
+    if (m_keepAlive)
+    {
+        RearmKeepAlive();
+    }
+    else
+    {
+        m_keepAliveEvent.Cancel();
+    }
+}
+
+bool
+TcpSocketBase::GetKeepAlive() const
+{
+    return m_keepAlive;
+}
+
+void
+TcpSocketBase::SetKeepAliveTime(Time keepAliveTime)
+{
+    NS_LOG_FUNCTION(this << keepAliveTime);
+    m_keepAliveTime = keepAliveTime;
+}
+
+Time
+TcpSocketBase::GetKeepAliveTime() const
+{
+    return m_keepAliveTime;
+}
+
+void
+TcpSocketBase::RearmKeepAlive()
+{
+    m_keepAliveEvent.Cancel();
+    if (!m_keepAlive || (m_state != ESTABLISHED && m_state != SYN_SENT && m_state != SYN_RCVD))
+    {
+        // The keep-alives probe an established connection; once the
+        // connection is closing, the FIN retransmissions and the TIME-WAIT
+        // timer take over, and a pending probe would keep the socket alive
+        // in the scheduler
+        return;
+    }
+
+    m_keepAlivesSent = 0;
+    m_keepAliveEvent = Simulator::Schedule(m_keepAliveTime, &TcpSocketBase::KeepAliveTimeout, this);
+}
+
+void
+TcpSocketBase::KeepAliveTimeout()
+{
+    NS_LOG_FUNCTION(this);
+
+    if (m_state != ESTABLISHED)
+    {
+        return;
+    }
+
+    if (BytesInFlight() > 0 || m_txBuffer->SizeFromSequence(m_tcb->m_nextTxSequence) > 0)
+    {
+        // Sent data is still outstanding, so the connection is not idle and
+        // the retransmissions are the ones probing the peer (RFC 9293,
+        // Section 3.8.4, MUST-26)
+        m_keepAliveEvent =
+            Simulator::Schedule(m_keepAliveTime, &TcpSocketBase::KeepAliveTimeout, this);
+        return;
+    }
+
+    if (m_keepAlivesSent >= m_keepAliveRetries)
+    {
+        // Only a whole series of unanswered keep-alives tells a dead
+        // connection apart from a lost probe (RFC 9293, Section 3.8.4,
+        // MUST-29)
+        NS_LOG_LOGIC("The peer answered none of the " << m_keepAlivesSent << " keep-alives");
+        // The socket API has no timed out error, and the peer is gone as far
+        // as this end can tell
+        m_errno = ERROR_NOTCONN;
+        // SendRST notifies the abort to the application: mark it, so that the
+        // close which follows does not notify a normal close on top of it
+        m_closeNotified = true;
+        SendRST();
+        CloseAndNotify();
+        return;
+    }
+
+    SendKeepAlive();
+    m_keepAlivesSent++;
+    m_keepAliveEvent =
+        Simulator::Schedule(m_keepAliveInterval, &TcpSocketBase::KeepAliveTimeout, this);
+}
+
+void
+TcpSocketBase::SendKeepAlive()
+{
+    NS_LOG_FUNCTION(this);
+
+    // The probe holds no data and takes the sequence number of the last octet
+    // the peer acknowledged, so that the answer to it is an acknowledgment
+    // (RFC 9293, Section 3.8.4)
+    Ptr<Packet> p = Create<Packet>();
+    AddSocketTags(p, false);
+    TcpHeader header;
+    header.SetFlags(TcpHeader::ACK);
+    header.SetSequenceNumber(m_tcb->m_nextTxSequence - 1);
+    header.SetAckNumber(m_tcb->m_rxBuffer->NextRxSequence());
+    header.SetWindowSize(AdvertisedWindowSize());
+
+    if (m_endPoint != nullptr)
+    {
+        header.SetSourcePort(m_endPoint->GetLocalPort());
+        header.SetDestinationPort(m_endPoint->GetPeerPort());
+        AddOptions(header);
+        m_txTrace(p, header, this);
+        m_tcp->SendPacket(p,
+                          header,
+                          m_endPoint->GetLocalAddress(),
+                          m_endPoint->GetPeerAddress(),
+                          m_boundnetdevice);
+    }
+    else
+    {
+        header.SetSourcePort(m_endPoint6->GetLocalPort());
+        header.SetDestinationPort(m_endPoint6->GetPeerPort());
+        AddOptions(header);
+        m_txTrace(p, header, this);
+        m_tcp->SendPacket(p,
+                          header,
+                          m_endPoint6->GetLocalAddress(),
+                          m_endPoint6->GetPeerAddress(),
+                          m_boundnetdevice);
+    }
 }
 
 Time
