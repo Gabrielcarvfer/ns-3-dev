@@ -230,6 +230,39 @@ class TcpSocket : public Socket
     virtual void SetPersistTimeout(Time timeout) = 0;
 
     /**
+     * @brief Enable or disable the keep-alives of this connection
+     *
+     * @RFC{9293}, Section 3.8.4 requires the application to be able to turn
+     * the keep-alives on or off for each connection (MUST-24), and requires
+     * them to default to off (MUST-25).
+     *
+     * @param keepAlive Whether the keep-alives are enabled.
+     */
+    virtual void SetKeepAlive(bool keepAlive) = 0;
+
+    /**
+     * @brief Get whether the keep-alives of this connection are enabled
+     * @returns true if the keep-alives are enabled.
+     */
+    virtual bool GetKeepAlive() const = 0;
+
+    /**
+     * @brief Set the idle time after which a keep-alive is sent
+     *
+     * @RFC{9293}, Section 3.8.4 requires this interval to be configurable
+     * (MUST-27) and to default to no less than two hours (MUST-28).
+     *
+     * @param keepAliveTime The idle time before the first keep-alive.
+     */
+    virtual void SetKeepAliveTime(Time keepAliveTime) = 0;
+
+    /**
+     * @brief Get the idle time after which a keep-alive is sent
+     * @returns The idle time before the first keep-alive.
+     */
+    virtual Time GetKeepAliveTime() const = 0;
+
+    /**
      * @brief Get the timeout for persistent connection
      *
      * When the timeout expires, send 1-byte data to probe for the window

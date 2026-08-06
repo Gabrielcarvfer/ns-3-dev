@@ -732,6 +732,10 @@ class TcpSocketBase : public TcpSocket
     void SetTcpNoDelay(bool noDelay) override;
     bool GetTcpNoDelay() const override;
     void SetPersistTimeout(Time timeout) override;
+    void SetKeepAlive(bool keepAlive) override;
+    bool GetKeepAlive() const override;
+    void SetKeepAliveTime(Time keepAliveTime) override;
+    Time GetKeepAliveTime() const override;
     Time GetPersistTimeout() const override;
     bool SetAllowBroadcast(bool allowBroadcast) override;
     bool GetAllowBroadcast() const override;
@@ -814,12 +818,20 @@ class TcpSocketBase : public TcpSocket
     /**
      * @brief Checks whether the given TCP segment is valid or not.
      *
+     * A segment lying outside the receive window is acknowledged and dropped
+     * (@RFC{9293}, Section 3.10.7.4), whether it carries data or not: a
+     * segment without data, such as a keep-alive probe, is acceptable only
+     * if its sequence number lies in the window, or equals RCV.NXT while
+     * the window is closed.
+     *
      * @param seq the sequence number of packet's TCP header
+     * @param flags the flags of packet's TCP header
      * @param tcpHeaderSize the size of packet's TCP header
      * @param tcpPayloadSize the size of TCP payload
      * @return true if the TCP segment is valid
      */
     bool IsValidTcpSegment(const SequenceNumber32 seq,
+                           const uint8_t flags,
                            const uint32_t tcpHeaderSize,
                            const uint32_t tcpPayloadSize);
 
@@ -927,6 +939,15 @@ class TcpSocketBase : public TcpSocket
      * @brief Send reset and tear down this socket
      */
     void SendRST();
+
+    /**
+     * @brief Check if the sequence number of a segment without data is within
+     *        the rx window
+     *
+     * @param seq the sequence number of the segment
+     * @return true if the sequence number is out of range
+     */
+    bool ZeroLengthOutOfRange(SequenceNumber32 seq) const;
 
     /**
      * @brief Check if a sequence number range is within the rx window
@@ -1236,6 +1257,31 @@ class TcpSocketBase : public TcpSocket
     virtual void PersistTimeout();
 
     /**
+     * @brief Send a keep-alive, or drop a connection whose peer stopped answering
+     *
+     * @RFC{9293}, Section 3.8.4 allows an implementation to probe an idle
+     * connection, as long as the probes are sent when no data is outstanding
+     * and nothing was received for the configured interval (MUST-26), and as
+     * long as a single probe left unanswered is not read as a dead connection
+     * (MUST-29).
+     */
+    void KeepAliveTimeout();
+
+    /**
+     * @brief Send a keep-alive probe
+     */
+    void SendKeepAlive();
+
+    /**
+     * @brief Restart the keep-alive timer of an active connection
+     *
+     * Called whenever a segment is received, since an incoming segment shows
+     * the peer is alive; outgoing data does not need to restart the timer,
+     * because the timeout skips the probe while sent data is outstanding.
+     */
+    void RearmKeepAlive();
+
+    /**
      * @brief Retransmit the first segment marked as lost, without considering
      * available window nor pacing.
      */
@@ -1502,6 +1548,12 @@ class TcpSocketBase : public TcpSocket
     Time m_clockGranularity{Seconds(0.001)}; //!< Clock Granularity used in RTO calcs
     Time m_delAckTimeout;                    //!< Time to delay an ACK
     Time m_persistTimeout;                   //!< Time between sending 1-byte probes
+    bool m_keepAlive{false};                 //!< Keep-alives are enabled
+    Time m_keepAliveTime;                    //!< Idle time before the first keep-alive
+    Time m_keepAliveInterval;                //!< Time between unanswered keep-alives
+    uint32_t m_keepAliveRetries{0};          //!< Unanswered keep-alives before dropping
+    uint32_t m_keepAlivesSent{0};            //!< Keep-alives sent without an answer
+    EventId m_keepAliveEvent{};              //!< Keep-alive event
     Time m_cnTimeout;                        //!< Timeout for connection retry
 
     // History of RTT
