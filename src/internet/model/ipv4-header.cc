@@ -280,6 +280,62 @@ Ipv4Header::SetProtocol(uint8_t protocol)
     m_protocol = protocol;
 }
 
+namespace
+{
+/// Type of the loose source route option, from the IANA IP option numbers
+constexpr uint8_t IPV4_OPTION_LSRR = 131;
+/// Type of the end of option list
+constexpr uint8_t IPV4_OPTION_END = 0;
+/// Type of the no operation option, used as padding
+constexpr uint8_t IPV4_OPTION_NOP = 1;
+} // namespace
+
+void
+Ipv4Header::SetLooseSourceRoute(const std::vector<Ipv4Address>& route)
+{
+    NS_LOG_FUNCTION(this << route.size());
+    m_sourceRoute = route;
+    m_sourceRoutePointer = 4;
+    m_headerSize = 20 + OptionsLength();
+}
+
+bool
+Ipv4Header::HasLooseSourceRoute() const
+{
+    return !m_sourceRoute.empty();
+}
+
+std::vector<Ipv4Address>
+Ipv4Header::GetLooseSourceRoute() const
+{
+    return m_sourceRoute;
+}
+
+uint8_t
+Ipv4Header::GetSourceRoutePointer() const
+{
+    return m_sourceRoutePointer;
+}
+
+void
+Ipv4Header::SetSourceRoutePointer(uint8_t pointer)
+{
+    m_sourceRoutePointer = pointer;
+}
+
+uint16_t
+Ipv4Header::OptionsLength() const
+{
+    if (m_sourceRoute.empty())
+    {
+        return 0;
+    }
+
+    // Type, length and pointer, then the addresses, padded to a word
+    uint16_t length = 3 + 4 * m_sourceRoute.size();
+    return (length + 3) & ~0x3;
+}
+
 void
 Ipv4Header::SetSource(Ipv4Address source)
 {
@@ -383,10 +439,12 @@ Ipv4Header::Serialize(Buffer::Iterator start) const
     NS_LOG_FUNCTION(this << &start);
     Buffer::Iterator i = start;
 
-    uint8_t verIhl = (4 << 4) | (5);
+    uint16_t optionsLength = OptionsLength();
+    uint16_t headerLength = 20 + optionsLength;
+    uint8_t verIhl = (4 << 4) | (headerLength / 4);
     i.WriteU8(verIhl);
     i.WriteU8(m_tos);
-    i.WriteHtonU16(m_payloadSize + 5 * 4);
+    i.WriteHtonU16(m_payloadSize + headerLength);
     i.WriteHtonU16(m_identification);
     uint32_t fragmentOffset = m_fragmentOffset / 8;
     uint8_t flagsFrag = (fragmentOffset >> 8) & 0x1f;
@@ -406,6 +464,23 @@ Ipv4Header::Serialize(Buffer::Iterator start) const
     i.WriteHtonU16(0);
     i.WriteHtonU32(m_source.Get());
     i.WriteHtonU32(m_destination.Get());
+
+    if (optionsLength > 0)
+    {
+        // The loose source route option, as RFC 791 lays it out
+        i.WriteU8(IPV4_OPTION_LSRR);
+        i.WriteU8(3 + 4 * m_sourceRoute.size());
+        i.WriteU8(m_sourceRoutePointer);
+        for (const auto& address : m_sourceRoute)
+        {
+            i.WriteHtonU32(address.Get());
+        }
+        // The padding bringing the options to a word boundary
+        for (uint16_t pad = 3 + 4 * m_sourceRoute.size(); pad < optionsLength; ++pad)
+        {
+            i.WriteU8(pad + 1 == optionsLength ? IPV4_OPTION_END : IPV4_OPTION_NOP);
+        }
+    }
 
     if (m_calcChecksum)
     {
@@ -460,6 +535,51 @@ Ipv4Header::Deserialize(Buffer::Iterator start)
     m_source.Set(i.ReadNtohU32());
     m_destination.Set(i.ReadNtohU32());
     m_headerSize = headerSize;
+
+    m_sourceRoute.clear();
+    m_sourceRoutePointer = 4;
+    uint16_t optionsLength = headerSize > 20 ? headerSize - 20 : 0;
+    while (optionsLength > 0)
+    {
+        uint8_t type = i.ReadU8();
+        optionsLength--;
+
+        if (type == IPV4_OPTION_END)
+        {
+            break;
+        }
+        if (type == IPV4_OPTION_NOP)
+        {
+            continue;
+        }
+        if (optionsLength == 0)
+        {
+            NS_LOG_WARN("IPv4 option without a length field");
+            break;
+        }
+
+        uint8_t length = i.ReadU8();
+        optionsLength--;
+        if (length < 2 || length - 2 > optionsLength)
+        {
+            NS_LOG_WARN("Illegal IPv4 option length " << static_cast<uint32_t>(length));
+            break;
+        }
+
+        if (type == IPV4_OPTION_LSRR && length >= 3 && (length - 3) % 4 == 0)
+        {
+            m_sourceRoutePointer = i.ReadU8();
+            for (uint8_t read = 3; read < length; read += 4)
+            {
+                m_sourceRoute.emplace_back(i.ReadNtohU32());
+            }
+        }
+        else
+        {
+            i.Next(length - 2);
+        }
+        optionsLength -= length - 2;
+    }
 
     if (m_calcChecksum)
     {

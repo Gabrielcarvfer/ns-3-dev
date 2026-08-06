@@ -15,6 +15,7 @@
 #include "ipv4-interface.h"
 #include "ipv4-raw-socket-impl.h"
 #include "ipv4-route.h"
+#include "ipv4-source-route-tag.h"
 #include "loopback-net-device.h"
 
 #include "ns3/boolean.h"
@@ -772,9 +773,30 @@ Ipv4L3Protocol::Send(Ptr<Packet> packet,
         tos = ipTosTag.GetTos();
     }
 
+    // The route the application asked the datagram to follow travels down as a
+    // tag, and becomes the loose source route option of the header, whose
+    // destination is the first hop of the route (RFC 791)
+    std::vector<Ipv4Address> sourceRoute;
+    Ipv4SourceRouteTag sourceRouteTag;
+    Ipv4Address firstHop = destination;
+    if (packet->RemovePacketTag(sourceRouteTag))
+    {
+        sourceRoute = sourceRouteTag.GetRoute();
+        if (!sourceRoute.empty())
+        {
+            firstHop = sourceRoute.front();
+            // The final destination travels in the last slot of the option
+            sourceRoute.back() = destination;
+        }
+    }
+
     // can construct the header here
     Ipv4Header ipHeader =
-        BuildHeader(source, destination, protocol, packet->GetSize(), ttl, tos, mayFragment);
+        BuildHeader(source, firstHop, protocol, packet->GetSize(), ttl, tos, mayFragment);
+    if (!sourceRoute.empty())
+    {
+        ipHeader.SetLooseSourceRoute(sourceRoute);
+    }
 
     // Handle a few cases:
     // 1) packet is passed in with a route entry
@@ -1078,6 +1100,51 @@ Ipv4L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv4Header& ip, uin
     NS_LOG_FUNCTION(this << packet << &ip << iif);
     Ptr<Packet> p = packet->Copy(); // need to pass a non-const packet up
     Ipv4Header ipHeader = ip;
+
+    if (ipHeader.HasLooseSourceRoute())
+    {
+        std::vector<Ipv4Address> route = ipHeader.GetLooseSourceRoute();
+        uint8_t pointer = ipHeader.GetSourceRoutePointer();
+        uint32_t next = (pointer - 4) / 4;
+
+        if (next < route.size())
+        {
+            // A hop of the route rather than the final destination: the
+            // address of this hop is recorded in the slot it came from, and
+            // the datagram goes on towards the next one (RFC 791)
+            Ipv4Address nextHop = route[next];
+            route[next] = ipHeader.GetDestination();
+            ipHeader.SetLooseSourceRoute(route);
+            ipHeader.SetSourceRoutePointer(pointer + 4);
+            ipHeader.SetDestination(nextHop);
+            ipHeader.SetTtl(ipHeader.GetTtl() - 1);
+
+            NS_LOG_LOGIC("Forwarding a source routed datagram to " << nextHop);
+            Socket::SocketErrno errno_;
+            Ptr<Ipv4Route> rtentry = m_routingProtocol->RouteOutput(p, ipHeader, nullptr, errno_);
+            if (rtentry)
+            {
+                SendRealOut(rtentry, p, ipHeader);
+            }
+            else
+            {
+                NS_LOG_WARN("No route towards the next hop " << nextHop << " of the source route");
+            }
+            return;
+        }
+
+        // The final destination of the route: the addresses it recorded are
+        // the way back, which the answers of a connection can follow
+        // (RFC 9293, Section 3.9.2.1, MUST-53)
+        Ipv4SourceRouteTag returnRoute;
+        std::vector<Ipv4Address> reversed(route.rbegin(), route.rend());
+        if (!reversed.empty())
+        {
+            reversed.back() = ipHeader.GetSource();
+            returnRoute.SetRoute(reversed);
+            p->AddPacketTag(returnRoute);
+        }
+    }
 
     if (!ipHeader.IsLastFragment() || ipHeader.GetFragmentOffset() != 0)
     {

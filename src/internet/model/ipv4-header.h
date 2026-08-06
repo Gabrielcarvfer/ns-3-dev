@@ -12,6 +12,8 @@
 #include "ns3/header.h"
 #include "ns3/ipv4-address.h"
 
+#include <vector>
+
 namespace ns3
 {
 /**
@@ -148,6 +150,47 @@ class Ipv4Header : public Header
      * @param source the source of this packet
      */
     void SetSource(Ipv4Address source);
+
+    /**
+     * @brief Set the loose source route option of the header
+     *
+     * The option holds the addresses the datagram is routed through, the last
+     * of which is its final destination, as @RFC{791} describes. The pointer
+     * of the option is left at the first of them.
+     *
+     * @param route The addresses of the route.
+     */
+    void SetLooseSourceRoute(const std::vector<Ipv4Address>& route);
+
+    /**
+     * @brief Check whether the header carries a loose source route option
+     * @returns true if the header carries the option.
+     */
+    bool HasLooseSourceRoute() const;
+
+    /**
+     * @brief Get the addresses of the loose source route option
+     * @returns The addresses of the option, empty if it is not present.
+     */
+    std::vector<Ipv4Address> GetLooseSourceRoute() const;
+
+    /**
+     * @brief Get the offset of the next address of the route
+     * @returns The pointer field of the option.
+     */
+    uint8_t GetSourceRoutePointer() const;
+
+    /**
+     * @brief Set the offset of the next address of the route
+     * @param pointer The pointer field of the option.
+     */
+    void SetSourceRoutePointer(uint8_t pointer);
+
+    /**
+     * @brief Get the length of the options, padding included
+     * @returns The length of the options in bytes.
+     */
+    uint16_t OptionsLength() const;
     /**
      * @param destination the destination of this packet.
      */
@@ -241,18 +284,20 @@ class Ipv4Header : public Header
 
     bool m_calcChecksum; //!< true if the checksum must be calculated
 
-    uint16_t m_payloadSize;    //!< payload size
-    uint16_t m_identification; //!< identification
-    uint32_t m_tos : 8;        //!< TOS, also used as DSCP + ECN value
-    uint32_t m_ttl : 8;        //!< TTL
-    uint32_t m_protocol : 8;   //!< Protocol
-    uint32_t m_flags : 3;      //!< flags
-    uint16_t m_fragmentOffset; //!< Fragment offset
-    Ipv4Address m_source;      //!< source address
-    Ipv4Address m_destination; //!< destination address
-    uint16_t m_checksum;       //!< checksum
-    bool m_goodChecksum;       //!< true if checksum is correct
-    uint16_t m_headerSize;     //!< IP header size
+    uint16_t m_payloadSize;                 //!< payload size
+    uint16_t m_identification;              //!< identification
+    uint32_t m_tos : 8;                     //!< TOS, also used as DSCP + ECN value
+    uint32_t m_ttl : 8;                     //!< TTL
+    uint32_t m_protocol : 8;                //!< Protocol
+    uint32_t m_flags : 3;                   //!< flags
+    uint16_t m_fragmentOffset;              //!< Fragment offset
+    Ipv4Address m_source;                   //!< source address
+    Ipv4Address m_destination;              //!< destination address
+    uint16_t m_checksum;                    //!< checksum
+    bool m_goodChecksum;                    //!< true if checksum is correct
+    uint16_t m_headerSize;                  //!< IP header size
+    std::vector<Ipv4Address> m_sourceRoute; //!< Addresses of the loose source route option
+    uint8_t m_sourceRoutePointer{4};        //!< Offset of the next address of the route
 };
 
 } // namespace ns3
