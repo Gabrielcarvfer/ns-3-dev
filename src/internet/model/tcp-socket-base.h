@@ -1351,6 +1351,14 @@ class TcpSocketBase : public TcpSocket
     void ProcessOptionMss(const Ptr<const TcpOption> option);
 
     /**
+     * @brief Get the largest segment the interface of the connection carries
+     *
+     * @return The MTU of the interface minus the base IP and TCP headers, or
+     *         the largest MSS when the socket is not bound to an interface.
+     */
+    uint32_t GetInterfaceMss() const;
+
+    /**
      * @brief Add the MSS option to the header
      *
      * The MSS option should be sent in every SYN segment when the receive
