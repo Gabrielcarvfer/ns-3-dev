@@ -1531,11 +1531,15 @@ class TcpSocketBase : public TcpSocket
     double m_msl{0.0};           //!< Max segment lifetime
 
     // Window management
-    uint16_t m_maxWinSize{0};                         //!< Maximum window size to advertise
-    uint32_t m_bytesAckedNotProcessed{0};             //!< Bytes acked, but not processed
-    SequenceNumber32 m_highTxAck{0};                  //!< Highest ack sent
-    TracedValue<uint32_t> m_rWnd{0};                  //!< Receiver window (RCV.WND in RFC793)
-    TracedValue<uint32_t> m_advWnd{0};                //!< Advertised Window size
+    uint16_t m_maxWinSize{0};             //!< Maximum window size to advertise
+    uint32_t m_bytesAckedNotProcessed{0}; //!< Bytes acked, but not processed
+    SequenceNumber32 m_highTxAck{0};      //!< Highest ack sent
+    TracedValue<uint32_t> m_rWnd{0};      //!< Receiver window (RCV.WND in RFC793)
+    TracedValue<uint32_t> m_advWnd{0};    //!< Advertised Window size
+    SequenceNumber32 m_advRightEdge{0};   //!< Right edge of the last advertised window
+    bool m_advRightEdgeArmed{false};      //!< True once a window has been advertised, since the
+                                          //!< right edge is only comparable to the live sequence
+                                          //!< numbers after being set from one
     TracedValue<SequenceNumber32> m_highRxMark{0};    //!< Highest seqno received
     TracedValue<SequenceNumber32> m_highRxAckMark{0}; //!< Highest ack received
 

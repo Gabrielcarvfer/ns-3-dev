@@ -417,6 +417,8 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_maxWinSize(sock.m_maxWinSize),
       m_bytesAckedNotProcessed(sock.m_bytesAckedNotProcessed),
       m_rWnd(sock.m_rWnd),
+      m_advRightEdge(sock.m_advRightEdge),
+      m_advRightEdgeArmed(sock.m_advRightEdgeArmed),
       m_highRxMark(sock.m_highRxMark),
       m_highRxAckMark(sock.m_highRxAckMark),
       m_sackEnabled(sock.m_sackEnabled),
@@ -4005,12 +4007,34 @@ TcpSocketBase::AdvertisedWindowSize(bool scale) const
                                   m_tcb->m_rxBuffer->NextRxSequence());
     }
 
-    // Ugly, but we are not modifying the state, that variable
-    // is used only for tracing purpose.
+    // Silly window syndrome avoidance in the receiver (RFC 9293, Section
+    // 3.8.6.2.2, MUST-39): while the window is not worth a segment, its right
+    // edge is not advanced for the few bytes the application read, but kept
+    // where it is until it can move by a whole segment or half of the buffer.
+    // A window already worth a segment is advertised whole: the sender does
+    // not shrink its segments to a small right edge advance of it.
+    uint32_t threshold = std::min(m_tcb->m_segmentSize, m_tcb->m_rxBuffer->MaxBufferSize() / 2);
+    SequenceNumber32 next = m_tcb->m_rxBuffer->NextRxSequence();
+    SequenceNumber32 edge = next + w;
+    bool windowNearlyClosed = !(m_advRightEdge > next + threshold);
+    if (m_advRightEdgeArmed && windowNearlyClosed && edge > m_advRightEdge &&
+        edge < m_advRightEdge + threshold)
+    {
+        NS_LOG_LOGIC("Not advancing the right edge to " << edge << ", less than " << threshold
+                                                        << " past " << m_advRightEdge);
+        w = m_advRightEdge > next ? m_advRightEdge - next : 0;
+    }
+
+    // The method is const because composing a header does not logically alter
+    // the socket, but the window actually advertised has to be remembered,
+    // both for tracing and for holding the right edge above
+    auto self = const_cast<TcpSocketBase*>(this);
     if (w != m_advWnd)
     {
-        const_cast<TcpSocketBase*>(this)->m_advWnd = w;
+        self->m_advWnd = w;
     }
+    self->m_advRightEdge = next + w;
+    self->m_advRightEdgeArmed = true;
     if (scale)
     {
         w >>= m_rcvWindShift;
