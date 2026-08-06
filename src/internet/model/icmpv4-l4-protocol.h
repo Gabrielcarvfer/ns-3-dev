@@ -121,6 +121,16 @@ class Icmpv4L4Protocol : public IpL4Protocol
      * @param orgData the original packet
      */
     void SendDestUnreachNetwork(Ipv4Header header, Ptr<const Packet> orgData);
+    /**
+     * @brief Send a Destination Unreachable, Source Route Failed ICMP packet
+     *
+     * Sent by the host which has no route towards the next hop of a source
+     * routed datagram (@RFC{1812}, Section 4.2.2.9).
+     *
+     * @param header the original IP header
+     * @param orgData the original packet
+     */
+    void SendDestUnreachSourceRouteFailed(Ipv4Header header, Ptr<const Packet> orgData);
 
     // From IpL4Protocol
     void SetDownTarget(IpL4Protocol::DownTargetCallback cb) override;

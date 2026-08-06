@@ -172,6 +172,13 @@ Icmpv4L4Protocol::SendDestUnreachNetwork(Ipv4Header header, Ptr<const Packet> or
 }
 
 void
+Icmpv4L4Protocol::SendDestUnreachSourceRouteFailed(Ipv4Header header, Ptr<const Packet> orgData)
+{
+    NS_LOG_FUNCTION(this << header << *orgData);
+    SendDestUnreach(header, orgData, Icmpv4DestinationUnreachable::ICMPV4_SOURCE_ROUTE_FAILED, 0);
+}
+
+void
 Icmpv4L4Protocol::SendDestUnreach(Ipv4Header header,
                                   Ptr<const Packet> orgData,
                                   uint8_t code,

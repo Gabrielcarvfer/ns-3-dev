@@ -34,6 +34,7 @@ set(source_files
     model/ipv4-end-point.cc
     model/global-routing.cc
     model/ipv4-header.cc
+    model/ipv4-source-route-tag.cc
     model/ipv4-interface-address.cc
     model/ipv4-interface.cc
     model/ipv4-l3-protocol.cc
@@ -165,6 +166,7 @@ set(header_files
     model/ipv4-end-point.h
     model/global-routing.h
     model/ipv4-header.h
+    model/ipv4-source-route-tag.h
     model/ipv4-interface-address.h
     model/ipv4-interface.h
     model/ipv4-l3-protocol.h

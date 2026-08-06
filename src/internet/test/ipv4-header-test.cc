@@ -282,6 +282,99 @@ Ipv4HeaderTest::DoRun()
 /**
  * @ingroup internet-test
  *
+ * @brief Test the serialization of the loose source route option
+ *
+ * The option of @RFC{791} is carried beside the fixed header fields, so a
+ * header holding one must survive a serialization round trip, and the parser
+ * must withstand padding and ill-formed options.
+ */
+class Ipv4HeaderLsrrTest : public TestCase
+{
+  public:
+    Ipv4HeaderLsrrTest()
+        : TestCase("The loose source route option survives a round trip")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        std::vector<Ipv4Address> route = {Ipv4Address("10.1.1.2"),
+                                          Ipv4Address("10.1.2.2"),
+                                          Ipv4Address("10.1.3.2")};
+
+        Ipv4Header header;
+        header.SetPayloadSize(100);
+        header.SetSource(Ipv4Address("10.1.1.1"));
+        header.SetDestination(route.back());
+        header.SetLooseSourceRoute(route);
+        header.SetSourceRoutePointer(8);
+        // The checksum covers the option bytes as well as the fixed fields
+        header.EnableChecksum();
+
+        // Type, length and pointer, plus three addresses, padded to a word
+        NS_TEST_ASSERT_MSG_EQ(header.GetSerializedSize(), 20 + 16, "Unexpected header size");
+
+        Buffer buffer;
+        buffer.AddAtStart(header.GetSerializedSize());
+        header.Serialize(buffer.Begin());
+
+        Ipv4Header read;
+        read.EnableChecksum();
+        NS_TEST_ASSERT_MSG_EQ(read.Deserialize(buffer.Begin()),
+                              header.GetSerializedSize(),
+                              "The option was not deserialized whole");
+        NS_TEST_ASSERT_MSG_EQ(read.IsChecksumOk(),
+                              true,
+                              "The checksum of a header carrying the option did not verify");
+        NS_TEST_ASSERT_MSG_EQ(read.HasLooseSourceRoute(), true, "The option was lost");
+        NS_TEST_ASSERT_MSG_EQ((read.GetLooseSourceRoute() == route),
+                              true,
+                              "The route did not survive the round trip");
+        NS_TEST_ASSERT_MSG_EQ(read.GetSourceRoutePointer(), 8, "The pointer was lost");
+
+        // A header without the option deserializes to one without a route
+        Ipv4Header plain;
+        plain.SetPayloadSize(100);
+        Buffer plainBuffer;
+        plainBuffer.AddAtStart(plain.GetSerializedSize());
+        plain.Serialize(plainBuffer.Begin());
+        Ipv4Header readPlain;
+        readPlain.Deserialize(plainBuffer.Begin());
+        NS_TEST_ASSERT_MSG_EQ(readPlain.HasLooseSourceRoute(),
+                              false,
+                              "A route appeared out of nowhere");
+
+        // An option with an illegal length must not be read past the header:
+        // hand craft an option space claiming more than it holds
+        Buffer malformed;
+        malformed.AddAtStart(24);
+        Buffer::Iterator it = malformed.Begin();
+        it.WriteU8(0x46); // version 4, IHL 6 words
+        it.WriteU8(0);
+        it.WriteHtonU16(24);
+        it.WriteHtonU16(0);
+        it.WriteHtonU16(0);
+        it.WriteU8(64);
+        it.WriteU8(6);
+        it.WriteU16(0);
+        it.WriteHtonU32(Ipv4Address("10.1.1.1").Get());
+        it.WriteHtonU32(Ipv4Address("10.1.3.2").Get());
+        it.WriteU8(131); // loose source route
+        it.WriteU8(39);  // length beyond the option space
+        it.WriteU8(4);
+        it.WriteU8(0);
+        Ipv4Header readMalformed;
+        readMalformed.Deserialize(malformed.Begin());
+        NS_TEST_ASSERT_MSG_EQ(readMalformed.HasLooseSourceRoute(),
+                              false,
+                              "An option with an illegal length was accepted");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief IPv4 Header TestSuite
  */
 class Ipv4HeaderTestSuite : public TestSuite
@@ -291,6 +384,7 @@ class Ipv4HeaderTestSuite : public TestSuite
         : TestSuite("ipv4-header", Type::UNIT)
     {
         AddTestCase(new Ipv4HeaderTest, TestCase::Duration::QUICK);
+        AddTestCase(new Ipv4HeaderLsrrTest, TestCase::Duration::QUICK);
     }
 };
 
