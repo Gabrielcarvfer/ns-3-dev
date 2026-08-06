@@ -15,6 +15,7 @@
 #include "ipv4-interface.h"
 #include "ipv4-raw-socket-impl.h"
 #include "ipv4-route.h"
+#include "ipv4-source-route-tag.h"
 #include "loopback-net-device.h"
 
 #include "ns3/boolean.h"
@@ -772,9 +773,49 @@ Ipv4L3Protocol::Send(Ptr<Packet> packet,
         tos = ipTosTag.GetTos();
     }
 
+    // The route the application asked the datagram to follow travels down as a
+    // tag: the first hop of the route becomes the destination of the header,
+    // and the option holds only the remaining hops (RFC 791)
+    std::vector<Ipv4Address> sourceRoute;
+    Ipv4SourceRouteTag sourceRouteTag;
+    Ipv4Address firstHop = destination;
+    if (packet->RemovePacketTag(sourceRouteTag))
+    {
+        sourceRoute = sourceRouteTag.GetRoute();
+        if (!sourceRoute.empty() && sourceRoute.back() != destination)
+        {
+            // A route which stops short of the destination goes on to it
+            sourceRoute.push_back(destination);
+        }
+        if (!sourceRoute.empty())
+        {
+            firstHop = sourceRoute.front();
+            sourceRoute.erase(sourceRoute.begin());
+        }
+    }
+
     // can construct the header here
     Ipv4Header ipHeader =
-        BuildHeader(source, destination, protocol, packet->GetSize(), ttl, tos, mayFragment);
+        BuildHeader(source, firstHop, protocol, packet->GetSize(), ttl, tos, mayFragment);
+    if (!sourceRoute.empty())
+    {
+        ipHeader.SetLooseSourceRoute(sourceRoute);
+    }
+
+    if (firstHop != destination)
+    {
+        // The route the caller looked up leads to the final destination, but
+        // the datagram is addressed to the first hop: it takes the route
+        // towards that one instead
+        Socket::SocketErrno errno_;
+        route = m_routingProtocol->RouteOutput(packet, ipHeader, nullptr, errno_);
+        if (!route)
+        {
+            NS_LOG_WARN("No route towards the first hop " << firstHop << " of the source route");
+            m_dropTrace(ipHeader, packet, DROP_NO_ROUTE, this, 0);
+            return;
+        }
+    }
 
     // Handle a few cases:
     // 1) packet is passed in with a route entry
@@ -1078,6 +1119,76 @@ Ipv4L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv4Header& ip, uin
     NS_LOG_FUNCTION(this << packet << &ip << iif);
     Ptr<Packet> p = packet->Copy(); // need to pass a non-const packet up
     Ipv4Header ipHeader = ip;
+
+    if (ipHeader.HasLooseSourceRoute())
+    {
+        std::vector<Ipv4Address> route = ipHeader.GetLooseSourceRoute();
+        uint8_t pointer = ipHeader.GetSourceRoutePointer();
+        uint32_t next = (pointer - 4) / 4;
+
+        if (next < route.size())
+        {
+            // A hop of the route rather than the final destination, which
+            // relays the datagram like the router it acts as; a host with
+            // forwarding disabled refuses instead (RFC 1122, Section 3.3.5)
+            if (!IsForwarding(iif))
+            {
+                NS_LOG_WARN("Not forwarding a source routed datagram: forwarding is disabled");
+                m_dropTrace(ip, p, DROP_ROUTE_ERROR, this, iif);
+                return;
+            }
+
+            // Relaying costs a hop, like the ordinary forwarding path
+            // (RFC 791; RFC 1812, Section 4.2.2.9)
+            if (ipHeader.GetTtl() <= 1)
+            {
+                GetIcmp()->SendTimeExceededTtl(ipHeader, p, false);
+                NS_LOG_WARN("TTL exceeded on a source routed datagram.  Drop.");
+                m_dropTrace(ip, p, DROP_TTL_EXPIRED, this, iif);
+                return;
+            }
+
+            // The datagram goes on towards the next hop of the route, whose
+            // slot records the address of this hop on the way out, as known
+            // in the environment the datagram is forwarded into (RFC 791)
+            Ipv4Address nextHop = route[next];
+            ipHeader.SetDestination(nextHop);
+            ipHeader.SetTtl(ipHeader.GetTtl() - 1);
+
+            NS_LOG_LOGIC("Forwarding a source routed datagram to " << nextHop);
+            Socket::SocketErrno errno_;
+            Ptr<Ipv4Route> rtentry = m_routingProtocol->RouteOutput(p, ipHeader, nullptr, errno_);
+            if (!rtentry)
+            {
+                NS_LOG_WARN("No route towards the next hop " << nextHop << " of the source route");
+                GetIcmp()->SendDestUnreachSourceRouteFailed(ip, p);
+                m_dropTrace(ip, p, DROP_NO_ROUTE, this, iif);
+                return;
+            }
+            route[next] = rtentry->GetSource();
+            ipHeader.SetLooseSourceRoute(route);
+            ipHeader.SetSourceRoutePointer(pointer + 4);
+
+            int32_t oif = GetInterfaceForDevice(rtentry->GetOutputDevice());
+            m_unicastForwardTrace(ipHeader, p, oif);
+            SendRealOut(rtentry, p, ipHeader);
+            return;
+        }
+
+        // The final destination of the route: the addresses it recorded,
+        // reversed and followed by the sender, are the way back, which the
+        // answers of a connection can follow (RFC 9293, Section 3.9.2.1,
+        // MUST-53). The way back is bounded like any route, which a raw
+        // sender filling the option to the brim would otherwise exceed.
+        std::vector<Ipv4Address> reversed(route.rbegin(), route.rend());
+        reversed.push_back(ipHeader.GetSource());
+        if (reversed.size() <= Ipv4SourceRouteTag::MAX_HOPS)
+        {
+            Ipv4SourceRouteTag returnRoute;
+            returnRoute.SetRoute(reversed);
+            p->AddPacketTag(returnRoute);
+        }
+    }
 
     if (!ipHeader.IsLastFragment() || ipHeader.GetFragmentOffset() != 0)
     {
@@ -1430,17 +1541,13 @@ Ipv4L3Protocol::DoFragmentation(Ptr<Packet> packet,
                                 uint32_t outIfaceMtu,
                                 std::list<Ipv4PayloadHeaderPair>& listFragments)
 {
-    // BEWARE: here we do assume that the header options are not present.
-    // a much more complex handling is necessary in case there are options.
-    // If (when) IPv4 option headers will be implemented, the following code shall be changed.
-    // Of course also the reassembly code shall be changed as well.
+    // The header, options included, is copied whole to every fragment: the
+    // only option in use, the loose source route, is one of those which are
+    // copied on fragmentation (RFC 791, Section 3.1)
 
     NS_LOG_FUNCTION(this << *packet << outIfaceMtu << &listFragments);
 
     Ptr<Packet> p = packet->Copy();
-
-    NS_ASSERT_MSG((ipv4Header.GetSerializedSize() == 5 * 4),
-                  "IPv4 fragmentation implementation only works without option headers.");
 
     uint16_t offset = 0;
     bool moreFragment = true;
