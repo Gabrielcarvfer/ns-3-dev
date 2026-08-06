@@ -3511,6 +3511,13 @@ TcpSocketBase::SendDataPacket(SequenceNumber32 seq, uint32_t maxSize, bool withA
             m_state = LAST_ACK;
         }
     }
+    if (m_txBuffer->SizeFromSequence(seq + SequenceNumber32(sz)) == 0)
+    {
+        // No data is queued after this segment, so it is the last of the
+        // buffer and says so (RFC 9293, Section 3.9.1.3, MUST-61)
+        flags |= TcpHeader::PSH;
+    }
+
     TcpHeader header;
     if (m_sndUrgentPoint > seq)
     {

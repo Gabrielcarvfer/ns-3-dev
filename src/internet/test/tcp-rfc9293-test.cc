@@ -1951,6 +1951,136 @@ TcpZeroWindowProbeTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that buffered data is sent and flagged with PSH
+ *
+ * @RFC{9293}, Section 3.9.1.3 requires an implementation which does not offer
+ * the PUSH flag on the SEND call not to buffer data indefinitely (MUST-60),
+ * and to set the PSH bit on the last buffered segment, the one after which
+ * there is no more queued data (MUST-61).
+ */
+class TcpPushFlagTestCase : public TestCase
+{
+  public:
+    TcpPushFlagTestCase()
+        : TestCase("The last buffered segment is sent and carries PSH (MUST-60, MUST-61)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Trace sink of the segments the receiver gets.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void SegmentReceived(Ptr<const Packet> packet,
+                         const TcpHeader& header,
+                         Ptr<const TcpSocketBase> socket);
+
+    /**
+     * Accept callback, tracing the accepted socket.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    /**
+     * Send the data.
+     * @param socket The sending socket.
+     * @param bytes The amount of data.
+     */
+    void SendData(Ptr<Socket> socket, uint32_t bytes);
+
+    uint32_t m_dataSegments{0};    //!< Data segments received
+    uint32_t m_pushed{0};          //!< Data segments carrying PSH
+    uint32_t m_bytes{0};           //!< Payload bytes received
+    bool m_lastCarriedPush{false}; //!< True if the last data segment carried PSH
+};
+
+void
+TcpPushFlagTestCase::SegmentReceived(Ptr<const Packet> packet,
+                                     const TcpHeader& header,
+                                     Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() == 0)
+    {
+        return;
+    }
+
+    m_dataSegments++;
+    m_bytes += packet->GetSize();
+    m_lastCarriedPush = (header.GetFlags() & TcpHeader::PSH) != 0;
+    if (m_lastCarriedPush)
+    {
+        m_pushed++;
+    }
+}
+
+void
+TcpPushFlagTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->TraceConnectWithoutContext("Rx",
+                                       MakeCallback(&TcpPushFlagTestCase::SegmentReceived, this));
+}
+
+void
+TcpPushFlagTestCase::SendData(Ptr<Socket> socket, uint32_t bytes)
+{
+    socket->Send(Create<Packet>(bytes), 0);
+}
+
+void
+TcpPushFlagTestCase::DoRun()
+{
+    const uint32_t segmentSize = 500;
+    const uint32_t bytes = segmentSize * 3;
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(segmentSize));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9906;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpPushFlagTestCase::Accepted, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+    Simulator::Schedule(Seconds(1), &TcpPushFlagTestCase::SendData, this, client, bytes);
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+
+    // The data is not held in the buffer waiting for more (MUST-60)
+    NS_TEST_ASSERT_MSG_EQ(m_bytes, bytes, "The data written was not sent");
+    // The segment after which the buffer is empty announces it (MUST-61)
+    NS_TEST_ASSERT_MSG_EQ(m_lastCarriedPush, true, "The last segment did not carry PSH");
+    NS_TEST_ASSERT_MSG_LT(m_pushed, m_dataSegments, "Every segment carried PSH");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -1974,6 +2104,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpPassiveOpenTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpLocalAddressTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpZeroWindowProbeTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpPushFlagTestCase(), TestCase::Duration::QUICK);
     }
 };
 
