@@ -473,6 +473,32 @@ TcpL4Protocol::GetIsnSecret()
     return m_isnSecret;
 }
 
+bool
+TcpL4Protocol::IsUnusableAddress(Ipv4Address address, Ptr<Ipv4Interface> interface) const
+{
+    if (address.IsBroadcast() || address.IsMulticast())
+    {
+        return true;
+    }
+
+    // The directed broadcast of a subnet the interface the segment came
+    // through is attached to: the network part is compared too, since any
+    // remote address whose host part happens to be all ones would otherwise
+    // be mistaken for one
+    if (interface)
+    {
+        for (uint32_t i = 0; i < interface->GetNAddresses(); ++i)
+        {
+            if (address == interface->GetAddress(i).GetBroadcast())
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void
 TcpL4Protocol::NoEndPointsFound(const TcpHeader& incomingHeader,
                                 const Address& incomingSAddr,
@@ -530,12 +556,27 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
         return checksumControl;
     }
 
+    if (IsUnusableAddress(incomingIpHeader.GetDestination(), incomingInterface) ||
+        IsUnusableAddress(incomingIpHeader.GetSource(), incomingInterface))
+    {
+        // TCP runs between a pair of unicast addresses, so a segment addressed
+        // to a broadcast or a multicast address is discarded (RFC 9293,
+        // Section 3.10.7.2, MUST-57), as is one claiming to come from one
+        // (MUST-63)
+        NS_LOG_LOGIC("Discarding a segment from " << incomingIpHeader.GetSource() << " to "
+                                                  << incomingIpHeader.GetDestination());
+        return IpL4Protocol::RX_ENDPOINT_CLOSED;
+    }
+
     if (incomingTcpHeader.IsMalformed())
     {
         // An illegal option length is handled by resetting the connection and
         // logging the error cause (RFC 9293, Section 3.1, MUST-7), which also
         // covers a non-zero padding after the End of Option List option
-        // (MUST-69)
+        // (MUST-69). The RST is built with the closed port formula of
+        // Section 3.10.7.1 even when the segment matches an established
+        // endpoint, whose peer may hence ignore it as lying outside its
+        // window; the connection is reset again upon the retransmissions.
         NS_LOG_ERROR("Malformed TCP options received from " << incomingIpHeader.GetSource()
                                                             << "; resetting the connection");
         // The connection on this end, if any, is aborted by its socket, which
@@ -634,6 +675,17 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
     if (checksumControl != IpL4Protocol::RX_OK)
     {
         return checksumControl;
+    }
+
+    if (incomingIpHeader.GetDestination().IsMulticast() ||
+        incomingIpHeader.GetSource().IsMulticast())
+    {
+        // TCP runs between a pair of unicast addresses, so a segment addressed
+        // to a multicast address is discarded (RFC 9293, Section 3.10.7.2,
+        // MUST-57), as is one claiming to come from one (MUST-63)
+        NS_LOG_LOGIC("Discarding a segment from " << incomingIpHeader.GetSource() << " to "
+                                                  << incomingIpHeader.GetDestination());
+        return IpL4Protocol::RX_ENDPOINT_CLOSED;
     }
 
     if (incomingTcpHeader.IsMalformed())

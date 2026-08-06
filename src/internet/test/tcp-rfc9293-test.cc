@@ -7,13 +7,17 @@
 #include "ns3/config.h"
 #include "ns3/double.h"
 #include "ns3/error-model.h"
+#include "ns3/iana-internet-protocol-numbers.h"
 #include "ns3/icmpv4.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
+#include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/ipv4-l3-protocol.h"
 #include "ns3/ipv4-raw-socket-factory.h"
+#include "ns3/ipv6-address-helper.h"
+#include "ns3/ipv6-raw-socket-factory.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
 #include "ns3/nstime.h"
@@ -2381,6 +2385,412 @@ TcpAdvertisedMssBoundTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that a SYN towards a broadcast or multicast address is dropped
+ *
+ * @RFC{9293}, Section 3.10.7.2 requires an incoming SYN addressed to a
+ * broadcast or a multicast address to be discarded (MUST-57), and a SYN with
+ * an invalid source address to be ignored either by TCP or by the IP layer
+ * (MUST-63).
+ */
+class TcpBroadcastSynTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpBroadcastSynTestCase()
+        : TcpCraftedSegmentTestCase(
+              "A SYN towards or from a broadcast address is dropped (MUST-57, MUST-63)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Inject a SYN towards the given destination.
+     * @param destination The destination address.
+     */
+    void SendSynTo(Ipv4Address destination);
+
+    /**
+     * Inject a SYN claiming to come from the given source, the IP header
+     * being built by the test.
+     * @param source The source address.
+     */
+    void SendSynFrom(Ipv4Address source);
+
+    /**
+     * Count the TCP segments reaching the spoofing socket, which is bound
+     * to the any address and hence sees the answers to a broadcast address.
+     * @param socket The spoofing socket.
+     */
+    void ReceiveSpoofed(Ptr<Socket> socket);
+
+    Ptr<Socket> m_spoofer;        //!< The raw socket sending the spoofed SYN
+    uint32_t m_spoofedReplies{0}; //!< TCP segments the spoofing socket received
+};
+
+void
+TcpBroadcastSynTestCase::ReceiveSpoofed(Ptr<Socket> socket)
+{
+    Address from;
+    while (Ptr<Packet> packet = socket->RecvFrom(from))
+    {
+        Ipv4Header ipv4;
+        packet->RemoveHeader(ipv4);
+        if (ipv4.GetProtocol() == iana::internetprotocolnumbers::TCP)
+        {
+            m_spoofedReplies++;
+        }
+    }
+}
+
+void
+TcpBroadcastSynTestCase::SendSynFrom(Ipv4Address source)
+{
+    const uint8_t segment[20] = {
+        static_cast<uint8_t>(m_proberPort >> 8),
+        static_cast<uint8_t>(m_proberPort & 0xff),
+        static_cast<uint8_t>(m_targetPort >> 8),
+        static_cast<uint8_t>(m_targetPort & 0xff),
+        0x00,
+        0x00,
+        0x00,
+        0x01, // sequence number
+        0x00,
+        0x00,
+        0x00,
+        0x00, // acknowledgment number
+        0x50, // data offset
+        TcpHeader::SYN,
+        0x10,
+        0x00, // window size
+        0x00,
+        0x00, // checksum
+        0x00,
+        0x00 // urgent pointer
+    };
+
+    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    Ipv4Header ipv4;
+    ipv4.SetSource(source);
+    ipv4.SetDestination(m_interfaces.GetAddress(1));
+    ipv4.SetProtocol(iana::internetprotocolnumbers::TCP);
+    ipv4.SetPayloadSize(packet->GetSize());
+    ipv4.SetTtl(64);
+    packet->AddHeader(ipv4);
+
+    // The raw socket sends the header as built, through the device towards
+    // the target, since the spoofed source belongs to no interface
+    m_spoofer = Socket::CreateSocket(m_nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
+    m_spoofer->SetAttribute("Protocol", UintegerValue(6));
+    m_spoofer->SetAttribute("IpHeaderInclude", BooleanValue(true));
+    m_spoofer->BindToNetDevice(m_nodes.Get(0)->GetDevice(0));
+    m_spoofer->Bind();
+    m_spoofer->SetRecvCallback(MakeCallback(&TcpBroadcastSynTestCase::ReceiveSpoofed, this));
+    m_spoofer->SendTo(packet, 0, InetSocketAddress(m_interfaces.GetAddress(1), 0));
+}
+
+void
+TcpBroadcastSynTestCase::SendSynTo(Ipv4Address destination)
+{
+    const uint8_t segment[20] = {
+        static_cast<uint8_t>(m_proberPort >> 8),
+        static_cast<uint8_t>(m_proberPort & 0xff),
+        static_cast<uint8_t>(m_targetPort >> 8),
+        static_cast<uint8_t>(m_targetPort & 0xff),
+        0x00,
+        0x00,
+        0x00,
+        0x01, // sequence number
+        0x00,
+        0x00,
+        0x00,
+        0x00, // acknowledgment number
+        0x50, // data offset
+        TcpHeader::SYN,
+        0x10,
+        0x00, // window size
+        0x00,
+        0x00, // checksum
+        0x00,
+        0x00 // urgent pointer
+    };
+
+    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    m_prober->SendTo(packet, 0, InetSocketAddress(destination, 0));
+}
+
+void
+TcpBroadcastSynTestCase::DoRun()
+{
+    SetupTopology();
+
+    // The subnet broadcast address reaches the listening socket of the target
+    Simulator::Schedule(Seconds(1),
+                        &TcpBroadcastSynTestCase::SendSynTo,
+                        this,
+                        Ipv4Address("10.1.1.255"));
+    // and so does a SYN claiming to come from it (MUST-63)
+    Simulator::Schedule(Seconds(2),
+                        &TcpBroadcastSynTestCase::SendSynFrom,
+                        this,
+                        Ipv4Address("10.1.1.255"));
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(GetReplies().size(), 0, "A SYN towards a broadcast address was answered");
+    NS_TEST_ASSERT_MSG_EQ(m_spoofedReplies, 0, "A SYN from a broadcast address was answered");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that a unicast address which looks like a broadcast is served
+ *
+ * The directed broadcast address of a subnet has its host part all ones
+ * under the mask of that subnet, but so does one address in four of any
+ * other subnet, under a /30 mask: a segment from such a remote address must
+ * not be mistaken for one from a broadcast address (@RFC{9293},
+ * Section 3.10.7.2, MUST-63 applies to broadcast addresses only).
+ */
+class TcpBroadcastLookalikeTestCase : public TestCase
+{
+  public:
+    TcpBroadcastLookalikeTestCase()
+        : TestCase("A remote address whose host bits are all ones is served")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Accept callback of the server.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    /**
+     * Receive callback of the accepted socket, counting the data delivered.
+     * @param socket The accepted socket.
+     */
+    void Received(Ptr<Socket> socket);
+
+    /**
+     * Send data from the client.
+     * @param socket The client socket.
+     */
+    void SendData(Ptr<Socket> socket);
+
+    uint32_t m_delivered{0}; //!< Bytes the server received
+};
+
+void
+TcpBroadcastLookalikeTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    socket->SetRecvCallback(MakeCallback(&TcpBroadcastLookalikeTestCase::Received, this));
+}
+
+void
+TcpBroadcastLookalikeTestCase::Received(Ptr<Socket> socket)
+{
+    while (Ptr<Packet> packet = socket->Recv())
+    {
+        m_delivered += packet->GetSize();
+    }
+}
+
+void
+TcpBroadcastLookalikeTestCase::SendData(Ptr<Socket> socket)
+{
+    socket->Send(Create<Packet>(1000), 0);
+}
+
+void
+TcpBroadcastLookalikeTestCase::DoRun()
+{
+    // The client (0) sits on a /24 LAN behind a router (1), which reaches
+    // the server (2) over a /30 link
+    NodeContainer nodes;
+    nodes.Create(3);
+
+    NodeContainer lan(nodes.Get(0), nodes.Get(1));
+    NodeContainer link(nodes.Get(1), nodes.Get(2));
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer lanDevices = devHelper.Install(lan);
+    NetDeviceContainer linkDevices = devHelper.Install(link);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    // The client takes 10.1.2.3, whose host part is all ones under the /30
+    // mask of the link the server is on
+    address.SetBase("10.1.2.0", "255.255.255.0", "0.0.0.3");
+    Ipv4InterfaceContainer lanIfs = address.Assign(lanDevices);
+    address.SetBase("10.1.3.0", "255.255.255.252");
+    Ipv4InterfaceContainer linkIfs = address.Assign(linkDevices);
+    NS_ASSERT_MSG(lanIfs.GetAddress(0) == Ipv4Address("10.1.2.3"), "Unexpected client address");
+
+    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    const uint16_t port = 9412;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(2), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpBroadcastLookalikeTestCase::Accepted, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->Connect(InetSocketAddress(linkIfs.GetAddress(1), port));
+    Simulator::Schedule(Seconds(1), &TcpBroadcastLookalikeTestCase::SendData, this, client);
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(
+        m_delivered,
+        1000,
+        "The segments of a unicast address looking like a broadcast were dropped");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that a SYN towards an IPv6 multicast address is dropped
+ *
+ * @RFC{9293}, Section 3.10.7.2 requires an incoming SYN addressed to a
+ * multicast address to be discarded (MUST-57), over IPv6 as over IPv4.
+ */
+class TcpIpv6MulticastSynTestCase : public TestCase
+{
+  public:
+    TcpIpv6MulticastSynTestCase()
+        : TestCase("A SYN towards an IPv6 multicast address is dropped (MUST-57)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Inject a SYN towards the all-nodes multicast address.
+     */
+    void SendSyn();
+
+    /**
+     * Count a TCP packet seen by one of the raw sockets.
+     * @param counter The counter to increment.
+     * @param socket The raw socket.
+     */
+    void ReceiveRaw(uint32_t* counter, Ptr<Socket> socket);
+
+    Ptr<Socket> m_prober;        //!< The raw socket of the probing node
+    uint32_t m_delivered{0};     //!< TCP packets the target node saw
+    uint32_t m_replies{0};       //!< TCP packets the probing node received back
+    uint16_t m_targetPort{9401}; //!< The port the target listens on
+};
+
+void
+TcpIpv6MulticastSynTestCase::ReceiveRaw(uint32_t* counter, Ptr<Socket> socket)
+{
+    Address from;
+    while (socket->RecvFrom(from))
+    {
+        (*counter)++;
+    }
+}
+
+void
+TcpIpv6MulticastSynTestCase::SendSyn()
+{
+    const uint8_t segment[20] = {
+        0x24,
+        0xba, // source port 9402
+        static_cast<uint8_t>(m_targetPort >> 8),
+        static_cast<uint8_t>(m_targetPort & 0xff),
+        0x00,
+        0x00,
+        0x00,
+        0x01, // sequence number
+        0x00,
+        0x00,
+        0x00,
+        0x00, // acknowledgment number
+        0x50, // data offset
+        TcpHeader::SYN,
+        0x10,
+        0x00, // window size
+        0x00,
+        0x00, // checksum
+        0x00,
+        0x00 // urgent pointer
+    };
+
+    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    m_prober->SendTo(packet, 0, Inet6SocketAddress(Ipv6Address::GetAllNodesMulticast(), 0));
+}
+
+void
+TcpIpv6MulticastSynTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv6AddressHelper address;
+    address.SetBase("2001:db8::", Ipv6Prefix(64));
+    Ipv6InterfaceContainer interfaces = address.Assign(devices);
+
+    Ptr<Socket> target = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    target->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), m_targetPort));
+    target->Listen();
+
+    // A raw socket on the target counts the TCP packets the IP layer
+    // delivered, so that a SYN dropped before reaching the node cannot pass
+    // the test either
+    Ptr<Socket> watcher = Socket::CreateSocket(nodes.Get(1), Ipv6RawSocketFactory::GetTypeId());
+    watcher->SetAttribute("Protocol", UintegerValue(6));
+    watcher->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), 0));
+    watcher->SetRecvCallback(
+        MakeCallback(&TcpIpv6MulticastSynTestCase::ReceiveRaw, this).Bind(&m_delivered));
+
+    m_prober = Socket::CreateSocket(nodes.Get(0), Ipv6RawSocketFactory::GetTypeId());
+    m_prober->SetAttribute("Protocol", UintegerValue(6));
+    m_prober->Bind(Inet6SocketAddress(interfaces.GetAddress(0, 1), 0));
+    m_prober->SetRecvCallback(
+        MakeCallback(&TcpIpv6MulticastSynTestCase::ReceiveRaw, this).Bind(&m_replies));
+
+    Simulator::Schedule(Seconds(1), &TcpIpv6MulticastSynTestCase::SendSyn, this);
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(m_delivered, 1, "The multicast SYN did not reach the target node");
+    NS_TEST_ASSERT_MSG_EQ(m_replies, 0, "A SYN towards a multicast address was answered");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -2407,6 +2817,9 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpZeroWindowProbeTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPushFlagTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpAdvertisedMssBoundTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpBroadcastSynTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpBroadcastLookalikeTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpIpv6MulticastSynTestCase(), TestCase::Duration::QUICK);
     }
 };
 

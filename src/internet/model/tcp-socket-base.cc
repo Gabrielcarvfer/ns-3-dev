@@ -761,7 +761,9 @@ TcpSocketBase::Connect(const Address& address)
     if (InetSocketAddress::IsMatchingType(address))
     {
         // A local OPEN call for an invalid remote IP address must be rejected
-        // as an error (RFC 9293, Section 3.9.1.5, MUST-46)
+        // as an error (RFC 9293, Section 3.9.1.5, MUST-46). Only the limited
+        // broadcast address is caught here: the socket has no interface yet
+        // to tell a subnet directed broadcast from a unicast address.
         Ipv4Address peer = InetSocketAddress::ConvertFrom(address).GetIpv4();
         if (peer.IsBroadcast() || peer.IsMulticast())
         {
