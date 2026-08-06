@@ -14,6 +14,7 @@
 #include "ns3/inet6-socket-address.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
+#include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/ipv4-raw-socket-factory.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
@@ -72,7 +73,7 @@
  * | MUST 47    | Soft errors reported to the application                   | yes  | yes   |
  * | MUST 48,49 | Differentiated services field and TTL configurable        | yes  | yes   |
  * | MUST 50    | IP options ignored by TCP                                 | n/a  | n/a   |
- * | MUST 51-53 | IP source routes specified, saved and preferred           | no   | no    |
+ * | MUST 51-53 | IP source routes specified, saved and preferred           | yes  | yes   |
  * | MUST 54    | ICMP errors acted upon                                    | yes  | yes   |
  * | MUST 55    | ICMP Source Quench discarded                              | yes  | yes   |
  * | MUST 56    | Soft ICMP errors do not abort the connection              | yes  | yes   |
@@ -3416,6 +3417,160 @@ TcpKeepAliveTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test the source route of a connection
+ *
+ * @RFC{9293}, Section 3.9.2.1 requires an application to be able to specify a
+ * source route when it opens a connection (MUST-51), that route to take
+ * precedence over the one a received datagram carries (MUST-52), and a
+ * connection opened passively to answer along the route recorded by the
+ * datagram which opened it (MUST-53).
+ *
+ * The three nodes are lined up, and the two ends are given a route to each
+ * other through the one in the middle.
+ */
+class TcpSourceRouteTestCase : public TestCase
+{
+  public:
+    TcpSourceRouteTestCase()
+        : TestCase("The segments follow the source route (MUST-51 to MUST-53)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Record the headers of the datagrams reaching the peer.
+     * @param socket The raw socket of the peer.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    /**
+     * Accept callback, which keeps the accepted socket and answers.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from);
+
+    uint32_t m_routedSegments{0};         //!< Segments which carried a source route
+    uint32_t m_segments{0};               //!< Segments which reached the peer
+    std::vector<Ipv4Address> m_seenRoute; //!< Route carried by the first of them
+    Ptr<Socket> m_accepted;               //!< The socket of the passive open
+};
+
+void
+TcpSourceRouteTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return;
+    }
+
+    m_segments++;
+    if (ipv4.HasLooseSourceRoute())
+    {
+        m_routedSegments++;
+        if (m_seenRoute.empty())
+        {
+            m_seenRoute = ipv4.GetLooseSourceRoute();
+        }
+    }
+}
+
+void
+TcpSourceRouteTestCase::Accepted(Ptr<Socket> socket, const Address& from)
+{
+    m_accepted = socket;
+}
+
+void
+TcpSourceRouteTestCase::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(3);
+
+    NodeContainer left(nodes.Get(0), nodes.Get(1));
+    NodeContainer right(nodes.Get(1), nodes.Get(2));
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer leftDevices = devHelper.Install(left);
+    NetDeviceContainer rightDevices = devHelper.Install(right);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer leftIfs = address.Assign(leftDevices);
+    address.SetBase("10.1.2.0", "255.255.255.0");
+    Ipv4InterfaceContainer rightIfs = address.Assign(rightDevices);
+
+    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    const uint16_t port = 9911;
+
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(2), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              MakeCallback(&TcpSourceRouteTestCase::Accepted, this));
+
+    Ptr<Socket> sniffer = Socket::CreateSocket(nodes.Get(2), Ipv4RawSocketFactory::GetTypeId());
+    sniffer->SetAttribute("Protocol", UintegerValue(6));
+    sniffer->Bind();
+    sniffer->SetRecvCallback(MakeCallback(&TcpSourceRouteTestCase::ReceiveRaw, this));
+
+    // The route the application asks for: through the node in the middle,
+    // then on to the peer
+    std::vector<Ipv4Address> route = {leftIfs.GetAddress(1), rightIfs.GetAddress(1)};
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    Ptr<TcpSocketBase> tcpClient = DynamicCast<TcpSocketBase>(client);
+    client->Bind();
+    tcpClient->SetIpv4SourceRoute(route);
+    client->Connect(InetSocketAddress(rightIfs.GetAddress(1), port));
+
+    Simulator::Stop(Seconds(10));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_segments, 0, "No segment reached the peer");
+    NS_TEST_ASSERT_MSG_EQ(m_routedSegments,
+                          m_segments,
+                          "A segment of the connection carried no source route");
+
+    // Every hop writes the address the datagram reached it at in the slot it
+    // took the next hop from, so the option holds the way back when it arrives
+    NS_TEST_ASSERT_MSG_EQ(m_seenRoute.size(), route.size(), "The route was not carried whole");
+    NS_TEST_ASSERT_MSG_EQ(m_seenRoute.front(),
+                          leftIfs.GetAddress(1),
+                          "The hop in the middle did not record the address it was reached at");
+
+    // The connection opened passively answers along the way back (MUST-53)
+    NS_TEST_ASSERT_MSG_NE(m_accepted, nullptr, "The connection was not established");
+    Ptr<TcpSocketBase> tcpServer = DynamicCast<TcpSocketBase>(m_accepted);
+    NS_TEST_ASSERT_MSG_EQ(tcpServer->GetIpv4SourceRoute().empty(),
+                          false,
+                          "The passive open saved no return route");
+
+    // and a route the application specifies takes precedence over it (MUST-52)
+    std::vector<Ipv4Address> own = {rightIfs.GetAddress(0), leftIfs.GetAddress(0)};
+    tcpServer->SetIpv4SourceRoute(own);
+    NS_TEST_ASSERT_MSG_EQ(tcpServer->GetIpv4SourceRoute().front(),
+                          own.front(),
+                          "The route of the application did not take precedence");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -3450,6 +3605,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpChecksumTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpShrinkingWindowTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpKeepAliveTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpSourceRouteTestCase(), TestCase::Duration::QUICK);
     }
 };
 

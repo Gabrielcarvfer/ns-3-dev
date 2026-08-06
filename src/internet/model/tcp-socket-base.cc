@@ -18,6 +18,7 @@
 #include "ipv4-end-point.h"
 #include "ipv4-route.h"
 #include "ipv4-routing-protocol.h"
+#include "ipv4-source-route-tag.h"
 #include "ipv4.h"
 #include "ipv6-end-point.h"
 #include "ipv6-l3-protocol.h"
@@ -1491,6 +1492,16 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
     }
 
     m_rxTrace(packet, tcpHeader, this);
+
+    Ipv4SourceRouteTag returnRoute;
+    if (packet->RemovePacketTag(returnRoute) && !m_appSourceRoute)
+    {
+        // The way back recorded by the datagram which arrived, which the
+        // segments of this connection follow unless the application asked for
+        // a route of its own (RFC 9293, Section 3.9.2.1, MUST-52 and MUST-53)
+        m_sourceRoute = returnRoute.GetRoute();
+        NS_LOG_LOGIC("Saved a return route of " << m_sourceRoute.size() << " hops");
+    }
 
     // Something came in, so the connection is not idle
     RearmKeepAlive();
@@ -3368,6 +3379,16 @@ TcpSocketBase::ConnectionSucceeded()
 void
 TcpSocketBase::AddSocketTags(const Ptr<Packet>& p, bool isEct) const
 {
+    if (!m_sourceRoute.empty())
+    {
+        // The route the application asked for, or the one the opening segment
+        // of a passively opened connection recorded (RFC 9293, Section
+        // 3.9.2.1, MUST-51 and MUST-53)
+        Ipv4SourceRouteTag routeTag;
+        routeTag.SetRoute(m_sourceRoute);
+        p->AddPacketTag(routeTag);
+    }
+
     /*
      * Add tags for each socket option.
      * Note that currently the socket adds both IPv4 tag and IPv6 tag
@@ -4643,6 +4664,22 @@ TcpSocketBase::SetPersistTimeout(Time timeout)
 {
     NS_LOG_FUNCTION(this << timeout);
     m_persistTimeout = timeout;
+}
+
+void
+TcpSocketBase::SetIpv4SourceRoute(const std::vector<Ipv4Address>& route)
+{
+    NS_LOG_FUNCTION(this << route.size());
+    m_sourceRoute = route;
+    // A route the application specified takes precedence over the one a
+    // received datagram recorded (RFC 9293, Section 3.9.2.1, MUST-52)
+    m_appSourceRoute = !route.empty();
+}
+
+std::vector<Ipv4Address>
+TcpSocketBase::GetIpv4SourceRoute() const
+{
+    return m_sourceRoute;
 }
 
 void
