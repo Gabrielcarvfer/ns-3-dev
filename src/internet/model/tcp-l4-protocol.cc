@@ -474,6 +474,29 @@ TcpL4Protocol::GetIsnSecret() const
     return m_isnSecret;
 }
 
+bool
+TcpL4Protocol::IsUnusableAddress(Ipv4Address address, Ptr<Ipv4Interface> interface) const
+{
+    if (address.IsBroadcast() || address.IsMulticast())
+    {
+        return true;
+    }
+
+    // The subnet directed broadcast of the interface the segment came through
+    if (interface)
+    {
+        for (uint32_t i = 0; i < interface->GetNAddresses(); ++i)
+        {
+            if (address.IsSubnetDirectedBroadcast(interface->GetAddress(i).GetMask()))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void
 TcpL4Protocol::NoEndPointsFound(const TcpHeader& incomingHeader,
                                 const Address& incomingSAddr,
@@ -529,6 +552,18 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
     if (checksumControl != IpL4Protocol::RX_OK)
     {
         return checksumControl;
+    }
+
+    if (IsUnusableAddress(incomingIpHeader.GetDestination(), incomingInterface) ||
+        IsUnusableAddress(incomingIpHeader.GetSource(), incomingInterface))
+    {
+        // TCP runs between a pair of unicast addresses, so a segment addressed
+        // to a broadcast or a multicast address is discarded (RFC 9293,
+        // Section 3.10.7.2, MUST-57), as is one claiming to come from one
+        // (MUST-63)
+        NS_LOG_LOGIC("Discarding a segment from " << incomingIpHeader.GetSource() << " to "
+                                                  << incomingIpHeader.GetDestination());
+        return IpL4Protocol::RX_ENDPOINT_CLOSED;
     }
 
     if (incomingTcpHeader.IsMalformed())

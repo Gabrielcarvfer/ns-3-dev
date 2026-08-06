@@ -2179,6 +2179,84 @@ TcpAdvertisedMssBoundTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that a SYN towards a broadcast or multicast address is dropped
+ *
+ * @RFC{9293}, Section 3.10.7.2 requires an incoming SYN addressed to a
+ * broadcast or a multicast address to be discarded (MUST-57), and a SYN with
+ * an invalid source address to be ignored either by TCP or by the IP layer
+ * (MUST-63).
+ */
+class TcpBroadcastSynTestCase : public TcpCraftedSegmentTestCase
+{
+  public:
+    TcpBroadcastSynTestCase()
+        : TcpCraftedSegmentTestCase("A SYN towards a broadcast address is dropped (MUST-57)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Inject a SYN towards the given destination.
+     * @param destination The destination address.
+     */
+    void SendSynTo(Ipv4Address destination);
+};
+
+void
+TcpBroadcastSynTestCase::SendSynTo(Ipv4Address destination)
+{
+    const uint8_t segment[20] = {
+        static_cast<uint8_t>(m_proberPort >> 8),
+        static_cast<uint8_t>(m_proberPort & 0xff),
+        static_cast<uint8_t>(m_targetPort >> 8),
+        static_cast<uint8_t>(m_targetPort & 0xff),
+        0x00,
+        0x00,
+        0x00,
+        0x01, // sequence number
+        0x00,
+        0x00,
+        0x00,
+        0x00, // acknowledgment number
+        0x50, // data offset
+        TcpHeader::SYN,
+        0x10,
+        0x00, // window size
+        0x00,
+        0x00, // checksum
+        0x00,
+        0x00 // urgent pointer
+    };
+
+    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    m_prober->SendTo(packet, 0, InetSocketAddress(destination, 0));
+}
+
+void
+TcpBroadcastSynTestCase::DoRun()
+{
+    SetupTopology();
+
+    // The subnet broadcast address reaches the listening socket of the target
+    Simulator::Schedule(Seconds(1),
+                        &TcpBroadcastSynTestCase::SendSynTo,
+                        this,
+                        Ipv4Address("10.1.1.255"));
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(GetReplies().size(), 0, "A SYN towards a broadcast address was answered");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -2204,6 +2282,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpZeroWindowProbeTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPushFlagTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpAdvertisedMssBoundTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpBroadcastSynTestCase(), TestCase::Duration::QUICK);
     }
 };
 

@@ -223,6 +223,20 @@ class TcpL4Protocol : public IpL4Protocol
                     Ptr<NetDevice> oif = nullptr) const;
 
     /**
+     * @brief Check whether an address cannot take part in a connection
+     *
+     * TCP runs between a pair of unicast addresses, so a segment addressed to
+     * or coming from a broadcast or a multicast address is discarded
+     * (@RFC{9293}, Section 3.10.7.2, MUST-57 and MUST-63).
+     *
+     * @param address The address to check.
+     * @param interface The interface the segment came through, which gives the
+     *                  mask of the subnet directed broadcast.
+     * @return true if the address cannot take part in a connection.
+     */
+    bool IsUnusableAddress(Ipv4Address address, Ptr<Ipv4Interface> interface) const;
+
+    /**
      * @brief Assign a fixed random variable stream number to the random
      *        variables used by this model
      *
