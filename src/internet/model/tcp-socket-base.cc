@@ -4838,7 +4838,31 @@ TcpSocketBase::AddOptionMss(TcpHeader& header)
     {
         m_advertisedMss = m_tcb->m_segmentSize;
     }
-    option->SetMSS(static_cast<uint16_t>(std::min(m_advertisedMss, 65535U)));
+
+    // The advertised MSS is bounded by the largest message which can be
+    // received and reassembled, which the MTU of the interface the connection
+    // runs over gives (RFC 9293, Section 3.7.1, MUST-67)
+    uint32_t mss = std::min(m_advertisedMss, 65535U);
+    if (m_endPoint)
+    {
+        Ptr<Ipv4> ipv4 = m_node->GetObject<Ipv4>();
+        int32_t interface = ipv4->GetInterfaceForAddress(m_endPoint->GetLocalAddress());
+        if (interface >= 0)
+        {
+            mss = std::min(mss, static_cast<uint32_t>(ipv4->GetMtu(interface)) - 40);
+        }
+    }
+    else if (m_endPoint6)
+    {
+        Ptr<Ipv6> ipv6 = m_node->GetObject<Ipv6>();
+        int32_t interface = ipv6->GetInterfaceForAddress(m_endPoint6->GetLocalAddress());
+        if (interface >= 0)
+        {
+            mss = std::min(mss, static_cast<uint32_t>(ipv6->GetMtu(interface)) - 60);
+        }
+    }
+
+    option->SetMSS(static_cast<uint16_t>(mss));
     header.AppendOption(option);
     NS_LOG_INFO(m_node->GetId() << " Add option MSS " << option->GetMSS());
 }

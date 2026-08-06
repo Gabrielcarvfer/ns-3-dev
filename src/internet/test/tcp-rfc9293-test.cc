@@ -2081,6 +2081,104 @@ TcpPushFlagTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that the advertised MSS fits what can be received
+ *
+ * @RFC{9293}, Section 3.7.1 (MUST-67) bounds the MSS value sent in an MSS
+ * option by MMS_R - 20, the largest transport message which can be received
+ * and reassembled, which the MTU of the interface gives here.
+ */
+class TcpAdvertisedMssBoundTestCase : public TestCase
+{
+  public:
+    TcpAdvertisedMssBoundTestCase()
+        : TestCase("The advertised MSS fits the interface MTU (MUST-67)")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Record the MSS option of the segments reaching the peer.
+     * @param socket The raw socket of the peer.
+     */
+    void ReceiveRaw(Ptr<Socket> socket);
+
+    uint16_t m_advertisedMss{0}; //!< MSS advertised by the local node
+};
+
+void
+TcpAdvertisedMssBoundTestCase::ReceiveRaw(Ptr<Socket> socket)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+
+    Ipv4Header ipv4;
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return;
+    }
+
+    TcpHeader tcp;
+    packet->RemoveHeader(tcp);
+    if (tcp.HasOption(TcpOption::MSS))
+    {
+        Ptr<const TcpOptionMSS> mss =
+            DynamicCast<const TcpOptionMSS>(tcp.GetOption(TcpOption::MSS));
+        m_advertisedMss = mss->GetMSS();
+    }
+}
+
+void
+TcpAdvertisedMssBoundTestCase::DoRun()
+{
+    const uint16_t mtu = 600;
+    // A segment size larger than the interface can carry
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1400));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+
+    SimpleNetDeviceHelper devHelper;
+    NetDeviceContainer devices = devHelper.Install(nodes);
+    for (uint32_t i = 0; i < devices.GetN(); ++i)
+    {
+        devices.Get(i)->SetMtu(mtu);
+    }
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    Ptr<Socket> sniffer = Socket::CreateSocket(nodes.Get(1), Ipv4RawSocketFactory::GetTypeId());
+    sniffer->SetAttribute("Protocol", UintegerValue(6));
+    sniffer->Bind();
+    sniffer->SetRecvCallback(MakeCallback(&TcpAdvertisedMssBoundTestCase::ReceiveRaw, this));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), 9907));
+
+    Simulator::Stop(Seconds(5));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_GT(m_advertisedMss, 0, "No MSS option was advertised");
+    NS_TEST_ASSERT_MSG_LT_OR_EQ(m_advertisedMss,
+                                mtu - 40,
+                                "The advertised MSS does not fit the interface MTU");
+
+    Simulator::Destroy();
+    Config::Reset();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief TCP RFC 9293 conformance TestSuite
  */
 class TcpRfc9293TestSuite : public TestSuite
@@ -2105,6 +2203,7 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpLocalAddressTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpZeroWindowProbeTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPushFlagTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpAdvertisedMssBoundTestCase(), TestCase::Duration::QUICK);
     }
 };
 
