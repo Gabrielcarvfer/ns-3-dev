@@ -91,7 +91,7 @@ class Ipv4InterfaceAddress
      * @brief Get the local address
      * @returns the local address
      *
-     * @note Functially identical to `Ipv4InterfaceAddress::GetLocal`.
+     * @note Functionally identical to `Ipv4InterfaceAddress::GetLocal`.
      *       This function is consistent with `Ipv6InterfaceAddress::GetAddress`.
      */
     Ipv4Address GetAddress() const;
@@ -154,7 +154,7 @@ class Ipv4InterfaceAddress
     Ipv4Address m_local; //!< Interface address
     // Note:  m_peer may be added in future when necessary
     // Ipv4Address m_peer;   // Peer destination address (in Linux:  m_address)
-    Ipv4Mask m_mask; //!< Network mask
+    uint8_t m_prefixLength{24}; //!< Network mask length
 
     InterfaceAddressScope_e m_scope; //!< Address scope
     bool m_secondary;                //!< For use in multihoming
@@ -167,15 +167,6 @@ class Ipv4InterfaceAddress
      * @returns true if the operands are equal
      */
     friend bool operator==(const Ipv4InterfaceAddress& a, const Ipv4InterfaceAddress& b);
-
-    /**
-     * @brief Not equal to operator.
-     *
-     * @param a the first operand
-     * @param b the first operand
-     * @returns true if the operands are not equal
-     */
-    friend bool operator!=(const Ipv4InterfaceAddress& a, const Ipv4InterfaceAddress& b);
 };
 
 /**
@@ -190,15 +181,8 @@ std::ostream& operator<<(std::ostream& os, const Ipv4InterfaceAddress& addr);
 inline bool
 operator==(const Ipv4InterfaceAddress& a, const Ipv4InterfaceAddress& b)
 {
-    return (a.m_local == b.m_local && a.m_mask == b.m_mask && a.m_scope == b.m_scope &&
-            a.m_secondary == b.m_secondary);
-}
-
-inline bool
-operator!=(const Ipv4InterfaceAddress& a, const Ipv4InterfaceAddress& b)
-{
-    return (a.m_local != b.m_local || a.m_mask != b.m_mask || a.m_scope != b.m_scope ||
-            a.m_secondary != b.m_secondary);
+    return (a.m_local == b.m_local && a.m_prefixLength == b.m_prefixLength &&
+            a.m_scope == b.m_scope && a.m_secondary == b.m_secondary);
 }
 
 } // namespace ns3
