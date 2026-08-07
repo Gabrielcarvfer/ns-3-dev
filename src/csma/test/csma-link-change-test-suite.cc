@@ -11,6 +11,7 @@
 #include "ns3/csma-net-device.h"
 #include "ns3/mac48-address.h"
 #include "ns3/node.h"
+#include "ns3/simulator.h"
 #include "ns3/test.h"
 
 using namespace ns3;
@@ -90,6 +91,10 @@ CsmaLinkChangeTestCase::DoRun()
                               "link-change callback should fire on Detach(deviceId)");
         NS_TEST_ASSERT_MSG_EQ(dev->IsLinkUp(), false, "link should be down after Detach(deviceId)");
     }
+
+    // The nodes register themselves with the NodeList on construction; this
+    // clears it and disposes them along with their devices and channels.
+    Simulator::Destroy();
 }
 
 /**

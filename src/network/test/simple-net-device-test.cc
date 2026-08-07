@@ -194,10 +194,12 @@ SimpleNetDeviceErrorModelTestCase::DoRun()
         receiver->SetQueue(queueFactory.Create<Queue<Packet>>());
 
         // Devices need a Node so SimpleChannel can deliver in the node's context.
-        // SetNode() (rather than Node::AddDevice) is used so the custom receive
-        // callback set below is not overwritten.
-        sender->SetNode(CreateObject<Node>());
-        receiver->SetNode(CreateObject<Node>());
+        // Node::AddDevice (rather than SetNode) is used so the node owns the
+        // devices and disposes them on Simulator::Destroy, breaking the
+        // device/channel reference cycle. The custom receive callback set
+        // below still wins, as it is installed after AddDevice.
+        CreateObject<Node>()->AddDevice(sender);
+        CreateObject<Node>()->AddDevice(receiver);
 
         sender->SetChannel(channel);
         sender->SetAddress(Mac48Address::Allocate());
@@ -300,8 +302,12 @@ SimpleNetDeviceDataRateTestCase::DoRun()
     receiver->SetQueue(queueFactory.Create<Queue<Packet>>());
 
     // Devices need a Node so SimpleChannel can deliver in the node's context.
-    sender->SetNode(CreateObject<Node>());
-    receiver->SetNode(CreateObject<Node>());
+    // Node::AddDevice (rather than SetNode) is used so the node owns the
+    // devices and disposes them on Simulator::Destroy, breaking the
+    // device/channel reference cycle. The custom receive callback set below
+    // still wins, as it is installed after AddDevice.
+    CreateObject<Node>()->AddDevice(sender);
+    CreateObject<Node>()->AddDevice(receiver);
 
     // The transmission time is computed from the sending device's DataRate.
     sender->SetAttribute("DataRate", DataRateValue(DataRate("1Mbps")));
