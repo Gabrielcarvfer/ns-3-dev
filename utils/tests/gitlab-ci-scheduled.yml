@@ -193,8 +193,8 @@ weekly-build-test-optimized-sanitizers:
     - linux
 
 ### Valgrind tests
-# Run the test.py script with files compiled in optimized mode + valgrind (daily)
-daily-build-test-optimized-valgrind:
+# Run the test.py script with files compiled in release mode + valgrind (daily)
+daily-build-test-release-valgrind:
   extends: .base-test
   rules:
     - if: $RELEASE == "daily"
@@ -204,7 +204,7 @@ daily-build-test-optimized-valgrind:
   needs: ["daily-jobs"]
   dependencies: []
   variables:
-    MODE: optimized
+    MODE: release
     VALGRIND_FLAG: -g --verbose-failed
     FORCE_TESTS: Force
   tags:
@@ -247,8 +247,8 @@ weekly-build-test-default-valgrind:
     - nsnam
     - linux
 
-# Run the test.py script with files compiled in optimized mode
-weekly-build-test-optimized-valgrind:
+# Run the test.py script with files compiled in release mode
+weekly-build-test-release-valgrind:
   extends: .base-test
   rules:
     - if: $RELEASE == "weekly"
@@ -258,7 +258,7 @@ weekly-build-test-optimized-valgrind:
   needs: ["weekly-slow-jobs"]
   dependencies: []
   variables:
-    MODE: optimized
+    MODE: release
     VALGRIND_FLAG: -g --verbose-failed
     FORCE_TESTS: Force
   tags:
