@@ -32,6 +32,9 @@ class Ipv4Mask;
 class Ipv4Address
 {
   public:
+    /// Address length when converted to an Address [bytes].
+    static constexpr uint8_t ADDRESS_LENGTH = 4;
+
     Ipv4Address() = default;
     /**
      * input address is in host order.
@@ -93,14 +96,14 @@ class Ipv4Address
      * @param buf output buffer to which this address gets overwritten with this
      * Ipv4Address
      */
-    void Serialize(uint8_t buf[4]) const;
+    void Serialize(uint8_t buf[ADDRESS_LENGTH]) const;
     /**
      * @param buf buffer to read address from
      * @return an Ipv4Address
      *
      * The input address is expected to be in network byte order format.
      */
-    static Ipv4Address Deserialize(const uint8_t buf[4]);
+    static Ipv4Address Deserialize(const uint8_t buf[ADDRESS_LENGTH]);
     /**
      * @brief Print this address to the given output stream
      *

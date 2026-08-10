@@ -49,7 +49,7 @@ Ipv6Address::CheckCompatible(const std::string& addressStr)
 {
     NS_LOG_FUNCTION(addressStr);
 
-    uint8_t buffer[16];
+    uint8_t buffer[ADDRESS_LENGTH];
 
     if (inet_pton(AF_INET6, addressStr.c_str(), &buffer) <= 0)
     {
@@ -59,10 +59,10 @@ Ipv6Address::CheckCompatible(const std::string& addressStr)
     return true;
 }
 
-Ipv6Address::Ipv6Address(uint8_t address[16])
+Ipv6Address::Ipv6Address(uint8_t address[ADDRESS_LENGTH])
 {
     NS_LOG_FUNCTION(this << &address);
-    std::copy(address, address + 16, m_address.begin());
+    std::copy(address, address + ADDRESS_LENGTH, m_address.begin());
     m_hash.reset();
 }
 
@@ -80,22 +80,22 @@ Ipv6Address::Set(const char* address)
 }
 
 void
-Ipv6Address::Set(uint8_t address[16])
+Ipv6Address::Set(uint8_t address[ADDRESS_LENGTH])
 {
     NS_LOG_FUNCTION(this << &address);
-    std::copy(address, address + 16, m_address.begin());
+    std::copy(address, address + ADDRESS_LENGTH, m_address.begin());
     m_hash.reset();
 }
 
 void
-Ipv6Address::Serialize(uint8_t buf[16]) const
+Ipv6Address::Serialize(uint8_t buf[ADDRESS_LENGTH]) const
 {
     NS_LOG_FUNCTION(this << &buf);
     std::copy(m_address.begin(), m_address.end(), buf);
 }
 
 Ipv6Address
-Ipv6Address::Deserialize(const uint8_t buf[16])
+Ipv6Address::Deserialize(const uint8_t buf[ADDRESS_LENGTH])
 {
     NS_LOG_FUNCTION(&buf);
     Ipv6Address ipv6((uint8_t*)buf);
@@ -106,7 +106,7 @@ Ipv6Address
 Ipv6Address::MakeIpv4MappedAddress(Ipv4Address addr)
 {
     NS_LOG_FUNCTION(addr);
-    uint8_t buf[16] = {0};
+    uint8_t buf[ADDRESS_LENGTH] = {0};
 
     buf[10] = 0xff;
     buf[11] = 0xff;
@@ -119,7 +119,7 @@ Ipv4Address
 Ipv6Address::GetIpv4MappedAddress() const
 {
     NS_LOG_FUNCTION(this);
-    uint8_t buf[16];
+    uint8_t buf[ADDRESS_LENGTH];
     Ipv4Address v4Addr;
 
     Serialize(buf);
@@ -169,7 +169,7 @@ Ipv6Address::MakeAutoconfiguredAddress(Mac16Address addr, Ipv6Address prefix)
     NS_LOG_FUNCTION(addr << prefix);
     Ipv6Address ret;
     uint8_t buf[2];
-    uint8_t buf2[16];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     addr.CopyTo(buf);
     prefix.GetBytes(buf2);
@@ -188,8 +188,8 @@ Ipv6Address::MakeAutoconfiguredAddress(Mac48Address addr, Ipv6Address prefix)
 {
     NS_LOG_FUNCTION(addr << prefix);
     Ipv6Address ret;
-    uint8_t buf[16];
-    uint8_t buf2[16];
+    uint8_t buf[ADDRESS_LENGTH];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     addr.CopyTo(buf);
     prefix.GetBytes(buf2);
@@ -210,7 +210,7 @@ Ipv6Address::MakeAutoconfiguredAddress(Mac64Address addr, Ipv6Address prefix)
     NS_LOG_FUNCTION(addr << prefix);
     Ipv6Address ret;
     uint8_t buf[8];
-    uint8_t buf2[16];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     addr.CopyTo(buf);
     prefix.GetBytes(buf2);
@@ -227,7 +227,7 @@ Ipv6Address::MakeAutoconfiguredAddress(Mac8Address addr, Ipv6Address prefix)
     NS_LOG_FUNCTION(addr << prefix);
     Ipv6Address ret;
     uint8_t buf[2];
-    uint8_t buf2[16];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     buf[0] = 0;
     addr.CopyTo(&buf[1]);
@@ -277,7 +277,7 @@ Ipv6Address::MakeAutoconfiguredLinkLocalAddress(Mac16Address addr)
     NS_LOG_FUNCTION(addr);
     Ipv6Address ret;
     uint8_t buf[2];
-    uint8_t buf2[16];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     addr.CopyTo(buf);
 
@@ -297,8 +297,8 @@ Ipv6Address::MakeAutoconfiguredLinkLocalAddress(Mac48Address addr)
 {
     NS_LOG_FUNCTION(addr);
     Ipv6Address ret;
-    uint8_t buf[16];
-    uint8_t buf2[16];
+    uint8_t buf[ADDRESS_LENGTH];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     addr.CopyTo(buf);
 
@@ -321,7 +321,7 @@ Ipv6Address::MakeAutoconfiguredLinkLocalAddress(Mac64Address addr)
     NS_LOG_FUNCTION(addr);
     Ipv6Address ret;
     uint8_t buf[8];
-    uint8_t buf2[16];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     addr.CopyTo(buf);
 
@@ -340,7 +340,7 @@ Ipv6Address::MakeAutoconfiguredLinkLocalAddress(Mac8Address addr)
     NS_LOG_FUNCTION(addr);
     Ipv6Address ret;
     uint8_t buf[2];
-    uint8_t buf2[16];
+    uint8_t buf2[ADDRESS_LENGTH];
 
     buf[0] = 0;
     addr.CopyTo(&buf[1]);
@@ -360,8 +360,8 @@ Ipv6Address
 Ipv6Address::MakeSolicitedAddress(Ipv6Address addr)
 {
     NS_LOG_FUNCTION(addr);
-    uint8_t buf[16];
-    uint8_t buf2[16];
+    uint8_t buf[ADDRESS_LENGTH];
+    uint8_t buf2[ADDRESS_LENGTH];
     Ipv6Address ret;
 
     addr.Serialize(buf2);
@@ -428,14 +428,14 @@ Ipv6Address::CombinePrefix(const Ipv6Prefix& prefix) const
 {
     NS_LOG_FUNCTION(this << prefix);
     Ipv6Address ipv6;
-    uint8_t addr[16];
-    uint8_t pref[16];
+    uint8_t addr[ADDRESS_LENGTH];
+    uint8_t pref[ADDRESS_LENGTH];
     unsigned int i = 0;
 
     std::copy(m_address.begin(), m_address.end(), addr);
     ((Ipv6Prefix)prefix).GetBytes(pref);
 
-    for (i = 0; i < 16; i++)
+    for (i = 0; i < ADDRESS_LENGTH; i++)
     {
         addr[i] = addr[i] & pref[i];
     }
@@ -505,7 +505,7 @@ bool
 Ipv6Address::IsMatchingType(const Address& address)
 {
     NS_LOG_FUNCTION(address);
-    return address.CheckCompatible(GetType(), 16);
+    return address.CheckCompatible(GetType(), ADDRESS_LENGTH);
 }
 
 Ipv6Address::
@@ -518,17 +518,17 @@ Address
 Ipv6Address::ConvertTo() const
 {
     NS_LOG_FUNCTION(this);
-    uint8_t buf[16];
+    uint8_t buf[ADDRESS_LENGTH];
     Serialize(buf);
-    return Address(GetType(), buf, 16);
+    return Address(GetType(), buf, ADDRESS_LENGTH);
 }
 
 Ipv6Address
 Ipv6Address::ConvertFrom(const Address& address)
 {
     NS_LOG_FUNCTION(address);
-    NS_ASSERT(address.CheckCompatible(GetType(), 16));
-    uint8_t buf[16];
+    NS_ASSERT(address.CheckCompatible(GetType(), ADDRESS_LENGTH));
+    uint8_t buf[ADDRESS_LENGTH];
     address.CopyTo(buf);
     return Deserialize(buf);
 }
@@ -537,7 +537,7 @@ uint8_t
 Ipv6Address::GetType()
 {
     NS_LOG_FUNCTION_NOARGS();
-    static uint8_t type = Address::Register("IpAddress", 16);
+    static uint8_t type = Address::Register("IpAddress", ADDRESS_LENGTH);
     return type;
 }
 
@@ -598,7 +598,7 @@ Ipv6Address::GetOnes()
 }
 
 void
-Ipv6Address::GetBytes(uint8_t buf[16]) const
+Ipv6Address::GetBytes(uint8_t buf[ADDRESS_LENGTH]) const
 {
     NS_LOG_FUNCTION(this << &buf);
     std::copy(m_address.begin(), m_address.end(), buf);

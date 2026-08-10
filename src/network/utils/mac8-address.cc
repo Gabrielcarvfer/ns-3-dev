@@ -31,14 +31,14 @@ Mac8Address::~Mac8Address()
 uint8_t
 Mac8Address::GetType()
 {
-    static uint8_t type = Address::Register("MacAddress", 1);
+    static uint8_t type = Address::Register("MacAddress", ADDRESS_LENGTH);
     return type;
 }
 
 Address
 Mac8Address::ConvertTo() const
 {
-    return Address(GetType(), &m_address, 1);
+    return Address(GetType(), &m_address, ADDRESS_LENGTH);
 }
 
 Mac8Address
@@ -53,7 +53,7 @@ Mac8Address::ConvertFrom(const Address& address)
 bool
 Mac8Address::IsMatchingType(const Address& address)
 {
-    return address.CheckCompatible(GetType(), 1);
+    return address.CheckCompatible(GetType(), ADDRESS_LENGTH);
 }
 
 Mac8Address::

@@ -41,6 +41,9 @@ class Mac64Address;
 class Ipv6Address
 {
   public:
+    /// Address length when converted to an Address [bytes].
+    static constexpr uint8_t ADDRESS_LENGTH = 16;
+
     /**
      * @brief Default constructor.
      */
@@ -60,7 +63,7 @@ class Ipv6Address
      *
      * Note: the function uses ``inet_pton`` internally.
      *
-     * @see Address::CheckCompatible hich has a similar name but which
+     * @see Address::CheckCompatible which has a similar name but which
      * instead checks the underlying type and length embedded in the Address.
      *
      * @param addressStr string containing the address as described above
@@ -73,7 +76,7 @@ class Ipv6Address
      * @param address the 128-bit address
      * @warning the parameter must point on a 16 bytes integer array!
      */
-    Ipv6Address(uint8_t address[16]);
+    Ipv6Address(uint8_t address[ADDRESS_LENGTH]);
 
     /**
      * @brief Sets an Ipv6Address by parsing the input C-string.
@@ -87,21 +90,21 @@ class Ipv6Address
      * @param address the 128-bit address
      * @warning the parameter must point on a 16 bytes integer array!
      */
-    void Set(uint8_t address[16]);
+    void Set(uint8_t address[ADDRESS_LENGTH]);
 
     /**
      * @brief Serialize this address to a 16-byte buffer.
      * @param buf the output buffer to which this address gets overwritten with this
      * Ipv6Address
      */
-    void Serialize(uint8_t buf[16]) const;
+    void Serialize(uint8_t buf[ADDRESS_LENGTH]) const;
 
     /**
      * @brief Deserialize this address.
      * @param buf buffer to read address from
      * @return an Ipv6Address
      */
-    static Ipv6Address Deserialize(const uint8_t buf[16]);
+    static Ipv6Address Deserialize(const uint8_t buf[ADDRESS_LENGTH]);
 
     /**
      * @brief Make the solicited IPv6 address.
@@ -394,7 +397,7 @@ class Ipv6Address
      * @brief Get the bytes corresponding to the address.
      * @param buf buffer to store the data
      */
-    void GetBytes(uint8_t buf[16]) const;
+    void GetBytes(uint8_t buf[ADDRESS_LENGTH]) const;
 
     /**
      * @brief Get the address hash.
@@ -450,7 +453,7 @@ class Ipv6Address
     /**
      * @brief The address representation on 128 bits (16 bytes).
      */
-    std::array<uint8_t, 16> m_address{};
+    std::array<uint8_t, ADDRESS_LENGTH> m_address{};
 
     /**
      * @brief address hash.

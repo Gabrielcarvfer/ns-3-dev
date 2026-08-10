@@ -288,7 +288,7 @@ Ipv4Address::IsLinkLocal() const
 }
 
 void
-Ipv4Address::Serialize(uint8_t buf[4]) const
+Ipv4Address::Serialize(uint8_t buf[ADDRESS_LENGTH]) const
 {
     NS_LOG_FUNCTION(this << &buf);
     buf[0] = (m_address >> 24) & 0xff;
@@ -298,7 +298,7 @@ Ipv4Address::Serialize(uint8_t buf[4]) const
 }
 
 Ipv4Address
-Ipv4Address::Deserialize(const uint8_t buf[4])
+Ipv4Address::Deserialize(const uint8_t buf[ADDRESS_LENGTH])
 {
     NS_LOG_FUNCTION(&buf);
     Ipv4Address ipv4;
@@ -326,7 +326,7 @@ bool
 Ipv4Address::IsMatchingType(const Address& address)
 {
     NS_LOG_FUNCTION(&address);
-    return address.CheckCompatible(GetType(), 4);
+    return address.CheckCompatible(GetType(), ADDRESS_LENGTH);
 }
 
 Ipv4Address::
@@ -339,17 +339,17 @@ Address
 Ipv4Address::ConvertTo() const
 {
     NS_LOG_FUNCTION(this);
-    uint8_t buf[4];
+    uint8_t buf[ADDRESS_LENGTH];
     Serialize(buf);
-    return Address(GetType(), buf, 4);
+    return Address(GetType(), buf, ADDRESS_LENGTH);
 }
 
 Ipv4Address
 Ipv4Address::ConvertFrom(const Address& address)
 {
     NS_LOG_FUNCTION(&address);
-    NS_ASSERT(address.CheckCompatible(GetType(), 4));
-    uint8_t buf[4];
+    NS_ASSERT(address.CheckCompatible(GetType(), ADDRESS_LENGTH));
+    uint8_t buf[ADDRESS_LENGTH];
     address.CopyTo(buf);
     return Deserialize(buf);
 }
@@ -358,7 +358,7 @@ uint8_t
 Ipv4Address::GetType()
 {
     NS_LOG_FUNCTION_NOARGS();
-    static uint8_t type = Address::Register("IpAddress", 4);
+    static uint8_t type = Address::Register("IpAddress", ADDRESS_LENGTH);
     return type;
 }
 

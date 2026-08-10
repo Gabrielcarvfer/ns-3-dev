@@ -33,6 +33,9 @@ class Address;
 class Mac8Address
 {
   public:
+    /// Address length when converted to an Address [bytes].
+    static constexpr uint8_t ADDRESS_LENGTH = 1;
+
     Mac8Address() = default;
     /**
      * Create Mac8Address object with address addr.

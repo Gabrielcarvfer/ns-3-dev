@@ -34,6 +34,9 @@ class Address;
 class Mac16Address
 {
   public:
+    /// Address length when converted to an Address [bytes].
+    static constexpr uint8_t ADDRESS_LENGTH = 2;
+
     Mac16Address() = default;
     /**
      * @param str a string representing the new Mac16Address
@@ -54,14 +57,14 @@ class Mac16Address
      *
      * Copy the input address to our internal buffer.
      */
-    void CopyFrom(const uint8_t buffer[2]);
+    void CopyFrom(const uint8_t buffer[ADDRESS_LENGTH]);
 
     /**
      * @param buffer address in network order
      *
      * Copy the internal address to the input buffer.
      */
-    void CopyTo(uint8_t buffer[2]) const;
+    void CopyTo(uint8_t buffer[ADDRESS_LENGTH]) const;
 
     /**
      * @returns a new Address instance
@@ -201,8 +204,8 @@ class Mac16Address
      */
     friend std::istream& operator>>(std::istream& is, Mac16Address& address);
 
-    static uint64_t m_allocationIndex;  //!< Address allocation index
-    std::array<uint8_t, 2> m_address{}; //!< Address value
+    static uint64_t m_allocationIndex;               //!< Address allocation index
+    std::array<uint8_t, ADDRESS_LENGTH> m_address{}; //!< Address value
 };
 
 ATTRIBUTE_HELPER_HEADER(Mac16Address);
