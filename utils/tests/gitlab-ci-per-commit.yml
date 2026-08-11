@@ -34,6 +34,11 @@ per-commit-gcc-debug:
   variables:
     MODE: debug
     COMPILER: g++
+  # override the exceptions, so run the job also on weekly and daily pipelines.
+  # this is necessary for the doxygen job, which is using this job's artifacts.
+  except:
+    variables:
+      - $CPPYY == "True"
 
 per-commit-gcc-default:
   extends: .base-per-commit-compile

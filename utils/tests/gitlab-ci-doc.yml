@@ -37,7 +37,7 @@ doxygen-1.16:
     - export CCACHE_BASEDIR=${PWD}
     - export CCACHE_DIR=${PWD}/$CCACHE_BASEDIR_VALUE
     - export MPI_CI=1
-    - CXX=g++ ./ns3 configure -d debug -GNinja --enable-examples --enable-tests --enable-asserts --enable-mpi
+    - CXX=g++ ./ns3 configure -d debug -GNinja --enable-examples --enable-tests --enable-asserts --enable-werror --enable-mpi
     - ./ns3 build
     - ./ns3 build assemble-introspected-command-line
 
@@ -67,6 +67,11 @@ doxygen-1.16:
     paths:
       - doc/doxygen.warnings.log
     when: always
+  dependencies:
+    - per-commit-gcc-debug
+  except:
+    variables:
+      - $CPPYY == "True"
 
 .sphinx-doc:
   extends: .doc
