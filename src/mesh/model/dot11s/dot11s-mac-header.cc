@@ -113,7 +113,7 @@ void
 MeshHeader::SetAddressExt(uint8_t value)
 {
     NS_ASSERT(value <= 3);
-    m_meshFlags |= 0x03 & value;
+    m_meshFlags = (m_meshFlags & ~0x03) | (0x03 & value);
 }
 
 uint8_t
