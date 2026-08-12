@@ -85,6 +85,32 @@ class HwmpTag : public Tag
     void DecrementTtl();
 
     /**
+     * Mark the frame as carried on behalf of stations outside the mesh, and
+     * record their addresses. They are carried in the Mesh Address Extension
+     * subfield of the Mesh Control field (IEEE 802.11-2012, Table 8-19).
+     *
+     * @param source the address of the station outside the mesh that originated the frame
+     * @param destination the address of the station the frame is destined to, which is the
+     *                    group address itself for group addressed frames
+     */
+    void SetProxiedAddresses(Mac48Address source, Mac48Address destination);
+    /**
+     * Whether the frame is carried on behalf of a station outside the mesh
+     * @returns true if the proxied addresses have been set
+     */
+    bool IsProxied() const;
+    /**
+     * Get the address of the station outside the mesh that originated the frame
+     * @returns the proxied source address
+     */
+    Mac48Address GetProxiedSource() const;
+    /**
+     * Get the address of the station outside the mesh the frame is destined to
+     * @returns the proxied destination address
+     */
+    Mac48Address GetProxiedDestination() const;
+
+    /**
      * @brief Get the type ID.
      * @return the object TypeId
      */
@@ -96,10 +122,13 @@ class HwmpTag : public Tag
     void Print(std::ostream& os) const override;
 
   private:
-    Mac48Address m_address; ///< address
-    uint8_t m_ttl;          ///< TTL
-    uint32_t m_metric;      ///< metric
-    uint32_t m_seqno;       ///< sequence no
+    Mac48Address m_address;            ///< address
+    uint8_t m_ttl;                     ///< TTL
+    uint32_t m_metric;                 ///< metric
+    uint32_t m_seqno;                  ///< sequence no
+    bool m_proxied;                    ///< whether the proxied addresses below are set
+    Mac48Address m_proxiedSource;      ///< address of the source outside the mesh
+    Mac48Address m_proxiedDestination; ///< address of the destination outside the mesh
 };
 } // namespace dot11s
 } // namespace ns3
