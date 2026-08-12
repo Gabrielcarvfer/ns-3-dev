@@ -59,5 +59,12 @@ weekly-test-ns3-py:
   extends: .test-platform-job-base
   variables:
     TEST_SCRIPT: ./utils/tests/test-ns3.py
+    # The dind-rootless image does not expose any port, so the port used by the
+    # service health check has to be indicated explicitly.
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
   services:
-    - docker:dind-rootless
+    - name: docker:dind-rootless
+      alias: docker
+      variables:
+        HEALTHCHECK_TCP_PORT: "2375"
