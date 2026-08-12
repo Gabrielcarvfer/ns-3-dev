@@ -184,6 +184,20 @@ class MeshPointDevice : public NetDevice
                  const Mac48Address src,
                  const Mac48Address dst);
     /**
+     * @brief Pass a frame to the upper layer and to whoever bridges this mesh point.
+     *
+     * @param packet the packet, stripped of all routing information
+     * @param protocol the protocol
+     * @param src the source MAC address, which is a station outside the mesh for a proxied frame
+     * @param dst the destination MAC address, likewise
+     * @param packetType the packet type
+     */
+    void DeliverUp(Ptr<Packet> packet,
+                   uint16_t protocol,
+                   Mac48Address src,
+                   Mac48Address dst,
+                   PacketType packetType);
+    /**
      * @brief Response callback for L2 routing protocol. This will be executed when routing
      * information is ready.
      *

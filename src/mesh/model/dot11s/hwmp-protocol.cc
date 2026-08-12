@@ -329,8 +329,8 @@ HwmpProtocol::LookupProxy(Mac48Address external, Mac48Address& meshAddress) cons
 
 bool
 HwmpProtocol::RemoveRoutingStuff(uint32_t fromIface,
-                                 const Mac48Address source,
-                                 const Mac48Address destination,
+                                 Mac48Address& source,
+                                 Mac48Address& destination,
                                  Ptr<Packet> packet,
                                  uint16_t& protocolType)
 {
@@ -338,6 +338,13 @@ HwmpProtocol::RemoveRoutingStuff(uint32_t fromIface,
     if (!packet->RemovePacketTag(tag))
     {
         NS_FATAL_ERROR("HWMP tag must exist when packet received from the network");
+    }
+    if (tag.IsProxied())
+    {
+        // The frame was carried on behalf of stations outside the mesh, so the upper layer must
+        // see their addresses rather than those of the mesh STAs proxying for them
+        source = tag.GetProxiedSource();
+        destination = tag.GetProxiedDestination();
     }
     return true;
 }
@@ -357,14 +364,18 @@ HwmpProtocol::ForwardUnicast(uint32_t sourceIface,
     // that proxies for it; the mesh has no path towards the station itself
     Mac48Address meshDestination = destination;
     Mac48Address meshSource = source;
-    if (inTag.IsProxied())
+    HwmpTag tag = inTag;
+    // Either end of the exchange may sit outside the mesh, so the destination is resolved
+    // through the proxy table whether or not the frame was already marked as proxied
+    const bool proxiedDestination = LookupProxy(destination, meshDestination);
+    if (sourceIface == GetMeshPoint()->GetIfIndex() && (inTag.IsProxied() || proxiedDestination))
     {
-        LookupProxy(destination, meshDestination);
-        if (sourceIface == GetMeshPoint()->GetIfIndex())
+        // This mesh gate originated the frame, so it is the mesh SA. A relayed frame keeps the
+        // mesh SA of the gate that originated it
+        meshSource = GetAddress();
+        if (!inTag.IsProxied())
         {
-            // This mesh gate originated the frame, so it is the mesh SA. A relayed frame keeps
-            // the mesh SA of the gate that originated it
-            meshSource = GetAddress();
+            tag.SetProxiedAddresses(source, destination);
         }
     }
     HwmpRtable::LookupResult result = m_rtable->LookupReactive(meshDestination);
@@ -374,7 +385,6 @@ HwmpProtocol::ForwardUnicast(uint32_t sourceIface,
     {
         result = m_rtable->LookupProactive();
     }
-    HwmpTag tag = inTag;
     tag.SetAddress(result.retransmitter);
     tag.SetTtl(inTag.GetTtl());
     // seqno and metric is not used;

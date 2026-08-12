@@ -101,20 +101,18 @@ MeshPointDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
     const Mac48Address dst48 = Mac48Address::ConvertFrom(dst);
     uint16_t& realProtocol = protocol;
     NS_LOG_DEBUG("SRC=" << src48 << ", DST = " << dst48 << ", I am: " << m_address);
-    if (!m_promiscRxCallback.IsNull())
-    {
-        m_promiscRxCallback(this, packet, protocol, src, dst, packetType);
-    }
     if (dst48.IsGroup())
     {
         Ptr<Packet> packet_copy = packet->Copy();
+        Mac48Address realSrc = src48;
+        Mac48Address realDst = dst48;
         if (m_routingProtocol->RemoveRoutingStuff(incomingPort->GetIfIndex(),
-                                                  src48,
-                                                  dst48,
+                                                  realSrc,
+                                                  realDst,
                                                   packet_copy,
                                                   realProtocol))
         {
-            m_rxCallback(this, packet_copy, realProtocol, src);
+            DeliverUp(packet_copy, realProtocol, realSrc, realDst, packetType);
             m_rxStats.broadcastData++;
             m_rxStats.broadcastDataBytes += packet->GetSize();
             Time forwardingDelay = GetForwardingDelay();
@@ -134,13 +132,15 @@ MeshPointDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
     if (dst48 == m_address)
     {
         Ptr<Packet> packet_copy = packet->Copy();
+        Mac48Address realSrc = src48;
+        Mac48Address realDst = dst48;
         if (m_routingProtocol->RemoveRoutingStuff(incomingPort->GetIfIndex(),
-                                                  src48,
-                                                  dst48,
+                                                  realSrc,
+                                                  realDst,
                                                   packet_copy,
                                                   realProtocol))
         {
-            m_rxCallback(this, packet_copy, realProtocol, src);
+            DeliverUp(packet_copy, realProtocol, realSrc, realDst, packetType);
             m_rxStats.unicastData++;
             m_rxStats.unicastDataBytes += packet->GetSize();
         }
@@ -159,6 +159,35 @@ MeshPointDevice::ReceiveFromDevice(Ptr<NetDevice> incomingPort,
                             dst48);
         NS_LOG_DEBUG("Forwarding unicast from " << src48 << " to " << dst48 << " with delay "
                                                 << forwardingDelay.As(Time::US));
+    }
+}
+
+void
+MeshPointDevice::DeliverUp(Ptr<Packet> packet,
+                           uint16_t protocol,
+                           Mac48Address src,
+                           Mac48Address dst,
+                           PacketType packetType)
+{
+    NS_LOG_FUNCTION(this << packet << protocol << src << dst);
+    const bool forUs = dst.IsGroup() || dst == m_address;
+    if (!m_promiscRxCallback.IsNull())
+    {
+        // The frame reached this mesh STA because the mesh addresses matched, so the packet type
+        // was resolved against them. Once the addresses of the stations outside the mesh are
+        // restored, a frame that is not for us has to look that way to whoever bridges us
+        m_promiscRxCallback(this,
+                            packet,
+                            protocol,
+                            src,
+                            dst,
+                            forUs ? packetType : PACKET_OTHERHOST);
+    }
+    // A frame addressed to a station outside the mesh is only of interest to whoever bridges
+    // this mesh gate to that station, which is served by the promiscuous callback above
+    if (forUs)
+    {
+        m_rxCallback(this, packet, protocol, src);
     }
 }
 
@@ -363,7 +392,9 @@ bool
 MeshPointDevice::SupportsSendFrom() const
 {
     NS_LOG_FUNCTION(this);
-    return false; // don't allow to bridge mesh network with something else.
+    // A mesh point that is bridged to a network outside the mesh acts as a mesh gate, carrying
+    // frames on behalf of the stations behind it (IEEE 802.11-2012, Section 13.11)
+    return true;
 }
 
 Address

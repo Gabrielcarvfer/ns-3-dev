@@ -68,6 +68,8 @@ build_lib(
     model/mesh-wifi-interface-mac.h
   LIBRARIES_TO_LINK ${libwifi}
                     ${libapplications}
+  TEST_LIBRARIES_TO_LINK ${libbridge}
+                         ${libcsma}
   TEST_SOURCES
     test/dot11s/airtime-metric-regression.cc
     test/dot11s/dot11s-test-suite.cc
@@ -77,6 +79,7 @@ build_lib(
     test/dot11s/hwmp-simplest-regression.cc
     test/dot11s/hwmp-target-flags-regression.cc
     test/dot11s/mesh-addressing-conformance-test.cc
+    test/dot11s/mesh-gate-proxy-test.cc
     test/dot11s/pmp-regression.cc
     test/dot11s/regression.cc
     test/flame/flame-regression.cc

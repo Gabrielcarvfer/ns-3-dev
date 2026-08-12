@@ -108,10 +108,13 @@ class MeshL2RoutingProtocol : public Object
      * @param protocolType  protocol ID, needed to form a proper MAC-layer header
      * @attention protocol type is passed by reference, because may be
      * changed
+     * @attention source and destination are passed by reference, because a frame carried on
+     * behalf of stations outside the mesh reaches the upper layer with their addresses rather
+     * than those of the mesh STAs that proxy for them
      */
     virtual bool RemoveRoutingStuff(uint32_t fromIface,
-                                    const Mac48Address source,
-                                    const Mac48Address destination,
+                                    Mac48Address& source,
+                                    Mac48Address& destination,
                                     Ptr<Packet> packet,
                                     uint16_t& protocolType) = 0;
     /**

@@ -271,8 +271,8 @@ FlameProtocol::RequestRoute(uint32_t sourceIface,
 
 bool
 FlameProtocol::RemoveRoutingStuff(uint32_t fromIface,
-                                  const Mac48Address source,
-                                  const Mac48Address destination,
+                                  Mac48Address& source,
+                                  Mac48Address& destination,
                                   Ptr<Packet> packet,
                                   uint16_t& protocolType)
 {
