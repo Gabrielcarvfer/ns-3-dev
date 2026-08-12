@@ -40,9 +40,9 @@ using namespace ns3::dot11s;
  * | Mesh Data unicast   |   1   |    1    | RA      | TA     | DA      | SA     |
  * | Mesh Data multicast |   0   |    1    | RA = DA | TA     | Mesh SA | -      |
  *
- * The proxied rows of the same table are covered by
- * ProxiedAddressingHeaderTest; they cannot be produced by the model, which has
- * no mesh gate able to carry traffic for stations outside the mesh.
+ * The proxied rows of the same table are covered by ProxiedAddressingHeaderTest
+ * at the level of the header encoding, and over the air by the mesh gate test
+ * suite, which drives traffic to and from a station outside the mesh.
  */
 class MeshDataAddressingTest : public TestCase
 {
@@ -246,8 +246,8 @@ MeshDataAddressingTest::DoRun()
  * | unicast     |   1   |    1    | 5 & 6 | RA      | Mesh DA | Mesh SA | DA     | SA     |
  * | multicast   |   0   |    1    | 4     | RA = DA | Mesh SA | SA      | -      | -      |
  *
- * The model has no mesh gate, so it never originates such a frame; this test
- * covers the encoding of the header pair rather than an exchange over the air.
+ * This test covers the encoding of the header pair in isolation; the mesh gate
+ * test suite checks the same rows on frames actually exchanged over the air.
  */
 class ProxiedAddressingHeaderTest : public TestCase
 {
