@@ -875,14 +875,17 @@ def run_job_synchronously(shell_command, directory, valgrind, is_python, build_p
         # To do that, we need to separate program from arguments, then quote the absolute program path with spaces.
         shell_args = re.findall(r'(?:".*?"|\S)+', shell_command)
 
+        program = shell_args[0].strip('"')
+
         if len(build_path):
-            path_cmd = os.path.join(build_path, shell_args[0])
+            # Programs are looked up in the user-provided build directory,
+            # which requires re-rooting the ones already resolved against
+            # the configured build directory.
+            if os.path.isabs(program):
+                program = os.path.relpath(program, NS3_BUILDDIR)
+            path_cmd = os.path.join(os.path.abspath(build_path), program)
         else:
-            path_cmd = (
-                shell_args[0].strip('"')
-                if NS3_BUILDDIR in shell_args[0]
-                else os.path.join(NS3_BUILDDIR, shell_args[0])
-            )
+            path_cmd = program if NS3_BUILDDIR in program else os.path.join(NS3_BUILDDIR, program)
 
         path_cmd = f'"{path_cmd}" {" ".join(shell_args[1:])}'
 
@@ -1433,7 +1436,7 @@ def run_tests():
             examples_sorted.sort()
         if ENABLE_PYTHON_BINDINGS:
             python_examples_sorted = []
-            for x, y in python_tests:
+            for x, y, _ in python_tests:
                 if y == "True":
                     python_examples_sorted.append(x)
             python_examples_sorted.sort()
