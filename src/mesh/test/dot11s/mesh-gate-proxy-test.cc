@@ -7,7 +7,9 @@
  */
 
 #include "ns3/bridge-helper.h"
+#include "ns3/config.h"
 #include "ns3/csma-helper.h"
+#include "ns3/dot11s-mac-header.h"
 #include "ns3/double.h"
 #include "ns3/mesh-helper.h"
 #include "ns3/mesh-point-device.h"
@@ -17,9 +19,11 @@
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/test.h"
+#include "ns3/wifi-mac-header.h"
 #include "ns3/yans-wifi-helper.h"
 
 using namespace ns3;
+using namespace ns3::dot11s;
 
 /**
  * @ingroup dot11s-test
@@ -74,9 +78,52 @@ class MeshGateProxyTest : public TestCase
                            uint16_t protocol,
                            const Address& source);
 
+    /**
+     * Trace sink recording the proxied frames transmitted in the mesh.
+     *
+     * @param packet the frame about to be transmitted, including its MAC header
+     * @param txPowerW the transmission power, unused
+     */
+    void Transmitted(Ptr<const Packet> packet, double txPowerW);
+
+    /// A captured proxied frame, kept alongside whether it was seen at all
+    struct Captured
+    {
+        WifiMacHeader header;  ///< the captured MAC header
+        MeshHeader meshHeader; ///< the captured Mesh Control field
+        bool seen{false};      ///< whether such a frame was captured
+    };
+
     std::vector<Mac48Address> m_sourcesAtMesh; ///< sources seen by the mesh STA
     uint32_t m_receivedAtExternal{0};          ///< frames delivered back to the outside station
+    Captured m_proxiedGroup;                   ///< first group addressed proxied frame
+    Captured m_proxiedUnicast;                 ///< first individually addressed proxied frame
 };
+
+void
+MeshGateProxyTest::Transmitted(Ptr<const Packet> packet, double txPowerW)
+{
+    Ptr<Packet> copy = packet->Copy();
+    WifiMacHeader header;
+    copy->RemoveHeader(header);
+    if (!header.IsData())
+    {
+        return;
+    }
+    MeshHeader meshHeader;
+    copy->RemoveHeader(meshHeader);
+    if (meshHeader.GetAddressExt() == 0)
+    {
+        return;
+    }
+    Captured& slot = header.GetAddr1().IsGroup() ? m_proxiedGroup : m_proxiedUnicast;
+    if (!slot.seen)
+    {
+        slot.header = header;
+        slot.meshHeader = meshHeader;
+        slot.seen = true;
+    }
+}
 
 bool
 MeshGateProxyTest::ReceiveAtMesh(Ptr<NetDevice> device,
@@ -135,7 +182,11 @@ MeshGateProxyTest::DoRun()
 
     const auto externalAddress = Mac48Address::ConvertFrom(external->GetAddress());
     const auto plainMeshAddress = Mac48Address::ConvertFrom(plainMesh->GetAddress());
+    const auto gateAddress = Mac48Address::ConvertFrom(meshDevices.Get(0)->GetAddress());
     const Mac48Address multicastGroup("01:00:5e:00:00:01");
+
+    Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/PhyTxBegin",
+                                  MakeCallback(&MeshGateProxyTest::Transmitted, this));
 
     // Group addressed, then individually addressed, from outside the mesh into it
     Simulator::Schedule(Seconds(3), [external, multicastGroup]() {
@@ -167,6 +218,54 @@ MeshGateProxyTest::DoRun()
     NS_TEST_EXPECT_MSG_GT(m_receivedAtExternal,
                           0,
                           "The mesh STA could not reach the station behind the gate");
+
+    // Proxied Mesh Data, group addressed: To DS = 0, From DS = 1, Address 1 the group DA,
+    // Address 3 the mesh SA and Address 4 of the extension the originating station
+    NS_TEST_ASSERT_MSG_EQ(m_proxiedGroup.seen,
+                          true,
+                          "No group addressed proxied frame was transmitted");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedGroup.header.IsToDs(),
+                          false,
+                          "Group addressed proxied frame must have To DS clear");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedGroup.header.IsFromDs(),
+                          true,
+                          "Group addressed proxied frame must have From DS set");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedGroup.meshHeader.GetAddressExt(),
+                          1,
+                          "Group addressed proxied frame carries one extension address");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedGroup.header.GetAddr1(),
+                          multicastGroup,
+                          "Address 1 must be the group DA");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedGroup.header.GetAddr3(),
+                          gateAddress,
+                          "Address 3 must be the mesh SA, which is the gate");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedGroup.meshHeader.GetAddr4(),
+                          externalAddress,
+                          "Address 4 must be the station outside the mesh");
+
+    // Proxied Mesh Data, individually addressed: To DS = From DS = 1, the mesh STAs in
+    // Address 3 and 4, and the stations outside the mesh in Address 5 and 6
+    NS_TEST_ASSERT_MSG_EQ(m_proxiedUnicast.seen,
+                          true,
+                          "No individually addressed proxied frame was transmitted");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedUnicast.header.IsToDs(),
+                          true,
+                          "Individually addressed proxied frame must have To DS set");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedUnicast.header.IsFromDs(),
+                          true,
+                          "Individually addressed proxied frame must have From DS set");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedUnicast.meshHeader.GetAddressExt(),
+                          2,
+                          "Individually addressed proxied frame carries two extension addresses");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedUnicast.header.GetAddr3(),
+                          plainMeshAddress,
+                          "Address 3 must be the mesh DA");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedUnicast.header.GetAddr4(),
+                          gateAddress,
+                          "Address 4 must be the mesh SA, which is the gate");
+    NS_TEST_EXPECT_MSG_EQ(m_proxiedUnicast.meshHeader.GetAddr6(),
+                          externalAddress,
+                          "Address 6 must be the station outside the mesh that originated it");
 }
 
 /**
