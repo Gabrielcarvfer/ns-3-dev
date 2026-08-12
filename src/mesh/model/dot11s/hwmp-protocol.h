@@ -9,6 +9,8 @@
 #ifndef HWMP_PROTOCOL_H
 #define HWMP_PROTOCOL_H
 
+#include "hwmp-tag.h"
+
 #include "ns3/event-id.h"
 #include "ns3/mesh-l2-routing-protocol.h"
 #include "ns3/nstime.h"
@@ -217,7 +219,8 @@ class HwmpProtocol : public MeshL2RoutingProtocol
      * @param packet the packet to route
      * @param protocolType the protocol type
      * @param routeReply the route reply callback
-     * @param ttl the TTL
+     * @param inTag the tag the frame arrived with, holding the TTL and, for frames carried on
+     *              behalf of stations outside the mesh, their addresses
      * @returns true if forwarded
      */
     bool ForwardUnicast(uint32_t sourceIface,
@@ -226,7 +229,7 @@ class HwmpProtocol : public MeshL2RoutingProtocol
                         Ptr<Packet> packet,
                         uint16_t protocolType,
                         RouteReplyCallback routeReply,
-                        uint32_t ttl);
+                        const HwmpTag& inTag);
 
     /// @name Interaction with HWMP MAC plugin
     ///@{
@@ -339,6 +342,22 @@ class HwmpProtocol : public MeshL2RoutingProtocol
      * @param source is the source address
      */
     bool DropDataFrame(uint32_t seqno, Mac48Address source);
+    /**
+     * @brief Record which mesh STA proxies for a station outside the mesh
+     *
+     * @param external the address of the station outside the mesh
+     * @param meshAddress the address of the mesh STA that proxies for it
+     */
+    void LearnProxy(Mac48Address external, Mac48Address meshAddress);
+    /**
+     * @brief Look up the mesh STA that proxies for a station outside the mesh
+     *
+     * @param external the address of the station outside the mesh
+     * @param [out] meshAddress the address of the mesh STA that proxies for it, left untouched
+     *              when nothing is known about the given address
+     * @return true if a proxy is known
+     */
+    bool LookupProxy(Mac48Address external, Mac48Address& meshAddress) const;
     ///@}
 
     /// Route discovery time:
@@ -492,6 +511,13 @@ class HwmpProtocol : public MeshL2RoutingProtocol
 
     /// Routing table
     Ptr<HwmpRtable> m_rtable;
+
+    /**
+     * Addresses of stations outside the mesh, mapped to the mesh STA that proxies for each of
+     * them. Entries are learnt from the Mesh Address Extension subfield of received frames; a
+     * destination that is not in the table is routed as if it were a mesh STA itself.
+     */
+    std::map<Mac48Address, Mac48Address> m_proxyTable;
 
     /// PreqEvent structure
     struct PreqEvent

@@ -231,6 +231,13 @@ HwmpProtocol::RequestRoute(uint32_t sourceIface,
             tag.SetSeqno(m_dataSeqno++);
         }
         tag.SetTtl(m_maxTtl);
+        if (source != GetAddress())
+        {
+            // The frame comes from a station outside the mesh attached to this mesh gate, so
+            // this mesh STA is the mesh SA and the addresses of the stations outside the mesh
+            // travel in the Mesh Address Extension subfield
+            tag.SetProxiedAddresses(source, destination);
+        }
     }
     else
     {
@@ -291,8 +298,27 @@ HwmpProtocol::RequestRoute(uint32_t sourceIface,
                               packet,
                               protocolType,
                               routeReply,
-                              tag.GetTtl());
+                              tag);
     }
+    return true;
+}
+
+void
+HwmpProtocol::LearnProxy(Mac48Address external, Mac48Address meshAddress)
+{
+    NS_LOG_FUNCTION(this << external << meshAddress);
+    m_proxyTable[external] = meshAddress;
+}
+
+bool
+HwmpProtocol::LookupProxy(Mac48Address external, Mac48Address& meshAddress) const
+{
+    auto i = m_proxyTable.find(external);
+    if (i == m_proxyTable.end())
+    {
+        return false;
+    }
+    meshAddress = i->second;
     return true;
 }
 
@@ -318,26 +344,40 @@ HwmpProtocol::ForwardUnicast(uint32_t sourceIface,
                              Ptr<Packet> packet,
                              uint16_t protocolType,
                              RouteReplyCallback routeReply,
-                             uint32_t ttl)
+                             const HwmpTag& inTag)
 {
-    NS_LOG_FUNCTION(this << sourceIface << source << destination << packet << protocolType << ttl);
+    NS_LOG_FUNCTION(this << sourceIface << source << destination << packet << protocolType);
     NS_ASSERT(!destination.IsGroup());
-    HwmpRtable::LookupResult result = m_rtable->LookupReactive(destination);
-    NS_LOG_DEBUG("Requested src = " << source << ", dst = " << destination << ", I am "
+    // A frame carried on behalf of a station outside the mesh is routed towards the mesh STA
+    // that proxies for it; the mesh has no path towards the station itself
+    Mac48Address meshDestination = destination;
+    Mac48Address meshSource = source;
+    if (inTag.IsProxied())
+    {
+        LookupProxy(destination, meshDestination);
+        if (sourceIface == GetMeshPoint()->GetIfIndex())
+        {
+            // This mesh gate originated the frame, so it is the mesh SA. A relayed frame keeps
+            // the mesh SA of the gate that originated it
+            meshSource = GetAddress();
+        }
+    }
+    HwmpRtable::LookupResult result = m_rtable->LookupReactive(meshDestination);
+    NS_LOG_DEBUG("Requested src = " << source << ", dst = " << meshDestination << ", I am "
                                     << GetAddress() << ", RA = " << result.retransmitter);
     if (result.retransmitter == Mac48Address::GetBroadcast())
     {
         result = m_rtable->LookupProactive();
     }
-    HwmpTag tag;
+    HwmpTag tag = inTag;
     tag.SetAddress(result.retransmitter);
-    tag.SetTtl(ttl);
+    tag.SetTtl(inTag.GetTtl());
     // seqno and metric is not used;
     packet->AddPacketTag(tag);
     if (result.retransmitter != Mac48Address::GetBroadcast())
     {
         // reply immediately:
-        routeReply(true, packet, source, destination, protocolType, result.ifIndex);
+        routeReply(true, packet, meshSource, meshDestination, protocolType, result.ifIndex);
         m_stats.txUnicast++;
         m_stats.txBytes += packet->GetSize();
         return true;
@@ -346,7 +386,7 @@ HwmpProtocol::ForwardUnicast(uint32_t sourceIface,
     {
         // Start path error procedure:
         NS_LOG_DEBUG("Must Send PERR");
-        result = m_rtable->LookupReactiveExpired(destination);
+        result = m_rtable->LookupReactiveExpired(meshDestination);
         NS_LOG_DEBUG("Path error " << result.retransmitter);
         // 1.  Lookup expired reactive path. If exists - start path error
         //     procedure towards a next hop of this path
@@ -369,8 +409,8 @@ HwmpProtocol::ForwardUnicast(uint32_t sourceIface,
         return false;
     }
     // Request a destination:
-    result = m_rtable->LookupReactiveExpired(destination);
-    if (ShouldSendPreq(destination))
+    result = m_rtable->LookupReactiveExpired(meshDestination);
+    if (ShouldSendPreq(meshDestination))
     {
         uint32_t originator_seqno = GetNextHwmpSeqno();
         uint32_t dst_seqno = 0;
@@ -381,13 +421,13 @@ HwmpProtocol::ForwardUnicast(uint32_t sourceIface,
         m_stats.initiatedPreq++;
         for (auto i = m_interfaces.begin(); i != m_interfaces.end(); i++)
         {
-            i->second->RequestDestination(destination, originator_seqno, dst_seqno);
+            i->second->RequestDestination(meshDestination, originator_seqno, dst_seqno);
         }
     }
     QueuedPacket pkt;
     pkt.pkt = packet;
-    pkt.dst = destination;
-    pkt.src = source;
+    pkt.dst = meshDestination;
+    pkt.src = meshSource;
     pkt.protocol = protocolType;
     pkt.reply = routeReply;
     pkt.inInterface = sourceIface;

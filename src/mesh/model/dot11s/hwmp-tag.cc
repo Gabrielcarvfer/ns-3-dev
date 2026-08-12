@@ -20,7 +20,8 @@ HwmpTag::HwmpTag()
     : m_address(Mac48Address::GetBroadcast()),
       m_ttl(0),
       m_metric(0),
-      m_seqno(0)
+      m_seqno(0),
+      m_proxied(false)
 {
 }
 
@@ -76,6 +77,32 @@ HwmpTag::GetSeqno() const
     return m_seqno;
 }
 
+void
+HwmpTag::SetProxiedAddresses(Mac48Address source, Mac48Address destination)
+{
+    m_proxied = true;
+    m_proxiedSource = source;
+    m_proxiedDestination = destination;
+}
+
+bool
+HwmpTag::IsProxied() const
+{
+    return m_proxied;
+}
+
+Mac48Address
+HwmpTag::GetProxiedSource() const
+{
+    return m_proxiedSource;
+}
+
+Mac48Address
+HwmpTag::GetProxiedDestination() const
+{
+    return m_proxiedDestination;
+}
+
 /**
  * @brief Get the type ID.
  * @return the object TypeId
@@ -102,7 +129,10 @@ HwmpTag::GetSerializedSize() const
     return 6    // address
            + 1  // ttl
            + 4  // metric
-           + 4; // seqno
+           + 4  // seqno
+           + 1  // proxied
+           + 6  // proxied source
+           + 6; // proxied destination
 }
 
 void
@@ -114,6 +144,17 @@ HwmpTag::Serialize(TagBuffer i) const
     i.WriteU8(m_ttl);
     i.WriteU32(m_metric);
     i.WriteU32(m_seqno);
+    for (j = 0; j < 6; j++)
+    {
+        i.WriteU8(address[j]);
+    }
+    i.WriteU8(m_proxied);
+    m_proxiedSource.CopyTo(address);
+    for (j = 0; j < 6; j++)
+    {
+        i.WriteU8(address[j]);
+    }
+    m_proxiedDestination.CopyTo(address);
     for (j = 0; j < 6; j++)
     {
         i.WriteU8(address[j]);
@@ -133,6 +174,17 @@ HwmpTag::Deserialize(TagBuffer i)
         address[j] = i.ReadU8();
     }
     m_address.CopyFrom(address);
+    m_proxied = i.ReadU8();
+    for (j = 0; j < 6; j++)
+    {
+        address[j] = i.ReadU8();
+    }
+    m_proxiedSource.CopyFrom(address);
+    for (j = 0; j < 6; j++)
+    {
+        address[j] = i.ReadU8();
+    }
+    m_proxiedDestination.CopyFrom(address);
 }
 
 void
