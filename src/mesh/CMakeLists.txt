@@ -76,6 +76,7 @@ build_lib(
     test/dot11s/hwmp-reactive-regression.cc
     test/dot11s/hwmp-simplest-regression.cc
     test/dot11s/hwmp-target-flags-regression.cc
+    test/dot11s/mesh-addressing-conformance-test.cc
     test/dot11s/pmp-regression.cc
     test/dot11s/regression.cc
     test/flame/flame-regression.cc
