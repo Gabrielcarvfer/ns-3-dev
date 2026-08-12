@@ -255,6 +255,11 @@ HwmpProtocol::RequestRoute(uint32_t sourceIface,
     }
     if (destination.IsGroup())
     {
+        // A frame originated by a station outside the mesh is sent with this mesh gate as its
+        // mesh SA; the address of the originating station travels in the Mesh Address Extension
+        const Mac48Address meshSource =
+            (tag.IsProxied() && sourceIface == GetMeshPoint()->GetIfIndex()) ? GetAddress()
+                                                                             : source;
         m_stats.txBroadcast++;
         m_stats.txBytes += packet->GetSize();
         // channel IDs where we have already sent broadcast:
@@ -286,7 +291,7 @@ HwmpProtocol::RequestRoute(uint32_t sourceIface,
                 tag.SetAddress(address);
                 packetCopy->AddPacketTag(tag);
                 NS_LOG_DEBUG("Sending route reply for broadcast; address " << address);
-                routeReply(true, packetCopy, source, destination, protocolType, plugin->first);
+                routeReply(true, packetCopy, meshSource, destination, protocolType, plugin->first);
             }
         }
     }
