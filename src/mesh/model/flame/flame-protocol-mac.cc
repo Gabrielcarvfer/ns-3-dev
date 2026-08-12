@@ -81,11 +81,22 @@ FlameProtocolMac::UpdateOutcomingFrame(Ptr<Packet> packet,
     {
         NS_FATAL_ERROR("FLAME tag must exist here");
     }
-    if (!(header.GetAddr1().IsGroup() && tag.receiver == Mac48Address::GetBroadcast()))
+    if (!header.GetAddr1().IsGroup())
     {
-        // Group addressed frames carry the DA in Address 1; do not replace it
-        // with the broadcast address
         header.SetAddr1(tag.receiver);
+    }
+    else if (!tag.receiver.IsGroup())
+    {
+        // A group addressed frame sent as an individually addressed frame no
+        // longer fits the three-address format, whose Address 1 is both the RA
+        // and the DA. Move it to the four-address format, which keeps the group
+        // DA in Address 3 (IEEE 802.11-2012, Table 8-19)
+        const auto destination = header.GetAddr1();
+        const auto source = header.GetAddr3();
+        header.SetAddr1(tag.receiver);
+        header.SetAddr3(destination);
+        header.SetAddr4(source);
+        header.SetDsTo();
     }
     if (tag.receiver == Mac48Address::GetBroadcast())
     {

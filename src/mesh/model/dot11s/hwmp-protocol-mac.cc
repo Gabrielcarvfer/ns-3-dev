@@ -229,13 +229,22 @@ HwmpProtocolMac::UpdateOutcomingFrame(Ptr<Packet> packet,
     meshHdr.SetMeshSeqno(tag.GetSeqno());
     meshHdr.SetMeshTtl(tag.GetTtl());
     packet->AddHeader(meshHdr);
-    if (!(header.GetAddr1().IsGroup() && tag.GetAddress() == Mac48Address::GetBroadcast()))
+    if (!header.GetAddr1().IsGroup())
     {
-        // Group addressed frames carry the DA in Address 1; do not replace it
-        // with the broadcast address (the tag carries a specific receiver
-        // address when a group addressed frame is sent as individually
-        // addressed frames to each neighbor)
         header.SetAddr1(tag.GetAddress());
+    }
+    else if (!tag.GetAddress().IsGroup())
+    {
+        // A group addressed frame sent as a chain of individually addressed
+        // frames no longer fits the three-address format, whose Address 1 is
+        // both the RA and the DA. Move it to the four-address format, which
+        // keeps the group DA in Address 3 (IEEE 802.11-2012, Table 8-19)
+        const auto destination = header.GetAddr1();
+        const auto source = header.GetAddr3();
+        header.SetAddr1(tag.GetAddress());
+        header.SetAddr3(destination);
+        header.SetAddr4(source);
+        header.SetDsTo();
     }
     header.SetQosMeshControlPresent();
     return true;
