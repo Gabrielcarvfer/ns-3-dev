@@ -1722,40 +1722,25 @@ ThreeGppIndoorOfficePropagationLossModel::GetShadowingCorrelationDistance(
     return correlationDistance;
 }
 
-NS_OBJECT_ENSURE_REGISTERED(ThreeGppNTNDenseUrbanPropagationLossModel);
+NS_OBJECT_ENSURE_REGISTERED(ThreeGppNTNPropagationLossModel);
 
 TypeId
-ThreeGppNTNDenseUrbanPropagationLossModel::GetTypeId()
+ThreeGppNTNPropagationLossModel::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::ThreeGppNTNDenseUrbanPropagationLossModel")
+    static TypeId tid = TypeId("ns3::ThreeGppNTNPropagationLossModel")
                             .SetParent<ThreeGppPropagationLossModel>()
-                            .SetGroupName("Propagation")
-                            .AddConstructor<ThreeGppNTNDenseUrbanPropagationLossModel>();
+                            .SetGroupName("Propagation");
     return tid;
 }
 
-ThreeGppNTNDenseUrbanPropagationLossModel::ThreeGppNTNDenseUrbanPropagationLossModel()
-    : ThreeGppPropagationLossModel(),
-      m_SFCL_DenseUrban(&SFCL_DenseUrban)
-{
-    NS_LOG_FUNCTION(this);
-    m_channelConditionModel = CreateObject<ThreeGppNTNDenseUrbanChannelConditionModel>();
-}
-
-ThreeGppNTNDenseUrbanPropagationLossModel::~ThreeGppNTNDenseUrbanPropagationLossModel()
-{
-    NS_LOG_FUNCTION(this);
-}
-
 double
-ThreeGppNTNDenseUrbanPropagationLossModel::GetO2iDistance2dIn() const
+ThreeGppNTNPropagationLossModel::GetO2iDistance2dIn() const
 {
     abort();
 }
 
 double
-ThreeGppNTNDenseUrbanPropagationLossModel::GetLossLos(Ptr<MobilityModel> a,
-                                                      Ptr<MobilityModel> b) const
+ThreeGppNTNPropagationLossModel::GetLossLos(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
 {
     NS_LOG_FUNCTION(this);
     NS_ASSERT_MSG(m_frequency <= 100.0e9,
@@ -1779,8 +1764,7 @@ ThreeGppNTNDenseUrbanPropagationLossModel::GetLossLos(Ptr<MobilityModel> a,
 }
 
 double
-ThreeGppNTNDenseUrbanPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a,
-                                                       Ptr<MobilityModel> b) const
+ThreeGppNTNPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
 {
     NS_LOG_FUNCTION(this);
     NS_ASSERT_MSG(m_frequency <= 100.0e9,
@@ -1794,7 +1778,7 @@ ThreeGppNTNDenseUrbanPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a,
     double loss = ComputeNtnPathloss(m_frequency, distance3D);
 
     // Apply Clutter Loss
-    loss += ComputeClutterLoss(m_frequency, m_SFCL_DenseUrban, elevAngleQuantized);
+    loss += ComputeClutterLoss(m_frequency, m_SFCL, elevAngleQuantized);
 
     // Apply Atmospheric Absorption Loss 3GPP 38.811 6.6.4
     loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
@@ -1807,10 +1791,9 @@ ThreeGppNTNDenseUrbanPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a,
 }
 
 double
-ThreeGppNTNDenseUrbanPropagationLossModel::GetShadowingStd(
-    Ptr<MobilityModel> a,
-    Ptr<MobilityModel> b,
-    ChannelCondition::LosConditionValue cond) const
+ThreeGppNTNPropagationLossModel::GetShadowingStd(Ptr<MobilityModel> a,
+                                                 Ptr<MobilityModel> b,
+                                                 ChannelCondition::LosConditionValue cond) const
 {
     NS_LOG_FUNCTION(this);
     double shadowingStd;
@@ -1822,19 +1805,19 @@ ThreeGppNTNDenseUrbanPropagationLossModel::GetShadowingStd(
     // Assign Shadowing Standard Deviation according to table 6.6.2-1
     if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "S")
     {
-        shadowingStd = (*m_SFCL_DenseUrban).at(elevAngleQuantized)[SFCL_params::S_LOS_sigF];
+        shadowingStd = (*m_SFCL).at(elevAngleQuantized)[SFCL_params::S_LOS_sigF];
     }
     else if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "Ka")
     {
-        shadowingStd = (*m_SFCL_DenseUrban).at(elevAngleQuantized)[SFCL_params::Ka_LOS_sigF];
+        shadowingStd = (*m_SFCL).at(elevAngleQuantized)[SFCL_params::Ka_LOS_sigF];
     }
     else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "S")
     {
-        shadowingStd = (*m_SFCL_DenseUrban).at(elevAngleQuantized)[SFCL_params::S_NLOS_sigF];
+        shadowingStd = (*m_SFCL).at(elevAngleQuantized)[SFCL_params::S_NLOS_sigF];
     }
     else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "Ka")
     {
-        shadowingStd = (*m_SFCL_DenseUrban).at(elevAngleQuantized)[SFCL_params::Ka_NLOS_sigF];
+        shadowingStd = (*m_SFCL).at(elevAngleQuantized)[SFCL_params::Ka_NLOS_sigF];
     }
     else
     {
@@ -1845,20 +1828,19 @@ ThreeGppNTNDenseUrbanPropagationLossModel::GetShadowingStd(
 }
 
 double
-ThreeGppNTNDenseUrbanPropagationLossModel::GetShadowingCorrelationDistance(
+ThreeGppNTNPropagationLossModel::GetShadowingCorrelationDistance(
     ChannelCondition::LosConditionValue cond) const
 {
     NS_LOG_FUNCTION(this);
     double correlationDistance;
 
-    // See 3GPP TR 38.811, Table 6.7.2-1a/b and Table 6.7.2-2a/b
     if (cond == ChannelCondition::LosConditionValue::LOS)
     {
-        correlationDistance = 37;
+        correlationDistance = m_shadowingCorrDistanceLos;
     }
     else if (cond == ChannelCondition::LosConditionValue::NLOS)
     {
-        correlationDistance = 50;
+        correlationDistance = m_shadowingCorrDistanceNlos;
     }
     else
     {
@@ -1866,6 +1848,34 @@ ThreeGppNTNDenseUrbanPropagationLossModel::GetShadowingCorrelationDistance(
     }
 
     return correlationDistance;
+}
+
+NS_OBJECT_ENSURE_REGISTERED(ThreeGppNTNDenseUrbanPropagationLossModel);
+
+TypeId
+ThreeGppNTNDenseUrbanPropagationLossModel::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::ThreeGppNTNDenseUrbanPropagationLossModel")
+                            .SetParent<ThreeGppNTNPropagationLossModel>()
+                            .SetGroupName("Propagation")
+                            .AddConstructor<ThreeGppNTNDenseUrbanPropagationLossModel>();
+    return tid;
+}
+
+ThreeGppNTNDenseUrbanPropagationLossModel::ThreeGppNTNDenseUrbanPropagationLossModel()
+    : ThreeGppNTNPropagationLossModel()
+{
+    NS_LOG_FUNCTION(this);
+    m_channelConditionModel = CreateObject<ThreeGppNTNDenseUrbanChannelConditionModel>();
+    m_SFCL = &SFCL_DenseUrban;
+    // See 3GPP TR 38.811, Table 6.7.2-1a/b and Table 6.7.2-2a/b
+    m_shadowingCorrDistanceLos = 37;
+    m_shadowingCorrDistanceNlos = 50;
+}
+
+ThreeGppNTNDenseUrbanPropagationLossModel::~ThreeGppNTNDenseUrbanPropagationLossModel()
+{
+    NS_LOG_FUNCTION(this);
 }
 
 // ------------------------------------------------------------------------- //
@@ -1876,142 +1886,26 @@ TypeId
 ThreeGppNTNUrbanPropagationLossModel::GetTypeId()
 {
     static TypeId tid = TypeId("ns3::ThreeGppNTNUrbanPropagationLossModel")
-                            .SetParent<ThreeGppPropagationLossModel>()
+                            .SetParent<ThreeGppNTNPropagationLossModel>()
                             .SetGroupName("Propagation")
                             .AddConstructor<ThreeGppNTNUrbanPropagationLossModel>();
     return tid;
 }
 
 ThreeGppNTNUrbanPropagationLossModel::ThreeGppNTNUrbanPropagationLossModel()
-    : ThreeGppPropagationLossModel(),
-      m_SFCL_Urban(&SFCL_Urban)
+    : ThreeGppNTNPropagationLossModel()
 {
     NS_LOG_FUNCTION(this);
     m_channelConditionModel = CreateObject<ThreeGppNTNUrbanChannelConditionModel>();
+    m_SFCL = &SFCL_Urban;
+    // See 3GPP TR 38.811, Table 6.7.2-3a/b and Table 6.7.2-4a/b
+    m_shadowingCorrDistanceLos = 37;
+    m_shadowingCorrDistanceNlos = 50;
 }
 
 ThreeGppNTNUrbanPropagationLossModel::~ThreeGppNTNUrbanPropagationLossModel()
 {
     NS_LOG_FUNCTION(this);
-}
-
-double
-ThreeGppNTNUrbanPropagationLossModel::GetO2iDistance2dIn() const
-{
-    abort();
-}
-
-double
-ThreeGppNTNUrbanPropagationLossModel::GetLossLos(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
-{
-    NS_LOG_FUNCTION(this);
-    NS_ASSERT_MSG(m_frequency <= 100.0e9,
-                  "NTN communications are valid for frequencies between 0.5 and 100 GHz.");
-
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
-    double loss = ComputeNtnPathloss(m_frequency, distance3D);
-
-    // Apply Atmospheric Absorption Loss 3GPP 38.811 6.6.4
-    loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
-
-    // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
-
-    NS_LOG_DEBUG("Loss " << loss);
-    return loss;
-}
-
-double
-ThreeGppNTNUrbanPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
-{
-    NS_LOG_FUNCTION(this);
-    NS_ASSERT_MSG(m_frequency <= 100.0e9,
-                  "NTN communications are valid for frequencies between 0.5 and 100 GHz.");
-
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
-    double loss = ComputeNtnPathloss(m_frequency, distance3D);
-
-    // Apply Clutter Loss
-    loss += ComputeClutterLoss(m_frequency, m_SFCL_Urban, elevAngleQuantized);
-
-    // Apply Atmospheric Absorption Loss 3GPP 38.811 6.6.4
-    loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
-
-    // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
-
-    NS_LOG_DEBUG("Loss " << loss);
-    return loss;
-}
-
-double
-ThreeGppNTNUrbanPropagationLossModel::GetShadowingStd(
-    Ptr<MobilityModel> a,
-    Ptr<MobilityModel> b,
-    ChannelCondition::LosConditionValue cond) const
-{
-    NS_LOG_FUNCTION(this);
-    double shadowingStd;
-
-    std::string freqBand = (m_frequency < 13.0e9) ? "S" : "Ka";
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // Assign Shadowing Standard Deviation according to table 6.6.2-1
-    if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "S")
-    {
-        shadowingStd = (*m_SFCL_Urban).at(elevAngleQuantized)[SFCL_params::S_LOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "Ka")
-    {
-        shadowingStd = (*m_SFCL_Urban).at(elevAngleQuantized)[SFCL_params::Ka_LOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "S")
-    {
-        shadowingStd = (*m_SFCL_Urban).at(elevAngleQuantized)[SFCL_params::S_NLOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "Ka")
-    {
-        shadowingStd = (*m_SFCL_Urban).at(elevAngleQuantized)[SFCL_params::Ka_NLOS_sigF];
-    }
-    else
-    {
-        NS_FATAL_ERROR("Unknown channel condition");
-    }
-
-    return shadowingStd;
-}
-
-double
-ThreeGppNTNUrbanPropagationLossModel::GetShadowingCorrelationDistance(
-    ChannelCondition::LosConditionValue cond) const
-{
-    NS_LOG_FUNCTION(this);
-    double correlationDistance;
-
-    // See 3GPP TR 38.811, Table 6.7.2-3a/b and Table 6.7.2-3a/b
-    if (cond == ChannelCondition::LosConditionValue::LOS)
-    {
-        correlationDistance = 37;
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS)
-    {
-        correlationDistance = 50;
-    }
-    else
-    {
-        NS_FATAL_ERROR("Unknown channel condition");
-    }
-
-    return correlationDistance;
 }
 
 // ------------------------------------------------------------------------- //
@@ -2022,145 +1916,26 @@ TypeId
 ThreeGppNTNSuburbanPropagationLossModel::GetTypeId()
 {
     static TypeId tid = TypeId("ns3::ThreeGppNTNSuburbanPropagationLossModel")
-                            .SetParent<ThreeGppPropagationLossModel>()
+                            .SetParent<ThreeGppNTNPropagationLossModel>()
                             .SetGroupName("Propagation")
                             .AddConstructor<ThreeGppNTNSuburbanPropagationLossModel>();
     return tid;
 }
 
 ThreeGppNTNSuburbanPropagationLossModel::ThreeGppNTNSuburbanPropagationLossModel()
-    : ThreeGppPropagationLossModel(),
-      m_SFCL_SuburbanRural(&SFCL_SuburbanRural)
+    : ThreeGppNTNPropagationLossModel()
 {
     NS_LOG_FUNCTION(this);
     m_channelConditionModel = CreateObject<ThreeGppNTNSuburbanChannelConditionModel>();
+    m_SFCL = &SFCL_SuburbanRural;
+    // See 3GPP TR 38.811, Table 6.7.2-5a/b and Table 6.7.2-6a/b
+    m_shadowingCorrDistanceLos = 37;
+    m_shadowingCorrDistanceNlos = 50;
 }
 
 ThreeGppNTNSuburbanPropagationLossModel::~ThreeGppNTNSuburbanPropagationLossModel()
 {
     NS_LOG_FUNCTION(this);
-}
-
-double
-ThreeGppNTNSuburbanPropagationLossModel::GetO2iDistance2dIn() const
-{
-    abort();
-}
-
-double
-ThreeGppNTNSuburbanPropagationLossModel::GetLossLos(Ptr<MobilityModel> a,
-                                                    Ptr<MobilityModel> b) const
-{
-    NS_LOG_FUNCTION(this);
-    NS_ASSERT_MSG(m_frequency <= 100.0e9,
-                  "NTN communications are valid for frequencies between 0.5 and 100 GHz.");
-
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
-    double loss = ComputeNtnPathloss(m_frequency, distance3D);
-
-    // Apply Atmospheric Absorption Loss 3GPP 38.811 6.6.4
-    loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
-
-    // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
-
-    NS_LOG_DEBUG("Loss " << loss);
-
-    return loss;
-}
-
-double
-ThreeGppNTNSuburbanPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a,
-                                                     Ptr<MobilityModel> b) const
-{
-    NS_LOG_FUNCTION(this);
-    NS_ASSERT_MSG(m_frequency <= 100.0e9,
-                  "NTN communications are valid for frequencies between 0.5 and 100 GHz.");
-
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
-    double loss = ComputeNtnPathloss(m_frequency, distance3D);
-
-    // Apply Clutter Loss
-    loss += ComputeClutterLoss(m_frequency, m_SFCL_SuburbanRural, elevAngleQuantized);
-
-    // Apply Atmospheric Absorption Loss 3GPP 38.811 6.6.4
-    loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
-
-    // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
-
-    NS_LOG_DEBUG("Loss " << loss);
-    return loss;
-}
-
-double
-ThreeGppNTNSuburbanPropagationLossModel::GetShadowingStd(
-    Ptr<MobilityModel> a,
-    Ptr<MobilityModel> b,
-    ChannelCondition::LosConditionValue cond) const
-{
-    NS_LOG_FUNCTION(this);
-    double shadowingStd;
-
-    std::string freqBand = (m_frequency < 13.0e9) ? "S" : "Ka";
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // Assign Shadowing Standard Deviation according to table 6.6.2-1
-    if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "S")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::S_LOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "Ka")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::Ka_LOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "S")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::S_NLOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "Ka")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::Ka_NLOS_sigF];
-    }
-    else
-    {
-        NS_FATAL_ERROR("Unknown channel condition");
-    }
-
-    return shadowingStd;
-}
-
-double
-ThreeGppNTNSuburbanPropagationLossModel::GetShadowingCorrelationDistance(
-    ChannelCondition::LosConditionValue cond) const
-{
-    NS_LOG_FUNCTION(this);
-    double correlationDistance;
-
-    // See 3GPP TR 38.811, Table 6.7.2-5a/b and Table 6.7.2-6a/b
-    if (cond == ChannelCondition::LosConditionValue::LOS)
-    {
-        correlationDistance = 37;
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS)
-    {
-        correlationDistance = 50;
-    }
-    else
-    {
-        NS_FATAL_ERROR("Unknown channel condition");
-    }
-
-    return correlationDistance;
 }
 
 // ------------------------------------------------------------------------- //
@@ -2171,142 +1946,26 @@ TypeId
 ThreeGppNTNRuralPropagationLossModel::GetTypeId()
 {
     static TypeId tid = TypeId("ns3::ThreeGppNTNRuralPropagationLossModel")
-                            .SetParent<ThreeGppPropagationLossModel>()
+                            .SetParent<ThreeGppNTNPropagationLossModel>()
                             .SetGroupName("Propagation")
                             .AddConstructor<ThreeGppNTNRuralPropagationLossModel>();
     return tid;
 }
 
 ThreeGppNTNRuralPropagationLossModel::ThreeGppNTNRuralPropagationLossModel()
-    : ThreeGppPropagationLossModel(),
-      m_SFCL_SuburbanRural(&SFCL_SuburbanRural)
+    : ThreeGppNTNPropagationLossModel()
 {
     NS_LOG_FUNCTION(this);
     m_channelConditionModel = CreateObject<ThreeGppNTNRuralChannelConditionModel>();
+    m_SFCL = &SFCL_SuburbanRural;
+    // See 3GPP TR 38.811, Table 6.7.2-7a/b and Table 6.7.2-8a/b
+    m_shadowingCorrDistanceLos = 37;
+    m_shadowingCorrDistanceNlos = 120;
 }
 
 ThreeGppNTNRuralPropagationLossModel::~ThreeGppNTNRuralPropagationLossModel()
 {
     NS_LOG_FUNCTION(this);
-}
-
-double
-ThreeGppNTNRuralPropagationLossModel::GetO2iDistance2dIn() const
-{
-    abort();
-}
-
-double
-ThreeGppNTNRuralPropagationLossModel::GetLossLos(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
-{
-    NS_LOG_FUNCTION(this);
-    NS_ASSERT_MSG(m_frequency <= 100.0e9,
-                  "NTN communications are valid for frequencies between 0.5 and 100 GHz.");
-
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
-    double loss = ComputeNtnPathloss(m_frequency, distance3D);
-
-    // Apply Atmospheric Absorption Loss 3GPP 38.811 6.6.4
-    loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
-
-    // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
-
-    NS_LOG_DEBUG("Loss " << loss);
-    return loss;
-}
-
-double
-ThreeGppNTNRuralPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
-{
-    NS_LOG_FUNCTION(this);
-    NS_ASSERT_MSG(m_frequency <= 100.0e9,
-                  "NTN communications are valid for frequencies between 0.5 and 100 GHz.");
-
-    double distance3D = CalculateDistance(a->GetPosition(), b->GetPosition());
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // compute the pathloss (see 3GPP TR 38.811, Table 6.6.2)
-    double loss = ComputeNtnPathloss(m_frequency, distance3D);
-
-    // Apply Clutter Loss
-    loss += ComputeClutterLoss(m_frequency, m_SFCL_SuburbanRural, elevAngleQuantized);
-
-    // Apply Atmospheric Absorption Loss 3GPP 38.811 6.6.4
-    loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
-
-    // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
-
-    NS_LOG_DEBUG("Loss " << loss);
-    return loss;
-}
-
-double
-ThreeGppNTNRuralPropagationLossModel::GetShadowingStd(
-    Ptr<MobilityModel> a,
-    Ptr<MobilityModel> b,
-    ChannelCondition::LosConditionValue cond) const
-{
-    NS_LOG_FUNCTION(this);
-    double shadowingStd;
-
-    std::string freqBand = (m_frequency < 13.0e9) ? "S" : "Ka";
-    auto [elevAngle, elevAngleQuantized] =
-        ThreeGppChannelConditionModel::GetQuantizedElevationAngle(a, b);
-
-    // Assign Shadowing Standard Deviation according to table 6.6.2-1
-    if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "S")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::S_LOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::LOS && freqBand == "Ka")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::Ka_LOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "S")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::S_NLOS_sigF];
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS && freqBand == "Ka")
-    {
-        shadowingStd = (*m_SFCL_SuburbanRural).at(elevAngleQuantized)[SFCL_params::Ka_NLOS_sigF];
-    }
-    else
-    {
-        NS_FATAL_ERROR("Unknown channel condition");
-    }
-
-    return shadowingStd;
-}
-
-double
-ThreeGppNTNRuralPropagationLossModel::GetShadowingCorrelationDistance(
-    ChannelCondition::LosConditionValue cond) const
-{
-    NS_LOG_FUNCTION(this);
-    double correlationDistance;
-
-    // See 3GPP TR 38.811, Table 6.7.2-7a/b and Table 6.7.2-8a/b
-    if (cond == ChannelCondition::LosConditionValue::LOS)
-    {
-        correlationDistance = 37;
-    }
-    else if (cond == ChannelCondition::LosConditionValue::NLOS)
-    {
-        correlationDistance = 120;
-    }
-    else
-    {
-        NS_FATAL_ERROR("Unknown channel condition");
-    }
-
-    return correlationDistance;
 }
 
 } // namespace ns3
