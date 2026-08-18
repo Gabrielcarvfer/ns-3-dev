@@ -9,6 +9,7 @@ build_lib(
   LIBNAME sixlowpan
   SOURCE_FILES
     helper/sixlowpan-helper.cc
+    model/sixlowpan-ghc.cc
     model/sixlowpan-header.cc
     model/sixlowpan-mesh-under-routing.cc
     model/sixlowpan-nd-context.cc
@@ -20,6 +21,7 @@ build_lib(
     model/sixlowpan-nd-binding-table.cc
   HEADER_FILES
     helper/sixlowpan-helper.h
+    model/sixlowpan-ghc.h
     model/sixlowpan-header.h
     model/sixlowpan-mesh-under-routing.h
     model/sixlowpan-nd-context.h
@@ -34,6 +36,7 @@ build_lib(
     ${example_as_test_suite}
     test/mock-net-device.cc
     test/sixlowpan-compression-threshold-test.cc
+    test/sixlowpan-ghc-test.cc
     test/sixlowpan-fragmentation-test.cc
     test/sixlowpan-hc1-test.cc
     test/sixlowpan-iphc-stateful-test.cc

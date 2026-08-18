@@ -93,6 +93,11 @@ class SixLowPanDispatch
         LOWPAN_NHC_N = 0xEF,
         LOWPAN_UDPNHC = 0xF0,
         LOWPAN_UDPNHC_N = 0xF7,
+        LOWPAN_GHC_EXT = 0xB0,
+        LOWPAN_GHC_EXT_N = 0xBF,
+        LOWPAN_GHC_UDP = 0xD0,
+        LOWPAN_GHC_UDP_N = 0xD7,
+        LOWPAN_GHC_ICMPV6 = 0xDF,
         LOWPAN_NHCUNSUPPORTED = 0xFF
     };
 

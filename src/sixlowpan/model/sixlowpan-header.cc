@@ -68,7 +68,19 @@ SixLowPanDispatch::GetDispatchType(uint8_t dispatch)
 SixLowPanDispatch::NhcDispatch_e
 SixLowPanDispatch::GetNhcDispatchType(uint8_t dispatch)
 {
-    if ((dispatch >= LOWPAN_NHC) && (dispatch <= LOWPAN_NHC_N))
+    if ((dispatch >= LOWPAN_GHC_EXT) && (dispatch <= LOWPAN_GHC_EXT_N))
+    {
+        return LOWPAN_GHC_EXT;
+    }
+    else if (dispatch == LOWPAN_GHC_ICMPV6)
+    {
+        return LOWPAN_GHC_ICMPV6;
+    }
+    else if ((dispatch >= LOWPAN_GHC_UDP) && (dispatch <= LOWPAN_GHC_UDP_N))
+    {
+        return LOWPAN_GHC_UDP;
+    }
+    else if ((dispatch >= LOWPAN_NHC) && (dispatch <= LOWPAN_NHC_N))
     {
         return LOWPAN_NHC;
     }

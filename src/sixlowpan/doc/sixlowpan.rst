@@ -59,6 +59,22 @@ and vice-versa. The drop is logged in the drop trace as ``DROP_DISALLOWED_COMPRE
 When using the IPHC stateful compression, nodes need to be aware of the context. To manually set the context,
 it is possible to use the  ``SixLowPanHelper::AddContext`` function. Please be aware that installing different contexts for different nodes will lead to decompression failures.
 
+Generic Header Compression (GHC)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The module implements Generic Header Compression (GHC), defined in :rfc:`7400`, which
+compresses payloads and headers for which no dedicated :rfc:`6282` NHC format exists:
+ICMPv6 messages, UDP payloads, and IPv6 extension headers.
+
+GHC is selected through the ``CompressionType`` attribute of ``SixLowPanNetDevice``
+(value ``GHC``). The default is ``IPHC``, which preserves interoperability with non-GHC
+peers. ``GHC`` extends ``IPHC`` rather than replacing it: the compressor falls back to
+standard :rfc:`6282` NHC when GHC does not produce a smaller result, and the decompressor
+accepts both :rfc:`6282` and GHC dispatch bytes.
+
+The 6LoWPAN Capability Indication Option (6CIO, :rfc:`7400` Section 3.3) is available
+through the ``SixLowPan6Cio`` option class to signal GHC support to peers.
+
 Routing Handling
 ----------------
 
@@ -293,7 +309,7 @@ Attributes
 
 The 6lowPAN provide some attributes:
 
-* ``CompressionType``: (enum, default ``IPHC``), selects the header compression scheme: ``HC1`` (RFC4944) or ``IPHC`` (RFC6282).
+* ``CompressionType``: (enum, default ``IPHC``), selects the header compression scheme: ``HC1`` (RFC4944), ``IPHC`` (RFC6282), or ``GHC`` (RFC7400).
 * ``OmitUdpChecksum``: (boolean, default true), Omit the UDP checksum in IPHC compression.
 * ``FragmentReassemblyListSize``: (integer, default 0), indicating the number of packets that can be reassembled at the same time. If the limit is reached, the oldest packet is discarded. Zero means infinite.
 * ``FragmentExpirationTimeout``: (Time, default 60 seconds), being the timeout to wait for further fragments before discarding a partial packet.
@@ -400,3 +416,5 @@ References
 [`2 <https://datatracker.ietf.org/doc/html/rfc8505>`_] RFC 8505: Registration Extensions for 6LoWPAN Neighbor Discovery, E. Thubert, November 2018.
 
 [`3 <https://datatracker.ietf.org/doc/html/rfc6775>`_] RFC 6775: Neighbor Discovery Optimization for IPv6 over Low-Power Wireless Personal Area Networks (6LoWPANs), Z. Shelby, S. Chakrabarti, E. Nordmark, C. Bormann, November 2012.
+
+[`4 <https://datatracker.ietf.org/doc/html/rfc7400>`_] RFC 7400: 6LoWPAN-GHC: Generic Header Compression for IPv6 over Low-Power Wireless Personal Area Networks (6LoWPANs), C. Bormann, November 2014.
