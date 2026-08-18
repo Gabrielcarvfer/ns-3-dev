@@ -205,24 +205,38 @@ ComputeAtmosphericAbsorptionLoss(double freq, double elevAngle)
  * @brief Computes the ionospheric plus tropospheric scintillation loss using the formulas
  * described in 3GPP TR 38.811, Sec 6.6.6.1-4 and 6.6.6.2, respectively.
  *
+ * The ionospheric term applies below 6 GHz and the tropospheric term at 6 GHz
+ * and above; either can be excluded via its enable flag.
+ *
  * @param freq the operating frequency
  * @param elevAngleQuantized the quantized elevation angle between the communicating nodes
+ * @param ionoScintLossEnabled whether to apply the ionospheric scintillation loss
+ * @param tropoScintLossEnabled whether to apply the tropospheric scintillation loss
  *
  * @return the ionospheric plus tropospheric scintillation loss for NTN scenarios
  */
 double
-ComputeIonosphericPlusTroposphericScintillationLoss(double freq, double elevAngleQuantized)
+ComputeIonosphericPlusTroposphericScintillationLoss(double freq,
+                                                    double elevAngleQuantized,
+                                                    bool ionoScintLossEnabled,
+                                                    bool tropoScintLossEnabled)
 {
     double loss = 0;
     if (freq < 6e9)
     {
         // Ionospheric
-        loss = 6.22 / (pow(freq / 1e9, 1.5));
+        if (ionoScintLossEnabled)
+        {
+            loss = 6.22 / (pow(freq / 1e9, 1.5));
+        }
     }
     else
     {
         // Tropospheric
-        loss = troposphericScintillationLoss.at(elevAngleQuantized);
+        if (tropoScintLossEnabled)
+        {
+            loss = troposphericScintillationLoss.at(elevAngleQuantized);
+        }
     }
     return loss;
 }
@@ -1733,9 +1747,24 @@ NS_OBJECT_ENSURE_REGISTERED(ThreeGppNTNPropagationLossModel);
 TypeId
 ThreeGppNTNPropagationLossModel::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::ThreeGppNTNPropagationLossModel")
-                            .SetParent<ThreeGppPropagationLossModel>()
-                            .SetGroupName("Propagation");
+    static TypeId tid =
+        TypeId("ns3::ThreeGppNTNPropagationLossModel")
+            .SetParent<ThreeGppPropagationLossModel>()
+            .SetGroupName("Propagation")
+            .AddAttribute(
+                "IonosphericScintillationLossEnabled",
+                "Whether to apply the ionospheric scintillation loss "
+                "(3GPP TR 38.811, Sec 6.6.6.1-4; applied below 6 GHz)",
+                BooleanValue(true),
+                MakeBooleanAccessor(&ThreeGppNTNPropagationLossModel::m_ionoScintLossEnabled),
+                MakeBooleanChecker())
+            .AddAttribute(
+                "TroposphericScintillationLossEnabled",
+                "Whether to apply the tropospheric scintillation loss "
+                "(3GPP TR 38.811, Sec 6.6.6.2; applied at 6 GHz and above)",
+                BooleanValue(true),
+                MakeBooleanAccessor(&ThreeGppNTNPropagationLossModel::m_tropoScintLossEnabled),
+                MakeBooleanChecker());
     return tid;
 }
 
@@ -1771,7 +1800,10 @@ ThreeGppNTNPropagationLossModel::GetLossLos(Ptr<MobilityModel> a, Ptr<MobilityMo
     loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
 
     // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
+    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency,
+                                                                elevAngleQuantized,
+                                                                m_ionoScintLossEnabled,
+                                                                m_tropoScintLossEnabled);
 
     NS_LOG_DEBUG("Loss " << loss);
     return loss;
@@ -1806,7 +1838,10 @@ ThreeGppNTNPropagationLossModel::GetLossNlos(Ptr<MobilityModel> a, Ptr<MobilityM
     loss += ComputeAtmosphericAbsorptionLoss(m_frequency, elevAngle);
 
     // Apply Ionospheric plus Tropospheric Scintillation Loss
-    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency, elevAngleQuantized);
+    loss += ComputeIonosphericPlusTroposphericScintillationLoss(m_frequency,
+                                                                elevAngleQuantized,
+                                                                m_ionoScintLossEnabled,
+                                                                m_tropoScintLossEnabled);
 
     NS_LOG_DEBUG("Loss " << loss);
     return loss;

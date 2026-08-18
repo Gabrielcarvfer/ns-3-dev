@@ -805,6 +805,8 @@ class ThreeGppNTNPropagationLossModel : public ThreeGppPropagationLossModel
     const std::map<int, std::vector<float>>* m_SFCL{nullptr};
     double m_shadowingCorrDistanceLos{0};  //!< shadowing correlation distance for LOS, in meters
     double m_shadowingCorrDistanceNlos{0}; //!< shadowing correlation distance for NLOS, in meters
+    bool m_ionoScintLossEnabled{true};  //!< whether the ionospheric scintillation loss is applied
+    bool m_tropoScintLossEnabled{true}; //!< whether the tropospheric scintillation loss is applied
 
   private:
     // Inherited
