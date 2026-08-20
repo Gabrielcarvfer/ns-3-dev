@@ -110,7 +110,7 @@ class WallClockSynchronizer : public Synchronizer
      * Signal().  In either case, we are done waiting.  If the timeout happened,
      * we return @c true; if a Signal happened we return @c false.
      *
-     * @param [in] ns The target normalized real time we should wait for.
+     * @param [in] ns The target normalized delay we should wait for.
      * @returns @c true if we reached the target time,
      *          @c false if we returned because the condition was set.
      */

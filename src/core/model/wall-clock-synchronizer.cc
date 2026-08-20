@@ -215,7 +215,7 @@ WallClockSynchronizer::DoSynchronize(uint64_t nsCurrent, uint64_t nsDelay)
         // interrupted by a Signal.  In this case, we need to return and let the
         // simulator re-evaluate what to do.
         //
-        if (SleepWait((numberJiffies - 3) * m_jiffy))
+        if (!SleepWait((numberJiffies - 3) * m_jiffy))
         {
             NS_LOG_INFO("SleepWait interrupted");
             return false;
@@ -323,12 +323,12 @@ WallClockSynchronizer::SleepWait(uint64_t ns)
     NS_LOG_FUNCTION(this << ns);
 
     std::unique_lock<std::mutex> lock(m_mutex);
-    bool finishedWaiting =
+    bool interrupted =
         m_conditionVariable.wait_for(lock,
                                      std::chrono::nanoseconds(ns),             // Timeout
                                      [this]() { return m_condition.load(); }); // Wait condition
 
-    return finishedWaiting;
+    return !interrupted;
 }
 
 uint64_t
