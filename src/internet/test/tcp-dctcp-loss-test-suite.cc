@@ -133,7 +133,7 @@ class TcpDctcpLossTestSuite : public TestSuite
         AddTestCase(new TcpDctcpLossSsThreshTest(20 * 1446,
                                                  1446,
                                                  20 * 1446,
-                                                 "DCTCP backs off to ~BytesInFlight/2 on "
+                                                 "DCTCP backs off to ~BytesInFlight * 0.5 on "
                                                  "packet loss with alpha=0"),
                     TestCase::Duration::QUICK);
     }
