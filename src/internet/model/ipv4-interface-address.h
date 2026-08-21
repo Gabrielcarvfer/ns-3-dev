@@ -133,23 +133,6 @@ class Ipv4InterfaceAddress
      */
     bool IsInSameSubnet(const Ipv4Address b) const;
 
-    /**
-     * @brief Check if the address is a secondary address
-     *
-     * Secondary address is used for multihoming
-     * @returns true if the address is secondary
-     */
-    bool IsSecondary() const;
-
-    /**
-     * @brief Make the address secondary (used for multihoming)
-     */
-    void SetSecondary();
-    /**
-     * @brief Make the address primary
-     */
-    void SetPrimary();
-
   private:
     Ipv4Address m_local; //!< Interface address
     // Note:  m_peer may be added in future when necessary
@@ -157,7 +140,6 @@ class Ipv4InterfaceAddress
     uint8_t m_prefixLength{24}; //!< Network mask length
 
     InterfaceAddressScope_e m_scope; //!< Address scope
-    bool m_secondary;                //!< For use in multihoming
 
     /**
      * @brief Equal to operator.
@@ -182,7 +164,7 @@ inline bool
 operator==(const Ipv4InterfaceAddress& a, const Ipv4InterfaceAddress& b)
 {
     return (a.m_local == b.m_local && a.m_prefixLength == b.m_prefixLength &&
-            a.m_scope == b.m_scope && a.m_secondary == b.m_secondary);
+            a.m_scope == b.m_scope);
 }
 
 } // namespace ns3

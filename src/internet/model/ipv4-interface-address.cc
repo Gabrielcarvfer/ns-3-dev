@@ -17,15 +17,13 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("Ipv4InterfaceAddress");
 
 Ipv4InterfaceAddress::Ipv4InterfaceAddress()
-    : m_scope(GLOBAL),
-      m_secondary(false)
+    : m_scope(GLOBAL)
 {
     NS_LOG_FUNCTION(this);
 }
 
 Ipv4InterfaceAddress::Ipv4InterfaceAddress(Ipv4Address local, Ipv4Mask mask)
-    : m_scope(GLOBAL),
-      m_secondary(false)
+    : m_scope(GLOBAL)
 {
     NS_LOG_FUNCTION(this << local << mask);
     m_local = local;
@@ -39,8 +37,7 @@ Ipv4InterfaceAddress::Ipv4InterfaceAddress(Ipv4Address local, Ipv4Mask mask)
 Ipv4InterfaceAddress::Ipv4InterfaceAddress(const Ipv4InterfaceAddress& o)
     : m_local(o.m_local),
       m_prefixLength(o.m_prefixLength),
-      m_scope(o.m_scope),
-      m_secondary(o.m_secondary)
+      m_scope(o.m_scope)
 {
     NS_LOG_FUNCTION(this << &o);
 }
@@ -130,33 +127,11 @@ Ipv4InterfaceAddress::IsInSameSubnet(const Ipv4Address b) const
     return (aAddr == bAddr);
 }
 
-bool
-Ipv4InterfaceAddress::IsSecondary() const
-{
-    NS_LOG_FUNCTION(this);
-    return m_secondary;
-}
-
-void
-Ipv4InterfaceAddress::SetSecondary()
-{
-    NS_LOG_FUNCTION(this);
-    m_secondary = true;
-}
-
-void
-Ipv4InterfaceAddress::SetPrimary()
-{
-    NS_LOG_FUNCTION(this);
-    m_secondary = false;
-}
-
 std::ostream&
 operator<<(std::ostream& os, const Ipv4InterfaceAddress& addr)
 {
     os << "m_local=" << addr.GetLocal() << "; m_mask=" << addr.GetMask()
-       << "; m_broadcast=" << addr.GetBroadcast() << "; m_scope=" << addr.GetScope()
-       << "; m_secondary=" << addr.IsSecondary();
+       << "; m_broadcast=" << addr.GetBroadcast() << "; m_scope=" << addr.GetScope();
     return os;
 }
 

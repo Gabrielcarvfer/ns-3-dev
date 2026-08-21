@@ -37,6 +37,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (network) `Buffer::Serialize`, `ByteTagList::Serialize`, `NixVector::Serialize`, `PacketMetadata::Serialize`, `PacketTagList::Serialize` and `Packet::Serialize` functions return now the number of serialized bytes instead of just `1` for a successful serialization.
 * (network) `Buffer::Deserialize`, `ByteTagList::Deserialize`, `PacketMetadata::Deserialize`, `PacketTagList::Deserialize` and `Packet::Deserialize` functions return now the number of deserialized bytes instead of just `1` for a successful deserialization.
 * (sixlowpan) The `SixLowPanNetDevice` attributes `MeshUnderJitter` and `MeshCacheLength` moved to the mesh-under forwarding policy: use `SixLowPanSimpleFlooding::MeshUnderJitter` and `SixLowPanMeshUnderRouting::MeshCacheLength`, reachable through the device's `MeshUnderRouting` attribute (e.g., `MeshUnderRouting/MeshUnderJitter` in a `Config` path). The old device attributes are deprecated and forward to the current policy.
+* (internet) the `Ipv4InterfaceAddress` functions related to the setup of a secondary address have been removed. This includes `SetPrimary`, `SetSecondary`, and `IsSecondary`. If users have a need for this feature in the future, please document the need by opening a Work Item on ns-3-dev tracker.
 
 ### Changes to build system
 

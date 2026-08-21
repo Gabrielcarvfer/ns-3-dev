@@ -1228,10 +1228,7 @@ Ipv4L3Protocol::SourceAddressSelection(uint32_t interfaceIdx, Ipv4Address dest)
         Ipv4InterfaceAddress test = GetAddress(interfaceIdx, i);
         if (test.GetLocal().CombineMask(test.GetMask()) == dest.CombineMask(test.GetMask()))
         {
-            if (!test.IsSecondary())
-            {
-                return test.GetLocal();
-            }
+            return test.GetLocal();
         }
     }
     return candidate;
@@ -1254,10 +1251,6 @@ Ipv4L3Protocol::SelectSourceAddress(Ptr<const NetDevice> device,
         for (uint32_t j = 0; j < GetNAddresses(i); j++)
         {
             iaddr = GetAddress(i, j);
-            if (iaddr.IsSecondary())
-            {
-                continue;
-            }
             if (iaddr.GetScope() > scope)
             {
                 continue;
@@ -1284,10 +1277,6 @@ Ipv4L3Protocol::SelectSourceAddress(Ptr<const NetDevice> device,
         for (uint32_t j = 0; j < GetNAddresses(i); j++)
         {
             iaddr = GetAddress(i, j);
-            if (iaddr.IsSecondary())
-            {
-                continue;
-            }
             if (iaddr.GetScope() != Ipv4InterfaceAddress::LINK && iaddr.GetScope() <= scope)
             {
                 return iaddr.GetLocal();
