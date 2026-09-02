@@ -34,6 +34,10 @@ versions 17 to 21 are still compatible.
 Python API requires [Cppyy](https://cppyy.readthedocs.io/en/latest/installation.html) and has only
 been tested on Linux. As of this release, the latest known version to work with ns-3 is cppyy==3.5.0.
 
+This release raised the minimum Python version for the Python bindings from 3.8 to 3.10
+and the required cppyy version from 3.1.2 to 3.5.0. Pip wheels are now built for
+Python 3.10 to 3.14.
+
 ### New user-visible features
 
 - (network) IANA protocol and link types are now centralized in network module headers.

@@ -41,6 +41,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### Changes to build system
 
+* (bindings) The minimum Python version for the Python bindings was raised from 3.8 to 3.10, and the required cppyy version from 3.1.2 to 3.5.0. Pip wheels are built for Python 3.10 to 3.14.
+
 ### Changed behavior
 
 * (sixlowpan) Mesh-under forwarding on the receive path is no longer unconditional. A node relays received mesh-under packets only when both `UseMeshUnder` and `ForwardMesh` are enabled; a node with `UseMeshUnder` alone decodes and delivers mesh packets without relaying them; a node without `UseMeshUnder` receiving a mesh-under packet drops it with a warning (`DROP_MESH_NOT_ENABLED` in the drop trace), as this is a network misconfiguration. Previously, every node relayed mesh-under packets regardless of its configuration.
