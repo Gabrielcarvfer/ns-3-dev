@@ -663,8 +663,7 @@ function(write_module_header name header_files)
   # Write each header listed to the contents variable
   foreach(header ${header_files})
     get_filename_component(head ${header} NAME)
-    list(APPEND contents "    #include <ns3/${head}>\n")
-    # include \"ns3/${head}\"")
+    list(APPEND contents "    #include \"ns3/${head}\"\n")
   endforeach()
 
   # Common module footer
