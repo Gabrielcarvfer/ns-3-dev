@@ -316,6 +316,83 @@ ThreeGppNTNPropagationLossModelGroundToGroundTestCase::DoRun()
 /**
  * @ingroup propagation-tests
  *
+ * Test case checking that the NTN path loss models return a finite loss for
+ * two terminals at the same position, for which the elevation angle is
+ * undefined (NaN). The NaN previously propagated into the quantized
+ * elevation angle used as a table key by the channel condition and path
+ * loss models, aborting the simulation. Each model is paired with the
+ * channel condition model of its scenario so that the LOS probability
+ * lookup is exercised as well.
+ */
+class ThreeGppNTNPropagationLossModelCoincidentTestCase : public TestCase
+{
+  public:
+    ThreeGppNTNPropagationLossModelCoincidentTestCase();
+
+  private:
+    void DoRun() override;
+};
+
+ThreeGppNTNPropagationLossModelCoincidentTestCase::
+    ThreeGppNTNPropagationLossModelCoincidentTestCase()
+    : TestCase("NTN path loss models must return a finite loss for coincident terminals")
+{
+}
+
+void
+ThreeGppNTNPropagationLossModelCoincidentTestCase::DoRun()
+{
+    std::vector<std::pair<Ptr<ThreeGppPropagationLossModel>, Ptr<ChannelConditionModel>>> models{
+        {CreateObject<ThreeGppNTNDenseUrbanPropagationLossModel>(),
+         CreateObject<ThreeGppNTNDenseUrbanChannelConditionModel>()},
+        {CreateObject<ThreeGppNTNUrbanPropagationLossModel>(),
+         CreateObject<ThreeGppNTNUrbanChannelConditionModel>()},
+        {CreateObject<ThreeGppNTNSuburbanPropagationLossModel>(),
+         CreateObject<ThreeGppNTNSuburbanChannelConditionModel>()},
+        {CreateObject<ThreeGppNTNRuralPropagationLossModel>(),
+         CreateObject<ThreeGppNTNRuralChannelConditionModel>()}};
+
+    const double txPowDbm = 30.0;
+    const std::vector<double> frequencies{2.0e9, 20.0e9};
+
+    for (auto& [lossModel, condModel] : models)
+    {
+        lossModel->SetAttribute("ShadowingEnabled", BooleanValue(false));
+        lossModel->SetChannelConditionModel(condModel);
+
+        for (double frequency : frequencies)
+        {
+            lossModel->SetAttribute("Frequency", DoubleValue(frequency));
+
+            NodeContainer nodes;
+            nodes.Create(2);
+            auto a = CreateObject<GeocentricConstantPositionMobilityModel>();
+            nodes.Get(0)->AggregateObject(a);
+            auto b = CreateObject<GeocentricConstantPositionMobilityModel>();
+            nodes.Get(1)->AggregateObject(b);
+            a->SetGeographicPosition(Vector(0.0, 0.0, 1.5));
+            b->SetGeographicPosition(Vector(0.0, 0.0, 1.5));
+
+            double rxPowDbm = lossModel->CalcRxPower(txPowDbm, a, b);
+            NS_TEST_EXPECT_MSG_EQ(std::isfinite(rxPowDbm),
+                                  true,
+                                  "Coincident link loss must be finite (model "
+                                      << lossModel->GetInstanceTypeId().GetName() << ", frequency "
+                                      << frequency / 1e9 << " GHz)");
+            NS_TEST_EXPECT_MSG_LT(rxPowDbm,
+                                  txPowDbm,
+                                  "Coincident link must not amplify (model "
+                                      << lossModel->GetInstanceTypeId().GetName() << ", frequency "
+                                      << frequency / 1e9 << " GHz)");
+        }
+    }
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-tests
+ *
  * @brief 3GPP NTN Propagation models TestSuite
  *
  * This TestSuite tests the following models:
@@ -335,6 +412,7 @@ ThreeGppNTNPropagationLossModelsTestSuite::ThreeGppNTNPropagationLossModelsTestS
 {
     AddTestCase(new ThreeGppNTNPropagationLossModelTestCase(), Duration::QUICK);
     AddTestCase(new ThreeGppNTNPropagationLossModelGroundToGroundTestCase(), Duration::QUICK);
+    AddTestCase(new ThreeGppNTNPropagationLossModelCoincidentTestCase(), Duration::QUICK);
 }
 
 /// Static variable for test initialization

@@ -586,6 +586,13 @@ ThreeGppChannelConditionModel::GetQuantizedElevationAngle(Ptr<const MobilityMode
                   "Mobility Models need to be of type Geocentric for NTN scenarios");
 
     double elevAngle = aNTNMob->GetElevationAngle(bNTNMob);
+    // Coincident positions yield an undefined (NaN) elevation angle; treat it as
+    // below the table domain so that the raw NaN reaches the callers, which
+    // handle it as out of the model domain
+    if (!std::isfinite(elevAngle))
+    {
+        return std::make_tuple(elevAngle, 10);
+    }
     // Round the elevation angle into a two-digits integer between 10 and 90, as specified in
     // Sec. 6.6.1, 3GPP TR 38.811 v15.4.0
     int elevAngleQuantized = (elevAngle < 10) ? 10 : round(elevAngle / 10) * 10;
