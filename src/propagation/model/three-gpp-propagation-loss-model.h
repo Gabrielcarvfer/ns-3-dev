@@ -774,6 +774,13 @@ class ThreeGppIndoorOfficePropagationLossModel : public ThreeGppPropagationLossM
  * The scenario subclasses provide the scenario-specific channel condition
  * model, shadow fading and clutter loss table, and shadowing correlation
  * distances.
+ *
+ * The model is defined for satellite-to-ground links with elevation angles
+ * between 10 and 90 degrees. For links outside this domain, i.e., with a
+ * non-positive elevation angle (such as between two ground terminals, or
+ * with the satellite below the horizon) or an undefined elevation angle
+ * (coincident positions), the elevation-dependent terms are not evaluated
+ * and a fixed loss of 500 dB is returned instead.
  */
 class ThreeGppNTNPropagationLossModel : public ThreeGppPropagationLossModel
 {
@@ -812,7 +819,7 @@ class ThreeGppNTNPropagationLossModel : public ThreeGppPropagationLossModel
 /**
  * @ingroup propagation
  *
- * @brief Implements the pathloss model defined in 3GPP TR 38.811, Table ????
+ * @brief Implements the pathloss model defined in 3GPP TR 38.811, Sec. 6.6.2,
  *        for the NTN Dense Urban scenario.
  */
 class ThreeGppNTNDenseUrbanPropagationLossModel : public ThreeGppNTNPropagationLossModel
@@ -855,7 +862,7 @@ class ThreeGppNTNDenseUrbanPropagationLossModel : public ThreeGppNTNPropagationL
 /**
  * @ingroup propagation
  *
- * @brief Implements the pathloss model defined in 3GPP TR 38.811, Table ????
+ * @brief Implements the pathloss model defined in 3GPP TR 38.811, Sec. 6.6.2,
  *        for the NTN Urban scenario.
  */
 class ThreeGppNTNUrbanPropagationLossModel : public ThreeGppNTNPropagationLossModel
@@ -897,7 +904,7 @@ class ThreeGppNTNUrbanPropagationLossModel : public ThreeGppNTNPropagationLossMo
 /**
  * @ingroup propagation
  *
- * @brief Implements the pathloss model defined in 3GPP TR 38.811, Table ????
+ * @brief Implements the pathloss model defined in 3GPP TR 38.811, Sec. 6.6.2,
  *        for the NTN Suburban scenario.
  */
 class ThreeGppNTNSuburbanPropagationLossModel : public ThreeGppNTNPropagationLossModel
@@ -940,7 +947,7 @@ class ThreeGppNTNSuburbanPropagationLossModel : public ThreeGppNTNPropagationLos
 /**
  * @ingroup propagation
  *
- * @brief Implements the pathloss model defined in 3GPP TR 38.811, Table ????
+ * @brief Implements the pathloss model defined in 3GPP TR 38.811, Sec. 6.6.2,
  *        for the NTN Rural scenario.
  */
 class ThreeGppNTNRuralPropagationLossModel : public ThreeGppNTNPropagationLossModel
