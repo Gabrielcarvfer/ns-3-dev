@@ -197,6 +197,11 @@ namespace
 class LogLineBuf : public std::streambuf
 {
   public:
+    LogLineBuf()
+    {
+        m_line.reserve(1000);
+    }
+
     /** @return The log line being assembled. */
     std::string& Line()
     {
