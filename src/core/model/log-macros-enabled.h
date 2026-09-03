@@ -15,50 +15,6 @@
  * NS_LOG and related logging macro definitions.
  */
 
-// These two implementation macros
-//   NS_LOG_APPEND_TIME_PREFIX_IMPL
-//   NS_LOG_APPEND_NODE_PREFIX_IMPL
-// need to be defined in all configurations (debug, release, optimized)
-// for use by NS_FATAL_...
-
-/**
- * @ingroup logging
- * Implementation details for NS_LOG_APPEND_TIME_PREFIX.
- * @internal
- * Logging implementation macro; should not be called directly.
- * We define this separately so we can reuse the definition
- * in NS_FATAL.
- */
-#define NS_LOG_APPEND_TIME_PREFIX_IMPL                                                             \
-    do                                                                                             \
-    {                                                                                              \
-        ns3::TimePrinter printer = ns3::LogGetTimePrinter();                                       \
-        if (printer != 0)                                                                          \
-        {                                                                                          \
-            (*printer)(std::clog);                                                                 \
-            std::clog << " ";                                                                      \
-        }                                                                                          \
-    } while (false)
-
-/**
- * @ingroup logging
- * Implementation details for NS_LOG_APPEND_NODE_PREFIX.
- * @internal
- * Logging implementation macro; should not be called directly.
- * We define this separately so we can reuse the definition
- * in NS_FATAL.
- */
-#define NS_LOG_APPEND_NODE_PREFIX_IMPL                                                             \
-    do                                                                                             \
-    {                                                                                              \
-        ns3::NodePrinter printer = ns3::LogGetNodePrinter();                                       \
-        if (printer != 0)                                                                          \
-        {                                                                                          \
-            (*printer)(std::clog);                                                                 \
-            std::clog << " ";                                                                      \
-        }                                                                                          \
-    } while (false)
-
 #ifdef NS3_LOG_ENABLE
 
 /**
@@ -68,6 +24,8 @@
  * Logging implementation macro; should not be called directly.
  * Requires the `ns3LogStream` stream declared by the NS_LOG_* macros
  * (see ns3::LogLineBegin()).
+ * NS_FATAL_ERROR_IMPL_NO_MSG (fatal-error.h) emits the same prefix
+ * directly to std::clog; keep the two formats in sync.
  */
 #define NS_LOG_APPEND_TIME_PREFIX                                                                  \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_TIME))                                                     \
@@ -75,8 +33,8 @@
         ns3::TimePrinter printer = ns3::LogGetTimePrinter();                                       \
         if (printer != 0)                                                                          \
         {                                                                                          \
-            (*printer)(ns3LogStream);                                                             \
-            ns3LogStream << " ";                                                                  \
+            (*printer)(ns3LogStream);                                                              \
+            ns3LogStream << " ";                                                                   \
         }                                                                                          \
     }
 
@@ -87,6 +45,8 @@
  * Logging implementation macro; should not be called directly.
  * Requires the `ns3LogStream` stream declared by the NS_LOG_* macros
  * (see ns3::LogLineBegin()).
+ * NS_FATAL_ERROR_IMPL_NO_MSG (fatal-error.h) emits the same prefix
+ * directly to std::clog; keep the two formats in sync.
  */
 #define NS_LOG_APPEND_NODE_PREFIX                                                                  \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_NODE))                                                     \
@@ -94,8 +54,8 @@
         ns3::NodePrinter printer = ns3::LogGetNodePrinter();                                       \
         if (printer != 0)                                                                          \
         {                                                                                          \
-            (*printer)(ns3LogStream);                                                             \
-            ns3LogStream << " ";                                                                  \
+            (*printer)(ns3LogStream);                                                              \
+            ns3LogStream << " ";                                                                   \
         }                                                                                          \
     }
 
@@ -110,7 +70,7 @@
 #define NS_LOG_APPEND_FUNC_PREFIX                                                                  \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_FUNC))                                                     \
     {                                                                                              \
-        ns3LogStream << g_log.Name() << ":" << __FUNCTION__ << "(): ";                            \
+        ns3LogStream << g_log.Name() << ":" << __FUNCTION__ << "(): ";                             \
     }
 
 /**
@@ -124,7 +84,7 @@
 #define NS_LOG_APPEND_LEVEL_PREFIX(level)                                                          \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_LEVEL))                                                    \
     {                                                                                              \
-        ns3LogStream << "[" << g_log.GetLevelLabel(level) << "] ";                                \
+        ns3LogStream << "[" << g_log.GetLevelLabel(level) << "] ";                                 \
     }
 
 #ifndef NS_LOG_APPEND_CONTEXT
@@ -200,16 +160,16 @@
     {                                                                                              \
         if (g_log.IsEnabled(level))                                                                \
         {                                                                                          \
-            std::ostream& ns3LogStream = ns3::LogLineBegin();                                     \
+            std::ostream& ns3LogStream = ns3::LogLineBegin();                                      \
             NS_LOG_APPEND_TIME_PREFIX;                                                             \
             NS_LOG_APPEND_NODE_PREFIX;                                                             \
             NS_LOG_APPEND_CONTEXT;                                                                 \
             NS_LOG_APPEND_FUNC_PREFIX;                                                             \
             NS_LOG_APPEND_LEVEL_PREFIX(level);                                                     \
-            auto flags = ns3LogStream.setf(std::ios_base::boolalpha);                             \
-            ns3LogStream << msg;                                                                  \
-            ns3LogStream.flags(flags);                                                            \
-            ns3::LogLineCommit(ns3LogStream);                                                     \
+            auto flags = ns3LogStream.setf(std::ios_base::boolalpha);                              \
+            ns3LogStream << msg;                                                                   \
+            ns3LogStream.flags(flags);                                                             \
+            ns3::LogLineCommit(ns3LogStream);                                                      \
         }                                                                                          \
     } while (false)
 
@@ -227,12 +187,12 @@
     {                                                                                              \
         if (g_log.IsEnabled(ns3::LOG_FUNCTION))                                                    \
         {                                                                                          \
-            std::ostream& ns3LogStream = ns3::LogLineBegin();                                     \
+            std::ostream& ns3LogStream = ns3::LogLineBegin();                                      \
             NS_LOG_APPEND_TIME_PREFIX;                                                             \
             NS_LOG_APPEND_NODE_PREFIX;                                                             \
             NS_LOG_APPEND_CONTEXT;                                                                 \
-            ns3LogStream << g_log.Name() << ":" << __FUNCTION__ << "()";                          \
-            ns3::LogLineCommit(ns3LogStream);                                                     \
+            ns3LogStream << g_log.Name() << ":" << __FUNCTION__ << "()";                           \
+            ns3::LogLineCommit(ns3LogStream);                                                      \
         }                                                                                          \
     } while (false)
 
@@ -265,16 +225,16 @@
     {                                                                                              \
         if (g_log.IsEnabled(ns3::LOG_FUNCTION))                                                    \
         {                                                                                          \
-            std::ostream& ns3LogStream = ns3::LogLineBegin();                                     \
+            std::ostream& ns3LogStream = ns3::LogLineBegin();                                      \
             NS_LOG_APPEND_TIME_PREFIX;                                                             \
             NS_LOG_APPEND_NODE_PREFIX;                                                             \
             NS_LOG_APPEND_CONTEXT;                                                                 \
-            ns3LogStream << g_log.Name() << ":" << __FUNCTION__ << "(";                           \
-            auto flags = ns3LogStream.setf(std::ios_base::boolalpha);                             \
-            ns3::ParameterLogger(ns3LogStream) << parameters;                                     \
-            ns3LogStream.flags(flags);                                                            \
-            ns3LogStream << ")";                                                                  \
-            ns3::LogLineCommit(ns3LogStream);                                                     \
+            ns3LogStream << g_log.Name() << ":" << __FUNCTION__ << "(";                            \
+            auto flags = ns3LogStream.setf(std::ios_base::boolalpha);                              \
+            ns3::ParameterLogger(ns3LogStream) << parameters;                                      \
+            ns3LogStream.flags(flags);                                                             \
+            ns3LogStream << ")";                                                                   \
+            ns3::LogLineCommit(ns3LogStream);                                                      \
         }                                                                                          \
     } while (false)
 
@@ -289,11 +249,11 @@
     NS_LOG_CONDITION                                                                               \
     do                                                                                             \
     {                                                                                              \
-        std::ostream& ns3LogStream = ns3::LogLineBegin();                                         \
-        auto flags = ns3LogStream.setf(std::ios_base::boolalpha);                                 \
-        ns3LogStream << msg;                                                                      \
-        ns3LogStream.flags(flags);                                                                \
-        ns3::LogLineCommit(ns3LogStream);                                                         \
+        std::ostream& ns3LogStream = ns3::LogLineBegin();                                          \
+        auto flags = ns3LogStream.setf(std::ios_base::boolalpha);                                  \
+        ns3LogStream << msg;                                                                       \
+        ns3LogStream.flags(flags);                                                                 \
+        ns3::LogLineCommit(ns3LogStream);                                                          \
     } while (false)
 
 #endif /* NS3_LOG_ENABLE */
