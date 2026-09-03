@@ -21,7 +21,7 @@ using namespace ns3::lrwpan;
 
 #undef NS_LOG_APPEND_CONTEXT
 #define NS_LOG_APPEND_CONTEXT                                                                      \
-    ns3LogContext << "[" << m_nwkNetworkAddress << " | " << m_nwkIeeeAddress << "] ";
+    ns3LogStream << "[" << m_nwkNetworkAddress << " | " << m_nwkIeeeAddress << "] ";
 
 namespace ns3
 {

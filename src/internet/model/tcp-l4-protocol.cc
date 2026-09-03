@@ -54,7 +54,7 @@ NS_OBJECT_ENSURE_REGISTERED(TcpL4Protocol);
 #define NS_LOG_APPEND_CONTEXT                                                                      \
     if (m_node)                                                                                    \
     {                                                                                              \
-        ns3LogContext << " [node " << m_node->GetId() << "] ";                                     \
+        ns3LogStream << " [node " << m_node->GetId() << "] ";                                      \
     }
 
 TypeId
