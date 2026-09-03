@@ -37,9 +37,7 @@ DefaultTimePrinter(std::ostream& os)
     static constexpr int precisions[Time::LAST] = {5, 5, 5, 5, 5, 5, 6, 9, 12, 15};
     const int precision = precisions[Time::GetResolution()];
 
-    // Same output as streaming inSeconds with std::fixed, std::showpos and
-    // the resolution-dependent precision, but bypassing the ostream
-    // formatting machinery, which is significantly slower.
+    // Faster than ostream formatting
     double seconds = Simulator::Now().GetSeconds();
     char buf[64];
     char* p = buf;
