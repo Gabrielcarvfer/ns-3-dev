@@ -436,9 +436,8 @@ LogComponent& GetLogComponent(const std::string name);
 
 /**
  * @ingroup logging
- * @internal
  * Begin assembling a log line in a reusable, thread-local memory buffer.
- *
+ * @internal
  * The returned stream (named `ns3LogStream` inside the NS_LOG_* macros)
  * collects the whole log line (prefixes, context and user message) in
  * memory; LogLineCommit() then emits it to `std::clog` with a single write
@@ -451,9 +450,10 @@ std::ostream& LogLineBegin();
 
 /**
  * @ingroup logging
+ * Terminate a log line started with LogLineBegin().
  * @internal
- * Terminate a log line started with LogLineBegin(): append a newline and
- * write the assembled line to `std::clog` with a single write operation.
+ * Append a newline and write the assembled line to `std::clog` with a
+ * single write operation.
  *
  * @param [in,out] os The stream returned by LogLineBegin().
  */
@@ -461,10 +461,9 @@ void LogLineCommit(std::ostream& os);
 
 /**
  * @ingroup logging
- * @internal
  * Emit the log line this thread is currently assembling, if any, without
  * waiting for LogLineCommit().
- *
+ * @internal
  * Called from ns3::FatalImpl::FlushStreams() so that a log line interrupted
  * by a fatal error, an assertion failure or a signal is not lost with the
  * buffer it is being assembled in.  The emitted line is truncated wherever
@@ -474,10 +473,9 @@ void LogLineFlushPartial();
 
 /**
  * @ingroup logging
- * @internal
  * Emit the log line this thread is currently assembling, if any, from a
  * signal handler.
- *
+ * @internal
  * Unlike LogLineFlushPartial(), this writes the line to the standard error
  * file descriptor directly, since the C++ streams are not async-signal-safe.
  * It is a best effort: the line is emitted as it stood when the signal was
