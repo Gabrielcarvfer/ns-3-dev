@@ -31,26 +31,11 @@ NS_LOG_COMPONENT_DEFINE("TimePrinter");
 void
 DefaultTimePrinter(std::ostream& os)
 {
-    int precision;
-    switch (Time::GetResolution())
-    {
-    case Time::US:
-        precision = 6;
-        break;
-    case Time::NS:
-        precision = 9;
-        break;
-    case Time::PS:
-        precision = 12;
-        break;
-    case Time::FS:
-        precision = 15;
-        break;
-
-    default:
-        // default C++ precision of 5
-        precision = 5;
-    }
+    // Digits after the decimal point when printing seconds, indexed by
+    // Time::Unit (Y, D, H, MIN, S, MS, US, NS, PS, FS); the default C++
+    // precision of 5 is kept for the coarser resolutions.
+    static constexpr int precisions[Time::LAST] = {5, 5, 5, 5, 5, 5, 6, 9, 12, 15};
+    const int precision = precisions[Time::GetResolution()];
 
     // Create the same Time temporaries as the historical
     // `os << Simulator::Now().As(Time::S)` so the Time marking bookkeeping
