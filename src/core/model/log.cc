@@ -241,13 +241,6 @@ class LogLineBuf : public std::streambuf
     std::string m_line; //!< The log line being assembled.
 };
 
-/** A memory buffer and the ostream assembling a log line into it. */
-struct LogLine
-{
-    LogLineBuf buf;        //!< The line buffer.
-    std::ostream os{&buf}; //!< The stream assembling the line.
-};
-
 /**
  * Write to the standard error file descriptor, bypassing std::clog.
  *
@@ -289,18 +282,20 @@ EmitLine(std::string& line)
  */
 thread_local bool g_logLineDestroyed = false;
 
-/**
- * Arm g_logLineDestroyed when the thread's LogLine is destroyed,
- * emitting any partially assembled line first so it is not lost.
- */
-struct LogLineHolder
+/** A memory buffer and the ostream assembling a log line into it. */
+struct LogLine
 {
-    LogLine line; //!< The line buffer and stream.
+    LogLineBuf buf;        //!< The line buffer.
+    std::ostream os{&buf}; //!< The stream assembling the line.
 
-    ~LogLineHolder()
+    /**
+     * Arm g_logLineDestroyed, emitting any partially assembled line first
+     * so it is not lost.
+     */
+    ~LogLine()
     {
         g_logLineDestroyed = true;
-        auto& partial = line.buf.Line();
+        auto& partial = buf.Line();
         if (!partial.empty())
         {
             EmitLine(partial);
@@ -320,9 +315,9 @@ thread_local LogLine* g_logLine = nullptr;
 LogLine&
 GetLogLine()
 {
-    thread_local LogLineHolder holder;
-    g_logLine = &holder.line;
-    return holder.line;
+    thread_local LogLine line;
+    g_logLine = &line;
+    return line;
 }
 
 } // unnamed namespace
