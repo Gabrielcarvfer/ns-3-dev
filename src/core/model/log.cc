@@ -197,7 +197,11 @@ namespace
 class LogLineBuf : public std::streambuf
 {
   public:
-    std::string m_line; //!< The log line being assembled.
+    /** @return The log line being assembled. */
+    std::string& Line()
+    {
+        return m_line;
+    }
 
   protected:
     /**
@@ -227,6 +231,9 @@ class LogLineBuf : public std::streambuf
         }
         return traits_type::not_eof(c);
     }
+
+  private:
+    std::string m_line; //!< The log line being assembled.
 };
 
 /** A memory buffer and the ostream assembling a log line into it. */
@@ -333,7 +340,7 @@ LogLineCommit(std::ostream& os)
         std::clog << std::endl;
         return;
     }
-    EmitLine(static_cast<LogLineBuf*>(os.rdbuf())->m_line);
+    EmitLine(static_cast<LogLineBuf*>(os.rdbuf())->Line());
 }
 
 void
@@ -343,7 +350,7 @@ LogLineFlushPartial()
     {
         return;
     }
-    auto& line = GetLogLine().buf.m_line;
+    auto& line = GetLogLine().buf.Line();
     if (line.empty())
     {
         return;
@@ -358,7 +365,7 @@ LogLineFlushPartialFromSignal()
     {
         return;
     }
-    const auto& line = g_logLine->buf.m_line;
+    const auto& line = g_logLine->buf.Line();
     if (line.empty())
     {
         return;
