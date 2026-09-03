@@ -22,8 +22,6 @@
  * Append the simulation time to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
- * Requires the `ns3LogStream` stream declared by the NS_LOG_* macros
- * (see ns3::LogLineBegin()).
  * NS_FATAL_ERROR_IMPL_NO_MSG (fatal-error.h) emits the same prefix
  * directly to std::clog; keep the two formats in sync.
  */
@@ -43,8 +41,6 @@
  * Append the simulation node id to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
- * Requires the `ns3LogStream` stream declared by the NS_LOG_* macros
- * (see ns3::LogLineBegin()).
  * NS_FATAL_ERROR_IMPL_NO_MSG (fatal-error.h) emits the same prefix
  * directly to std::clog; keep the two formats in sync.
  */
@@ -64,8 +60,6 @@
  * Append the function name to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
- * Requires the `ns3LogStream` stream declared by the NS_LOG_* macros
- * (see ns3::LogLineBegin()).
  */
 #define NS_LOG_APPEND_FUNC_PREFIX                                                                  \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_FUNC))                                                     \
@@ -78,8 +72,6 @@
  * Append the log severity level to a log message.
  * @internal
  * Logging implementation macro; should not be called directly.
- * Requires the `ns3LogStream` stream declared by the NS_LOG_* macros
- * (see ns3::LogLineBegin()).
  */
 #define NS_LOG_APPEND_LEVEL_PREFIX(level)                                                          \
     if (g_log.IsEnabled(ns3::LOG_PREFIX_LEVEL))                                                    \
