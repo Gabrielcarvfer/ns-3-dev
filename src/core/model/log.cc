@@ -249,44 +249,6 @@ struct LogLine
 };
 
 /**
- * Whether this thread's LogLine has been destroyed.
- *
- * Trivially destructible, so it remains readable during program shutdown,
- * after the buffer's own thread_local destructor has run.  Core itself logs
- * during static destruction (e.g. Time::Clear() from ~Time of static
- * attribute defaults), so this must be handled.
- */
-thread_local bool g_logLineDestroyed = false;
-
-/** Arm g_logLineDestroyed when the thread's LogLine is destroyed. */
-struct LogLineHolder
-{
-    LogLine line; //!< The line buffer and stream.
-
-    ~LogLineHolder()
-    {
-        g_logLineDestroyed = true;
-    }
-};
-
-/**
- * The thread's log line, once created.
- *
- * A plain pointer, so a signal handler can reach the line being assembled
- * without running the thread_local initialization it may have interrupted.
- */
-thread_local LogLine* g_logLine = nullptr;
-
-/** @return The thread-local log line buffer. */
-LogLine&
-GetLogLine()
-{
-    thread_local LogLineHolder holder;
-    g_logLine = &holder.line;
-    return holder.line;
-}
-
-/**
  * Write to the standard error file descriptor, bypassing std::clog.
  *
  * @param [in] s The characters to write.
@@ -315,6 +277,52 @@ EmitLine(std::string& line)
     std::clog.write(line.data(), static_cast<std::streamsize>(line.size()));
     std::clog.flush();
     line.clear();
+}
+
+/**
+ * Whether this thread's LogLine has been destroyed.
+ *
+ * Trivially destructible, so it remains readable during program shutdown,
+ * after the buffer's own thread_local destructor has run.  Core itself logs
+ * during static destruction (e.g. Time::Clear() from ~Time of static
+ * attribute defaults), so this must be handled.
+ */
+thread_local bool g_logLineDestroyed = false;
+
+/**
+ * Arm g_logLineDestroyed when the thread's LogLine is destroyed,
+ * emitting any partially assembled line first so it is not lost.
+ */
+struct LogLineHolder
+{
+    LogLine line; //!< The line buffer and stream.
+
+    ~LogLineHolder()
+    {
+        g_logLineDestroyed = true;
+        auto& partial = line.buf.Line();
+        if (!partial.empty())
+        {
+            EmitLine(partial);
+        }
+    }
+};
+
+/**
+ * The thread's log line, once created.
+ *
+ * A plain pointer, so a signal handler can reach the line being assembled
+ * without running the thread_local initialization it may have interrupted.
+ */
+thread_local LogLine* g_logLine = nullptr;
+
+/** @return The thread-local log line buffer. */
+LogLine&
+GetLogLine()
+{
+    thread_local LogLineHolder holder;
+    g_logLine = &holder.line;
+    return holder.line;
 }
 
 } // unnamed namespace
