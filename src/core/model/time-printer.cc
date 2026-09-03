@@ -39,7 +39,7 @@ DefaultTimePrinter(std::ostream& os)
 
     // Faster than ostream formatting
     double seconds = Simulator::Now().GetSeconds();
-    char buf[64];
+    char buf[32];
     char* p = buf;
     if (!std::signbit(seconds))
     {
