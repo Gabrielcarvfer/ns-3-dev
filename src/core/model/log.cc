@@ -242,22 +242,6 @@ class LogLineBuf : public std::streambuf
 };
 
 /**
- * Write to the standard error file descriptor, bypassing std::clog.
- *
- * @param [in] s The characters to write.
- * @param [in] n The number of characters to write.
- */
-void
-WriteStdErr(const char* s, std::size_t n)
-{
-#ifdef _WIN32
-    _write(2, s, static_cast<unsigned int>(n));
-#else
-    [[maybe_unused]] auto written = write(2, s, n);
-#endif
-}
-
-/**
  * Write an assembled log line to std::clog, terminated by a newline,
  * and empty it.
  *
@@ -365,6 +349,27 @@ LogLineFlushPartial()
     }
     EmitLine(line);
 }
+
+namespace
+{
+
+/**
+ * Write to the standard error file descriptor, bypassing std::clog.
+ *
+ * @param [in] s The characters to write.
+ * @param [in] n The number of characters to write.
+ */
+void
+WriteStdErr(const char* s, std::size_t n)
+{
+#ifdef _WIN32
+    _write(2, s, static_cast<unsigned int>(n));
+#else
+    [[maybe_unused]] auto written = write(2, s, n);
+#endif
+}
+
+} // unnamed namespace
 
 void
 LogLineFlushPartialFromSignal()
