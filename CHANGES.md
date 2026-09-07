@@ -16,6 +16,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### New API
 
+* (propagation) `ThreeGppPropagationLossModel` and `ThreeGppChannelConditionModel` gained an `InterUeSpatialConsistency` attribute enabling inter-UE (drop-based) spatially consistent shadow fading and LOS/NLOS state (3GPP TR 38.901 Sec. 7.6.3.1).
+* (spectrum) `ThreeGppChannelModel` gained an `InterUeSpatialConsistency` attribute extending the drop-based spatial consistency to the large-scale parameters and the cluster and ray specific fast-fading variables, and `LargeBandwidthArrayModeling`, `ChannelBandwidth` and `MaxRaysPerCluster` attributes implementing the large bandwidth and large antenna array modeling of 3GPP TR 38.901 Sec. 7.6.2.2.
 * (core) The `Time` class now declares an explicit `operator==` on MSVC builds (guarded by `NS_MSVC`), to work around an MSVC 18 (2026) STL issue that otherwise breaks compilation. It is semantically identical to the defaulted comparison and has no behavioral effect on any platform.
 * Centralization of ``PPP`` and ``IEEE802`` numbers. These are now contained in network model in ``iana-ppp-numbers.h`` and ``iana-ieee802-numbers.h`` respectively.
 * (core) The new `NS_OBJECT_TEMPLATE_CLASS_WITH_NS_DEFINE`  macro enables the registration of template classes inside a namespace.
