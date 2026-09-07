@@ -16,6 +16,9 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### New API
 
+* (propagation) `ThreeGppPropagationLossModel` and `ThreeGppChannelConditionModel` gained an `InterUeSpatialConsistency` attribute enabling inter-UE (drop-based) spatially consistent shadow fading and LOS/NLOS state (3GPP TR 38.901 Sec. 7.6.3.1).
+* (spectrum) `ThreeGppChannelModel` gained an `InterUeSpatialConsistency` attribute extending the drop-based spatial consistency to the large-scale parameters and the cluster and ray specific fast-fading variables, and `LargeBandwidthArrayModeling`, `ChannelBandwidth` and `MaxRaysPerCluster` attributes implementing the large bandwidth and large antenna array modeling of 3GPP TR 38.901 Sec. 7.6.2.2.
+* (propagation) Added `SpatialGaussianField`, a stateless, position-keyed spatially-correlated Gaussian random field used by `ThreeGppPropagationLossModel`, `ThreeGppChannelConditionModel` and `ThreeGppChannelModel` for the inter-UE spatial consistency.
 * (core) The `Time` class now declares an explicit `operator==` on MSVC builds (guarded by `NS_MSVC`), to work around an MSVC 18 (2026) STL issue that otherwise breaks compilation. It is semantically identical to the defaulted comparison and has no behavioral effect on any platform.
 * Centralization of ``PPP`` and ``IEEE802`` numbers. These are now contained in network model in ``iana-ppp-numbers.h`` and ``iana-ieee802-numbers.h`` respectively.
 * (core) The new `NS_OBJECT_TEMPLATE_CLASS_WITH_NS_DEFINE`  macro enables the registration of template classes inside a namespace.
@@ -53,6 +56,9 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (spectrum) `ThreeGppChannelModel` now maps the rays of the two strongest clusters to sub-clusters following TR 38.901 Table 7.5-5; the mapping was previously shifted by one ray, so channel realizations change.
 * (spectrum) `ThreeGppChannelModel` now applies a blockage attenuation of A dB to the LOS ray as the amplitude scaling `10^(-A/20)` instead of `10^(-A/10)`, halving the attenuation in dB that was previously applied.
 * (spectrum) `ThreeGppChannelModel` now draws the cross-polarization power ratios in dB from the TR 38.901 Table 7.5-6 parameters; the previous draw was under-dispersed and about 3 dB under-powered, so channel realizations with dual-polarized antennas change.
+* (spectrum) `ThreeGppChannelModel` now draws the large-scale parameters of indoor (O2I) LOS links with the O2I ordering of TR 38.901 Table 7.5-6 (no K-factor); the LOS ordering was previously applied against the O2I correlation matrix, so the realizations of indoor LOS links change.
+* (spectrum) `ThreeGppSpectrumPropagationLossModel` now refreshes its cached delay phasors whenever the cluster delays change, not only when their number changes; results of channel models that update the delays in place with an unchanged cluster count (the spatial consistency update) change.
+* (spectrum) `ThreeGppChannelModel::WrapAngles` mirrors an out-of-range inclination through the pole (2 pi - theta, phi + pi) instead of subtracting pi; ray angles generated near the zenith or nadir change.
 
 ## Changes from ns-3.47 to ns-3.48
 

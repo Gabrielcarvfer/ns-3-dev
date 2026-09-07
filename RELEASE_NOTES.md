@@ -40,6 +40,10 @@ Python 3.10 to 3.14.
 
 ### New user-visible features
 
+- (propagation) New `InterUeSpatialConsistency` attributes of `ThreeGppPropagationLossModel` and `ThreeGppChannelConditionModel` enable inter-UE (drop-based) spatially consistent shadow fading and LOS/NLOS state per 3GPP TR 38.901 Sec. 7.6.3.1.
+- (spectrum) A new `InterUeSpatialConsistency` attribute of `ThreeGppChannelModel` extends the drop-based spatial consistency to the large-scale parameters and the cluster and ray specific variables of the fast fading.
+- (propagation) New `SpatialGaussianField` class provides the stateless, position-keyed spatially-correlated Gaussian random field shared by the drop-based spatial consistency of the 3GPP propagation, channel condition and channel models.
+- (spectrum) New `LargeBandwidthArrayModeling`, `ChannelBandwidth` and `MaxRaysPerCluster` attributes of `ThreeGppChannelModel` implement the large bandwidth and large antenna array modeling of 3GPP TR 38.901 Sec. 7.6.2.2.
 - (network) IANA protocol and link types are now centralized in network module headers.
 
 - Added support for `nlohmann/json`, a header-only C++ third-party library for JSON parsing and serialization.
@@ -54,6 +58,9 @@ Python 3.10 to 3.14.
 - (spectrum) The fixed ray-to-subcluster mapping of the two strongest clusters of the 3GPP TR 38.901 fast-fading model now follows Table 7.5-5; the previous mapping was shifted by one ray.
 - (spectrum) The cross-polarization power ratios of the 3GPP TR 38.901 fast-fading model are now drawn in dB from the Table 7.5-6 mean and standard deviation; the parameters were previously converted to linear scale before the dB draw, giving under-dispersed and under-powered ratios.
 - (spectrum) A blockage attenuation of A dB now scales the LOS ray amplitude of the 3GPP TR 38.901 fast-fading model by `10^(-A/20)`; it was previously applied as `10^(-A/10)`, doubling the attenuation.
+- (spectrum) The large-scale parameters of indoor (O2I) LOS links of the 3GPP TR 38.901 fast-fading model are now drawn with the O2I ordering of Table 7.5-6, which has no K-factor; the LOS ordering was previously applied against the O2I correlation matrix, giving wrong correlations and a constant zenith spread of arrival on every such link.
+- (spectrum) The cached delay phasors of `ThreeGppSpectrumPropagationLossModel` are now refreshed whenever the cluster delays change; they were previously kept as long as the number of clusters did not change, so an in-place channel update with the same cluster count reused the previous realization's phasors.
+- (spectrum) `ThreeGppChannelModel::WrapAngles` now mirrors an inclination outside [0, pi] through the pole; it previously subtracted pi, sending a ray just past the nadir to just below the zenith (the wrong hemisphere).
 - (lr-wpan) !2916 Pcap files are now correctly generated with and without FCS cases.
 - (mesh) #1341 Fixed dot11s regression that ignored the link rate, degrading the HWMP routing metric to hop count.
 - (sixlowpan) #1342 Fixed a deserialization error in the MESH header.
