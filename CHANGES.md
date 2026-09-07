@@ -50,6 +50,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (sixlowpan) Mesh-under forwarding on the receive path is no longer unconditional. A node relays received mesh-under packets only when both `UseMeshUnder` and `ForwardMesh` are enabled; a node with `UseMeshUnder` alone decodes and delivers mesh packets without relaying them; a node without `UseMeshUnder` receiving a mesh-under packet drops it with a warning (`DROP_MESH_NOT_ENABLED` in the drop trace), as this is a network misconfiguration. Previously, every node relayed mesh-under packets regardless of its configuration.
 * (spectrum) The number of rays per cluster of the large bandwidth modeling of `ThreeGppChannelModel` (TR 38.901 Equation 7.6-8) is now derived from the maximum antenna aperture over the two link ends instead of the aperture of the lowest node id end, so it no longer depends on the node creation order or the query direction.
 * (spectrum) `ThreeGppChannelModel` now maps the rays of the two strongest clusters to sub-clusters following TR 38.901 Table 7.5-5; the mapping was previously shifted by one ray, so channel realizations change.
+* (spectrum) `ThreeGppChannelModel` now applies a blockage attenuation of A dB to the LOS ray as the amplitude scaling `10^(-A/20)` instead of `10^(-A/10)`, halving the attenuation in dB that was previously applied.
 
 ## Changes from ns-3.47 to ns-3.48
 
