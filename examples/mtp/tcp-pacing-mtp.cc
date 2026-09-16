@@ -3,8 +3,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
- *
- *
  * Authors: Vivek Jain <jain.vivek.anand@gmail.com>
  *          Deepak Kumaraswamy <deepakkavoor99@gmail.com>
  */
@@ -74,7 +72,7 @@
 #include "ns3/flow-monitor-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/ipv4-global-routing-helper.h"
-#include "ns3/mtp-module.h"
+#include "ns3/mtp-interface.h"
 #include "ns3/network-module.h"
 #include "ns3/packet-sink.h"
 #include "ns3/point-to-point-module.h"

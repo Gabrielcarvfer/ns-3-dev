@@ -3,8 +3,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
- *
- *
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  */
 
@@ -41,12 +39,12 @@
 // Examining the .pcap files with Wireshark can confirm this effect.
 
 #include "ns3/core-module.h"
+#include "ns3/csma-module.h"
 #include "ns3/internet-apps-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/ipv6-routing-table-entry.h"
 #include "ns3/ipv6-static-routing-helper.h"
-#include "ns3/mtp-module.h"
-#include "ns3/point-to-point-module.h"
+#include "ns3/mtp-interface.h"
 
 #include <fstream>
 
@@ -75,7 +73,7 @@ main(int argc, char** argv)
     cmd.AddValue("printRoutingTables",
                  "Print routing tables at 30, 60 and 90 seconds",
                  printRoutingTables);
-    cmd.AddValue("showPings", "Show Ping6 reception", showPings);
+    cmd.AddValue("showPings", "Show Ping reception", showPings);
     cmd.AddValue("splitHorizonStrategy",
                  "Split Horizon strategy to use (NoSplitHorizon, SplitHorizon, PoisonReverse)",
                  SplitHorizon);
@@ -129,16 +127,16 @@ main(int argc, char** argv)
     NodeContainer nodes(src, dst);
 
     NS_LOG_INFO("Create channels.");
-    PointToPointHelper p2p;
-    p2p.SetDeviceAttribute("DataRate", DataRateValue(5000000));
-    p2p.SetChannelAttribute("Delay", TimeValue(MilliSeconds(2)));
-    NetDeviceContainer ndc1 = p2p.Install(net1);
-    NetDeviceContainer ndc2 = p2p.Install(net2);
-    NetDeviceContainer ndc3 = p2p.Install(net3);
-    NetDeviceContainer ndc4 = p2p.Install(net4);
-    NetDeviceContainer ndc5 = p2p.Install(net5);
-    NetDeviceContainer ndc6 = p2p.Install(net6);
-    NetDeviceContainer ndc7 = p2p.Install(net7);
+    CsmaHelper csma;
+    csma.SetChannelAttribute("DataRate", DataRateValue(5000000));
+    csma.SetChannelAttribute("Delay", TimeValue(MilliSeconds(2)));
+    NetDeviceContainer ndc1 = csma.Install(net1);
+    NetDeviceContainer ndc2 = csma.Install(net2);
+    NetDeviceContainer ndc3 = csma.Install(net3);
+    NetDeviceContainer ndc4 = csma.Install(net4);
+    NetDeviceContainer ndc5 = csma.Install(net5);
+    NetDeviceContainer ndc6 = csma.Install(net6);
+    NetDeviceContainer ndc7 = csma.Install(net7);
 
     NS_LOG_INFO("Create IPv6 and routing");
     RipNgHelper ripNgRouting;
@@ -213,25 +211,25 @@ main(int argc, char** argv)
     {
         Ptr<OutputStreamWrapper> routingStream = Create<OutputStreamWrapper>(&std::cout);
 
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30.0), a, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30.0), b, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30.0), c, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30.0), d, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30), a, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30), b, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30), c, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(30), d, routingStream);
 
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60.0), a, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60.0), b, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60.0), c, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60.0), d, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60), a, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60), b, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60), c, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(60), d, routingStream);
 
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90.0), a, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90.0), b, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90.0), c, routingStream);
-        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90.0), d, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90), a, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90), b, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90), c, routingStream);
+        Ipv6RoutingHelper::PrintRoutingTableAt(Seconds(90), d, routingStream);
     }
 
     NS_LOG_INFO("Create Applications.");
     uint32_t packetSize = 1024;
-    Time interPacketInterval = Seconds(1.0);
+    Time interPacketInterval = Seconds(1);
     PingHelper ping(iic7.GetAddress(1, 1));
 
     ping.SetAttribute("Interval", TimeValue(interPacketInterval));
@@ -241,12 +239,12 @@ main(int argc, char** argv)
         ping.SetAttribute("VerboseMode", EnumValue(Ping::VerboseMode::VERBOSE));
     }
     ApplicationContainer apps = ping.Install(src);
-    apps.Start(Seconds(1.0));
-    apps.Stop(Seconds(110.0));
+    apps.Start(Seconds(1));
+    apps.Stop(Seconds(110));
 
     AsciiTraceHelper ascii;
-    p2p.EnableAsciiAll(ascii.CreateFileStream("ripng-simple-routing.tr"));
-    p2p.EnablePcapAll("ripng-simple-routing", true);
+    csma.EnableAsciiAll(ascii.CreateFileStream("ripng-simple-routing.tr"));
+    csma.EnablePcapAll("ripng-simple-routing", true);
 
     Simulator::Schedule(Seconds(40), &TearDownLink, b, d, 3, 2);
 

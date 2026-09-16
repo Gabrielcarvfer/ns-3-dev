@@ -4,8 +4,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
- *
- *
  * Authors: Shravya K.S. <shravya.ks0@gmail.com>
  *          Apoorva Bhargava <apoorvabhargava13@gmail.com>
  *          Shikha Bakshi <shikhabakshi912@gmail.com>
@@ -84,7 +82,7 @@
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/mtp-module.h"
+#include "ns3/mtp-interface.h"
 #include "ns3/network-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/traffic-control-module.h"
@@ -291,7 +289,7 @@ main(int argc, char* argv[])
 
     Config::SetDefault("ns3::TcpL4Protocol::SocketType", StringValue("ns3::" + tcpTypeId));
 
-    Time startTime = Seconds(0);
+    Time startTime{0};
     Time stopTime = flowStartupWindow + convergenceTime + measurementWindow;
 
     rxS1R1Bytes.reserve(10);

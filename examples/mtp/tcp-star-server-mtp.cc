@@ -1,8 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- *
- *
  */
 
 // Default Network topology, 9 nodes in a star
@@ -33,7 +31,7 @@
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/ipv4-global-routing-helper.h"
-#include "ns3/mtp-module.h"
+#include "ns3/mtp-interface.h"
 #include "ns3/network-module.h"
 #include "ns3/point-to-point-module.h"
 
@@ -119,8 +117,8 @@ main(int argc, char* argv[])
     Address sinkLocalAddress(InetSocketAddress(Ipv4Address::GetAny(), port));
     PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", sinkLocalAddress);
     ApplicationContainer sinkApp = sinkHelper.Install(serverNode);
-    sinkApp.Start(Seconds(1.0));
-    sinkApp.Stop(Seconds(10.0));
+    sinkApp.Start(Seconds(1));
+    sinkApp.Stop(Seconds(10));
 
     // Create the OnOff applications to send TCP to the server
     OnOffHelper clientHelper("ns3::TcpSocketFactory", Address());
@@ -137,8 +135,8 @@ main(int argc, char* argv[])
         clientHelper.SetAttribute("Remote", remoteAddress);
         clientApps.Add(clientHelper.Install(clientNodes.Get(i)));
     }
-    clientApps.Start(Seconds(1.0));
-    clientApps.Stop(Seconds(10.0));
+    clientApps.Start(Seconds(1));
+    clientApps.Stop(Seconds(10));
 
     // configure tracing
     AsciiTraceHelper ascii;

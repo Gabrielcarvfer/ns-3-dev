@@ -4,8 +4,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
- *
- *
  * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
  * Modified (2019): Jared Dulmage <jared.dulmage@caliola.com>
  *   Demonstrates dissemination of multicast packets across a mesh

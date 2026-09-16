@@ -3,8 +3,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
- *
- *
  * Authors: Pasquale Imputato <p.imputato@gmail.com>
  *          Stefano Avallone <stefano.avallone@unina.it>
  */
@@ -49,7 +47,7 @@
 #include "ns3/flow-monitor-module.h"
 #include "ns3/internet-apps-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/mtp-module.h"
+#include "ns3/mtp-interface.h"
 #include "ns3/network-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/traffic-control-module.h"
