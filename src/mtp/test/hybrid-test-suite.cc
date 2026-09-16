@@ -9,7 +9,7 @@
  */
 
 #include "ns3/example-as-test.h"
-#include "ns3/mtp-module.h"
+#include "ns3/mtp-interface.h"
 #include "ns3/test.h"
 
 #include <sstream>
@@ -95,9 +95,9 @@ class HybridTestSuite : public TestSuite
                     const std::string dataDir,
                     const std::string args = "",
                     const std::string postCmd = "",
-                    const TestDuration duration = QUICK,
+                    const Duration duration = Duration::QUICK,
                     const bool shouldNotErr = true)
-        : TestSuite(name, EXAMPLE)
+        : TestSuite(name, Type::EXAMPLE)
     {
         AddTestCase(new HybridTestCase(name, program, dataDir, args, postCmd, shouldNotErr),
                     duration);
@@ -110,14 +110,14 @@ static HybridTestSuite g_hybridFatTree1("hybrid-fat-tree",
                                         NS_TEST_SOURCEDIR,
                                         "--bandwidth=100Mbps --thread=2",
                                         "| grep -v 'Simulation time' | grep -v 'Event count'",
-                                        TestCase::TestDuration::QUICK);
+                                        TestCase::Duration::QUICK);
 
 static HybridTestSuite g_hybridFatTree2("hybrid-fat-tree-incast",
                                         "fat-tree-hybrid",
                                         NS_TEST_SOURCEDIR,
                                         "--bandwidth=100Mbps --incast=1 --thread=2",
                                         "| grep -v 'Simulation time' | grep -v 'Event count'",
-                                        TestCase::TestDuration::QUICK);
+                                        TestCase::Duration::QUICK);
 
 static HybridTestSuite g_hybridSimple("hybrid-simple",
                                       "simple-hybrid",
@@ -125,4 +125,4 @@ static HybridTestSuite g_hybridSimple("hybrid-simple",
                                       ""
                                       "",
                                       "",
-                                      TestCase::TestDuration::QUICK);
+                                      TestCase::Duration::QUICK);

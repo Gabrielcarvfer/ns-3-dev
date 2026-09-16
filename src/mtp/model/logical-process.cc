@@ -35,28 +35,20 @@ LogicalProcess::LogicalProcess()
       m_stop(false),
       m_uid(EventId::UID::VALID),
       m_currentContext(Simulator::NO_CONTEXT),
-      m_currentUid(0),
       m_currentTs(0),
       m_eventCount(0),
       m_pendingEventCount(0),
-      m_events(nullptr),
-      m_lookAhead(TimeStep(0))
+      m_lookAhead(TimeStep(0)),
+      m_grantedTs(0),
+      m_execSeq(0),
+      m_sent(false),
+      m_executionTime(0)
 {
 }
 
 LogicalProcess::~LogicalProcess()
 {
     NS_LOG_INFO("system " << m_systemId << " finished with event count " << m_eventCount);
-
-    // if others hold references to event list, do not unref events
-    if (m_events->GetReferenceCount() == 1)
-    {
-        while (!m_events->IsEmpty())
-        {
-            Scheduler::Event next = m_events->RemoveNext();
-            next.impl->Unref();
-        }
-    }
 }
 
 void
@@ -74,6 +66,10 @@ LogicalProcess::CalculateLookAhead()
     if (m_systemId == 0)
     {
         m_lookAhead = TimeStep(0); // No lookahead for the public LP
+        for (uint32_t i = 1; i < m_systemCount; i++)
+        {
+            m_mailbox[i];
+        }
     }
     else
     {
@@ -81,62 +77,64 @@ LogicalProcess::CalculateLookAhead()
         NodeContainer c = NodeContainer::GetGlobal();
         for (auto iter = c.Begin(); iter != c.End(); ++iter)
         {
-#ifdef NS3_MPI
-            // for hybrid simulation, the left 16-bit indicates local system ID,
-            // and the right 16-bit indicates global system ID (MPI rank)
-            if (((*iter)->GetSystemId() >> 16) != m_systemId)
+            if (GetLocalSystemId(*iter) != m_systemId)
             {
                 continue;
             }
-#else
-            if ((*iter)->GetSystemId() != m_systemId)
-            {
-                continue;
-            }
-#endif
             for (uint32_t i = 0; i < (*iter)->GetNDevices(); ++i)
             {
                 Ptr<NetDevice> localNetDevice = (*iter)->GetDevice(i);
-                // only works for p2p links currently
-                if (!localNetDevice->IsPointToPoint())
-                {
-                    continue;
-                }
                 Ptr<Channel> channel = localNetDevice->GetChannel();
                 if (!channel)
                 {
                     continue;
                 }
-                // grab the adjacent node
-                Ptr<Node> remoteNode;
-                if (channel->GetDevice(0) == localNetDevice)
+                // The lookahead over a link is the channel delay; channels without a
+                // fixed delay (e.g. wireless) offer no lookahead when they are split
+                // between LPs, which is only possible with a manual partition.
+                TimeValue delay(TimeStep(0));
+                if (!channel->GetAttributeFailSafe("Delay", delay))
                 {
-                    remoteNode = (channel->GetDevice(1))->GetNode();
+                    delay = TimeValue(TimeStep(0));
                 }
-                else
+                for (std::size_t j = 0; j < channel->GetNDevices(); ++j)
                 {
-                    remoteNode = (channel->GetDevice(0))->GetNode();
+                    Ptr<Node> remoteNode = channel->GetDevice(j)->GetNode();
+                    if (GetLocalSystemId(remoteNode) == m_systemId)
+                    {
+                        continue;
+                    }
+                    if (!localNetDevice->IsPointToPoint())
+                    {
+                        NS_LOG_WARN("Channel " << channel->GetId() << " of node "
+                                               << (*iter)->GetId()
+                                               << " is shared between LPs; results may be "
+                                                  "nondeterministic");
+                    }
+                    if (delay.Get() < m_lookAhead)
+                    {
+                        m_lookAhead = delay.Get();
+                    }
+                    // add the neighbour to the mailbox
+                    m_mailbox[remoteNode->GetSystemId()];
                 }
-                // if it's not remote, don't consider it
-                if (remoteNode->GetSystemId() == m_systemId)
-                {
-                    continue;
-                }
-                // compare delay on the channel with current value of m_lookAhead.
-                // if delay on channel is smaller, make it the new lookAhead.
-                TimeValue delay;
-                channel->GetAttribute("Delay", delay);
-                if (delay.Get() < m_lookAhead)
-                {
-                    m_lookAhead = delay.Get();
-                }
-                // add the neighbour to the mailbox
-                m_mailbox[remoteNode->GetSystemId()];
             }
         }
     }
 
     NS_LOG_INFO("lookahead of system " << m_systemId << " is set to " << m_lookAhead.GetTimeStep());
+}
+
+uint32_t
+LogicalProcess::GetLocalSystemId(Ptr<Node> node)
+{
+#ifdef NS3_MPI
+    // for hybrid simulation, the left 16-bit indicates local system ID,
+    // and the right 16-bit indicates global system ID (MPI rank)
+    return node->GetSystemId() >> 16;
+#else
+    return node->GetSystemId();
+#endif
 }
 
 void
@@ -145,19 +143,22 @@ LogicalProcess::ReceiveMessages()
     NS_LOG_FUNCTION(this);
 
     m_pendingEventCount = 0;
+    // Mailboxes are visited in sender order and each one is already in the
+    // sender's scheduling order, so the uid assignment is deterministic.
     for (auto& item : m_mailbox)
     {
         auto& queue = item.second;
-        std::sort(queue.begin(), queue.end(), std::greater<>());
-        while (!queue.empty())
+        for (auto& msg : queue)
         {
-            auto& evWithTs = queue.back();
-            Scheduler::Event& ev = std::get<3>(evWithTs);
-            ev.key.m_uid = m_uid++;
-            m_events->Insert(ev);
-            queue.pop_back();
+            MtpEvent ev;
+            ev.event = msg.event;
+            ev.event.key.m_uid = m_uid++;
+            ev.originUid = msg.originUid;
+            ev.lineage = msg.lineage;
+            m_events.Insert(ev);
             m_pendingEventCount++;
         }
+        queue.clear();
     }
 }
 
@@ -170,54 +171,166 @@ LogicalProcess::ProcessOneRound()
     MtpInterface::SetSystem(m_systemId);
 
     // calculate time window
-    Time grantedTime =
-        Min(MtpInterface::GetSmallestTime() + m_lookAhead, MtpInterface::GetNextPublicTime());
+    Time grantedTime = MtpInterface::GetSmallestTime() + m_lookAhead;
+    // Events received from other LPs in the next rounds may have a timestamp
+    // equal to the granted time, so it is excluded from this round unless
+    // there is no lookahead at all (in which case no progress would be made).
+    bool inclusive = m_lookAhead.IsZero();
+    // Events of the public LP are processed once all the other LPs have reached
+    // them: this LP stops at the first event that the next public event precedes.
+    const MtpEvent* nextPublic = MtpInterface::GetNextPublicEvent();
+    if (nextPublic && TimeStep(nextPublic->event.key.m_ts) <= grantedTime)
+    {
+        if (TimeStep(nextPublic->event.key.m_ts) == grantedTime && !inclusive)
+        {
+            nextPublic = nullptr;
+        }
+        else
+        {
+            grantedTime = TimeStep(nextPublic->event.key.m_ts);
+            inclusive = false;
+        }
+    }
+    m_grantedTs = grantedTime.GetTimeStep();
 
     auto start = std::chrono::system_clock::now();
 
-    // process events
-    while (Next() <= grantedTime)
+    while (const MtpEvent* next = PeekNextEvent())
     {
-        Scheduler::Event next = m_events->RemoveNext();
-        m_eventCount++;
-        NS_LOG_LOGIC("handle " << next.key.m_ts);
-
-        m_currentTs = next.key.m_ts;
-        m_currentContext = next.key.m_context;
-        m_currentUid = next.key.m_uid;
-
-        next.impl->Invoke();
-        next.impl->Unref();
+        const Time ts = TimeStep(next->event.key.m_ts);
+        if (ts > grantedTime)
+        {
+            break;
+        }
+        if (ts == grantedTime && !inclusive && !(nextPublic && MtpEventLess(*next, *nextPublic)))
+        {
+            break;
+        }
+        Invoke(m_events.RemoveNext());
     }
 
     auto end = std::chrono::system_clock::now();
     m_executionTime = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 }
 
+void
+LogicalProcess::ProcessPublicEvents()
+{
+    NS_LOG_FUNCTION(this);
+    NS_ASSERT(m_systemId == 0);
+
+    MtpInterface::SetSystem(m_systemId);
+
+    while (const MtpEvent* next = PeekNextEvent())
+    {
+        const MtpEvent* bound = MtpInterface::GetNextPrivateEvent();
+        if (bound && !MtpEventLess(*next, *bound))
+        {
+            break;
+        }
+        m_grantedTs = next->event.key.m_ts;
+        Invoke(m_events.RemoveNext());
+        // Events sent to other LPs must be delivered before going on, since
+        // they may precede the next events of the public LP.
+        if (m_sent)
+        {
+            break;
+        }
+    }
+}
+
+bool
+LogicalProcess::TakeSentFlag()
+{
+    const bool sent = m_sent;
+    m_sent = false;
+    return sent;
+}
+
+const MtpEvent*
+LogicalProcess::PeekNextEvent() const
+{
+    if (m_stop || m_events.IsEmpty())
+    {
+        return nullptr;
+    }
+    return &m_events.PeekNext();
+}
+
+void
+LogicalProcess::Invoke(const MtpEvent& ev)
+{
+    m_eventCount++;
+    NS_LOG_LOGIC("handle " << ev.event.key.m_ts);
+
+    m_currentTs = ev.event.key.m_ts;
+    m_currentContext = ev.event.key.m_context;
+
+    // The current event becomes the parent of the events it schedules
+    for (std::size_t i = MTP_LINEAGE_DEPTH - 1; i > 0; i--)
+    {
+        m_currentLineage[i] = ev.lineage[i - 1];
+    }
+    m_currentLineage[0] = {m_currentTs, m_systemId, ++m_execSeq, ev.originUid};
+
+    ev.event.impl->Invoke();
+    ev.event.impl->Unref();
+}
+
 EventId
 LogicalProcess::Schedule(const Time& delay, EventImpl* event)
 {
-    Scheduler::Event ev;
+    MtpEvent ev;
 
-    ev.impl = event;
-    ev.key.m_ts = m_currentTs + delay.GetTimeStep();
-    ev.key.m_context = GetContext();
-    ev.key.m_uid = m_uid++;
-    m_events->Insert(ev);
+    ev.event.impl = event;
+    ev.event.key.m_ts = m_currentTs + delay.GetTimeStep();
+    ev.event.key.m_context = GetContext();
+    ev.event.key.m_uid = m_uid++;
+    ev.originUid = ev.event.key.m_uid;
+    ev.lineage = m_currentLineage;
+    m_events.Insert(ev);
 
-    return EventId(event, ev.key.m_ts, ev.key.m_context, ev.key.m_uid);
+    return EventId(event, ev.event.key.m_ts, ev.event.key.m_context, ev.event.key.m_uid);
 }
 
 void
 LogicalProcess::ScheduleAt(const uint32_t context, const Time& time, EventImpl* event)
 {
-    Scheduler::Event ev;
+    MtpEvent ev;
 
-    ev.impl = event;
-    ev.key.m_ts = time.GetTimeStep();
-    ev.key.m_context = context;
-    ev.key.m_uid = m_uid++;
-    m_events->Insert(ev);
+    ev.event.impl = event;
+    ev.event.key.m_ts = time.GetTimeStep();
+    ev.event.key.m_context = context;
+    ev.event.key.m_uid = m_uid++;
+    ev.originUid = ev.event.key.m_uid;
+    ev.lineage = m_currentLineage;
+    m_events.Insert(ev);
+}
+
+void
+LogicalProcess::ScheduleInitial(const Scheduler::Event& event)
+{
+    MtpEvent ev;
+
+    ev.event = event;
+    ev.originUid = event.key.m_uid;
+    ev.lineage = EventLineage{};
+    m_events.Insert(ev);
+}
+
+void
+LogicalProcess::ReserveUidsUpTo(uint32_t uid)
+{
+    m_uid = std::max(m_uid, uid);
+}
+
+void
+LogicalProcess::TakePendingEvents(std::vector<Scheduler::Event>& events)
+{
+    while (!m_events.IsEmpty())
+    {
+        events.push_back(m_events.RemoveNext().event);
+    }
 }
 
 void
@@ -226,39 +339,49 @@ LogicalProcess::ScheduleWithContext(LogicalProcess* remote,
                                     const Time& delay,
                                     EventImpl* event)
 {
-    Scheduler::Event ev;
-
-    ev.impl = event;
-    ev.key.m_ts = delay.GetTimeStep() + m_currentTs;
-    ev.key.m_context = context;
-
     if (remote == this)
     {
-        ev.key.m_uid = m_uid++;
-        m_events->Insert(ev);
+        MtpEvent ev;
+        ev.event.impl = event;
+        ev.event.key.m_ts = delay.GetTimeStep() + m_currentTs;
+        ev.event.key.m_context = context;
+        ev.event.key.m_uid = m_uid++;
+        ev.originUid = ev.event.key.m_uid;
+        ev.lineage = m_currentLineage;
+        m_events.Insert(ev);
+        return;
     }
-    else
-    {
-        ev.key.m_uid = EventId::UID::INVALID;
-        remote->m_mailbox[m_systemId].emplace_back(m_currentTs, m_systemId, m_uid, ev);
-    }
+
+    Message msg;
+    msg.event.impl = event;
+    msg.event.key.m_ts = delay.GetTimeStep() + m_currentTs;
+    msg.event.key.m_context = context;
+    msg.event.key.m_uid = EventId::UID::INVALID;
+    msg.originUid = m_uid++;
+    msg.lineage = m_currentLineage;
+
+    NS_ASSERT_MSG(msg.event.key.m_ts >= remote->m_grantedTs,
+                  "Event scheduled at " << msg.event.key.m_ts << " from system " << m_systemId
+                                        << " is in the past of system " << remote->m_systemId
+                                        << " (already at " << remote->m_grantedTs
+                                        << "); the lookahead is too large");
+    // Each sender owns its queue in the mailbox of the remote LP, and queues are
+    // registered up front, so no locking is needed.
+    remote->m_mailbox[m_systemId].push_back(msg);
+    m_sent = true;
 }
 
 void
-LogicalProcess::InvokeNow(const Scheduler::Event& ev)
+LogicalProcess::InvokeNow(const Scheduler::Event& event)
 {
     uint32_t oldSystemId = MtpInterface::GetSystem()->GetSystemId();
     MtpInterface::SetSystem(m_systemId);
 
-    m_eventCount++;
-    NS_LOG_LOGIC("handle " << ev.key.m_ts);
-
-    m_currentTs = ev.key.m_ts;
-    m_currentContext = ev.key.m_context;
-    m_currentUid = ev.key.m_uid;
-
-    ev.impl->Invoke();
-    ev.impl->Unref();
+    MtpEvent ev;
+    ev.event = event;
+    ev.originUid = event.key.m_uid;
+    ev.lineage = EventLineage{};
+    Invoke(ev);
 
     // restore previous thread context
     MtpInterface::SetSystem(oldSystemId);
@@ -267,56 +390,54 @@ LogicalProcess::InvokeNow(const Scheduler::Event& ev)
 void
 LogicalProcess::Remove(const EventId& id)
 {
-    if (IsExpired(id))
+    MtpEvent removed;
+    if (!m_events.Remove(id.GetUid(), removed))
     {
         return;
     }
-    Scheduler::Event event;
-
-    event.impl = id.PeekEventImpl();
-    event.key.m_ts = id.GetTs();
-    event.key.m_context = id.GetContext();
-    event.key.m_uid = id.GetUid();
-    m_events->Remove(event);
-    event.impl->Cancel();
+    removed.event.impl->Cancel();
     // whenever we remove an event from the event list, we have to unref it.
-    event.impl->Unref();
+    removed.event.impl->Unref();
 }
 
 bool
 LogicalProcess::IsExpired(const EventId& id) const
 {
-    return id.PeekEventImpl() == nullptr || id.GetTs() < m_currentTs ||
-           (id.GetTs() == m_currentTs && id.GetUid() <= m_currentUid) ||
-           id.PeekEventImpl()->IsCancelled();
+    if (id.PeekEventImpl() == nullptr || id.PeekEventImpl()->IsCancelled())
+    {
+        return true;
+    }
+    if (id.GetTs() < m_currentTs)
+    {
+        return true;
+    }
+    if (id.GetTs() > m_currentTs)
+    {
+        return false;
+    }
+    // Events with the current timestamp are not executed in uid order, so
+    // check whether the event is still pending.
+    return !m_events.Contains(id.GetUid());
 }
 
 void
 LogicalProcess::SetScheduler(ObjectFactory schedulerFactory)
 {
-    Ptr<Scheduler> scheduler = schedulerFactory.Create<Scheduler>();
-    if (m_events)
-    {
-        while (!m_events->IsEmpty())
-        {
-            Scheduler::Event next = m_events->RemoveNext();
-            scheduler->Insert(next);
-        }
-    }
-    m_events = scheduler;
+    NS_LOG_FUNCTION(this << schedulerFactory);
+    // Logical processes use their own event list, which reproduces the event
+    // ordering of the sequential simulator; the requested scheduler is ignored.
 }
 
 Time
 LogicalProcess::Next() const
 {
-    if (m_stop || m_events->IsEmpty())
+    if (m_stop || m_events.IsEmpty())
     {
         return Time::Max();
     }
     else
     {
-        Scheduler::Event ev = m_events->PeekNext();
-        return TimeStep(ev.key.m_ts);
+        return TimeStep(m_events.PeekNext().event.key.m_ts);
     }
 }
 

@@ -16,10 +16,12 @@ build_lib(
   SOURCE_FILES
     model/logical-process.cc
     model/mtp-interface.cc
+    model/mtp-scheduler.cc
     model/multithreaded-simulator-impl.cc
   HEADER_FILES
     model/logical-process.h
     model/mtp-interface.h
+    model/mtp-scheduler.h
     model/multithreaded-simulator-impl.h
   LIBRARIES_TO_LINK ${libnetwork}
   TEST_SOURCES ${example_as_test_suite}

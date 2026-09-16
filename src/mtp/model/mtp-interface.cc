@@ -19,11 +19,14 @@
 #include "ns3/assert.h"
 #include "ns3/config.h"
 #include "ns3/log.h"
+#include "ns3/node-list.h"
 #include "ns3/string.h"
 #include "ns3/uinteger.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <thread>
 
 namespace ns3
 {
@@ -156,6 +159,40 @@ MtpInterface::EnableNew(const uint32_t threadCount, const uint32_t newSystemCoun
 }
 
 void
+MtpInterface::TransferInitialEvents()
+{
+    std::vector<Scheduler::Event> events;
+    g_systems[0].TakePendingEvents(events);
+    std::sort(events.begin(), events.end());
+
+    // The initial events keep their uid, so the new ones must not collide with them
+    const uint32_t nextUid = g_systems[0].GetNextUid();
+    for (uint32_t i = 0; i <= g_systemCount; i++)
+    {
+        g_systems[i].ReserveUidsUpTo(nextUid);
+    }
+
+    for (const auto& ev : events)
+    {
+        LogicalProcess* system =
+            ev.key.m_context == Simulator::NO_CONTEXT
+                ? &g_systems[0]
+                : &g_systems[LogicalProcess::GetLocalSystemId(NodeList::GetNode(ev.key.m_context))];
+        // invoke initialization events (at time 0) by their insertion order
+        // since changing the execution order of these events may cause error,
+        // they have to be invoked now rather than parallelly executed
+        if (ev.key.m_ts == 0)
+        {
+            system->InvokeNow(ev);
+        }
+        else
+        {
+            system->ScheduleInitial(ev);
+        }
+    }
+}
+
+void
 MtpInterface::Disable()
 {
     g_threadCount = 0;
@@ -191,6 +228,8 @@ MtpInterface::RunBefore()
         g_sortedSystemIndices[i] = i + 1;
     }
     g_systemIndex.store(g_systemCount, std::memory_order_release);
+
+    CalculateSmallestTime();
 
     // start threads
     g_threads = new pthread_t[g_threadCount - 1]; // exclude the main thread
@@ -229,14 +268,10 @@ MtpInterface::ProcessOneRound()
     }
 
     // logical process barrier synchronization
-    while (g_finishedSystemCount.load(std::memory_order_acquire) != g_systemCount)
-    {
-    };
+    WaitUntil(
+        [] { return g_finishedSystemCount.load(std::memory_order_acquire) == g_systemCount; });
 
-    // stage 2: process the public LP
-    g_systems[0].ProcessOneRound();
-
-    // stage 3: receive messages
+    // stage 2: receive messages
     g_recvMsgStage = true;
     g_finishedSystemCount.store(0, std::memory_order_relaxed);
     g_systemIndex.store(0, std::memory_order_release);
@@ -253,9 +288,64 @@ MtpInterface::ProcessOneRound()
     }
 
     // logical process barrier synchronization
-    while (g_finishedSystemCount.load(std::memory_order_acquire) != g_systemCount)
+    WaitUntil(
+        [] { return g_finishedSystemCount.load(std::memory_order_acquire) == g_systemCount; });
+    g_systems[0].ReceiveMessages();
+
+    // stage 3: process the public LP, whose events are ordered with respect to
+    // the next events of the other LPs, which are now all known
+    g_systems[0].ProcessPublicEvents();
+    if (g_systems[0].TakeSentFlag())
     {
-    };
+        for (uint32_t i = 1; i <= g_systemCount; i++)
+        {
+            g_systems[i].ReceiveMessages();
+        }
+    }
+}
+
+const MtpEvent*
+MtpInterface::GetNextPublicEvent()
+{
+    return g_systems[0].PeekNextEvent();
+}
+
+const MtpEvent*
+MtpInterface::GetNextPrivateEvent()
+{
+    const MtpEvent* next = nullptr;
+    for (uint32_t i = 1; i <= g_systemCount; i++)
+    {
+        const MtpEvent* candidate = g_systems[i].PeekNextEvent();
+        if (candidate && (!next || MtpEventLess(*candidate, *next)))
+        {
+            next = candidate;
+        }
+    }
+    return next;
+}
+
+template <typename Predicate>
+void
+MtpInterface::WaitUntil(Predicate ready)
+{
+    // Spin while the wait is expected to be short (the other LPs of the round are
+    // still being processed), then back off so that idle threads release the CPU.
+    constexpr uint32_t spinLimit = 5000;
+    constexpr std::chrono::microseconds maxSleep(1000);
+    std::chrono::microseconds sleep(20);
+    for (uint32_t spins = 0; !ready(); spins++)
+    {
+        if (spins < spinLimit)
+        {
+            std::this_thread::yield();
+        }
+        else
+        {
+            std::this_thread::sleep_for(sleep);
+            sleep = std::min(sleep * 2, maxSleep);
+        }
+    }
 }
 
 void
@@ -271,7 +361,6 @@ MtpInterface::CalculateSmallestTime()
             g_smallestTime = nextTime;
         }
     }
-    g_nextPublicTime = g_systems[0].Next();
 
     // test if global finished
     bool globalFinished = true;
@@ -322,9 +411,10 @@ MtpInterface::ThreadFunc(void* arg)
         uint32_t index = g_systemIndex.fetch_add(1, std::memory_order_acquire);
         if (index >= g_systemCount)
         {
-            while (g_systemIndex.load(std::memory_order_acquire) >= g_systemCount)
-            {
-            };
+            WaitUntil([] {
+                return g_systemIndex.load(std::memory_order_acquire) < g_systemCount ||
+                       g_globalFinished;
+            });
             continue;
         }
         LogicalProcess* system = &g_systems[g_sortedSystemIndices[index]];
@@ -397,8 +487,6 @@ std::atomic<uint32_t> MtpInterface::g_finishedSystemCount;
 uint32_t MtpInterface::g_round = 0;
 
 Time MtpInterface::g_smallestTime = TimeStep(0);
-
-Time MtpInterface::g_nextPublicTime = TimeStep(0);
 
 bool MtpInterface::g_recvMsgStage = false;
 

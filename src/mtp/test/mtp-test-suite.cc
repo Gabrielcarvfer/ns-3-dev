@@ -9,7 +9,7 @@
  */
 
 #include "ns3/example-as-test.h"
-#include "ns3/mtp-module.h"
+#include "ns3/mtp-interface.h"
 #include "ns3/test.h"
 
 #include <sstream>
@@ -97,7 +97,7 @@ class MtpTestSuite : public TestSuite
                  const std::string postCmd = "",
                  const Duration duration = Duration::QUICK,
                  const bool shouldNotErr = true)
-        : TestSuite(name, EXAMPLE)
+        : TestSuite(name, Type::EXAMPLE)
     {
         AddTestCase(new MtpTestCase(name, program, dataDir, args, postCmd, shouldNotErr), duration);
     }
@@ -117,6 +117,14 @@ static MtpTestSuite g_mtpFatTree2("mtp-fat-tree-incast",
                                   "--bandwidth=100Mbps --incast=1 --thread=4 --flowmon=true",
                                   "| grep -v 'Simulation time'",
                                   TestCase::Duration::QUICK);
+
+// The reference log is produced by the sequential simulator (--thread=0)
+static MtpTestSuite g_mtpWiredWireless("mtp-wired-wireless",
+                                       "wired-wireless-mtp",
+                                       NS_TEST_SOURCEDIR,
+                                       "--thread=4",
+                                       "",
+                                       TestCase::Duration::QUICK);
 
 static MtpTestSuite g_mtpTcpValidation1("mtp-tcp-validation-dctcp-10ms",
                                         "tcp-validation-mtp",

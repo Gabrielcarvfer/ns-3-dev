@@ -17,8 +17,11 @@
 #ifndef LOGICAL_PROCESS_H
 #define LOGICAL_PROCESS_H
 
+#include "mtp-scheduler.h"
+
 #include "ns3/event-id.h"
 #include "ns3/event-impl.h"
+#include "ns3/node.h"
 #include "ns3/nstime.h"
 #include "ns3/object-factory.h"
 #include "ns3/ptr.h"
@@ -27,7 +30,6 @@
 #include <atomic>
 #include <chrono>
 #include <map>
-#include <tuple>
 #include <vector>
 
 namespace ns3
@@ -71,6 +73,23 @@ class LogicalProcess
     void ProcessOneRound();
 
     /**
+     * @brief Process the events of the public LP that precede the next event
+     * of every other LP.
+     */
+    void ProcessPublicEvents();
+
+    /**
+     * @return The next event, or nullptr if there is none or the LP is stopped
+     */
+    const MtpEvent* PeekNextEvent() const;
+
+    /**
+     * @brief Check and clear the flag recording that this LP sent events to other LPs.
+     * @return true if events were sent since the last call
+     */
+    bool TakeSentFlag();
+
+    /**
      * @brief Get the execution time of the last round.
      *
      * This method is called by MtpInterfaceused to determine the priority of each LP.
@@ -95,13 +114,40 @@ class LogicalProcess
     }
 
     /**
-     * @brief Get the future event list (scheduler)
+     * @brief Move all the pending events of this LP to the given container.
      *
-     * @return The event list
+     * Used by the automatic partition to transfer the events scheduled before
+     * Simulator::Run() from the public LP to the newly created LPs.
+     *
+     * @param events The container receiving the events, in scheduling order
      */
-    inline Ptr<Scheduler> GetPendingEvents() const
+    void TakePendingEvents(std::vector<Scheduler::Event>& events);
+
+    /**
+     * @brief Insert an event scheduled before the partition of the simulation.
+     *
+     * The uid of the event is preserved, so that the EventId returned to the user
+     * remains valid, and its ordering with respect to the other initial events is
+     * preserved as well.
+     *
+     * @param ev The event
+     */
+    void ScheduleInitial(const Scheduler::Event& ev);
+
+    /**
+     * @brief Make sure the uids of newly scheduled events do not collide with
+     * the given uid or any smaller one.
+     *
+     * @param uid The uid
+     */
+    void ReserveUidsUpTo(uint32_t uid);
+
+    /**
+     * @return The uid that the next scheduled event will receive
+     */
+    inline uint32_t GetNextUid() const
     {
-        return m_events;
+        return m_uid;
     }
 
     /**
@@ -131,7 +177,7 @@ class LogicalProcess
 
     inline bool isLocalFinished() const
     {
-        return m_stop || m_events->IsEmpty();
+        return m_stop || m_events.IsEmpty();
     }
 
     inline void Stop()
@@ -164,21 +210,44 @@ class LogicalProcess
         return m_eventCount;
     }
 
+    /**
+     * @brief Get the local (per-process) system ID of a node.
+     * @param node the node
+     * @return the local system ID
+     */
+    static uint32_t GetLocalSystemId(Ptr<Node> node);
+
   private:
+    /// An event sent by another LP, waiting to be received
+    struct Message
+    {
+        Scheduler::Event event; ///< the event
+        uint32_t originUid;     ///< scheduling order of the event in the sender
+        EventLineage lineage;   ///< the ancestors of the event
+    };
+
+    /**
+     * @brief Execute an event, updating the current time, context and lineage.
+     * @param ev the event
+     */
+    void Invoke(const MtpEvent& ev);
+
     uint32_t m_systemId;
     uint32_t m_systemCount;
     bool m_stop;
     uint32_t m_uid;
     uint32_t m_currentContext;
-    uint32_t m_currentUid;
     uint64_t m_currentTs;
     uint64_t m_eventCount;
     uint64_t m_pendingEventCount;
-    Ptr<Scheduler> m_events;
+    MtpScheduler m_events;
     Time m_lookAhead;
+    uint64_t m_grantedTs;          //!< upper bound of the time window of the current round
+    uint32_t m_execSeq;            //!< execution sequence number of the current event
+    bool m_sent;                   //!< whether events were sent to other LPs
+    EventLineage m_currentLineage; //!< the current event followed by its ancestors
 
-    std::map<uint32_t, std::vector<std::tuple<uint64_t, uint32_t, uint32_t, Scheduler::Event>>>
-        m_mailbox; // event message mail box
+    std::map<uint32_t, std::vector<Message>> m_mailbox; //!< event message mail box, per sender
     std::chrono::nanoseconds::rep m_executionTime;
 };
 

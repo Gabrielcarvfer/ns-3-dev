@@ -319,11 +319,8 @@ void
 HybridSimulatorImpl::SetScheduler(ObjectFactory schedulerFactory)
 {
     NS_LOG_FUNCTION(this << schedulerFactory);
-    for (uint32_t i = 0; i < MtpInterface::GetSize(); i++)
-    {
-        MtpInterface::GetSystem(i)->SetScheduler(schedulerFactory);
-    }
-    m_schedulerTypeId = schedulerFactory.GetTypeId();
+    // Logical processes use their own event list, which reproduces the event
+    // ordering of the sequential simulator; the requested scheduler is ignored.
 }
 
 uint32_t
@@ -471,46 +468,7 @@ HybridSimulatorImpl::Partition()
     // create new LPs
     MtpInterface::EnableNew(threadCount, systemCount);
 
-    // set scheduler
-    ObjectFactory schedulerFactory;
-    schedulerFactory.SetTypeId(m_schedulerTypeId);
-    for (uint32_t i = 1; i <= systemCount; i++)
-    {
-        MtpInterface::GetSystem(i)->SetScheduler(schedulerFactory);
-    }
-
-    // remove old events in public LP
-    const Ptr<Scheduler> oldEvents = MtpInterface::GetSystem()->GetPendingEvents();
-    const Ptr<Scheduler> eventsToBeTransferred = schedulerFactory.Create<Scheduler>();
-    while (!oldEvents->IsEmpty())
-    {
-        Scheduler::Event next = oldEvents->RemoveNext();
-        eventsToBeTransferred->Insert(next);
-    }
-
-    // transfer events to new LPs
-    while (!eventsToBeTransferred->IsEmpty())
-    {
-        Scheduler::Event ev = eventsToBeTransferred->RemoveNext();
-        // invoke initialization events (at time 0) by their insertion order
-        // since changing the execution order of these events may cause error,
-        // they have to be invoked now rather than parallelly executed
-        if (ev.key.m_ts == 0)
-        {
-            MtpInterface::GetSystem(ev.key.m_context == Simulator::NO_CONTEXT
-                                        ? 0
-                                        : NodeList::GetNode(ev.key.m_context)->GetSystemId() >> 16)
-                ->InvokeNow(ev);
-        }
-        else if (ev.key.m_context == Simulator::NO_CONTEXT)
-        {
-            Schedule(TimeStep(ev.key.m_ts), ev.impl);
-        }
-        else
-        {
-            ScheduleWithContext(ev.key.m_context, TimeStep(ev.key.m_ts), ev.impl);
-        }
-    }
+    MtpInterface::TransferInitialEvents();
 }
 
 } // namespace ns3

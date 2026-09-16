@@ -128,6 +128,15 @@ class MtpInterface
     static void EnableNew(const uint32_t threadCount, const uint32_t newSystemCount);
 
     /**
+     * @brief Move the events scheduled before the partition from the public LP to
+     * the LPs of their nodes.
+     *
+     * Events at time zero are executed immediately, in their scheduling order,
+     * since they typically initialize the nodes. The other events keep their uid.
+     */
+    static void TransferInitialEvents();
+
+    /**
      * @brief Disable the multithreaded simulation and free the memory
      * space of LPs and threads.
      *
@@ -281,16 +290,22 @@ class MtpInterface
     }
 
     /**
-     * @brief Get the timestamp of the next global event.
+     * @brief Get the next event of the public LP.
      *
-     * The next global event's timestamp is also used to calculate LBTS.
+     * Valid while the other LPs process their events, when the public LP is idle.
      *
-     * @return The timestamp of the next global event
+     * @return The next event of the public LP, or nullptr if there is none
      */
-    inline static Time GetNextPublicTime()
-    {
-        return g_nextPublicTime;
-    }
+    static const MtpEvent* GetNextPublicEvent();
+
+    /**
+     * @brief Get the first of the next events of the non-public LPs.
+     *
+     * Valid while the public LP processes its events, when the other LPs are idle.
+     *
+     * @return The event, or nullptr if there is none
+     */
+    static const MtpEvent* GetNextPrivateEvent();
 
     /**
      * @brief Whether all LPs are finished all rounds (or terminated by
@@ -305,7 +320,8 @@ class MtpInterface
     }
 
     /**
-     * @brief Schedule a global event right after the current round is finished.
+     * @brief Schedule a global event at the current time, to be executed by the
+     * public LP once the current round is finished.
      */
     template <
         typename FUNC,
@@ -315,10 +331,10 @@ class MtpInterface
         typename... Ts>
     inline static void ScheduleGlobal(FUNC f, Ts&&... args)
     {
-        CriticalSection cs;
-        g_systems[0].ScheduleAt(Simulator::NO_CONTEXT,
-                                Min(g_smallestTime, g_nextPublicTime),
-                                MakeEvent(f, std::forward<Ts>(args)...));
+        GetSystem()->ScheduleWithContext(&g_systems[0],
+                                         Simulator::NO_CONTEXT,
+                                         TimeStep(0),
+                                         MakeEvent(f, std::forward<Ts>(args)...));
     }
 
     /**
@@ -327,13 +343,22 @@ class MtpInterface
     template <typename... Us, typename... Ts>
     inline static void ScheduleGlobal(void (*f)(Us...), Ts&&... args)
     {
-        CriticalSection cs;
-        g_systems[0].ScheduleAt(Simulator::NO_CONTEXT,
-                                Min(g_smallestTime, g_nextPublicTime),
-                                MakeEvent(f, std::forward<Ts>(args)...));
+        GetSystem()->ScheduleWithContext(&g_systems[0],
+                                         Simulator::NO_CONTEXT,
+                                         TimeStep(0),
+                                         MakeEvent(f, std::forward<Ts>(args)...));
     }
 
   private:
+    /**
+     * @brief Wait until a condition holds, spinning first and then backing off.
+     *
+     * @tparam Predicate The type of the condition
+     * @param ready The condition
+     */
+    template <typename Predicate>
+    static void WaitUntil(Predicate ready);
+
     /**
      * @brief The actual function each thread will run.
      *
@@ -378,7 +403,6 @@ class MtpInterface
 
     static uint32_t g_round;
     static Time g_smallestTime;
-    static Time g_nextPublicTime;
     static bool g_recvMsgStage;
     static bool g_globalFinished;
     static bool g_enabled;

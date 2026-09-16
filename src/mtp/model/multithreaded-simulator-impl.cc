@@ -129,7 +129,10 @@ MultithreadedSimulatorImpl::ScheduleWithContext(uint32_t context,
                                                 EventImpl* event)
 {
     NS_LOG_FUNCTION(this << context << delay.GetTimeStep() << event);
-    LogicalProcess* remote = MtpInterface::GetSystem(NodeList::GetNode(context)->GetSystemId());
+    LogicalProcess* remote =
+        context == Simulator::NO_CONTEXT
+            ? MtpInterface::GetSystem(0)
+            : MtpInterface::GetSystem(NodeList::GetNode(context)->GetSystemId());
     MtpInterface::GetSystem()->ScheduleWithContext(remote, context, delay, event);
 }
 
@@ -248,11 +251,8 @@ void
 MultithreadedSimulatorImpl::SetScheduler(ObjectFactory schedulerFactory)
 {
     NS_LOG_FUNCTION(this << schedulerFactory);
-    for (uint32_t i = 0; i < MtpInterface::GetSize(); i++)
-    {
-        MtpInterface::GetSystem(i)->SetScheduler(schedulerFactory);
-    }
-    m_schedulerTypeId = schedulerFactory.GetTypeId();
+    // Logical processes use their own event list, which reproduces the event
+    // ordering of the sequential simulator; the requested scheduler is ignored.
 }
 
 uint32_t
@@ -290,10 +290,13 @@ MultithreadedSimulatorImpl::Partition()
     NS_LOG_FUNCTION(this);
     uint32_t systemId = 0;
     const NodeContainer nodes = NodeContainer::GetGlobal();
-    bool* visited = new bool[nodes.GetN()]{false};
+    std::vector<bool> visited(nodes.GetN(), false);
     std::queue<Ptr<Node>> q;
 
-    // if m_minLookahead is not set, calculate the median of delay for every link
+    // Only point-to-point links are cut when partitioning. Shared-medium channels
+    // (CSMA, Wi-Fi, spectrum, ...) keep all attached nodes in the same LP, since
+    // their models access the state of every device on the channel directly.
+    // If m_minLookahead is not set, use the median of the delay of every p2p link.
     if (m_minLookahead == TimeStep(0))
     {
         std::vector<Time> delays;
@@ -304,17 +307,13 @@ MultithreadedSimulatorImpl::Partition()
             {
                 Ptr<NetDevice> localNetDevice = node->GetDevice(i);
                 Ptr<Channel> channel = localNetDevice->GetChannel();
-                if (!channel)
+                if (!channel || !localNetDevice->IsPointToPoint())
                 {
                     continue;
                 }
-                // cut-off p2p links for partition
-                if (localNetDevice->IsPointToPoint())
-                {
-                    TimeValue delay;
-                    channel->GetAttribute("Delay", delay);
-                    delays.push_back(delay.Get());
-                }
+                TimeValue delay;
+                channel->GetAttribute("Delay", delay);
+                delays.push_back(delay.Get());
             }
         }
         std::sort(delays.begin(), delays.end());
@@ -337,54 +336,51 @@ MultithreadedSimulatorImpl::Partition()
     for (auto it = nodes.Begin(); it != nodes.End(); it++)
     {
         Ptr<Node> node = *it;
-        if (!visited[node->GetId()])
+        if (visited[node->GetId()])
         {
-            q.push(node);
-            systemId++;
-            while (!q.empty())
-            {
-                // pop from BFS queue
-                node = q.front();
-                q.pop();
-                visited[node->GetId()] = true;
-                // assign this node the current systemId
-                node->SetSystemId(systemId);
-                NS_LOG_INFO("node " << node->GetId() << " is set to system " << systemId);
+            continue;
+        }
+        q.push(node);
+        visited[node->GetId()] = true;
+        systemId++;
+        while (!q.empty())
+        {
+            node = q.front();
+            q.pop();
+            node->SetSystemId(systemId);
+            NS_LOG_INFO("node " << node->GetId() << " is set to system " << systemId);
 
-                for (uint32_t i = 0; i < node->GetNDevices(); i++)
+            for (uint32_t i = 0; i < node->GetNDevices(); i++)
+            {
+                Ptr<NetDevice> localNetDevice = node->GetDevice(i);
+                Ptr<Channel> channel = localNetDevice->GetChannel();
+                if (!channel)
                 {
-                    Ptr<NetDevice> localNetDevice = node->GetDevice(i);
-                    Ptr<Channel> channel = localNetDevice->GetChannel();
-                    if (!channel)
+                    continue;
+                }
+                // cut-off p2p links whose delay is not below the threshold
+                if (localNetDevice->IsPointToPoint())
+                {
+                    TimeValue delay;
+                    channel->GetAttribute("Delay", delay);
+                    if (delay.Get() >= m_minLookahead && delay.Get() > TimeStep(0))
                     {
                         continue;
                     }
-                    // cut-off p2p links for partition
-                    if (localNetDevice->IsPointToPoint())
+                }
+                // grab the adjacent nodes
+                for (std::size_t j = 0; j < channel->GetNDevices(); j++)
+                {
+                    Ptr<Node> remote = channel->GetDevice(j)->GetNode();
+                    if (!visited[remote->GetId()])
                     {
-                        TimeValue delay;
-                        channel->GetAttribute("Delay", delay);
-                        // if delay is below threshold, do not cut-off
-                        if (delay.Get() >= m_minLookahead)
-                        {
-                            continue;
-                        }
-                    }
-                    // grab the adjacent nodes
-                    for (uint32_t j = 0; j < channel->GetNDevices(); j++)
-                    {
-                        Ptr<Node> remote = channel->GetDevice(j)->GetNode();
-                        // if it's not visited, add it to the current partition
-                        if (!visited[remote->GetId()])
-                        {
-                            q.push(remote);
-                        }
+                        visited[remote->GetId()] = true;
+                        q.push(remote);
                     }
                 }
             }
         }
     }
-    delete[] visited;
 
     // after the partition, we finally know the system count (# of LPs)
     const uint32_t systemCount = systemId;
@@ -395,46 +391,7 @@ MultithreadedSimulatorImpl::Partition()
     // create new LPs
     MtpInterface::EnableNew(threadCount, systemCount);
 
-    // set scheduler
-    ObjectFactory schedulerFactory;
-    schedulerFactory.SetTypeId(m_schedulerTypeId);
-    for (uint32_t i = 1; i <= systemCount; i++)
-    {
-        MtpInterface::GetSystem(i)->SetScheduler(schedulerFactory);
-    }
-
-    // remove old events in public LP
-    const Ptr<Scheduler> oldEvents = MtpInterface::GetSystem()->GetPendingEvents();
-    const Ptr<Scheduler> eventsToBeTransferred = schedulerFactory.Create<Scheduler>();
-    while (!oldEvents->IsEmpty())
-    {
-        Scheduler::Event next = oldEvents->RemoveNext();
-        eventsToBeTransferred->Insert(next);
-    }
-
-    // transfer events to new LPs
-    while (!eventsToBeTransferred->IsEmpty())
-    {
-        Scheduler::Event ev = eventsToBeTransferred->RemoveNext();
-        // invoke initialization events (at time 0) by their insertion order
-        // since changing the execution order of these events may cause error,
-        // they have to be invoked now rather than parallelly executed
-        if (ev.key.m_ts == 0)
-        {
-            MtpInterface::GetSystem(ev.key.m_context == Simulator::NO_CONTEXT
-                                        ? 0
-                                        : NodeList::GetNode(ev.key.m_context)->GetSystemId())
-                ->InvokeNow(ev);
-        }
-        else if (ev.key.m_context == Simulator::NO_CONTEXT)
-        {
-            Schedule(TimeStep(ev.key.m_ts), ev.impl);
-        }
-        else
-        {
-            ScheduleWithContext(ev.key.m_context, TimeStep(ev.key.m_ts), ev.impl);
-        }
-    }
+    MtpInterface::TransferInitialEvents();
 }
 
 } // namespace ns3

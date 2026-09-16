@@ -83,7 +83,6 @@ class MultithreadedSimulatorImpl : public SimulatorImpl
     bool m_partition;
     uint32_t m_maxThreads;
     Time m_minLookahead;
-    TypeId m_schedulerTypeId;
     std::list<EventId> m_destroyEvents;
 };
 
