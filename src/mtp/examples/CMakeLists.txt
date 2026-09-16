@@ -20,3 +20,17 @@ build_lib_example(
     ${libapplications}
     ${libflow-monitor}
 )
+
+build_lib_example(
+  NAME wired-wireless-mtp
+  SOURCE_FILES wired-wireless-mtp.cc
+  LIBRARIES_TO_LINK
+    ${libmtp}
+    ${libpoint-to-point}
+    ${libcsma}
+    ${libwifi}
+    ${libmobility}
+    ${libinternet}
+    ${libapplications}
+    ${libflow-monitor}
+)

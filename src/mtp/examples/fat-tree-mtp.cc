@@ -252,7 +252,9 @@ Initialize(int argc, char* argv[])
     cmd.AddValue("interval", "Simulation progress print interval in seconds", conf::interval);
 
     // parse mtp/mpi options
-    cmd.AddValue("thread", "Maximum number of threads", conf::thread);
+    cmd.AddValue("thread",
+                 "Maximum number of threads (0 uses the default sequential simulator)",
+                 conf::thread);
     cmd.Parse(argc, argv);
 
     // link layer settings
@@ -304,7 +306,10 @@ Initialize(int argc, char* argv[])
     RngSeedManager::SetSeed(Hash32(conf::seed));
 
     // initialize mtp
-    MtpInterface::Enable(conf::thread);
+    if (conf::thread > 0)
+    {
+        MtpInterface::Enable(conf::thread);
+    }
 }
 
 void

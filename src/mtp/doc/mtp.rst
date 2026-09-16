@@ -99,10 +99,15 @@ You can also change the default maximum number of threads by setting
     Config::SetDefault("ns3::MultithreadedSimulatorImpl::MaxThreads", UintegerValue(8));
     Config::SetDefault("ns3::HybridSimulatorImpl::MaxThreads", UintegerValue(8));
 
-The automatic partition will cut off stateless links whose delay is above the
+The automatic partition will cut off point-to-point links whose delay is above the
 threshold. The threshold is automatically calculated based on the delay of every
-link. If you are not satisfied with the partition results, you can set a custom
-threshold by setting
+link. Shared-medium channels (CSMA, Wi-Fi, spectrum-based channels, ...) are never
+cut: all the nodes attached to such a channel are placed in the same logical
+process, since the channel models access the state of every attached device
+directly. A mixed topology, such as several Wi-Fi cells connected to a wired core
+by point-to-point links, is therefore parallelized at the granularity of the
+wireless segments. If you are not satisfied with the partition results, you can
+set a custom threshold by setting
 
     Config::SetDefault("ns3::MultithreadedSimulatorImpl::MinLookahead", TimeValue(NanoSeconds(500));
     Config::SetDefault("ns3::HybridSimulatorImpl::MinLookahead", TimeValue(NanoSeconds(500));
@@ -127,6 +132,32 @@ partitions lead to more scheduling costs. You can also set how frequently schedu
 occurs by setting
 
     GlobalValue::Bind("PartitionSchedulingPeriod", UintegerValue(4));
+
+Reproducibility of the results
+******************************
+
+The multithreaded simulator executes the events of the same logical process in
+the order the sequential simulator would execute them, and the events with the
+same timestamp of different logical processes in the order in which the sequential
+simulator would have scheduled them. To this end, each event records a few
+generations of the events that led to its scheduling (its lineage), which is
+compared whenever two events with the same timestamp coming from different logical
+processes must be ordered. As a result, the simulation results are the same as
+with the default (sequential) simulator, whatever the number of threads, provided
+that the models do not share state across logical processes other than through
+the channels, and that the traces are collected per node. The
+``wired-wireless-mtp`` and ``fat-tree-mtp`` examples accept ``--thread=0`` to run
+with the sequential simulator, so that the results can be compared.
+
+Two things are not reproducible. The flow identifiers assigned by the flow
+monitor depend on the order in which the flows are first seen, which is
+arbitrary when packets of different logical processes are seen at the same
+simulation time; the statistics of each flow, keyed by its five-tuple, are
+reproducible. Also, a single trace file written by several nodes is filled in an
+arbitrary (and not thread-safe) order.
+
+The scheduler requested with ``Simulator::SetScheduler`` is ignored, since
+logical processes use an event list of their own.
 
 Tracing During Multithreaded Simulations
 ****************************************
