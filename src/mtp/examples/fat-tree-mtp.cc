@@ -44,6 +44,7 @@ class Distribution
     {
         ifstream fin;
         fin.open(filename);
+        NS_ABORT_MSG_IF(!fin.is_open(), "Cannot open the traffic CDF file " << filename);
         while (!fin.eof())
         {
             double x;
