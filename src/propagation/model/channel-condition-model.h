@@ -510,6 +510,14 @@ class ThreeGppChannelConditionModel : public ChannelConditionModel
 
     Ptr<UniformRandomVariable> m_uniformVar; //!< uniform random variable
 
+    /**
+     * @brief Correlation distance of the LOS/NLOS state (TR 38.901 Table
+     *        7.6.3.1-2) used by the InterUeSpatialConsistency attribute; the
+     *        base implementation returns the UMa distance.
+     * @return The correlation distance in meters.
+     */
+    virtual double GetLosStateCorrelationDistance() const;
+
   private:
     /**
      * This method computes the channel condition based on a probabilistic model
@@ -575,6 +583,8 @@ class ThreeGppChannelConditionModel : public ChannelConditionModel
         0}; //!< the threshold for determining what is the ratio of channels with O2I
     double m_o2iLowLossThreshold{0}; //!< the threshold for determining what is the ratio of low -
                                      //!< high O2I building penetration losses
+    /// enables inter-UE (drop-based) spatially consistent LOS/NLOS state
+    bool m_interUeSpatialConsistency{false};
     bool m_linkO2iConditionToAntennaHeight{
         false}; //!< the indicator that determines whether the O2I/O2O condition is determined based
                 //!< on the UE height
@@ -612,6 +622,8 @@ class ThreeGppRmaChannelConditionModel : public ThreeGppChannelConditionModel
      * Destructor for the ThreeGppRmaChannelConditionModel class
      */
     ~ThreeGppRmaChannelConditionModel() override;
+
+    double GetLosStateCorrelationDistance() const override;
 
   private:
     /**
@@ -733,6 +745,8 @@ class ThreeGppIndoorMixedOfficeChannelConditionModel : public ThreeGppChannelCon
      */
     ~ThreeGppIndoorMixedOfficeChannelConditionModel() override;
 
+    double GetLosStateCorrelationDistance() const override;
+
   private:
     /**
      * Compute the LOS probability as specified in Table 7.4.2-1 of 3GPP TR 38.901
@@ -772,6 +786,8 @@ class ThreeGppIndoorOpenOfficeChannelConditionModel : public ThreeGppChannelCond
      * Destructor for the ThreeGppIndoorOpenOfficeChannelConditionModel class
      */
     ~ThreeGppIndoorOpenOfficeChannelConditionModel() override;
+
+    double GetLosStateCorrelationDistance() const override;
 
   private:
     /**

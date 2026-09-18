@@ -891,6 +891,15 @@ characterized by Gaussian distribution with zero mean and scenario-specific
 standard deviation. Subsequent shadowing components of each BS-UT link are
 correlated as described in 3GPP TR 38.901, Sec. 7.4.4 [9]_.
 
+When the attribute "InterUeSpatialConsistency" is enabled, the shadow fading is
+instead a sample of a per-site, per-condition ``SpatialGaussianField`` at the
+terminal position (drop-based spatial consistency of 3GPP TR 38.901,
+Sec. 7.6.3.1, correlation distance of Table 7.5-6, O2I column for O2I links):
+links from the same site to nearby terminals obtain correlated shadowing, and
+the draw is repeatable across model instances. The site is the link endpoint
+with the lower node id, so infrastructure nodes must be created before the
+terminals; a way to designate the site explicitly is left for future work.
+
 *Note 1*: The TR defines height ranges for UTs and BSs, depending on the chosen
 propagation model (for the exact values, please see below in the specific model
 documentation). If the user does not set correct values, the model will emit
@@ -1222,6 +1231,13 @@ It provides the possibility to update the condition of each channel periodically
 after a given time period which can be configured through the attribute "UpdatePeriod".
 If "UpdatePeriod" is set to 0, the channel condition is never updated.
 It has five derived classes implementing the channel condition models described in 3GPP TR 38.901 [9]_ for different propagation scenarios.
+
+When the attribute "InterUeSpatialConsistency" is enabled, the uniform variate
+compared against the LOS probability is obtained from a per-site
+``SpatialGaussianField`` sampled at the terminal position (3GPP TR 38.901,
+Sec. 7.6.3.3, correlation distance of Table 7.6.3.1-2): links from the same
+site (the lower node id endpoint) to nearby terminals obtain a consistent
+LOS/NLOS state, forming contiguous regions.
 
 ThreeGppRmaChannelConditionModel
 ````````````````````````````````

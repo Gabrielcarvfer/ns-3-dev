@@ -8,6 +8,7 @@
 #include "three-gpp-propagation-loss-model.h"
 
 #include "channel-condition-model.h"
+#include "spatial-gaussian-field.h"
 
 #include "ns3/boolean.h"
 #include "ns3/double.h"
@@ -19,9 +20,18 @@
 #include "ns3/simulator.h"
 
 #include <cmath>
+#include <cstdint>
 
 namespace
 {
+
+/**
+ * Shadow-fading random field, see SpatialGaussianField. The class salt
+ * decorrelates it from the LSP and LOS-state fields keyed on the same site by
+ * ThreeGppChannelModel and ThreeGppChannelConditionModel.
+ */
+const ns3::SpatialGaussianField kShadowFadingField{0x5AD0FADE5F1E1DULL};
+
 /**
  * The enumerator used for code clarity when performing parameter assignment in the GetLoss Methods
  */
@@ -302,6 +312,17 @@ ThreeGppPropagationLossModel::GetTypeId()
                           MakeBooleanAccessor(&ThreeGppPropagationLossModel::m_shadowingEnabled),
                           MakeBooleanChecker())
             .AddAttribute(
+                "InterUeSpatialConsistency",
+                "Enable inter-UE (drop-based) spatially consistent shadow fading (3GPP TR "
+                "38.901 Sec. 7.6.3.1): the shadowing of a link is drawn from a per-site, "
+                "per-condition (LOS/NLOS/O2I) spatially correlated field at the terminal "
+                "position with the Table 7.5-6 correlation distance, replacing the per-link "
+                "displacement-autocorrelated draw. The site is the link endpoint with the "
+                "lower node id, so infrastructure nodes must be created before the terminals.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&ThreeGppPropagationLossModel::m_interUeSpatialConsistency),
+                MakeBooleanChecker())
+            .AddAttribute(
                 "ChannelConditionModel",
                 "Pointer to the channel condition model.",
                 PointerValue(),
@@ -337,6 +358,8 @@ ThreeGppPropagationLossModel::ThreeGppPropagationLossModel()
     m_normRandomVariable = CreateObject<NormalRandomVariable>();
     m_normRandomVariable->SetAttribute("Mean", DoubleValue(0));
     m_normRandomVariable->SetAttribute("Variance", DoubleValue(1));
+
+    m_interUeSpatialConsistency = false;
 
     m_randomO2iVar1 = CreateObject<UniformRandomVariable>();
     m_randomO2iVar2 = CreateObject<UniformRandomVariable>();
@@ -723,6 +746,30 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
 {
     NS_LOG_FUNCTION(this);
 
+    if (m_interUeSpatialConsistency)
+    {
+        // Drop-based spatial consistency (TR 38.901 Sec. 7.6.3.1): draw the
+        // shadow-fading realization from a per-site spatially-correlated
+        // Gaussian field sampled at the terminal position, instead of the
+        // per-link displacement-autocorrelated map below. Re-evaluating the
+        // field at a moving terminal's successive positions reproduces the
+        // temporal correlation automatically, so no map bookkeeping is needed.
+        const uint32_t idA = a->GetObject<Node>()->GetId();
+        const uint32_t idB = b->GetObject<Node>()->GetId();
+        const bool aIsSite = idA <= idB;
+        const uint32_t siteNodeId = aIsSite ? idA : idB;
+        const Vector termPos = (aIsSite ? b : a)->GetPosition();
+        // O2I links own a third field with the O2I correlation distance of
+        // Table 7.5-6, as the spec treats O2I as its own state.
+        const bool isO2i = m_channelConditionModel->GetChannelCondition(a, b)->GetO2iCondition() ==
+                           ChannelCondition::O2iConditionValue::O2I;
+        const uint8_t condSlot = isO2i ? 2 : (cond == ChannelCondition::LOS ? 0 : 1);
+        const double corrDist =
+            isO2i ? GetO2iShadowingCorrelationDistance() : GetShadowingCorrelationDistance(cond);
+        return SampleSpatiallyCorrelatedNormal(siteNodeId, condSlot, termPos, corrDist) *
+               GetShadowingStd(a, b, cond);
+    }
+
     double shadowingValue;
 
     // compute the channel key
@@ -771,6 +818,27 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
     it->second.m_condition = cond;
 
     return shadowingValue;
+}
+
+double
+ThreeGppPropagationLossModel::GetO2iShadowingCorrelationDistance() const
+{
+    NS_LOG_FUNCTION(this);
+    // Scenarios without an O2I column in TR 38.901 Table 7.5-6 (InH, NTN)
+    // reuse the NLOS correlation distance.
+    return GetShadowingCorrelationDistance(ChannelCondition::LosConditionValue::NLOS);
+}
+
+double
+ThreeGppPropagationLossModel::SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
+                                                              uint8_t condSlot,
+                                                              const Vector& position,
+                                                              double corrDist) const
+{
+    // One independent field per (site, condition slot).
+    const uint64_t fieldKey =
+        (static_cast<uint64_t>(siteNodeId) << 2) | static_cast<uint64_t>(condSlot);
+    return kShadowFadingField.Sample(fieldKey, position, corrDist);
 }
 
 int64_t
@@ -1096,6 +1164,14 @@ ThreeGppRmaPropagationLossModel::GetShadowingStd(Ptr<MobilityModel> a,
 }
 
 double
+ThreeGppRmaPropagationLossModel::GetO2iShadowingCorrelationDistance() const
+{
+    NS_LOG_FUNCTION(this);
+    // See 3GPP TR 38.901, Table 7.5-6, O2I column
+    return 120;
+}
+
+double
 ThreeGppRmaPropagationLossModel::GetShadowingCorrelationDistance(
     ChannelCondition::LosConditionValue cond) const
 {
@@ -1350,6 +1426,14 @@ ThreeGppUmaPropagationLossModel::GetShadowingStd(Ptr<MobilityModel> /* a */,
 }
 
 double
+ThreeGppUmaPropagationLossModel::GetO2iShadowingCorrelationDistance() const
+{
+    NS_LOG_FUNCTION(this);
+    // See 3GPP TR 38.901, Table 7.5-6, O2I column
+    return 7;
+}
+
+double
 ThreeGppUmaPropagationLossModel::GetShadowingCorrelationDistance(
     ChannelCondition::LosConditionValue cond) const
 {
@@ -1583,6 +1667,14 @@ ThreeGppUmiStreetCanyonPropagationLossModel::GetShadowingStd(
         }
     }
     return shadowingStd;
+}
+
+double
+ThreeGppUmiStreetCanyonPropagationLossModel::GetO2iShadowingCorrelationDistance() const
+{
+    NS_LOG_FUNCTION(this);
+    // See 3GPP TR 38.901, Table 7.5-6, O2I column
+    return 7;
 }
 
 double

@@ -14,6 +14,8 @@
 #include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/mobility-helper.h"
+#include "ns3/node.h"
+#include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/test.h"
 #include "ns3/three-gpp-propagation-loss-model.h"
@@ -1331,6 +1333,172 @@ ThreeGppShadowingTestCase::DoRun()
 /**
  * @ingroup propagation-tests
  *
+ * Test case for the inter-UE (drop-based) spatial consistency of TR 38.901
+ * Sec. 7.6.3.1. With InterUeSpatialConsistency enabled on both the pathloss
+ * model and the channel condition model, two co-located terminals served by
+ * the same site sample the LOS-state and shadow-fading random fields at the
+ * same position and must therefore obtain the same channel condition and the
+ * same total loss. Without it, the per-link draws are independent and
+ * co-located terminals obtain different shadowing realizations.
+ */
+class ThreeGppColocatedSpatialConsistencyTestCase : public TestCase
+{
+  public:
+    ThreeGppColocatedSpatialConsistencyTestCase();
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Create a node with an aggregated constant-position mobility model.
+     *
+     * @param pos The node position.
+     * @return The mobility model of the new node.
+     */
+    Ptr<MobilityModel> CreateNodeAt(const Vector& pos);
+
+    /**
+     * Compute the losses perceived by two co-located terminals.
+     *
+     * @param scenario Key of the scenario to test.
+     * @param interUeSpatialConsistency Value for the InterUeSpatialConsistency attributes.
+     * @param o2i Force every link to the O2I condition.
+     * @param position The common terminal position.
+     * @return The losses of the two terminals, in dB, and whether their channel
+     *         conditions match.
+     */
+    std::tuple<double, double, bool> ComputeColocatedLosses(const std::string& scenario,
+                                                            bool interUeSpatialConsistency,
+                                                            const Vector& position,
+                                                            bool o2i);
+};
+
+ThreeGppColocatedSpatialConsistencyTestCase::ThreeGppColocatedSpatialConsistencyTestCase()
+    : TestCase("Test that co-located terminals perceive the same loss with "
+               "InterUeSpatialConsistency")
+{
+}
+
+Ptr<MobilityModel>
+ThreeGppColocatedSpatialConsistencyTestCase::CreateNodeAt(const Vector& pos)
+{
+    Ptr<Node> node = CreateObject<Node>();
+    Ptr<ConstantPositionMobilityModel> mob = CreateObject<ConstantPositionMobilityModel>();
+    mob->SetPosition(pos);
+    node->AggregateObject(mob);
+    return mob;
+}
+
+std::tuple<double, double, bool>
+ThreeGppColocatedSpatialConsistencyTestCase::ComputeColocatedLosses(const std::string& scenario,
+                                                                    bool interUeSpatialConsistency,
+                                                                    const Vector& position,
+                                                                    bool o2i)
+{
+    double hBs;
+    Ptr<ThreeGppPropagationLossModel> lossModel;
+    Ptr<ThreeGppChannelConditionModel> condModel;
+    if (scenario == "RMa")
+    {
+        hBs = 35;
+        lossModel = CreateObject<ThreeGppRmaPropagationLossModel>();
+        condModel = CreateObject<ThreeGppRmaChannelConditionModel>();
+    }
+    else if (scenario == "UMa")
+    {
+        hBs = 25;
+        lossModel = CreateObject<ThreeGppUmaPropagationLossModel>();
+        condModel = CreateObject<ThreeGppUmaChannelConditionModel>();
+    }
+    else if (scenario == "UMi")
+    {
+        hBs = 10;
+        lossModel = CreateObject<ThreeGppUmiStreetCanyonPropagationLossModel>();
+        condModel = CreateObject<ThreeGppUmiStreetCanyonChannelConditionModel>();
+    }
+    else
+    {
+        NS_ABORT_MSG_UNLESS(scenario == "InH", "Unknown scenario " << scenario);
+        hBs = 3;
+        lossModel = CreateObject<ThreeGppIndoorOfficePropagationLossModel>();
+        condModel = CreateObject<ThreeGppIndoorMixedOfficeChannelConditionModel>();
+    }
+
+    lossModel->SetAttribute("Frequency", DoubleValue(3.5e9));
+    lossModel->SetAttribute("ShadowingEnabled", BooleanValue(true));
+    lossModel->SetAttribute("InterUeSpatialConsistency", BooleanValue(interUeSpatialConsistency));
+    condModel->SetAttribute("InterUeSpatialConsistency", BooleanValue(interUeSpatialConsistency));
+    condModel->SetAttribute("O2iThreshold", DoubleValue(o2i ? 1.0 : 0.0));
+    lossModel->SetChannelConditionModel(condModel);
+
+    Ptr<MobilityModel> tx = CreateNodeAt(Vector(0.0, 0.0, hBs));
+    Ptr<MobilityModel> rx1 = CreateNodeAt(position);
+    Ptr<MobilityModel> rx2 = CreateNodeAt(position);
+
+    Ptr<ChannelCondition> cond1 = condModel->GetChannelCondition(tx, rx1);
+    Ptr<ChannelCondition> cond2 = condModel->GetChannelCondition(tx, rx2);
+    return {lossModel->CalcRxPower(0.0, tx, rx1),
+            lossModel->CalcRxPower(0.0, tx, rx2),
+            cond1->GetLosCondition() == cond2->GetLosCondition()};
+}
+
+void
+ThreeGppColocatedSpatialConsistencyTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    for (const std::string scenario : {"RMa", "UMa", "UMi", "InH"})
+    {
+        for (bool o2i : {false, true})
+        {
+            for (const Vector& pos :
+                 {Vector(60.0, 0.0, 1.5), Vector(-35.0, 120.0, 1.5), Vector(200.0, -150.0, 1.5)})
+            {
+                auto [l1, l2, sameCondition] = ComputeColocatedLosses(scenario, true, pos, o2i);
+                NS_TEST_ASSERT_MSG_EQ(sameCondition,
+                                      true,
+                                      "Co-located terminals must obtain the same channel "
+                                      "condition with InterUeSpatialConsistency ("
+                                          << scenario << (o2i ? ", O2I)" : ")"));
+                // The O2I penetration losses are drawn per link and are outside
+                // the scope of the spatial consistency, so only outdoor losses
+                // are compared.
+                if (!o2i)
+                {
+                    NS_TEST_ASSERT_MSG_EQ_TOL(l1,
+                                              l2,
+                                              1e-9,
+                                              "Co-located terminals must perceive the same loss "
+                                              "with InterUeSpatialConsistency ("
+                                                  << scenario << ")");
+                }
+            }
+        }
+
+        // Without spatial consistency the shadowing draws are independent: at
+        // least one co-located pair sharing the LOS/NLOS condition (so that
+        // only the shadowing can differ) must differ.
+        bool anyDifferent = false;
+        for (const Vector& pos :
+             {Vector(60.0, 0.0, 1.5), Vector(-35.0, 120.0, 1.5), Vector(200.0, -150.0, 1.5)})
+        {
+            auto [l1, l2, sameCondition] = ComputeColocatedLosses(scenario, false, pos, false);
+            anyDifferent |= sameCondition && std::abs(l1 - l2) > 0.1;
+        }
+        NS_TEST_ASSERT_MSG_EQ(anyDifferent,
+                              true,
+                              "Without InterUeSpatialConsistency, co-located terminals should "
+                              "draw independent shadowing realizations ("
+                                  << scenario << ")");
+    }
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-tests
+ *
  * @brief 3GPP Propagation models TestSuite
  *
  * This TestSuite tests the following models:
@@ -1358,6 +1526,7 @@ ThreeGppPropagationLossModelsTestSuite::ThreeGppPropagationLossModelsTestSuite()
     AddTestCase(new ThreeGppV2vUrbanPropagationLossModelTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppV2vHighwayPropagationLossModelTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppColocatedSpatialConsistencyTestCase, TestCase::Duration::QUICK);
 }
 
 /// Static variable for test initialization
