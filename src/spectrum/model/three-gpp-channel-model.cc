@@ -2870,7 +2870,14 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
     const ChannelCondition::LosConditionValue losCondition = channelCondition->GetLosCondition();
     DoubleVector lspIndepRandomVar;
     DoubleVector lsp;
-    const uint8_t paramNum = losCondition == ChannelCondition::LOS ? 7 : 6;
+    // TR 38.901 Table 7.5-6: an O2I link takes the O2I LSP column, which has no
+    // K-factor, whatever its LOS state. Applying the 7-parameter LOS ordering to a
+    // LOS+O2I link against the 6x6 O2I correlation matrix made every LSP after K
+    // read the wrong matrix row and ZSA (row 6) read past the matrix, i.e. a
+    // constant ZSA on every indoor LOS link.
+    const bool isO2i = channelCondition->GetO2iCondition() == ChannelCondition::O2I;
+    const bool losOrdering = losCondition == ChannelCondition::LOS && !isO2i;
+    const uint8_t paramNum = losOrdering ? 7 : 6;
 
     // Generate paramNum independent LSPs.
     if (!m_interUeSpatialConsistency)
@@ -2892,8 +2899,6 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
         GetLspCorrelationDistances(corrLos, corrNlos, corrO2i);
 
         // Condition slot selecting the field set: LOS=0, NLOS=1, O2I=2.
-        const bool losOrdering = losCondition == ChannelCondition::LOS;
-        const bool isO2i = channelCondition->GetO2iCondition() == ChannelCondition::O2I;
         const uint8_t condSlot = isO2i ? 2 : (losOrdering ? 0 : 1);
         const auto& corrDist = isO2i ? corrO2i : (losOrdering ? corrLos : corrNlos);
         const uint32_t siteNodeId = siteMob->GetObject<Node>()->GetId();
@@ -2933,8 +2938,8 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
     LargeScaleParameters lsps;
     // NOTE the shadowing is generated in the propagation loss model
     // For LOS, LSP is following the order of [SF,K,DS,ASD,ASA,ZSD,ZSA].
-    // For NLOS, LSP is following the order of [SF,DS,ASD,ASA,ZSD,ZSA].
-    if (losCondition == ChannelCondition::LOS)
+    // For NLOS and O2I, LSP is following the order of [SF,DS,ASD,ASA,ZSD,ZSA].
+    if (losOrdering)
     {
         lsps.kFactor = lsp[1] * table3gpp->m_sigK + table3gpp->m_uK;
         lsps.DS = pow(10, lsp[2] * table3gpp->m_sigLgDS + table3gpp->m_uLgDS);
