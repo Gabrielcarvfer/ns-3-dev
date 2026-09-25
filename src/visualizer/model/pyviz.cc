@@ -287,6 +287,8 @@ PyViz::CallbackStopSimulation()
     NS_LOG_FUNCTION_NOARGS();
     if (m_runUntil <= Simulator::Now())
     {
+        // If this callback was the last pending event, the simulation is over
+        m_finished = Simulator::IsFinished();
         Simulator::Stop(); // Stop right now
         m_stop = true;
     }
@@ -355,6 +357,19 @@ PyViz::SimulatorRunUntil(Time time)
     {
         impl->Run();
     }
+
+    // If the run was not paused by CallbackStopSimulation, the simulation program
+    // stopped it
+    if (!m_stop)
+    {
+        m_finished = true;
+    }
+}
+
+bool
+PyViz::IsSimulationFinished() const
+{
+    return m_finished;
 }
 
 Time

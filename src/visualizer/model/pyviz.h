@@ -173,6 +173,15 @@ class PyViz
     Time GetSimulatorStopTime();
 
     /**
+     * Check whether the simulation ended, either because it ran out of events or
+     * because Simulator::Stop() was called by the simulation program, rather than
+     * being paused at the end of a SimulatorRunUntil() step.
+     *
+     * @return true if the simulation ended.
+     */
+    bool IsSimulationFinished() const;
+
+    /**
      * Pause function.
      *
      * @param message the pause message
@@ -526,8 +535,9 @@ class PyViz
     std::map<uint32_t, Time> m_packetsOfInterest; //!< List of packet UIDs that will be monitored
     std::map<uint32_t, LastPacketsSample> m_lastPackets;                    //!< Last packets
     std::map<uint32_t, std::vector<NetDeviceStatistics>> m_nodesStatistics; //!< Node statistics
-    bool m_stop;     //!< Stop simulation flag
-    Time m_runUntil; //!< Indicates until when the simulation should run for its next step
+    bool m_stop;            //!< Stop simulation flag
+    bool m_finished{false}; //!< Whether the simulation ended
+    Time m_runUntil;        //!< Indicates until when the simulation should run for its next step
 };
 
 } // namespace visualizer

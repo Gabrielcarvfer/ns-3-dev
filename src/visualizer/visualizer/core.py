@@ -743,10 +743,7 @@ class SimulationThread(threading.Thread):
                         GLib.idle_add(self.viz.update_model, priority=PRIORITY_UPDATE_MODEL)
 
                     # Check stop condition
-                    if (
-                        ns.Simulator.Now().GetSeconds()
-                        >= self.sim_helper.GetSimulatorStopTime().GetSeconds()
-                    ):
+                    if self.sim_helper.IsSimulationFinished():
                         if gui_active:
                             GLib.idle_add(self.viz._on_simulation_finished)
                         break
