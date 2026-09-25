@@ -55,6 +55,7 @@ bindings from 3.8 to 3.12. Pip wheels are now built for Python 3.12 to 3.14.
 - (wifi) Added support for Beacon generation in an IBSS
 - (bindings) Python bindings are now enabled by default when cppjit and the Python development libraries are found.
 - (bindings) The Python bindings now use cppjit, the successor of cppyy. `ns.cppyy` remains available as an alias of `ns.cppjit`.
+- (spectrum) Sionna RT support no longer requires cppjit nor `--enable-python-bindings`.
 
 ### Bugs fixed
 

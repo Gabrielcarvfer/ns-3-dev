@@ -346,7 +346,6 @@ weekly-sionna-macos:
     - conda create -n venv python=3.12 -y
     - conda activate venv
     - conda install pip conda-forge::libllvm17 -y
-    - python -m pip install cppjit==0.1.0a1
     - export DRJIT_LIBLLVM_PATH="$CONDA_PREFIX/lib/libLLVM-17.dylib"
   after_script:
     - source ~/.zshrc

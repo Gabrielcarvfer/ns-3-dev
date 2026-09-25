@@ -49,6 +49,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 * (bindings) The Python bindings now use cppjit (0.1.0a1) instead of cppyy, raising the minimum Python version for the Python bindings from 3.8 to 3.12. Pip wheels are built for Python 3.12 to 3.14. Scripts should use `ns.cppjit` instead of `ns.cppyy`, which is kept as an alias. In C++ code JIT-compiled from Python, `CPyCppyy/API.h` and `CPyCppyy::Eval()` are replaced by `cpyrt/API.h` and `cppjit::cpyrt::Exec()`.
 * (bindings) Python bindings are now enabled by default (`NS3_PYTHON_BINDINGS=ON`), and are automatically disabled if cppjit or the Python development libraries are not found. Use `./ns3 configure --disable-python-bindings` to opt out.
+* (spectrum) Sionna RT support no longer requires cppjit nor `--enable-python-bindings`; the Python development libraries, `pybind11` and `sionna-rt` are sufficient.
 
 ### Changed behavior
 
