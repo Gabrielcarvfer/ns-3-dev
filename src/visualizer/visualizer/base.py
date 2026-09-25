@@ -52,18 +52,30 @@ class NetDeviceTraits(object):
         self.is_virtual = is_virtual
 
 
-netdevice_traits = {
-    ns.PointToPointNetDevice: NetDeviceTraits(is_wireless=False),
-    ns.CsmaNetDevice: NetDeviceTraits(is_wireless=False),
-    ns.WifiNetDevice: NetDeviceTraits(is_wireless=True),
-    ns.BridgeNetDevice: NetDeviceTraits(is_virtual=True),
-    ns.LoopbackNetDevice: NetDeviceTraits(is_virtual=True, is_wireless=False),
-    ns.MeshPointDevice: NetDeviceTraits(is_virtual=True),
-    ns.LteUeNetDevice: NetDeviceTraits(is_wireless=True),
-    ns.LteEnbNetDevice: NetDeviceTraits(is_wireless=True),
-    ns.lrwpan.LrWpanNetDevice: NetDeviceTraits(is_wireless=True),
-    ns.SixLowPanNetDevice: NetDeviceTraits(is_virtual=False, is_wireless=True),
+_known_netdevice_traits = {
+    "PointToPointNetDevice": NetDeviceTraits(is_wireless=False),
+    "CsmaNetDevice": NetDeviceTraits(is_wireless=False),
+    "WifiNetDevice": NetDeviceTraits(is_wireless=True),
+    "BridgeNetDevice": NetDeviceTraits(is_virtual=True),
+    "LoopbackNetDevice": NetDeviceTraits(is_virtual=True, is_wireless=False),
+    "MeshPointDevice": NetDeviceTraits(is_virtual=True),
+    "LteUeNetDevice": NetDeviceTraits(is_wireless=True),
+    "LteEnbNetDevice": NetDeviceTraits(is_wireless=True),
+    "lrwpan.LrWpanNetDevice": NetDeviceTraits(is_wireless=True),
+    "SixLowPanNetDevice": NetDeviceTraits(is_virtual=False, is_wireless=True),
 }
+
+netdevice_traits = {}
+for _class_name, _traits in _known_netdevice_traits.items():
+    # Devices of modules that are not enabled are not available in the bindings
+    _class = ns
+    try:
+        for _name in _class_name.split("."):
+            _class = getattr(_class, _name)
+    except AttributeError:
+        continue
+    netdevice_traits[_class] = _traits
+del _class_name, _traits, _class
 
 
 def lookup_netdevice_traits(class_type):

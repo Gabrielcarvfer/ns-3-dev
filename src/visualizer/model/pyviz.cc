@@ -143,15 +143,23 @@ PyViz::PyViz()
     Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::lrwpan::LrWpanNetDevice/Mac/MacRx",
                             MakeCallback(&PyViz::TraceNetDevRxLrWpan, this));
 
+    // The CSMA and LTE modules are not dependencies of the visualizer, so their
+    // devices are only traced if the simulation program links them. Paths with
+    // unregistered types would otherwise abort in the Config resolver.
+    TypeId tid;
+
     // CSMA
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacTx",
-                            MakeCallback(&PyViz::TraceNetDevTxCsma, this));
+    if (TypeId::LookupByNameFailSafe("ns3::CsmaNetDevice", &tid))
+    {
+        Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacTx",
+                                MakeCallback(&PyViz::TraceNetDevTxCsma, this));
 
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacRx",
-                            MakeCallback(&PyViz::TraceNetDevRxCsma, this));
+        Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacRx",
+                                MakeCallback(&PyViz::TraceNetDevRxCsma, this));
 
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacPromiscRx",
-                            MakeCallback(&PyViz::TraceNetDevPromiscRxCsma, this));
+        Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacPromiscRx",
+                                MakeCallback(&PyViz::TraceNetDevPromiscRxCsma, this));
+    }
 
     // Generic queue drop
     Config::ConnectFailSafe("/NodeList/*/DeviceList/*/TxQueue/Drop",
@@ -168,11 +176,14 @@ PyViz::PyViz()
                             MakeCallback(&PyViz::TraceNetDevRxPointToPoint, this));
 
     // LTE
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::LteNetDevice/Tx",
-                            MakeCallback(&PyViz::TraceNetDevTxLte, this));
+    if (TypeId::LookupByNameFailSafe("ns3::LteNetDevice", &tid))
+    {
+        Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::LteNetDevice/Tx",
+                                MakeCallback(&PyViz::TraceNetDevTxLte, this));
 
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::LteNetDevice/Rx",
-                            MakeCallback(&PyViz::TraceNetDevRxLte, this));
+        Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::LteNetDevice/Rx",
+                                MakeCallback(&PyViz::TraceNetDevRxLte, this));
+    }
 }
 
 void
