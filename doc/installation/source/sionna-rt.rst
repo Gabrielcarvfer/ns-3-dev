@@ -11,7 +11,7 @@ Installation Steps for Ubuntu
 =============================
 
 Follow these steps to create a Python 3.12 virtual environment, install Python
-dependencies, and build ns-3 with Python bindings.
+dependencies, and build ns-3 with Sionna RT support.
 "Instructions are for Python 3.12 because that is the version we have tested; other versions may or may not work."
 
 Prerequisites
@@ -50,8 +50,7 @@ required Python packages:
    pip install \
        sionna==1.2.0 \
        sionna-rt==1.2.0 \
-       pybind11==2.11.1 \
-       cppyy==3.5.0
+       pybind11==2.11.1
 
 .. note::
 
@@ -67,7 +66,7 @@ you must see the message "Sionna-RT support enabled: all required dependencies w
 
 .. code-block:: bash
 
-   ./ns3 configure --enable-examples --enable-tests --enable-python-bindings
+   ./ns3 configure --enable-examples --enable-tests
    ./ns3 build
 
 Run the Example
@@ -190,7 +189,7 @@ Set Up the Conda Environment
 -----------------------------
 
 Create and activate a dedicated Python 3.12 environment, then install the
-required packages including ``cppyy`` and the LLVM 17 library:
+LLVM 17 library:
 "Instructions are for Python 3.12 because that is the version we have tested; other versions may or may not work."
 
 .. code-block:: bash
@@ -198,7 +197,6 @@ required packages including ``cppyy`` and the LLVM 17 library:
    conda create -n venv python=3.12 -y
    conda activate venv
    conda install pip \
-       conda-forge::cppyy=3.5.0 \
        conda-forge::libllvm17 \
        -y
 
@@ -241,7 +239,7 @@ Installation Steps using uv
 `uv <https://github.com/astral-sh/uv>`_ is a fast Python package manager
 that can install Python interpreters and manage virtual environments.
 Follow these steps to set up a Python 3.12 virtual environment with ``uv``,
-install Sionna RT, and build ns-3 with Python bindings.
+install Sionna RT, and build ns-3 with Sionna RT support.
 
 .. note::
 
@@ -297,7 +295,7 @@ Upgrade the toolchain and install Sionna RT along with its required bindings:
 
    "$PY" -m ensurepip --upgrade
    "$PY" -m pip install --upgrade pip setuptools wheel
-   "$PY" -m pip install cppyy pybind11 "sionna==1.2.0" "sionna-rt==1.2.0"
+   "$PY" -m pip install pybind11 "sionna==1.2.0" "sionna-rt==1.2.0"
 
 Verify the Sionna installation:
 
@@ -334,15 +332,13 @@ JIT backend used by Mitsuba 3 / Sionna RT) for CPU-mode ray tracing:
 Build ns-3
 ----------
 
-Clean any previous build artefacts, configure with Ninja and Python bindings
-enabled, then build:
+Clean any previous build artefacts, configure with Ninja, then build:
 you must see the message "Sionna-RT support enabled: all required dependencies were found." in the output of the configure step for Sionna-RT to be available in the build.
 .. code-block:: bash
 
    ./ns3 clean
 
    "$PY" ./ns3 configure -G Ninja \
-       --enable-python-bindings \
        --enable-examples \
        --filter-module-examples-and-tests=spectrum
 

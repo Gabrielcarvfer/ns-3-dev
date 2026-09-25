@@ -51,6 +51,7 @@ Python 3.10 to 3.14.
 - (sixlowpan) !2873 The mesh-under forwarding decision is now delegated to a pluggable policy (`SixLowPanMeshUnderRouting`); the default `SixLowPanSimpleFlooding` preserves the historical flooding behavior. The `MeshUnderJitter` and `MeshCacheLength` attributes moved from `SixLowPanNetDevice` to the policy. Mesh-under membership and relaying are now controlled separately by the `UseMeshUnder` and `ForwardMesh` attributes.
 - (wifi) Added support for Beacon generation in an IBSS
 - (bindings) Python bindings are now enabled by default when cppyy and the Python development libraries are found.
+- (spectrum) Sionna RT support no longer requires cppyy nor `--enable-python-bindings`.
 
 ### Bugs fixed
 

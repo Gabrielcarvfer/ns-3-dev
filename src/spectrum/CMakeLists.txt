@@ -86,10 +86,19 @@ set(header_files
 check_deps(
   sionna_deps
   PYTHON_PACKAGES
-  cppyy # enables python bindings/dependencies search in venv
   sionna.rt # main sionna package
   pybind11 # required to call sionna from c++
 )
+if(NOT
+   ${Python3_FOUND}
+)
+  # pybind11 needs the Python headers and libraries to embed the interpreter
+  list(
+    APPEND
+    sionna_deps
+    "Python development libraries"
+  )
+endif()
 set(sionna_test_sources)
 if(NOT
    ("${sionna_deps}"
