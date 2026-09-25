@@ -34,7 +34,7 @@ function(check_deps missing_deps)
   endforeach()
 
   foreach(package ${DEPS_PYTHON_PACKAGES})
-    # Import each package only once, as importing some of them (e.g. cppyy) is
+    # Import each package only once, as importing some of them (e.g. cppjit) is
     # slow
     execute_process(
       COMMAND
@@ -55,7 +55,7 @@ function(check_deps missing_deps)
                            "${venv_site_packages_path}"
       )
       # Keep only the last line, as importing a package may print messages (e.g.
-      # cppyy rebuilding its pre-compiled header)
+      # a JIT rebuilding its pre-compiled headers)
       string(REGEX MATCH "[^\r\n]*$" venv_site_packages_path
                    "${venv_site_packages_path}"
       )

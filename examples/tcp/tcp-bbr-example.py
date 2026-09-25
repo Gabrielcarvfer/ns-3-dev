@@ -50,7 +50,7 @@ def trace_throughput_callback():
     """Throughput trace callback."""
     global prev_tx, prev_time, throughput_file
 
-    stats = ns.cppyy.gbl.monitor_ptr.GetFlowStats()
+    stats = ns.cppjit.gbl.monitor_ptr.GetFlowStats()
     if stats and not stats.empty():
         flow_stats = stats.begin().__deref__().second
         cur_time = ns.Now()
@@ -70,7 +70,7 @@ def check_queue_size_callback():
     """Queue length tracer."""
     global queue_file
 
-    q = ns.cppyy.gbl.qdisc_ptr.GetCurrentSize().GetValue()
+    q = ns.cppjit.gbl.qdisc_ptr.GetCurrentSize().GetValue()
     queue_file.write(f"{ns.Simulator.Now().GetSeconds():.6g} {q}\n")
     queue_file.flush()
 
@@ -84,7 +84,7 @@ def trace_cwnd_callback(oldval, newval):
 
 
 # C++ helper functions for scheduling Python callbacks
-ns.cppyy.cppdef(r"""
+ns.cppjit.cppdef(r"""
 #include "ns3/simulator.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/queue-disc.h"
@@ -236,35 +236,35 @@ def main():
     prev_time = ns.Now()
     prev_tx = 0
 
-    ns.cppyy.gbl.monitor_ptr = monitor
-    ns.cppyy.gbl.qdisc_ptr = qdc.Get(0)
+    ns.cppjit.gbl.monitor_ptr = monitor
+    ns.cppjit.gbl.qdisc_ptr = qdc.Get(0)
 
     # Define wrapper functions that reschedule themselves
     def throughput_tracer():
         """Periodic throughput tracer that reschedules itself."""
         trace_throughput_callback()
-        event = ns.cppyy.gbl.pythonMakeEvent(throughput_tracer)
+        event = ns.cppjit.gbl.pythonMakeEvent(throughput_tracer)
         ns.Simulator.Schedule(ns.Seconds(0.2), event)
 
     def queue_size_tracer():
         """Periodic queue size tracer that reschedules itself."""
         check_queue_size_callback()
-        event = ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer)
+        event = ns.cppjit.gbl.pythonMakeEvent(queue_size_tracer)
         ns.Simulator.Schedule(ns.Seconds(0.2), event)
 
     # Schedule initial events using pythonMakeEvent
-    event = ns.cppyy.gbl.pythonMakeEvent(throughput_tracer)
+    event = ns.cppjit.gbl.pythonMakeEvent(throughput_tracer)
     ns.Simulator.Schedule(ns.Seconds(0.000001), event)
 
-    event = ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer)
+    event = ns.cppjit.gbl.pythonMakeEvent(queue_size_tracer)
     ns.Simulator.ScheduleNow(event)
 
     # Connect cwnd trace after socket is created
     def connect_cwnd_trace():
         """Connect the cwnd trace callback."""
-        ns.cppyy.gbl.pythonConnectCwndTrace(trace_cwnd_callback)
+        ns.cppjit.gbl.pythonConnectCwndTrace(trace_cwnd_callback)
 
-    event = ns.cppyy.gbl.pythonMakeEvent(connect_cwnd_trace)
+    event = ns.cppjit.gbl.pythonMakeEvent(connect_cwnd_trace)
     ns.Simulator.Schedule(ns.Seconds(0.1) + ns.MilliSeconds(1), event)
 
     ns.Simulator.Stop(stopTime + ns.TimeStep(1))

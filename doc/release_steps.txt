@@ -41,7 +41,7 @@ and/or the CI have been testing
    - ensure that tests pass (./test.py -g) and make sure that the CI scripts
      are reporting 'pass' state, based on the tip of the repository
    - revise and check in AUTHORS, RELEASE_NOTES.md, and CHANGES.html
-   - required versions for related libraries (netanim, cppyy)
+   - required versions for related libraries (netanim, cppjit)
      are correct
    - confirm that Doxygen builds cleanly (./ns3 doxygen),
    - confirm all documents build:  './ns3 docs' and check outputs

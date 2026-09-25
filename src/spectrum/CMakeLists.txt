@@ -86,7 +86,7 @@ set(header_files
 check_deps(
   sionna_deps
   PYTHON_PACKAGES
-  cppyy # enables python bindings/dependencies search in venv
+  cppjit # enables python bindings/dependencies search in venv
   sionna.rt # main sionna package
   pybind11 # required to call sionna from c++
 )

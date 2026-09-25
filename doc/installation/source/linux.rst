@@ -112,10 +112,15 @@ Please see below subsections for Python-related package requirements.
 Python bindings
 ===============
 
-Python requires `Cppyy, <https://cppyy.readthedocs.io/en/latest/installation.html>` and specifically,
-version 3.5.0 is the latest version known to work with ns-3 at this time.
+Python requires `cppjit <https://github.com/compiler-research/cppjit>`_, the successor of cppyy,
+and specifically, version 0.1.0a1 is the latest version known to work with ns-3 at this time.
+cppjit requires Python 3.12 or newer.
 
-ns-3.45 and newer::
+ns-3.49 and newer::
+
+  python3 -m pip install --user cppjit==0.1.0a1
+
+ns-3.45-3.48::
 
   python3 -m pip install --user cppyy==3.5.0
 

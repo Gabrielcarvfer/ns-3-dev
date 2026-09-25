@@ -51,7 +51,7 @@ required Python packages:
        sionna==1.2.0 \
        sionna-rt==1.2.0 \
        pybind11==2.11.1 \
-       cppyy==3.5.0
+       cppjit==0.1.0a1
 
 .. note::
 
@@ -190,7 +190,7 @@ Set Up the Conda Environment
 -----------------------------
 
 Create and activate a dedicated Python 3.12 environment, then install the
-required packages including ``cppyy`` and the LLVM 17 library:
+required packages including ``cppjit`` and the LLVM 17 library:
 "Instructions are for Python 3.12 because that is the version we have tested; other versions may or may not work."
 
 .. code-block:: bash
@@ -198,9 +198,9 @@ required packages including ``cppyy`` and the LLVM 17 library:
    conda create -n venv python=3.12 -y
    conda activate venv
    conda install pip \
-       conda-forge::cppyy=3.5.0 \
        conda-forge::libllvm17 \
        -y
+   python -m pip install cppjit==0.1.0a1
 
 .. note::
 
@@ -297,7 +297,7 @@ Upgrade the toolchain and install Sionna RT along with its required bindings:
 
    "$PY" -m ensurepip --upgrade
    "$PY" -m pip install --upgrade pip setuptools wheel
-   "$PY" -m pip install cppyy pybind11 "sionna==1.2.0" "sionna-rt==1.2.0"
+   "$PY" -m pip install cppjit pybind11 "sionna==1.2.0" "sionna-rt==1.2.0"
 
 Verify the Sionna installation:
 

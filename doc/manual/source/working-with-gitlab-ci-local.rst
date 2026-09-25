@@ -67,7 +67,7 @@ the ns-3 jobs can be listed using the following command:
     ...
 
     weekly-build-clang-11-optimized                     build          on_success  false
-    cppyy-22.04                                         build          on_success  false
+    cppjit-24.04                                        build          on_success  false
     per-commit-compile-debug                            build          on_success  false
     per-commit-compile-release                          build          on_success  false
     per-commit-compile-optimized                        build          on_success  false
@@ -118,7 +118,7 @@ to run after weekly jobs are successfully executed.
 Another option is to run the specific job that produces the required artifact. In this case
 the ``pybindgen`` job.
 
-Note: Pybindgen has been replaced by Cppyy, which does not produce artifacts to be consumed
+Note: Pybindgen has been replaced by cppjit, which does not produce artifacts to be consumed
 by other jobs. However, the example is kept for reference.
 
 .. sourcecode:: console
