@@ -397,7 +397,7 @@ Memray
 including native code called by them. Along with stack traces, developers can trace down
 possible memory leaks and unnecessary allocations.
 
-Note: Memray is ineffective for profiling the ns-3 python bindings since Cppyy hides away
+Note: Memray is ineffective for profiling the ns-3 python bindings since cppjit hides away
 the calls to the ns-3 module libraries. However, it is still useful for python scripts
 in general, for example ones used to parse and consolidate simulation results.
 

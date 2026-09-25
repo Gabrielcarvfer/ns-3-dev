@@ -49,7 +49,7 @@ From a software perspective, ns-3 consists of a number of C++
 libraries organized around different topics and technologies.
 Programs that actually run simulations can be written in
 either C++ or Python; the use of Python is enabled by
-[runtime C++/Python bindings](https://cppyy.readthedocs.io/en/latest/).  Simulation programs will
+[runtime C++/Python bindings](https://github.com/compiler-research/cppjit).  Simulation programs will
 typically link or import the ns `core` library and any additional
 libraries that they need.  ns-3 requires a modern C++ compiler
 installation (g++ or clang++) and the [CMake](https://cmake.org) build system.

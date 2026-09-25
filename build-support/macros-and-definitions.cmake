@@ -757,7 +757,7 @@ macro(process_options)
       )
       set(ENABLE_PYTHON_BINDINGS_REASON "missing dependency: python")
     else()
-      check_deps(missing_packages PYTHON_PACKAGES cppyy)
+      check_deps(missing_packages PYTHON_PACKAGES cppjit)
       if(missing_packages)
         message(
           ${HIGHLIGHTED_STATUS}

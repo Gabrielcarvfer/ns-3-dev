@@ -330,7 +330,7 @@ weekly-sionna-ubuntu-22.04:
       llvm # Required by Dr. Jit, a Sionna-RT dependency for CPU compute
     - $PYTHON -m venv ./venv
     - . ./venv/bin/activate
-    - $PYTHON -m pip install cppyy cmake==3.25.2
+    - $PYTHON -m pip install cmake==3.25.2
   variables:
     PYTHON: "python3"
 
@@ -345,7 +345,7 @@ weekly-sionna-macos:
     - source ~/.zshrc
     - conda create -n venv python=3.12 -y
     - conda activate venv
-    - conda install pip conda-forge::cppyy=3.5.0 conda-forge::libllvm17 -y
+    - conda install pip conda-forge::libllvm17 -y
     - export DRJIT_LIBLLVM_PATH="$CONDA_PREFIX/lib/libLLVM-17.dylib"
   after_script:
     - source ~/.zshrc

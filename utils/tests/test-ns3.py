@@ -2617,15 +2617,15 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
 
         # Maybe check the built binary for shared library references? Using objdump, otool, etc
 
-    def test_12_CppyyBindings(self):
+    def test_12_CppjitBindings(self):
         """!
         Test if we can use python bindings
         @return None
         """
         try:
-            import cppyy
+            import cppjit
         except ModuleNotFoundError:
-            self.skipTest("Cppyy was not found")
+            self.skipTest("cppjit was not found")
 
         # First enable examples and static build
         return_code, stdout, stderr = run_ns3(
@@ -2640,12 +2640,14 @@ class NS3BuildBaseTestCase(NS3BaseTestCase):
         self.assertEqual(return_code, 0)
 
         # Then try to run a specific test
-        return_code, stdout, stderr = run_program("test.py", "-p mixed-wired-wireless", python=True)
+        return_code, stdout, stderr = run_program(
+            "test.py", "-p mixed-wired-wireless.py", python=True
+        )
         self.assertEqual(return_code, 0)
 
         # Then try to run a specific test with the full relative path
         return_code, stdout, stderr = run_program(
-            "test.py", "-p ./examples/wireless/mixed-wired-wireless", python=True
+            "test.py", "-p ./examples/wireless/mixed-wired-wireless.py", python=True
         )
         self.assertEqual(return_code, 0)
 

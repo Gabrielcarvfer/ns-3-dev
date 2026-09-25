@@ -38,7 +38,7 @@ class TestSimulator(unittest.TestCase):
         @return None
         """
 
-        def callback(args: ns.cppyy.gbl.std.vector) -> None:
+        def callback(args: ns.cppjit.gbl.std.vector) -> None:
             """! Callback function
             @param args arguments
             @return None
@@ -49,13 +49,13 @@ class TestSimulator(unittest.TestCase):
         ns.Simulator.Destroy()
         self._args_received = None
         self._cb_time = None
-        ns.cppyy.cppdef("""
+        ns.cppjit.cppdef("""
             EventImpl* pythonMakeEvent(void (*f)(std::vector<std::string>), std::vector<std::string> l)
             {
                 return MakeEvent(f, l);
             }
         """)
-        event = ns.cppyy.gbl.pythonMakeEvent(callback, sys.argv)
+        event = ns.cppjit.gbl.pythonMakeEvent(callback, sys.argv)
         ns.Simulator.ScheduleNow(event)
         ns.Simulator.Run()
         self.assertListEqual(self._args_received, sys.argv)
@@ -67,7 +67,7 @@ class TestSimulator(unittest.TestCase):
         @return None
         """
 
-        def callback(args: ns.cppyy.gbl.std.vector):
+        def callback(args: ns.cppjit.gbl.std.vector):
             """! Callback function
             @param args arguments
             @return None
@@ -78,13 +78,13 @@ class TestSimulator(unittest.TestCase):
         ns.Simulator.Destroy()
         self._args_received = None
         self._cb_time = None
-        ns.cppyy.cppdef("""
+        ns.cppjit.cppdef("""
             EventImpl* pythonMakeEvent2(void (*f)(std::vector<std::string>), std::vector<std::string> l)
             {
                 return MakeEvent(f, l);
             }
         """)
-        event = ns.cppyy.gbl.pythonMakeEvent2(callback, sys.argv)
+        event = ns.cppjit.gbl.pythonMakeEvent2(callback, sys.argv)
         ns.Simulator.Schedule(ns.Seconds(123), event)
         ns.Simulator.Run()
         self.assertListEqual(self._args_received, sys.argv)
@@ -96,7 +96,7 @@ class TestSimulator(unittest.TestCase):
         @return None
         """
 
-        def callback(args: ns.cppyy.gbl.std.vector):
+        def callback(args: ns.cppjit.gbl.std.vector):
             """! Callback function
             @param args
             @return None
@@ -107,15 +107,15 @@ class TestSimulator(unittest.TestCase):
         ns.Simulator.Destroy()
         self._args_received = None
         self._cb_time = None
-        ns.cppyy.cppdef("void null(){ return; }")
-        ns.Simulator.Schedule(ns.Seconds(123), ns.cppyy.gbl.null)
-        ns.cppyy.cppdef("""
+        ns.cppjit.cppdef("void null(){ return; }")
+        ns.Simulator.Schedule(ns.Seconds(123), ns.cppjit.gbl.null)
+        ns.cppjit.cppdef("""
             EventImpl* pythonMakeEvent3(void (*f)(std::vector<std::string>), std::vector<std::string> l)
             {
                 return MakeEvent(f, l);
             }
         """)
-        event = ns.cppyy.gbl.pythonMakeEvent3(callback, sys.argv)
+        event = ns.cppjit.gbl.pythonMakeEvent3(callback, sys.argv)
         ns.Simulator.ScheduleDestroy(event)
         ns.Simulator.Run()
         ns.Simulator.Destroy()
@@ -128,7 +128,7 @@ class TestSimulator(unittest.TestCase):
         @return None
         """
 
-        def callback(context, args: ns.cppyy.gbl.std.vector):
+        def callback(context, args: ns.cppjit.gbl.std.vector):
             """! Callback
             @param context the context
             @param args the arguments
@@ -142,13 +142,13 @@ class TestSimulator(unittest.TestCase):
         self._args_received = None
         self._cb_time = None
         self._context_received = None
-        ns.cppyy.cppdef("""
+        ns.cppjit.cppdef("""
             EventImpl* pythonMakeEvent4(void (*f)(uint32_t, std::vector<std::string>), uint32_t context, std::vector<std::string> l)
             {
                 return MakeEvent(f, context, l);
             }
         """)
-        event = ns.cppyy.gbl.pythonMakeEvent4(callback, 54321, sys.argv)
+        event = ns.cppjit.gbl.pythonMakeEvent4(callback, 54321, sys.argv)
         ns.Simulator.ScheduleWithContext(54321, ns.Seconds(123), event)
         ns.Simulator.Run()
         self.assertEqual(self._context_received, 54321)
@@ -199,7 +199,7 @@ class TestSimulator(unittest.TestCase):
         def python_rx_callback(socket) -> None:
             self._received_packet = socket.Recv(maxSize=UINT32_MAX, flags=0)
 
-        ns.cppyy.cppdef("""
+        ns.cppjit.cppdef("""
             Callback<void,ns3::Ptr<ns3::Socket> > make_rx_callback_test_socket(void(*func)(Ptr<Socket>))
             {
                 return MakeCallback(func);
@@ -208,7 +208,7 @@ class TestSimulator(unittest.TestCase):
 
         sink = ns.Socket.CreateSocket(node, ns.TypeId.LookupByName("ns3::UdpSocketFactory"))
         sink.Bind(ns.InetSocketAddress(ns.Ipv4Address.GetAny(), 80).ConvertTo())
-        sink.SetRecvCallback(ns.cppyy.gbl.make_rx_callback_test_socket(python_rx_callback))
+        sink.SetRecvCallback(ns.cppjit.gbl.make_rx_callback_test_socket(python_rx_callback))
 
         source = ns.Socket.CreateSocket(node, ns.TypeId.LookupByName("ns3::UdpSocketFactory"))
         source.SendTo(
@@ -242,7 +242,7 @@ class TestSimulator(unittest.TestCase):
         mobility = ns.CreateObject[ns.RandomWaypointMobilityModel]()
         ptr = ns.PointerValue()
         mobility.GetAttribute("PositionAllocator", ptr)
-        self.assertEqual(ptr.GetObject(), ns.Ptr["Object"](ns.cppyy.nullptr))
+        self.assertEqual(ptr.GetObject(), ns.Ptr["Object"](ns.cppjit.nullptr))
 
         pos = ns.ListPositionAllocator()
         ptr.SetObject(pos)
@@ -250,7 +250,7 @@ class TestSimulator(unittest.TestCase):
 
         ptr2 = ns.PointerValue()
         mobility.GetAttribute("PositionAllocator", ptr2)
-        self.assertNotEqual(ptr.GetObject(), ns.Ptr["Object"](ns.cppyy.nullptr))
+        self.assertNotEqual(ptr.GetObject(), ns.Ptr["Object"](ns.cppjit.nullptr))
 
         # Delete Ptr<>'s on the python side to let C++ clean them
         del queue, mobility, ptr, ptr2
@@ -358,7 +358,7 @@ class TestSimulator(unittest.TestCase):
 
         interfaces = address.Assign(devices)
 
-        ns.cppyy.cppdef("""
+        ns.cppjit.cppdef("""
             namespace ns3
             {
                 Callback<void,Ptr<Socket> > make_rx_callback(void(*func)(Ptr<Socket>))
@@ -386,7 +386,7 @@ class TestSimulator(unittest.TestCase):
                 return None
                 """
                 super().__init__()
-                ## __python_owns__ flag indicates that Cppyy should not manage the lifetime of this variable
+                ## __python_owns__ flag indicates that cppjit should not manage the lifetime of this variable
                 self.__python_owns__ = False  # Let C++ destroy this on Simulator::Destroy
                 ## Listen port for the server
                 self.port = port
@@ -434,7 +434,7 @@ class TestSimulator(unittest.TestCase):
                 @return None
                 """
                 address = ns.Address()
-                packet = self.m_socket.RecvFrom(address)
+                packet = self.m_socket.RecvFrom(UINT32_MAX, 0, address)
                 if EchoServer.LOGGING:
                     inetAddress = ns.InetSocketAddress.ConvertFrom(address)
                     print(

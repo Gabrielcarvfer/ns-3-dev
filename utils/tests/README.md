@@ -60,7 +60,7 @@ Thanks to the "Schedule" feature of Gitlab, we setup pipelines that have to be r
 
 ### Weekly jobs description
 
-As weekly jobs, we perform the build, testing, and documentation stage in every platform we support (Ubuntu, Arch Linux, macOS) with all the compilers we support (GCC and CLang). Weekly pipelines also run the tests under sanitizers and Valgrind (in all modes), the tests marked as TAKES_FOREVER, code coverage scanning, Python binding checks (cppyy and Sionna examples), and the build system platform tests (`gitlab-ci-build.yml`). Weekly pipelines should define a variable, named `RELEASE`, as `weekly`. To add the support for your platform, please see how the jobs are constructed (for instance, the GCC jobs are in `gitlab-ci-gcc.yml`). We currently miss the jobs for Windows.
+As weekly jobs, we perform the build, testing, and documentation stage in every platform we support (Ubuntu, Arch Linux, macOS) with all the compilers we support (GCC and CLang). Weekly pipelines also run the tests under sanitizers and Valgrind (in all modes), the tests marked as TAKES_FOREVER, code coverage scanning, Python binding checks (cppjit and Sionna examples), and the build system platform tests (`gitlab-ci-build.yml`). Weekly pipelines should define a variable, named `RELEASE`, as `weekly`. To add the support for your platform, please see how the jobs are constructed (for instance, the GCC jobs are in `gitlab-ci-gcc.yml`). We currently miss the jobs for Windows.
 
 ### Pipeline optimization
 

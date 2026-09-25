@@ -486,41 +486,46 @@ def load_modules():
     # Sort modules based on libraries
     modules = list(map(lambda x: filter_module_name(x), libraries_to_load))
 
-    # Try to import Cppyy and warn the user in case it is not found
+    # cppjit's interpreter defaults to C++17, but the ns-3 headers require C++23.
+    # The last -std flag wins, so appending it overrides the default.
+    interpreter_args = os.environ.get("CPPINTEROP_EXTRA_INTERPRETER_ARGS", "")
+    os.environ["CPPINTEROP_EXTRA_INTERPRETER_ARGS"] = f"{interpreter_args} -std=c++23".strip()
+
+    # Try to import cppjit and warn the user in case it is not found
     try:
-        import cppyy
+        import cppjit
     except ModuleNotFoundError:
-        print("Cppyy is required by the ns-3 python bindings.")
-        print("You can install it with the following command: pip install cppyy")
+        print("cppjit is required by the ns-3 python bindings.")
+        print("You can install it with the following command: pip install cppjit")
         exit(-1)
 
     # Enable full logs for debugging
-    # cppyy.set_debug(True)
+    # cppjit.set_debug(True)
 
     # Register Ptr<> as a smart pointer
-    import libcppyy
+    from cppjit import libcppjit
 
-    libcppyy.AddSmartPtrType("Ptr")
+    libcppjit.AddSmartPtrType("Ptr")
 
     # Import ns-3 libraries
     for variant in ["lib", "lib64"]:
         path_to_lib = f"{prefix}/{variant}"
         if not os.path.exists(path_to_lib):
             continue
-        cppyy.add_library_path(path_to_lib)
+        cppjit.add_library_path(path_to_lib)
     del variant, path_to_lib
-    cppyy.add_include_path(f"{prefix}/include")
+    cppjit.add_include_path(f"{prefix}/include")
 
     known_include_dirs = set()
     # We then need to include all include directories for dependencies
     for library in libraries_to_load:
         linked_lib_include_dirs, defines = extract_library_include_dirs(library, prefix)
-        cppyy.cppexec(defines)
+        cppjit.cppexec(defines)
         for linked_lib_include_dir in linked_lib_include_dirs:
             if linked_lib_include_dir not in known_include_dirs:
                 known_include_dirs.add(linked_lib_include_dir)
                 if os.path.isdir(linked_lib_include_dir):
-                    cppyy.add_include_path(linked_lib_include_dir)
+                    cppjit.add_include_path(linked_lib_include_dir)
 
     # Get build type
     build_type = ""  # release
@@ -530,20 +535,22 @@ def load_modules():
 
     # Load a module, then its module header
     for library in libraries_to_load:
-        cppyy.load_library(library)
+        cppjit.load_library(library)
         for module in modules:
             library_name_from_module = (
                 f"{version}-{module}{'-' if len(build_type)>0 else ''}{build_type}."
             )
             if library_name_from_module in library:
-                cppyy.include(f"ns3/{module}-module.h")
+                cppjit.include(f"ns3/{module}-module.h")
                 break
 
-    # We expose cppyy to consumers of this module as ns.cppyy
-    setattr(cppyy.gbl.ns3, "cppyy", cppyy)
+    # We expose cppjit to consumers of this module as ns.cppjit, and as ns.cppyy
+    # for scripts written for its predecessor
+    setattr(cppjit.gbl.ns3, "cppjit", cppjit)
+    setattr(cppjit.gbl.ns3, "cppyy", cppjit)
 
     # Set up a few tricks
-    cppyy.cppdef("""
+    cppjit.cppdef("""
         using namespace ns3;
         bool Time_ge(Time& a, Time& b){ return a >= b;}
         bool Time_eq(Time& a, Time& b){ return a == b;}
@@ -552,27 +559,27 @@ def load_modules():
         bool Time_gt(Time& a, Time& b){ return a > b;}
         bool Time_lt(Time& a, Time& b){ return a < b;}
     """)
-    cppyy.gbl.ns3.Time.__ge__ = cppyy.gbl.Time_ge
-    cppyy.gbl.ns3.Time.__eq__ = cppyy.gbl.Time_eq
-    cppyy.gbl.ns3.Time.__ne__ = cppyy.gbl.Time_ne
-    cppyy.gbl.ns3.Time.__le__ = cppyy.gbl.Time_le
-    cppyy.gbl.ns3.Time.__gt__ = cppyy.gbl.Time_gt
-    cppyy.gbl.ns3.Time.__lt__ = cppyy.gbl.Time_lt
+    cppjit.gbl.ns3.Time.__ge__ = cppjit.gbl.Time_ge
+    cppjit.gbl.ns3.Time.__eq__ = cppjit.gbl.Time_eq
+    cppjit.gbl.ns3.Time.__ne__ = cppjit.gbl.Time_ne
+    cppjit.gbl.ns3.Time.__le__ = cppjit.gbl.Time_le
+    cppjit.gbl.ns3.Time.__gt__ = cppjit.gbl.Time_gt
+    cppjit.gbl.ns3.Time.__lt__ = cppjit.gbl.Time_lt
 
     # Node::~Node isn't supposed to destroy the object,
     # since it gets destroyed at the end of the simulation
     # we need to hold the reference until it gets destroyed by C++
     #
     # Search for NodeList::Add (this)
-    cppyy.gbl.ns3.__nodes_pending_deletion = []
+    cppjit.gbl.ns3.__nodes_pending_deletion = []
 
-    def Node_del(self: cppyy.gbl.ns3.Node) -> None:
-        cppyy.gbl.ns3.__nodes_pending_deletion.append(self)
+    def Node_del(self: cppjit.gbl.ns3.Node) -> None:
+        cppjit.gbl.ns3.__nodes_pending_deletion.append(self)
         return None
 
-    cppyy.gbl.ns3.Node.__del__ = Node_del
+    cppjit.gbl.ns3.Node.__del__ = Node_del
 
-    cppyy.cppdef("""
+    cppjit.cppdef("""
         using namespace ns3;
         std::tuple<bool, TypeId> LookupByNameFailSafe(std::string name)
         {
@@ -581,9 +588,9 @@ def load_modules():
             return std::make_tuple(ok, id);
         }
     """)
-    setattr(cppyy.gbl.ns3, "LookupByNameFailSafe", cppyy.gbl.LookupByNameFailSafe)
+    setattr(cppjit.gbl.ns3, "LookupByNameFailSafe", cppjit.gbl.LookupByNameFailSafe)
 
-    return cppyy.gbl.ns3
+    return cppjit.gbl.ns3
 
 
 # Load all modules and make them available via a built-in

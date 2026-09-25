@@ -34,12 +34,12 @@ this release are 20 to 22.
 Version 22 of the clang-tidy linter is now supported and recommended, although
 versions 17 to 21 are still compatible.
 
-Python API requires [Cppyy](https://cppyy.readthedocs.io/en/latest/installation.html) and has only
-been tested on Linux. As of this release, the latest known version to work with ns-3 is cppyy==3.5.0.
+Python API requires [cppjit](https://github.com/compiler-research/cppjit), the successor of cppyy,
+and has only been tested on Linux. As of this release, the latest known version to work with ns-3 is
+cppjit==0.1.0a1.
 
-This release raised the minimum Python version for the Python bindings from 3.8 to 3.10
-and the required cppyy version from 3.1.2 to 3.5.0. Pip wheels are now built for
-Python 3.10 to 3.14.
+This release replaced cppyy with cppjit, raising the minimum Python version for the Python
+bindings from 3.8 to 3.12. Pip wheels are now built for Python 3.12 to 3.14.
 
 ### New user-visible features
 
@@ -50,7 +50,8 @@ Python 3.10 to 3.14.
 
 - (sixlowpan) !2873 The mesh-under forwarding decision is now delegated to a pluggable policy (`SixLowPanMeshUnderRouting`); the default `SixLowPanSimpleFlooding` preserves the historical flooding behavior. The `MeshUnderJitter` and `MeshCacheLength` attributes moved from `SixLowPanNetDevice` to the policy. Mesh-under membership and relaying are now controlled separately by the `UseMeshUnder` and `ForwardMesh` attributes.
 - (wifi) Added support for Beacon generation in an IBSS
-- (bindings) Python bindings are now enabled by default when cppyy and the Python development libraries are found.
+- (bindings) Python bindings are now enabled by default when cppjit and the Python development libraries are found.
+- (bindings) The Python bindings now use cppjit, the successor of cppyy. `ns.cppyy` remains available as an alias of `ns.cppjit`.
 - (spectrum) Sionna RT support no longer requires cppyy nor `--enable-python-bindings`.
 
 ### Bugs fixed

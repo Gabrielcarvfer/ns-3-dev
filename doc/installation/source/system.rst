@@ -151,12 +151,14 @@ if you are running LTE or NR simulations (which make use of SQLite databases):
 Python bindings (ns-3.37 and newer)
 ===================================
 
-|ns3| Python support now uses `cppyy <https://cppyy.readthedocs.io/en/latest/>`_.  Version 3.5.0
-is the most recent supported cppyy release since ns-3.45, and requires Python 3.10 or later.
+|ns3| Python support now uses `cppjit <https://github.com/compiler-research/cppjit>`_, the
+successor of cppyy.  Version 0.1.0a1 is the supported cppjit release since ns-3.49, and requires
+Python 3.12 or later.
 
-Cppyy version 3.1.2 should be used from ns-3.42 up to 3.44, and version 2.4.2 from ns-3.37 up to 3.41.
+Older releases used cppyy instead: version 3.5.0 from ns-3.45 up to 3.48, version 3.1.2 from
+ns-3.42 up to 3.44, and version 2.4.2 from ns-3.37 up to 3.41.
 
-Due to an `upstream limitation with cppyy <https://github.com/wlav/cppyy/issues/150>`_, Python bindings do not work on macOS machines with Apple silicon (M1 and M2 processors).
+Due to an `upstream limitation with cppyy <https://github.com/wlav/cppyy/issues/150>`_, Python bindings of releases older than ns-3.42 do not work on macOS machines with Apple silicon (M1 and M2 processors).
 
 Using Python bindings (release 3.30 to ns-3.36)
 ===============================================
@@ -177,7 +179,7 @@ PyViz visualizer
 ================
 
 The PyViz visualizer uses a variety of Python packages supporting GraphViz.
-In general, to enable Python support in ns-3, `cppyy <https://cppyy.readthedocs.io/en/latest/>`_ is required.
+In general, to enable Python support in ns-3, `cppjit <https://github.com/compiler-research/cppjit>`_ is required.
 
 MPI-based distributed simulation
 ================================

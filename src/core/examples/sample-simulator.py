@@ -36,8 +36,8 @@ def CancelledEvent():
     print("I should never be called... ")
 
 
-ns.cppyy.cppdef("""
-    #include "CPyCppyy/API.h"
+ns.cppjit.cppdef("""
+    #include "cpyrt/API.h"
 
     #include <iostream>
 
@@ -91,7 +91,7 @@ ns.cppyy.cppdef("""
     }
 
     void RandomFunctionCpp(MyModel& model) {
-        CPyCppyy::Eval("RandomFunction()");
+        cppjit::cpyrt::Exec("RandomFunction()");
     }
 
     EventImpl* RandomFunctionEvent(MyModel& model)
@@ -100,7 +100,7 @@ ns.cppyy.cppdef("""
     }
 
     void CancelledFunctionCpp() {
-        CPyCppyy::Eval("CancelledEvent()");
+        cppjit::cpyrt::Exec("CancelledEvent()");
     }
 
     EventImpl* CancelledFunctionEvent()
@@ -114,18 +114,18 @@ def main(argv):
     cmd = ns.CommandLine(__file__)
     cmd.Parse(argv)
 
-    model = ns.cppyy.gbl.MyModel()
+    model = ns.cppjit.gbl.MyModel()
     v = ns.CreateObject[ns.UniformRandomVariable]()
     v.SetAttribute("Min", ns.DoubleValue(10))
     v.SetAttribute("Max", ns.DoubleValue(20))
 
-    ev = ns.cppyy.gbl.ExampleFunctionEvent(model)
+    ev = ns.cppjit.gbl.ExampleFunctionEvent(model)
     ns.Simulator.Schedule(ns.Seconds(10), ev)
 
-    ev2 = ns.cppyy.gbl.RandomFunctionEvent(model)
+    ev2 = ns.cppjit.gbl.RandomFunctionEvent(model)
     ns.Simulator.Schedule(ns.Seconds(v.GetValue()), ev2)
 
-    ev3 = ns.cppyy.gbl.CancelledFunctionEvent()
+    ev3 = ns.cppjit.gbl.CancelledFunctionEvent()
     id = ns.Simulator.Schedule(ns.Seconds(30), ev3)
     ns.Simulator.Cancel(id)
 

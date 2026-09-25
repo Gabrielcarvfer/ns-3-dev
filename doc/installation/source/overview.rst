@@ -53,7 +53,8 @@ built from command-line or via a code editor program.
 
 Most users write C++ ns-3 programs; Python support is less frequently used.
 As of *ns-3.37*, |ns3| uses `cppyy` to generate runtime Python
-bindings, and |ns3| is available in the Pip repositories as of ns-3.39 release.
+bindings, replaced by its successor `cppjit` as of *ns-3.49*, and |ns3| is
+available in the Pip repositories as of ns-3.39 release.
 
 Many users may be familiar with how software is packaged and installed on Linux and other systems
 using package managers.  For example, to install a given Linux development library such as

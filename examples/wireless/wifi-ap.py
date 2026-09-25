@@ -66,7 +66,7 @@ except ModuleNotFoundError:
 #   std::cout << " start="<<start<<" duration="<<duration<<std::endl;
 # }
 
-ns.cppyy.cppdef("""
+ns.cppjit.cppdef("""
     using namespace ns3;
     void AdvancePosition(Ptr<Node> node){
         Ptr<MobilityModel> mob = node->GetObject<MobilityModel>();
@@ -122,7 +122,7 @@ def main(argv):
     mobility.Install(stas)
     mobility.Install(ap)
 
-    ns.Simulator.Schedule(ns.Seconds(1), ns.cppyy.gbl.AdvancePosition, ap.Get(0))
+    ns.Simulator.Schedule(ns.Seconds(1), ns.cppjit.gbl.AdvancePosition, ap.Get(0))
 
     socket = ns.PacketSocketAddress()
     socket.SetSingleDevice(staDevs.Get(0).GetIfIndex())

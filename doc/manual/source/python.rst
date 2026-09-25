@@ -27,18 +27,20 @@ Python, to allow integration of |ns3| with other Python tools and workflows.
 The intent is not to provide a different language choice to author new
 |ns3| models implemented in Python.
 
-As of ns-3.37 release or later,
-Python bindings for |ns3| use a tool called Cppyy (https://cppyy.readthedocs.io/en/latest/)
-to create a Python module from the C++ libraries built by CMake. The Python bindings that Cppyy
+As of ns-3.49 release or later,
+Python bindings for |ns3| use a tool called cppjit (https://github.com/compiler-research/cppjit)
+to create a Python module from the C++ libraries built by CMake. The Python bindings that cppjit
 uses are built at runtime, by importing the C++ libraries and headers for each |ns3| module.
 This means that even if the C++ API changes, the Python bindings will adapt to them
 without requiring any preprocessing or scanning.
 
 If a user is not interested in Python, no action is needed; the Python bindings
-are only built on-demand by Cppyy, and only if the user enables them in the
-configuration of |ns3|.
+are only built on-demand by cppjit, and only if cppjit is found when configuring |ns3|.
 
-Prior to ns-3.37, the previous Python bindings framework was based on
+From ns-3.37 up to ns-3.48, the Python bindings were based on cppjit's predecessor,
+`cppyy <https://cppyy.readthedocs.io/en/latest/>`_. Scripts written for those releases
+can keep using ``ns.cppyy``, which is an alias of ``ns.cppjit``.
+Prior to ns-3.37, the Python bindings framework was based on
 `Pybindgen <https://github.com/gjcarneiro/pybindgen>`_.
 
 Python virtual environment
@@ -48,12 +50,12 @@ According to `PEP 668 <https://peps.python.org/pep-0668/>`_ it is a best practic
 to create a virtual environment for each new Python project. This isolates and
 simplifies dependency management. This is done via Python virtual environments (VENV).
 
-Trying to pip install cppyy, required for ns-3 python bindings, system-wide will
+Trying to pip install cppjit, required for ns-3 python bindings, system-wide will
 likely result in the following error message:
 
 .. sourcecode:: console
 
-  ~$ pip install cppyy
+  ~$ pip install cppjit
   error: externally-managed-environment
 
   x This environment is externally managed
@@ -287,20 +289,20 @@ simple modules in python, jump to the `Using the pip wheel`_ section.
 Using the bindings from the ns-3 source
 =======================================
 
-The main prerequisite is to install `cppyy`, with version 3.5.0.
-Depending on how you may manage
+The main prerequisite is to install `cppjit`, with version 0.1.0a1, which requires
+Python 3.12 or newer. Depending on how you may manage
 Python extensions, the installation instructions may vary, but you can first
-check if it installed by seeing if the `cppyy` module can be
-successfully imported and the version 3.5.0:
+check if it installed by seeing if the `cppjit` module can be
+successfully imported and the version 0.1.0a1:
 
 .. sourcecode:: bash
 
   $ python3
   Python 3.12.3 (main, Jun 18 2025, 17:59:45) [GCC 13.3.0] on linux
   Type "help", "copyright", "credits" or "license" for more information.
-  >>> import cppyy
-  >>> print("%s" % cppyy.__version__)
-  3.5.0
+  >>> import cppjit
+  >>> print("%s" % cppjit.__version__)
+  0.1.0a1
   >>>
 
 If not, you may try to install via `pip` or whatever other manager you are
@@ -308,9 +310,9 @@ using; e.g.:
 
 .. sourcecode:: bash
 
-  $ python3 -m pip install --user cppyy==3.5.0
+  $ python3 -m pip install --user cppjit==0.1.0a1
 
-Python bindings are enabled by default whenever cppyy and the Python development
+Python bindings are enabled by default whenever cppjit and the Python development
 libraries are found; the configure summary reports whether they were enabled,
 and they can be disabled with ``--disable-python-bindings``:
 
@@ -425,7 +427,7 @@ After installing it, you can start using ns-3 right away. For example, using the
 
   from ns import ns
 
-  ns.cppyy.cppdef("""
+  ns.cppjit.cppdef("""
               using namespace ns3;
 
               Callback<void,Ptr<const Packet>,const Address&,const Address&>
@@ -479,7 +481,7 @@ After installing it, you can start using ns-3 right away. For example, using the
   ns.Ipv4GlobalRoutingHelper.PopulateRoutingTables()
 
   # Setup the trace callback
-  sinkTraceCallback = ns.cppyy.gbl.make_sinktrace_callback(SinkTracer)
+  sinkTraceCallback = ns.cppjit.gbl.make_sinktrace_callback(SinkTracer)
   serverApps.Get(0).__deref__().TraceConnectWithoutContext("RxWithAddresses", sinkTraceCallback);
 
   # Set the simulation duration to 11 seconds
@@ -505,7 +507,7 @@ Which should print:
 Caveats
 *******
 
-Some of the limitations of the Cppyy-based bindings are listed here.
+Some of the limitations of the cppjit-based bindings are listed here.
 
 Incomplete Coverage
 ===================
@@ -523,7 +525,7 @@ For example, when handling command-line arguments, we could set additional param
 
 .. sourcecode:: python
 
-  # Import the ns-3 C++ modules with Cppyy
+  # Import the ns-3 C++ modules with cppjit
   from ns import ns
   import sys
 
@@ -536,7 +538,7 @@ For example, when handling command-line arguments, we could set additional param
   outputFileBuffer = create_string_buffer(b"default_output_file.xml", BUFFLEN)
   outputFile = c_char_p(outputFileBuffer.raw)
 
-  # Cppyy will transform the ctype types into the appropriate reference or raw pointers
+  # cppjit will transform the ctype types into the appropriate reference or raw pointers
   cmd = ns.CommandLine(__file__)
   cmd.AddValue("verbose", "Tell echo applications to log if true", verbose)
   cmd.AddValue("nCsma", "Number of extra CSMA nodes/devices", nCsma)
@@ -627,15 +629,15 @@ no bounds checking in CommandLine::AddValue variant for ``char*``.
   # 'oNotWriteHere_DoNotWriteHere_DoNotWriteHere_\x00\x00', caused
   # by the null terminator written at the middle of the victimBuffer.
 
-If you find a segmentation violation, be sure to wait for the stacktrace provided by Cppyy
+If you find a segmentation violation, be sure to wait for the stacktrace provided by cppjit
 and try to find the root cause of the issue. If you have multiple cores, the number of
-stacktraces will correspond to the number of threads being executed by Cppyy. To limit them,
+stacktraces will correspond to the number of threads being executed by cppjit. To limit them,
 define the environment variable `OPENBLAS_NUM_THREADS=1`.
 
 Operators
 #########
 
-Cppyy may fail to map C++ operators due to the implementation style used by |ns3|.
+cppjit may fail to map C++ operators due to the implementation style used by |ns3|.
 This happens for the fundamental type `Time`. To provide the expected behavior, we
 redefine these operators from the Python side during the setup of the |ns3| bindings
 module (`ns-3-dev/bindings/python/ns__init__.py`).
@@ -643,7 +645,7 @@ module (`ns-3-dev/bindings/python/ns__init__.py`).
 .. sourcecode:: python
 
   # Redefine Time operators
-  cppyy.cppdef("""
+  cppjit.cppdef("""
       using namespace ns3;
       bool Time_ge(Time& a, Time& b){ return a >= b;}
       bool Time_eq(Time& a, Time& b){ return a == b;}
@@ -652,17 +654,17 @@ module (`ns-3-dev/bindings/python/ns__init__.py`).
       bool Time_gt(Time& a, Time& b){ return a > b;}
       bool Time_lt(Time& a, Time& b){ return a < b;}
   """)
-  cppyy.gbl.ns3.Time.__ge__ = cppyy.gbl.Time_ge
-  cppyy.gbl.ns3.Time.__eq__ = cppyy.gbl.Time_eq
-  cppyy.gbl.ns3.Time.__ne__ = cppyy.gbl.Time_ne
-  cppyy.gbl.ns3.Time.__le__ = cppyy.gbl.Time_le
-  cppyy.gbl.ns3.Time.__gt__ = cppyy.gbl.Time_gt
-  cppyy.gbl.ns3.Time.__lt__ = cppyy.gbl.Time_lt
+  cppjit.gbl.ns3.Time.__ge__ = cppjit.gbl.Time_ge
+  cppjit.gbl.ns3.Time.__eq__ = cppjit.gbl.Time_eq
+  cppjit.gbl.ns3.Time.__ne__ = cppjit.gbl.Time_ne
+  cppjit.gbl.ns3.Time.__le__ = cppjit.gbl.Time_le
+  cppjit.gbl.ns3.Time.__gt__ = cppjit.gbl.Time_gt
+  cppjit.gbl.ns3.Time.__lt__ = cppjit.gbl.Time_lt
 
 
 A different operator used by |ns3| is `operator Address()`, used to
 convert different types of Addresses into the generic type Address.
-This is not supported by Cppyy and requires explicit conversion.
+This is not supported by cppjit and requires explicit conversion.
 
 .. sourcecode:: python
 
@@ -811,7 +813,7 @@ distributions, resulting on a pip wheel that is compatible across distributions.
 
 Then we install the required toolchain and dependencies necessary for both
 ns-3 (e.g. libxml2, gsl, sqlite, gtk, etc) and for the bindings and packaging
-(e.g. setuptools, wheel, auditwheel, cmake-build-extension, cppyy).
+(e.g. setuptools, wheel, auditwheel, cmake-build-extension, cppjit).
 
 .. sourcecode:: yaml
 
@@ -820,10 +822,10 @@ ns-3 (e.g. libxml2, gsl, sqlite, gtk, etc) and for the bindings and packaging
   # Create Python venv
   - $PYTHON -m venv ./venv
   - . ./venv/bin/activate
-  # Upgrade the pip version to reuse the pre-build cppyy
+  # Upgrade the pip version to reuse the pre-built cppjit
   - $PYTHON -m pip install pip --upgrade
   - $PYTHON -m pip install setuptools setuptools_scm --upgrade
-  - $PYTHON -m pip install wheel auditwheel cmake-build-extension cppyy
+  - $PYTHON -m pip install wheel auditwheel cmake-build-extension cppjit==0.1.0a1
 
 The project is then configured loading the configuration settings defined
 in the ``ns-3-dev/setup.py`` file.

@@ -1,4 +1,4 @@
-cppyy-24.04:
+cppjit-24.04:
   stage: test
   image: ubuntu:24.04 # python 3.12
   dependencies: []
@@ -13,7 +13,7 @@ cppyy-24.04:
       git wget
     - python3 -m venv ns3venv
     - source ./ns3venv/bin/activate
-    - pip install cppyy==3.5.0 matplotlib numpy
+    - pip install cppjit==0.1.0a1 matplotlib numpy
   script:
     - if (git remote | grep -qw upstream) ; then
       git remote remove upstream ;
@@ -62,10 +62,10 @@ cppyy-24.04:
     # Create Python venv
     - $PYTHON -m venv ./venv
     - . ./venv/bin/activate
-    # Upgrade the pip version to reuse the pre-build cppyy
+    # Upgrade the pip version to reuse the pre-built cppjit
     - python -m pip install pip --upgrade
     - python -m pip install setuptools setuptools_scm wheel --upgrade
-    - python -m pip install auditwheel cmake-build-extension cppyy==3.5.0
+    - python -m pip install auditwheel cmake-build-extension cppjit==0.1.0a1
     # Configure and build wheel
     - python setup.py bdist_wheel build_ext
     - export EXCLUDE_INTERNAL_LIBRARIES=`python ./build-support/pip-wheel/auditwheel-exclude-list.py`
@@ -103,16 +103,6 @@ cppyy-24.04:
     paths:
       - wheelhouse/*.whl
     when: on_success
-
-manylinux-pip-wheel-py3.10:
-  extends: .manylinux-pip-wheel
-  variables:
-    PYTHON: "python3.10"
-
-manylinux-pip-wheel-py3.11:
-  extends: .manylinux-pip-wheel
-  variables:
-    PYTHON: "python3.11"
 
 manylinux-pip-wheel-py3.12:
   extends: .manylinux-pip-wheel

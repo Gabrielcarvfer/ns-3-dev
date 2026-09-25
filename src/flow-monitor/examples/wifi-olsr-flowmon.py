@@ -101,7 +101,7 @@ def main(argv):
         )
         container = ns.NodeContainer(node)
         app = onOffHelper.Install(container)
-        urv = ns.CreateObject[ns.UniformRandomVariable]()  # ns.cppyy.gbl.get_rng()
+        urv = ns.CreateObject[ns.UniformRandomVariable]()  # ns.cppjit.gbl.get_rng()
         startDelay = ns.Seconds(urv.GetValue(20, 30))
         app.Start(startDelay)
 
