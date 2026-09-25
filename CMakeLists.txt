@@ -85,7 +85,7 @@ set(NS3_OUTPUT_DIRECTORY "" CACHE STRING "Directory to store built artifacts")
 option(NS3_PRECOMPILE_HEADERS
        "Precompile module headers to speed up compilation" ON
 )
-option(NS3_PYTHON_BINDINGS "Build ns-3 python bindings" OFF)
+option(NS3_PYTHON_BINDINGS "Build ns-3 python bindings" ON)
 option(NS3_SQLITE "Build with SQLite support" ON)
 option(NS3_EIGEN "Build with Eigen support" ON)
 option(NS3_STATIC "Build a static ns-3 library and link it against executables"

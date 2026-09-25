@@ -909,14 +909,24 @@ def configure_cmake(
         if args.G is None:
             args.G = current_cmake_generator
 
+        # Point CMake to the Python interpreter running this script, so that the
+        # active virtual environment is used to find Python packages.
+        # Windows paths are converted to forward slashes, as backslashes would
+        # be treated as escape sequences in CMake and in the generated lock file.
+        def cmake_path(path):
+            return str(path).replace("\\", "/")
+
+        cmake_args.append(f"-DPython3_EXECUTABLE={cmake_path(sys.executable)}")
+
         # Get the current Python information to supply
         # CMake with the respective installation
-        if args.enable_python_bindings is True:
+        if not args.disable_python_bindings:
             import sysconfig
 
-            cmake_args.append(f"-DPython3_LIBRARY_DIRS={sysconfig.get_config_var('LIBDIR')}")
-            cmake_args.append(f"-DPython3_INCLUDE_DIRS={sysconfig.get_config_var('INCLUDEPY')}")
-            cmake_args.append(f"-DPython3_EXECUTABLE={sys.executable}")
+            libdir = cmake_path(sysconfig.get_config_var("LIBDIR"))
+            includedir = cmake_path(sysconfig.get_config_var("INCLUDEPY"))
+            cmake_args.append(f"-DPython3_LIBRARY_DIRS={libdir}")
+            cmake_args.append(f"-DPython3_INCLUDE_DIRS={includedir}")
 
     cmake_args.extend(["-B", current_cmake_cache_folder])
 

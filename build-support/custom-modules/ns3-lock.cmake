@@ -86,7 +86,10 @@ function(write_lock)
   string(APPEND lock_contents
          "BUILD_VERSION_STRING = '${BUILD_VERSION_STRING}' \n"
   )
-  string(APPEND lock_contents "PYTHON = ['${Python3_EXECUTABLE}']\n")
+  # Use forward slashes, as backslashes in Windows paths would be interpreted as
+  # escape sequences when the lock file is loaded by Python
+  string(REPLACE "\\" "/" lock_python_executable "${Python3_EXECUTABLE}")
+  string(APPEND lock_contents "PYTHON = ['${lock_python_executable}']\n")
 
   mark_as_advanced(VALGRIND)
   find_program(VALGRIND valgrind)

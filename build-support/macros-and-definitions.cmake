@@ -707,17 +707,13 @@ macro(process_options)
   set(Python3_INCLUDE_DIRS)
   set(Python3_Interpreter_FOUND FALSE)
   set(Python3_FIND_VIRTUALENV FIRST)
-  if(${NS3_PYTHON_BINDINGS})
-    find_package(Python3 COMPONENTS Interpreter Development)
-  else()
-    find_package(Python3 COMPONENTS Interpreter)
-  endif()
+  find_package(Python3 COMPONENTS Interpreter Development)
 
   # Check if both Python interpreter and development libraries were found
   if(${Python3_Interpreter_FOUND})
     if(${Python3_Development_FOUND})
       set(Python3_FOUND TRUE)
-      if(APPLE)
+      if(APPLE AND ${NS3_PYTHON_BINDINGS})
         # Apple is very weird and there could be a lot of conflicting python
         # versions which can generate conflicting rpaths preventing the python
         # bindings from working
@@ -733,7 +729,7 @@ macro(process_options)
           set(CMAKE_INSTALL_RPATH "${DEVELOPER_DIR}" CACHE STRING "")
         endif()
       endif()
-      if(NOT ${NS3_FORCE_LOCAL_DEPENDENCIES})
+      if(${NS3_PYTHON_BINDINGS} AND NOT ${NS3_FORCE_LOCAL_DEPENDENCIES})
         include_directories(SYSTEM ${Python3_INCLUDE_DIRS})
       endif()
     else()
@@ -788,7 +784,7 @@ macro(process_options)
       )
 
       # And create an install target for the bindings
-      if(NOT NS3_BINDINGS_INSTALL_DIR)
+      if(${ENABLE_PYTHON_BINDINGS} AND NOT NS3_BINDINGS_INSTALL_DIR)
         # If the installation directory for the python bindings is not set,
         # suggest the user site-packages directory
         execute_process(
@@ -807,7 +803,7 @@ macro(process_options)
           ${HIGHLIGHTED_STATUS}
           "Set NS3_BINDINGS_INSTALL_DIR=\"${SUGGESTED_BINDINGS_INSTALL_DIR}\" to install it to the default location."
         )
-      else()
+      elseif(${ENABLE_PYTHON_BINDINGS})
         if(${NS3_BINDINGS_INSTALL_DIR} STREQUAL "INSTALL_PREFIX")
           set(NS3_BINDINGS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
         endif()

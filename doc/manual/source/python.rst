@@ -310,11 +310,13 @@ using; e.g.:
 
   $ python3 -m pip install --user cppyy==3.5.0
 
-First, we need to enable the build of Python bindings:
+Python bindings are enabled by default whenever cppyy and the Python development
+libraries are found; the configure summary reports whether they were enabled,
+and they can be disabled with ``--disable-python-bindings``:
 
 .. sourcecode:: bash
 
-  $ ./ns3 configure --enable-python-bindings
+  $ ./ns3 configure
 
 Other options such as ``--enable-examples`` may be passed to the above command.
 ns3 contains some options that automatically update the python path to find the ns3 module.
