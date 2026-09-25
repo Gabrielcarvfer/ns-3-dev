@@ -224,6 +224,42 @@ class TestSimulator(unittest.TestCase):
         # Delete Ptr<>'s on the python side to let C++ clean them
         del internet
 
+    def testSocketConvenienceOverloads(self):
+        """! Test the Socket convenience overloads on concrete socket types
+        @param self this object
+        @return None
+        """
+        nc = ns.NodeContainer(1)
+        node = nc.Get(0)
+        internet = ns.InternetStackHelper()
+        internet.Install(node)
+
+        # Sockets are bound to their concrete types (e.g. UdpSocketImpl),
+        # which must not hide the overloads defined by Socket
+        sink = ns.Socket.CreateSocket(node, ns.TypeId.LookupByName("ns3::UdpSocketFactory"))
+        sink.Bind(ns.InetSocketAddress(ns.Ipv4Address.GetAny(), 80).ConvertTo())
+
+        source = ns.Socket.CreateSocket(node, ns.TypeId.LookupByName("ns3::UdpSocketFactory"))
+        source.Connect(ns.InetSocketAddress(ns.Ipv4Address("127.0.0.1"), 80).ConvertTo())
+        self.assertEqual(source.Send(ns.Packet(19)), 19)
+        self.assertEqual(source.Send(ns.Packet(23)), 23)
+
+        ns.Simulator.Run()
+
+        address = ns.Address()
+        packet = sink.RecvFrom(address)
+        self.assertEqual(packet.GetSize(), 19)
+        self.assertTrue(ns.InetSocketAddress.IsMatchingType(address))
+        packet = sink.Recv()
+        self.assertEqual(packet.GetSize(), 23)
+
+        tcpSocket = ns.Socket.CreateSocket(node, ns.TypeId.LookupByName("ns3::TcpSocketFactory"))
+        self.assertFalse(tcpSocket.Recv())
+        self.assertFalse(tcpSocket.RecvFrom(address))
+
+        # Delete Ptr<>'s on the python side to let C++ clean them
+        del internet
+
     def testAttributes(self):
         """! Test attributes function
         @param self this object

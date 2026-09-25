@@ -181,6 +181,7 @@ set(header_files
     model/ipv4-static-routing.h
     model/ipv4.h
     model/ipv6-address-generator.h
+    model/ipv6-autoconfigured-prefix.h
     model/ipv6-end-point-demux.h
     model/ipv6-end-point.h
     model/ipv6-extension-demux.h
@@ -199,6 +200,7 @@ set(header_files
     model/ipv6-pmtu-cache.h
     model/ipv6-queue-disc-item.h
     model/ipv6-raw-socket-factory.h
+    model/ipv6-raw-socket-impl.h
     model/ipv6-route.h
     model/ipv6-routing-protocol.h
     model/ipv6-routing-table-entry.h
@@ -249,6 +251,7 @@ set(header_files
     model/udp-header.h
     model/udp-l4-protocol.h
     model/udp-socket-factory.h
+    model/udp-socket-impl.h
     model/udp-socket.h
     model/windowed-filter.h
 )

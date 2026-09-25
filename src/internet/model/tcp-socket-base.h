@@ -650,7 +650,15 @@ class TcpSocketBase : public TcpSocket
     Ptr<Packet> Recv(uint32_t maxSize,
                      uint32_t flags) override; // Return a packet to be forwarded to app
     Ptr<Packet> RecvFrom(uint32_t maxSize, uint32_t flags, Address& fromAddress)
-        override;                             // ... and write the remote address at fromAddress
+        override; // ... and write the remote address at fromAddress
+
+    // Overriding the pure virtual Send/SendTo/Recv/RecvFrom hides the Socket
+    // convenience overloads (e.g. RecvFrom(Address&)), so bring them back into scope
+    using Socket::Recv;
+    using Socket::RecvFrom;
+    using Socket::Send;
+    using Socket::SendTo;
+
     uint32_t GetTxAvailable() const override; // Available Tx buffer size
     uint32_t GetRxAvailable()
         const override; // Available-to-read data size, i.e. value of m_rxAvailable

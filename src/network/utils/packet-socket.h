@@ -136,6 +136,13 @@ class PacketSocket : public Socket
     uint32_t GetRxAvailable() const override;
     Ptr<Packet> Recv(uint32_t maxSize, uint32_t flags) override;
     Ptr<Packet> RecvFrom(uint32_t maxSize, uint32_t flags, Address& fromAddress) override;
+
+    // Overriding the pure virtual Send/SendTo/Recv/RecvFrom hides the Socket
+    // convenience overloads (e.g. RecvFrom(Address&)), so bring them back into scope
+    using Socket::Recv;
+    using Socket::RecvFrom;
+    using Socket::Send;
+    using Socket::SendTo;
     int GetSockName(Address& address) const override;
     int GetPeerName(Address& address) const override;
     bool SetAllowBroadcast(bool allowBroadcast) override;
