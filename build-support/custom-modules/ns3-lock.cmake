@@ -71,7 +71,9 @@ function(write_lock)
   cache_cmake_flag(NS3_CLICK "NSCLICK" lock_contents)
   cache_cmake_flag(NS3_BRITE "ENABLE_BRITE" lock_contents)
   cache_cmake_flag(NS3_ENABLE_SUDO "ENABLE_SUDO" lock_contents)
-  cache_cmake_flag(NS3_PYTHON_BINDINGS "ENABLE_PYTHON_BINDINGS" lock_contents)
+  cache_cmake_flag(
+    ENABLE_PYTHON_BINDINGS "ENABLE_PYTHON_BINDINGS" lock_contents
+  )
   cache_cmake_flag(NS3_NETANIM "FETCH_NETANIM_VISUALIZER" lock_contents)
 
   string(APPEND lock_contents "EXAMPLE_DIRECTORIES = [")
@@ -86,7 +88,10 @@ function(write_lock)
   string(APPEND lock_contents
          "BUILD_VERSION_STRING = '${BUILD_VERSION_STRING}' \n"
   )
-  string(APPEND lock_contents "PYTHON = ['${Python3_EXECUTABLE}']\n")
+  # Use forward slashes, as backslashes in Windows paths would be interpreted as
+  # escape sequences when the lock file is loaded by Python
+  string(REPLACE "\\" "/" lock_python_executable "${Python3_EXECUTABLE}")
+  string(APPEND lock_contents "PYTHON = ['${lock_python_executable}']\n")
 
   mark_as_advanced(VALGRIND)
   find_program(VALGRIND valgrind)

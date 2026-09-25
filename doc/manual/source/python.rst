@@ -310,13 +310,23 @@ using; e.g.:
 
   $ python3 -m pip install --user cppyy==3.5.0
 
-First, we need to enable the build of Python bindings:
+Python bindings are enabled by default whenever cppyy and the Python development
+libraries are found; the configure summary reports whether they were enabled:
 
 .. sourcecode:: bash
 
-  $ ./ns3 configure --enable-python-bindings
+  $ ./ns3 configure
 
-Other options such as ``--enable-examples`` may be passed to the above command.
+To build |ns3| without Python bindings, which also skips looking for cppyy and
+running the Python examples and tests, disable them explicitly:
+
+.. sourcecode:: bash
+
+  $ ./ns3 configure --disable-python-bindings
+
+The equivalent CMake option is ``-DNS3_PYTHON_BINDINGS=OFF``.
+
+Other options such as ``--enable-examples`` may be passed to the above commands.
 ns3 contains some options that automatically update the python path to find the ns3 module.
 To run example programs, there are two ways to use ns3 to take care of this.  One is to run a ns3 shell; e.g.:
 
