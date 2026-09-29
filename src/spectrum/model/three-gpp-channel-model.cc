@@ -3078,12 +3078,14 @@ ThreeGppChannelModel::RemoveWeakClusters(DoubleVector* clusterPowers,
         }
     }
 
-    // remove clusters with less than -25 dB power compared to the maxim cluster power;
-    // double thresh = pow(10, -2.5);
-    double thresh = 0.0032;
+    // Remove the clusters more than 25 dB below the strongest one. The powers
+    // with the LOS component of (7.5-8) are used only in (7.5-9) and (7.5-14),
+    // so the threshold applies to the powers of (7.5-6).
+    const double thresh = std::pow(10, -2.5);
+    const double maxClusterPower = *std::max_element(clusterPowers->begin(), clusterPowers->end());
     for (uint8_t cIndex = table3gpp->m_numOfCluster; cIndex > 0; cIndex--)
     {
-        if (clusterPowersForAngles[cIndex - 1] < thresh * *powerMax)
+        if ((*clusterPowers)[cIndex - 1] < thresh * maxClusterPower)
         {
             clusterPowersForAngles.erase(clusterPowersForAngles.begin() + cIndex - 1);
             clusterPowers->erase(clusterPowers->begin() + cIndex - 1);

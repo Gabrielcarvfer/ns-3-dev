@@ -3422,10 +3422,10 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
      *  Bearing angle is configured to point one toward the other.
      *  When polarization slant angles are 0 and 0 at TX and RX,
      *  we expect the strongest cluster to be similar to the following matrix:
-     *   (2.5,-4.7)  (2.5,-4.7)   (0,0)     (0,0)
-     *   (2.5,-4.7)  (2.5,-4.7)   (0,0)     (0,0)
-     *   (0,0)   (0,0)    (-2.4,4)    (-2.4,4)
-     *   (0,0)   (0,0)    (-2.4,4)    (-2.4,4)
+     *   (2.7,-4.7)  (2.7,-4.7)   (0,0)     (0,0)
+     *   (2.7,-4.7)  (2.7,-4.7)   (0,0)     (0,0)
+     *   (0,0)   (0,0)    (-2.6,4.4)    (-2.6,4.4)
+     *   (0,0)   (0,0)    (-2.6,4.4)    (-2.6,4.4)
      */
     AddTestCase(new ThreeGppMimoPolarizationTest(
                     "Not face-to-face. Different heights. 0 and 0 pol. slant angles.",
@@ -3433,22 +3433,22 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
                     MimoPolarizationAntennaParams(false, 0, 0),
                     Vector{30, 0, 3},
                     MimoPolarizationAntennaParams(false, 0, M_PI),
-                    {{2.5, -4.7},
-                     {2.5, -4.7},
+                    {{2.7, -4.7},
+                     {2.7, -4.7},
                      0,
                      0,
-                     {2.5, -4.7},
-                     {2.5, -4.7},
+                     {2.7, -4.7},
+                     {2.7, -4.7},
                      0,
                      0,
                      0,
                      0,
-                     {-2.4, 4},
-                     {-2.4, 4},
+                     {-2.6, 4.4},
+                     {-2.6, 4.4},
                      0,
                      0,
-                     {-2.4, 4},
-                     {-2.4, 4}},
+                     {-2.6, 4.4},
+                     {-2.6, 4.4}},
                     0.5),
                 TestCase::Duration::QUICK);
 }
