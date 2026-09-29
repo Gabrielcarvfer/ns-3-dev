@@ -3257,7 +3257,7 @@ ThreeGppChannelModel::GenerateClusterAngles(Ptr<const ThreeGppChannelParams> cha
             RadiansToDegrees(sAngle.GetInclination()) + table3gpp->m_offsetZOD; //(7.5-19)
     }
 
-    if (channelParams->m_losCondition == ChannelCondition::LOS)
+    if (channelParams->HasLosRay())
     {
         // The 7.5-12 can be rewrite as Theta_n,ZOA = Theta_n,ZOA - (Theta_1,ZOA - Theta_LOS,ZOA) =
         // Theta_n,ZOA - diffZOA, Similar as AOD, ZSA and ZSD.
@@ -3446,7 +3446,7 @@ ThreeGppChannelModel::UpdateClusterAngles(Ptr<const ThreeGppChannelParams> chann
     const DoubleVector prevClusterZod = channelParams->m_angle[ZOD_INDEX];
     const auto rxSpeed = channelParams->m_rxSpeed;
     const auto txSpeed = channelParams->m_txSpeed;
-    const bool los = channelParams->m_losCondition == ChannelCondition::LOS;
+    const bool los = channelParams->HasLosRay();
 
     for (size_t cInd = 0; cInd < prevClusterDelay.size(); cInd++)
     {
@@ -3787,7 +3787,7 @@ ThreeGppChannelModel::ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> 
     // Under LOS, GetNewChannel combines the LOS ray with the first tap (7.5-30):
     // move the zero-relative-delay ray of the first cluster to ray index 0 so that
     // combination happens at the cluster delay.
-    if (channelParams->m_losCondition == ChannelCondition::LOS && nClusters > 0)
+    if (channelParams->HasLosRay() && nClusters > 0)
     {
         const auto minIt = std::min_element(rayDelay[0].begin(), rayDelay[0].end());
         const auto m0 = static_cast<size_t>(std::distance(rayDelay[0].begin(), minIt));
@@ -4300,17 +4300,19 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                           table3gpp,
                           channelParams->m_clusterShadowing,
                           &channelParams->m_clusterPower);
+    const auto rayLosCondition =
+        channelParams->HasLosRay() ? ChannelCondition::LOS : ChannelCondition::NLOS;
     double powerMax = 0;
     const DoubleVector clusterPowerForAngles = RemoveWeakClusters(&channelParams->m_clusterPower,
                                                                   &channelParams->m_delay,
-                                                                  channelParams->m_losCondition,
+                                                                  rayLosCondition,
                                                                   table3gpp,
                                                                   lsps.kFactor,
                                                                   &powerMax);
 
     channelParams->m_reducedClusterNumber = channelParams->m_clusterPower.size();
     // Resume step 5 to compute the delay for LoS condition.
-    if (channelParams->m_losCondition == ChannelCondition::LOS)
+    if (channelParams->HasLosRay())
     {
         AdjustClusterDelaysForLosCondition(&channelParams->m_delay,
                                            channelParams->m_reducedClusterNumber,
@@ -4318,8 +4320,8 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
     }
 
     // Step 7: Generate arrival and departure angles for both azimuth and elevation.
-    const auto cPhi = CalculateCphi(channelParams->m_losCondition, table3gpp, lsps.kFactor);
-    const auto cTheta = CalculateCtheta(channelParams->m_losCondition, table3gpp, lsps.kFactor);
+    const auto cPhi = CalculateCphi(rayLosCondition, table3gpp, lsps.kFactor);
+    const auto cTheta = CalculateCtheta(rayLosCondition, table3gpp, lsps.kFactor);
 
     GenerateClusterAngles(channelParams,
                           clusterPowerForAngles,
@@ -4390,7 +4392,7 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
     for (uint16_t cInd = 0; cInd < channelParams->m_reducedClusterNumber; cInd++)
     {
         // 7.6.3.2, Procedure A, k=0 -> t_0
-        if (channelParams->m_losCondition != ChannelCondition::LOS)
+        if (!channelParams->HasLosRay())
         {
             channelParams->m_delayConsistency[cInd] += minTau;
         }
@@ -4493,8 +4495,7 @@ ThreeGppChannelModel::UpdateChannelParameters(Ptr<ThreeGppChannelParams> channel
 
     // draw random signs from cluster angles +1,-1 and save them to reuse them for the channel
     // update
-    if (channelParams->m_losCondition != ChannelCondition::LOS &&
-        channelParams->m_clusterXnNlosSign.empty())
+    if (!channelParams->HasLosRay() && channelParams->m_clusterXnNlosSign.empty())
     {
         GenerateClusterXnNLos(channelParams->m_reducedClusterNumber,
                               &channelParams->m_clusterXnNlosSign);
@@ -5039,7 +5040,7 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
         }
     }
 
-    if (channelParams->m_losCondition == ChannelCondition::LOS) //(7.5-29) && (7.5-30)
+    if (channelParams->HasLosRay()) //(7.5-29) && (7.5-30)
     {
         // Precompute the per-link LOS constants once, outside the (u, s) loops:
         // the Ricean K-factor weights, the distance phase term, and the field

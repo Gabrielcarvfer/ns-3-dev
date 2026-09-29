@@ -741,6 +741,11 @@ please have a look at the documentation of the classes
     and ray specific random variables through the ``InterUeSpatialConsistency``
     attribute of the channel condition model (disabled by default); see below.
 
+  * The LOS state of an O2I link, which is the one of its outdoor part, sets
+    its path loss and ZSD parameters (Table 7.5-7 and 7.5-8, note 5), while its
+    fast fading is generated without a LOS ray, as Table 7.5-6 has no K-factor
+    for O2I.
+
   * The large bandwidth and large antenna array modeling of Sec. 7.6.2.2 is
     available through the ``LargeBandwidthArrayModeling`` attribute (disabled
     by default); see below.
