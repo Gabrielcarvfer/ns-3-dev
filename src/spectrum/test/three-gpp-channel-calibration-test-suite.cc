@@ -1020,13 +1020,18 @@ Quantile(const std::vector<double>& sorted, double q)
  * CRS port 0 RSRP), and of the delay and angle spreads of the serving link
  * (circular angle spread of TR 25.996), are compared at every reference
  * percentile with the band spanned by the companies of the 3GPP calibration
- * (R1-165975, TR 38.900 V14.0.0): the confidence interval of the ns-3
- * percentile must overlap the band. The spreads whose TR 38.900 V14.0.0
- * parameters differ from TR 38.901 (InH, and ZSA of the O2I links) are instead
- * compared with the Sionna TR 38.901 channel models, as are the spreads of all
- * the scenarios: attachment on the path loss without shadow fading and angle
- * spread of TR 38.901 Annex A, whose confidence interval must overlap the one
- * of Sionna (see three-gpp-channel-calibration-reference.py).
+ * (R1-165975, TR 38.900 V14.0.0): the UMa coupling loss and SIR percentiles
+ * must lie in the band, while the confidence interval (3 standard deviations
+ * of the order statistic) of the other percentiles must overlap it, as the InH
+ * and O2I cluster parameters of TR 38.900 V14.0.0 differ from TR 38.901. The spreads
+ * whose TR 38.900 V14.0.0 parameters differ further (InH, and ASA and ZSA of the
+ * O2I links) are not compared with 3GPP, nor is the InH SIR, which depends on
+ * the angular spreads through the beam gains. The spreads of all the scenarios are
+ * compared with the Sionna TR 38.901 channel models, with attachment on the
+ * path loss without shadow fading and the angle spread of TR 38.901 Annex A:
+ * the difference of the ns-3 and Sionna percentiles must be within 4 standard
+ * deviations of their combined confidence interval (see
+ * three-gpp-channel-calibration-reference.py).
  */
 class ThreeGppFullCalibrationTestCase : public TestCase
 {
@@ -1363,12 +1368,19 @@ ThreeGppFullCalibrationTestCase::RunSetup(const FullCalibrationSetup& setup)
         {calibration::Metric::ASA, "ASA (deg)"},
         {calibration::Metric::ZSA, "ZSA (deg)"},
     };
-    // Compare every reference percentile: the confidence interval of the ns-3
-    // percentile (order statistics, 3 standard deviations) must overlap the
-    // reference band.
+    // Compare every reference percentile, with the confidence interval of the
+    // ns-3 percentile given by 3 standard deviations of the order statistic.
+    enum class Criterion
+    {
+        POINT_IN_BAND, ///< the ns-3 percentile lies in the band of the 3GPP companies
+        BAND_OVERLAP,  ///< the ns-3 confidence interval overlaps the band
+        DIFFERENCE,    ///< the difference is within the combined confidence interval
+    };
+
     auto check = [&](std::map<calibration::Metric, std::vector<double>>& sampleSet,
                      const calibration::ReferenceCdf& ref,
-                     const std::string& source) {
+                     const std::string& source,
+                     Criterion criterion) {
         auto& x = sampleSet[ref.metric];
         std::sort(x.begin(), x.end());
         const auto n = static_cast<double>(x.size());
@@ -1376,20 +1388,42 @@ ThreeGppFullCalibrationTestCase::RunSetup(const FullCalibrationSetup& setup)
         {
             const double p = calibration::kReferencePercentiles[i] / 100;
             const double delta = 3 * std::sqrt(p * (1 - p) / n);
+            const double value = Quantile(x, p);
             const double lo = Quantile(x, p - delta);
             const double hi = Quantile(x, p + delta);
-            const bool overlap = hi >= ref.low[i] && lo <= ref.high[i];
+            bool pass = false;
+            switch (criterion)
+            {
+            case Criterion::POINT_IN_BAND:
+                pass = value >= ref.low[i] && value <= ref.high[i];
+                break;
+            case Criterion::BAND_OVERLAP:
+                pass = hi >= ref.low[i] && lo <= ref.high[i];
+                break;
+            case Criterion::DIFFERENCE:
+                // Both confidence intervals are asymmetric: use the half-widths
+                // facing each other, combined as independent errors, and widened
+                // from 3 to 4 standard deviations, as hundreds of percentiles are
+                // compared.
+                pass = value >= ref.mean[i]
+                           ? value - ref.mean[i] <=
+                                 4.0 / 3 * std::hypot(value - lo, ref.high[i] - ref.mean[i])
+                           : ref.mean[i] - value <=
+                                 4.0 / 3 * std::hypot(hi - value, ref.mean[i] - ref.low[i]);
+                break;
+            }
             NS_LOG_INFO(setup.name << " " << setup.fcGHz << " GHz " << names.at(ref.metric) << " "
-                                   << calibration::kReferencePercentiles[i] << "% ns-3 "
-                                   << Quantile(x, p) << " " << source << " " << ref.mean[i] << " ["
-                                   << ref.low[i] << ", " << ref.high[i] << "]");
+                                   << calibration::kReferencePercentiles[i] << "% ns-3 " << value
+                                   << " [" << lo << ", " << hi << "] " << source << " "
+                                   << ref.mean[i] << " [" << ref.low[i] << ", " << ref.high[i]
+                                   << "]");
             NS_TEST_EXPECT_MSG_EQ(
-                overlap,
+                pass,
                 true,
                 setup.name << " " << setup.fcGHz << " GHz " << names.at(ref.metric) << " at "
-                           << calibration::kReferencePercentiles[i] << "%: ns-3 " << Quantile(x, p)
-                           << " [" << lo << ", " << hi << "], " << source << " " << ref.mean[i]
-                           << " [" << ref.low[i] << ", " << ref.high[i] << "]");
+                           << calibration::kReferencePercentiles[i] << "%: ns-3 " << value << " ["
+                           << lo << ", " << hi << "], " << source << " " << ref.mean[i] << " ["
+                           << ref.low[i] << ", " << ref.high[i] << "]");
         }
     };
 
@@ -1400,21 +1434,35 @@ ThreeGppFullCalibrationTestCase::RunSetup(const FullCalibrationSetup& setup)
             continue;
         }
         // The 3GPP calibration used TR 38.900 V14.0.0, whose InH parameters,
-        // and O2I ZSA parameters (lgZSA and cZSA of Table 7.5-6), differ from
-        // those of TR 38.901, so these spreads are only compared with Sionna.
+        // and O2I arrival parameters (cASA of 20 instead of 8 degrees, lgZSA and
+        // cZSA of Table 7.5-6), differ from those of TR 38.901, so these spreads
+        // are only compared with Sionna. With the cASA of TR 38.900 V14.0.0, the
+        // UMa and UMi ASA percentiles match the mean of the companies.
         const bool isSpread = ref.metric != calibration::Metric::COUPLING_LOSS &&
                               ref.metric != calibration::Metric::SIR;
-        if (isSpread && (indoorScenario || ref.metric == calibration::Metric::ZSA))
+        // The InH SIR also differs, as the serving and interfering beam gains
+        // depend on the angular spreads, so only the InH coupling loss is kept.
+        const bool inhSir = indoorScenario && ref.metric == calibration::Metric::SIR;
+        if (inhSir || (isSpread && (indoorScenario || ref.metric == calibration::Metric::ASA ||
+                                    ref.metric == calibration::Metric::ZSA)))
         {
             continue;
         }
-        check(samples, ref, "3GPP mean");
+        // The coupling loss and SIR of UMa must lie in the band. The InH coupling
+        // loss, whose TR 38.900 V14.0.0 parameters differ, and the UMi ones only
+        // have to overlap it: the UMi coupling loss at 30 GHz is about 2 dB above
+        // the mean of the companies, at the edge of their band.
+        const bool pointInBand = !isSpread && setup.name == "UMa";
+        check(samples,
+              ref,
+              "3GPP mean",
+              pointInBand ? Criterion::POINT_IN_BAND : Criterion::BAND_OVERLAP);
     }
     for (const auto& ref : calibration::kSionnaSpreads)
     {
         if (ref.scenario == setup.name && ref.fcGHz == setup.fcGHz)
         {
-            check(pathGainSamples, ref, "Sionna");
+            check(pathGainSamples, ref, "Sionna", Criterion::DIFFERENCE);
         }
     }
 }
@@ -1457,12 +1505,12 @@ ThreeGppChannelCalibrationTestSuite::ThreeGppChannelCalibrationTestSuite()
                 }),
                 Duration::EXTENSIVE);
     AddTestCase(new ThreeGppFullCalibrationTestCase({
-                    {"UMa", "UMa", 6, 500, 25, 35, 102, 2},
-                    {"UMa", "UMa", 30, 500, 25, 35, 102, 2},
-                    {"UMi", "UMi-StreetCanyon", 6, 200, 10, 10, 102, 2},
-                    {"UMi", "UMi-StreetCanyon", 30, 200, 10, 10, 102, 2},
-                    {"InH", "InH-OfficeOpen", 6, 20, 3, 0, 110, 3},
-                    {"InH", "InH-OfficeOpen", 30, 20, 3, 0, 110, 3},
+                    {"UMa", "UMa", 6, 500, 25, 35, 102, 16},
+                    {"UMa", "UMa", 30, 500, 25, 35, 102, 16},
+                    {"UMi", "UMi-StreetCanyon", 6, 200, 10, 10, 102, 8},
+                    {"UMi", "UMi-StreetCanyon", 30, 200, 10, 10, 102, 8},
+                    {"InH", "InH-OfficeOpen", 6, 20, 3, 0, 110, 8},
+                    {"InH", "InH-OfficeOpen", 30, 20, 3, 0, 110, 8},
                 }),
                 Duration::TAKES_FOREVER);
 }
