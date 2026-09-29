@@ -37,6 +37,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (mesh) `dot11s::IePreq::GetDestinationList()` is now a const method.
 * (wifi) The `MonitorSnifferRx` and `MonitorSnifferTx` trace sources of the `WifiPhy` class have been deprecated in favor of a new `MonitorSniffer` trace source of the `WifiPhy` class. If the trace contains information about the signal and noise, it is equivalent to `MonitorSnifferRx`; otherwise it is equivalent to `MonitorSnifferTx`.
 * (wifi) `WifiPhy::NotifyMonitorSniffRx` and `WifiPhy::NotifyMonitorSniffTx` take a `WifiPhy::SniffInfo` instead of separate channel frequency, TXVECTOR, signal and noise, and STA-ID arguments.
+* (antenna, spectrum) A `PhasedArrayModel` beamforming vector now holds the weights applied to the elements both when transmitting and when receiving: `PhasedArrayModel::GetBeamformingVector(Angles)` returns the normalized steering vector instead of its conjugate, and `ThreeGppSpectrumPropagationLossModel` and `SionnaRtSpectrumPropagationLossModel` no longer conjugate the receive-side weights. Previously, the vector returned by `GetBeamformingVector(Angles)` pointed the beam at the mirror image of the requested direction (through the array plane) when used at the transmitter, while hand-made weights like `exp(-j 2 pi r.u / lambda)` did so at the receiver. Custom beamforming vectors built for the receiver side must be conjugated.
 
 ### Changes to build system
 

@@ -206,7 +206,15 @@ class PhasedArrayModel : public Object
     virtual uint8_t GetElemPol(size_t elementIndex) const = 0;
 
     /**
-     * Sets the beamforming vector to be used
+     * Sets the beamforming vector to be used.
+     *
+     * The i-th entry is the complex weight applied to the i-th antenna element,
+     * both when transmitting and when receiving (channel reciprocity). A plane
+     * wave departing towards, or arriving from, the direction u has phase
+     * exp(+j 2 pi r_i.u / lambda) at the element located at r_i (3GPP TR 38.901,
+     * Eq. 7.5-22), so the weights exp(-j 2 pi r_i.u / lambda) returned by
+     * GetBeamformingVector(Angles) point the beam towards u at either end of a link.
+     *
      * @param beamformingVector the beamforming vector
      */
     void SetBeamformingVector(const ComplexVector& beamformingVector);
@@ -224,14 +232,21 @@ class PhasedArrayModel : public Object
     const PhasedArrayModel::ComplexVector& GetBeamformingVectorRef() const;
 
     /**
-     * Returns the beamforming vector that points towards the specified position
+     * Returns the beamforming vector that points towards the specified direction,
+     * that is, the steering vector normalized to unit power per port. The same
+     * vector points the beam towards that direction for both transmission and
+     * reception, see SetBeamformingVector.
+     *
      * @param a the beamforming angle
      * @return the beamforming vector
      */
     ComplexVector GetBeamformingVector(Angles a) const;
 
     /**
-     * Returns the steering vector that points toward the specified position
+     * Returns the steering vector that points toward the specified direction,
+     * whose i-th entry is exp(-j 2 pi r_i.u / lambda), where r_i is the location
+     * of the i-th element and u the unit vector of the direction.
+     *
      * @param a the steering angle
      * @return the steering vector
      */
