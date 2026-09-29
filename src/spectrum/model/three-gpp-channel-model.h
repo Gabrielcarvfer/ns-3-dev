@@ -611,8 +611,8 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * @param table3gpp 3GPP parameters from the table
      * @param kFactor K factor
      * @param powerMax output for maximum power
-     * @return Vector of per-cluster powers used for angle generation, after removing clusters
-     * more than 25 dB below the strongest cluster.
+     * @return Vector of per-cluster powers used for angle generation (7.5-8), after removing
+     * the clusters whose power of (7.5-6) is more than 25 dB below the strongest cluster.
      */
     DoubleVector RemoveWeakClusters(DoubleVector* clusterPowers,
                                     DoubleVector* clusterDelays,
