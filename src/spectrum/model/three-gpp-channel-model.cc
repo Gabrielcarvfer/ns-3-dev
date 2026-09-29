@@ -1399,9 +1399,9 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_sigLgASA = 0.24;
             table3gpp->m_uLgZSA = 0.47;
             table3gpp->m_sigLgZSA = 0.40;
-            table3gpp->m_uLgZSD = 0.34;
-            table3gpp->m_sigLgZSD =
+            table3gpp->m_uLgZSD =
                 std::max(-1.0, -0.17 * (distance2D / 1000.0) - 0.01 * (hUT - 1.5) + 0.22);
+            table3gpp->m_sigLgZSD = 0.34;
             table3gpp->m_offsetZOD = 0;
             table3gpp->m_cDS = 3.91e-9;
             table3gpp->m_cASD = 2;
