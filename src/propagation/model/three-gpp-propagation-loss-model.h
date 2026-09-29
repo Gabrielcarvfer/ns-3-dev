@@ -82,6 +82,29 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
      */
     void ClearO2iLossCacheMap();
 
+    /**
+     * @brief Sample the SpatialGaussianField of shadow fading owned by a
+     *        (site, condition slot) pair, see the InterUeSpatialConsistency
+     *        attribute of ChannelConditionModel.
+     *
+     * The shadow fading of a link is this sample times the shadow fading
+     * standard deviation. ThreeGppChannelModel draws the SF entry of its large
+     * scale parameter vector from the same field, so that the cross-correlations
+     * between the shadow fading and the other large scale parameters of
+     * TR 38.901 Table 7.5-6 hold.
+     *
+     * @param siteNodeId Node id of the site endpoint owning the field.
+     * @param condSlot Channel condition slot (0 = LOS, 1 = NLOS, 2 = O2I).
+     * @param position Sampling position (only x and y are used).
+     * @param corrDist Correlation distance in meters; non-positive values
+     *        degrade to a single deterministic draw at the position.
+     * @return A sample of the field with N(0,1) marginal distribution.
+     */
+    static double SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
+                                                  uint8_t condSlot,
+                                                  const Vector& position,
+                                                  double corrDist);
+
   private:
     /**
      * Computes the received power by applying the pathloss model described in
@@ -241,23 +264,6 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     double GetShadowing(Ptr<MobilityModel> a,
                         Ptr<MobilityModel> b,
                         ChannelCondition::LosConditionValue cond) const;
-
-    /**
-     * @brief Sample the SpatialGaussianField of shadow fading owned by a
-     *        (site, condition slot) pair, see the InterUeSpatialConsistency
-     *        attribute.
-     *
-     * @param siteNodeId Node id of the site endpoint owning the field.
-     * @param condSlot Channel condition slot (0 = LOS, 1 = NLOS, 2 = O2I).
-     * @param position Sampling position (only x and y are used).
-     * @param corrDist Correlation distance in meters; non-positive values
-     *        degrade to a single deterministic draw at the position.
-     * @return A sample of the field with N(0,1) marginal distribution.
-     */
-    double SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
-                                           uint8_t condSlot,
-                                           const Vector& position,
-                                           double corrDist) const;
 
     /**
      * @brief Returns the shadow fading standard deviation

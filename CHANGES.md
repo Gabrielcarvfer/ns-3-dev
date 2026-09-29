@@ -30,6 +30,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### Changed behavior
 
+* (propagation, spectrum) With the `InterUeSpatialConsistency` attribute of the channel condition model enabled, `ThreeGppChannelModel` draws the shadow fading entry of its large scale parameter vector from the shadow fading field of `ThreeGppPropagationLossModel`, so the delay and angular spreads are cross-correlated with the shadow fading applied to the link as in TR 38.901 Table 7.5-6; channel realizations change.
+
 ## Changes from ns-3.48 to ns-3.49
 
 ### New API
