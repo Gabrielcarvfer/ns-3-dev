@@ -6,27 +6,41 @@
  * Author: Gabriel Ferreira <gabrielcarvfer@gmail.com>
  */
 
+#include "three-gpp-channel-calibration-reference.h"
+
 #include "ns3/abort.h"
+#include "ns3/angles.h"
 #include "ns3/boolean.h"
 #include "ns3/channel-condition-model.h"
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/double.h"
+#include "ns3/hexagonal-wraparound-model.h"
+#include "ns3/isotropic-antenna-model.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
 #include "ns3/node.h"
+#include "ns3/object-factory.h"
 #include "ns3/pointer.h"
+#include "ns3/random-variable-stream.h"
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/test.h"
+#include "ns3/three-gpp-antenna-model.h"
 #include "ns3/three-gpp-channel-model.h"
+#include "ns3/three-gpp-propagation-loss-model.h"
+#include "ns3/uinteger.h"
+#include "ns3/uniform-planar-array.h"
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <complex>
 #include <limits>
 #include <map>
 #include <random>
+#include <set>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -730,6 +744,851 @@ ThreeGppLspDistributionTestCase::DoRun()
     Simulator::Destroy();
 }
 
+namespace
+{
+
+/**
+ * Channel condition model whose O2I state follows the indoor state of the
+ * terminal drawn by the calibration drop, instead of a per-link draw, so that
+ * all the links of a terminal share its indoor state (TR 38.901 Sec. 7.5 step 2).
+ */
+template <class Base>
+class DropIndoorConditionModel : public Base
+{
+  public:
+    /**
+     * @brief Set the node ids of the indoor terminals.
+     * @param indoor the node ids of the indoor terminals
+     */
+    void SetIndoorNodes(const std::set<uint32_t>& indoor)
+    {
+        m_indoor = indoor;
+    }
+
+  private:
+    /**
+     * Compute the O2I state of a link from the indoor state of its terminal.
+     *
+     * @param a the mobility model of one end of the link
+     * @param b the mobility model of the other end of the link
+     * @return O2I if the terminal of the link is indoor, O2O otherwise
+     */
+    ChannelCondition::O2iConditionValue ComputeO2i(Ptr<const MobilityModel> a,
+                                                   Ptr<const MobilityModel> b) const override
+    {
+        const bool indoor = m_indoor.contains(a->GetObject<Node>()->GetId()) ||
+                            m_indoor.contains(b->GetObject<Node>()->GetId());
+        return indoor ? ChannelCondition::O2I : ChannelCondition::O2O;
+    }
+
+    std::set<uint32_t> m_indoor; ///< node ids of the indoor terminals
+};
+
+/**
+ * Setup of a TR 38.901 Sec. 7.8.2 full calibration case.
+ */
+struct FullCalibrationSetup
+{
+    std::string name;            ///< reference scenario name: UMa, UMi or InH
+    std::string channelScenario; ///< ThreeGppChannelModel scenario
+    double fcGHz;                ///< carrier frequency in GHz
+    double isd;                  ///< inter-site distance in m
+    double hBs;                  ///< BS height in m
+    double minDist2D;            ///< minimum 2D BS-UT distance in m
+    double tiltDeg;              ///< electrical downtilt (zenith) of the CRS port in degrees
+    uint32_t numDrops;           ///< number of drops
+};
+
+/// Number of UTs dropped per sector (TR 36.873).
+constexpr uint32_t kUtsPerSector = 10;
+
+/// Sector boresights of TR 38.901 Tables 7.8-1 and 7.8-2, in degrees.
+constexpr std::array<double, 3> kSectorBoresightsDeg{30, 150, 270};
+
+/**
+ * Margin in dB around the band of the companies for the InH coupling loss. The
+ * TR 38.901 path loss, shadow fading and LOS probability of InH, unchanged
+ * since TR 38.900 V1.0.0, spread the coupling loss beyond every company at the
+ * strongest percentiles, in ns-3 as in Sionna (kSionnaCouplingLoss).
+ */
+constexpr double kInHCouplingLossMarginDb = 1.0;
+
+/**
+ * @brief Positions of the 19 sites of a two-ring hexagonal layout whose
+ *        neighboring sites lie at 30 + 60 k degrees, the orientation of the
+ *        sector boresights and of HexagonalWraparoundModel.
+ * @param isd the inter-site distance in m
+ * @param hBs the BS height in m
+ * @return the site positions
+ */
+std::vector<Vector>
+HexagonalSites(double isd, double hBs)
+{
+    std::vector<Vector> ring1;
+    for (int k = 0; k < 6; k++)
+    {
+        const double a = (30.0 + 60.0 * k) * M_PI / 180.0;
+        ring1.emplace_back(isd * std::cos(a), isd * std::sin(a), hBs);
+    }
+    std::vector<Vector> sites{Vector(0, 0, hBs)};
+    sites.insert(sites.end(), ring1.begin(), ring1.end());
+    for (int k = 0; k < 6; k++)
+    {
+        const Vector& u = ring1[k];
+        const Vector& v = ring1[(k + 1) % 6];
+        sites.emplace_back(2 * u.x, 2 * u.y, hBs);
+        sites.emplace_back(u.x + v.x, u.y + v.y, hBs);
+    }
+    return sites;
+}
+
+/**
+ * @brief Whether a point lies in the hexagonal Voronoi cell of a site of the
+ *        HexagonalSites layout (vertices at 0 + 60 k degrees).
+ * @param dx x offset from the site in m
+ * @param dy y offset from the site in m
+ * @param isd the inter-site distance in m
+ * @return true if the point lies in the cell
+ */
+bool
+InSiteHexagon(double dx, double dy, double isd)
+{
+    // The cell edges are perpendicular to the directions of the neighbors, at
+    // half the inter-site distance.
+    for (int k = 0; k < 6; k++)
+    {
+        const double a = (30.0 + 60.0 * k) * M_PI / 180.0;
+        if (dx * std::cos(a) + dy * std::sin(a) > isd / 2)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * @brief Power delay profile of the serving link used for the delay spread:
+ *        the clusters, with the two strongest split into their sub-clusters
+ *        (TR 38.901 Table 7.5-5) and, for LOS links, the Ricean weighting of
+ *        the LOS ray (Equation 7.5-30).
+ * @param params the channel parameters of the link
+ * @param cDs the cluster delay spread in s
+ * @return the (delay in s, power) taps
+ */
+std::vector<std::pair<double, double>>
+DelayProfile(Ptr<const ThreeGppChannelModel::ThreeGppChannelParams> params, double cDs)
+{
+    const bool los = params->HasLosRay();
+    const double kR = los ? std::pow(10, params->m_K_factor / 10) : 0;
+    std::vector<std::pair<double, double>> taps;
+    for (uint16_t n = 0; n < params->m_reducedClusterNumber; n++)
+    {
+        const double p = params->m_clusterPower[n] / (1 + kR);
+        const double tau = params->m_delay[n];
+        if (n == params->m_cluster1st || n == params->m_cluster2nd)
+        {
+            taps.emplace_back(tau, p * 10 / 20);
+            taps.emplace_back(tau + 1.28 * cDs, p * 6 / 20);
+            taps.emplace_back(tau + 2.56 * cDs, p * 4 / 20);
+        }
+        else
+        {
+            taps.emplace_back(tau, p);
+        }
+    }
+    if (los)
+    {
+        taps.emplace_back(params->m_delay[0], kR / (1 + kR));
+    }
+    return taps;
+}
+
+/**
+ * @brief RMS delay spread of a power delay profile.
+ * @param taps the (delay, power) taps
+ * @return the delay spread
+ */
+double
+RmsDelaySpread(const std::vector<std::pair<double, double>>& taps)
+{
+    double pSum = 0;
+    double m1 = 0;
+    double m2 = 0;
+    for (const auto& [tau, p] : taps)
+    {
+        pSum += p;
+        m1 += p * tau;
+        m2 += p * tau * tau;
+    }
+    m1 /= pSum;
+    return std::sqrt(std::max(0.0, m2 / pSum - m1 * m1));
+}
+
+/**
+ * @brief Wrap an angle to [-pi, pi].
+ * @param x the angle in rad
+ * @return the wrapped angle in rad
+ */
+double
+WrapAngle(double x)
+{
+    return std::remainder(x, 2 * M_PI);
+}
+
+/**
+ * @brief Circular angle spread of TR 25.996 Annex A: the RMS spread around the
+ *        mean, minimized over a rotation of all the angles.
+ * @param rays the (angle in rad, power) rays
+ * @return the angle spread in rad
+ */
+double
+AngleSpread25996(const std::vector<std::pair<double, double>>& rays)
+{
+    double pSum = 0;
+    for (const auto& [a, p] : rays)
+    {
+        pSum += p;
+    }
+    double best = std::numeric_limits<double>::infinity();
+    for (int step = 0; step < 360; step++)
+    {
+        const double delta = step * M_PI / 180;
+        double mean = 0;
+        for (const auto& [a, p] : rays)
+        {
+            mean += p * WrapAngle(a + delta);
+        }
+        mean /= pSum;
+        double var = 0;
+        for (const auto& [a, p] : rays)
+        {
+            const double d = WrapAngle(WrapAngle(a + delta) - mean);
+            var += p * d * d;
+        }
+        best = std::min(best, var / pSum);
+    }
+    return std::sqrt(best);
+}
+
+/**
+ * @brief Circular angle spread of TR 38.901 Annex A, Equation (A-1).
+ * @param rays the (angle in rad, power) rays
+ * @return the angle spread in rad
+ */
+double
+AngleSpreadA1(const std::vector<std::pair<double, double>>& rays)
+{
+    double pSum = 0;
+    std::complex<double> acc = 0;
+    for (const auto& [a, p] : rays)
+    {
+        pSum += p;
+        acc += p * std::polar(1.0, a);
+    }
+    const double r = std::min(std::abs(acc) / pSum, 1.0);
+    return std::sqrt(std::max(0.0, -2 * std::log(r)));
+}
+
+/**
+ * @brief Rays of the serving link for one angle, with the powers of their
+ *        clusters shared equally and, for LOS links, the Ricean weighting of
+ *        the LOS ray (Equation 7.5-30).
+ * @param params the channel parameters of the link
+ * @param rayAngles the per-cluster, per-ray angles in rad
+ * @param losAngle the LOS angle in rad
+ * @return the (angle in rad, power) rays
+ */
+std::vector<std::pair<double, double>>
+RayProfile(Ptr<const ThreeGppChannelModel::ThreeGppChannelParams> params,
+           const MatrixBasedChannelModel::Double2DVector& rayAngles,
+           double losAngle)
+{
+    const bool los = params->HasLosRay();
+    const double kR = los ? std::pow(10, params->m_K_factor / 10) : 0;
+    std::vector<std::pair<double, double>> rays;
+    for (uint16_t n = 0; n < params->m_reducedClusterNumber; n++)
+    {
+        const double p = params->m_clusterPower[n] / (1 + kR) / rayAngles[n].size();
+        for (double a : rayAngles[n])
+        {
+            rays.emplace_back(a, p);
+        }
+    }
+    if (los)
+    {
+        rays.emplace_back(losAngle, kR / (1 + kR));
+    }
+    return rays;
+}
+
+/**
+ * @brief Empirical quantile of sorted samples.
+ * @param sorted the sorted samples
+ * @param q the quantile in [0, 1]
+ * @return the quantile
+ */
+double
+Quantile(const std::vector<double>& sorted, double q)
+{
+    const double pos = std::clamp(q, 0.0, 1.0) * (sorted.size() - 1);
+    const auto i = static_cast<size_t>(pos);
+    const double f = pos - i;
+    return i + 1 < sorted.size() ? sorted[i] * (1 - f) + sorted[i + 1] * f : sorted[i];
+}
+
+/// Samples of each calibration metric
+using MetricSamples = std::map<calibration::Metric, std::vector<double>>;
+
+/// Angle spread in rad of (angle in rad, power) rays
+using AngleSpreadFunction = double (*)(const std::vector<std::pair<double, double>>&);
+
+/**
+ * @brief Add the delay and angle spreads of a serving link to the samples.
+ * @param channel the channel model of the terminal
+ * @param condModel the channel condition model
+ * @param servingMob the mobility model of the serving site
+ * @param utMob the mobility model of the terminal
+ * @param angleSpread the angle spread definition
+ * @param out the samples to add the spreads to
+ */
+void
+AddSpreads(Ptr<ThreeGppChannelModel> channel,
+           Ptr<ChannelConditionModel> condModel,
+           Ptr<MobilityModel> servingMob,
+           Ptr<MobilityModel> utMob,
+           AngleSpreadFunction angleSpread,
+           MetricSamples& out)
+{
+    const auto params = DynamicCast<const ThreeGppChannelModel::ThreeGppChannelParams>(
+        channel->GetParams(servingMob, utMob));
+    const auto cond = condModel->GetChannelCondition(servingMob, utMob);
+    const double cDs = channel->GetThreeGppTable(servingMob, utMob, cond)->m_cDS;
+    out[calibration::Metric::DS].push_back(RmsDelaySpread(DelayProfile(params, cDs)) * 1e9);
+    const Angles dep(utMob->GetPosition(), servingMob->GetPosition());
+    const Angles arr(servingMob->GetPosition(), utMob->GetPosition());
+    out[calibration::Metric::ASD].push_back(RadiansToDegrees(
+        angleSpread(RayProfile(params, params->m_rayAodRadian, dep.GetAzimuth()))));
+    out[calibration::Metric::ZSD].push_back(RadiansToDegrees(
+        angleSpread(RayProfile(params, params->m_rayZodRadian, dep.GetInclination()))));
+    out[calibration::Metric::ASA].push_back(RadiansToDegrees(
+        angleSpread(RayProfile(params, params->m_rayAoaRadian, arr.GetAzimuth()))));
+    out[calibration::Metric::ZSA].push_back(RadiansToDegrees(
+        angleSpread(RayProfile(params, params->m_rayZoaRadian, arr.GetInclination()))));
+}
+
+/**
+ * @brief Name of a calibration metric, with its unit.
+ * @param metric the metric
+ * @return the name
+ */
+std::string
+MetricName(calibration::Metric metric)
+{
+    static const std::map<calibration::Metric, std::string> names{
+        {calibration::Metric::COUPLING_LOSS, "coupling loss (dB)"},
+        {calibration::Metric::SIR, "SIR (dB)"},
+        {calibration::Metric::DS, "DS (ns)"},
+        {calibration::Metric::ASD, "ASD (deg)"},
+        {calibration::Metric::ZSD, "ZSD (deg)"},
+        {calibration::Metric::ASA, "ASA (deg)"},
+        {calibration::Metric::ZSA, "ZSA (deg)"},
+    };
+    return names.at(metric);
+}
+
+} // namespace
+
+/**
+ * @ingroup spectrum-tests
+ *
+ * Full calibration of ThreeGppChannelModel, with ThreeGppPropagationLossModel
+ * and the 3GPP channel condition models, following TR 38.901 Sec. 7.8.2 and
+ * Table 7.8-2 (BS antenna configuration 1): hexagonal 19-site, 3-sector UMa and
+ * UMi layouts with wrap-around and the 12-site open office InH layout, TR
+ * 36.873 terminal drops with 80% indoor terminals on random floors, CRS port 0
+ * mapped to the 16 +45-degree elements of the first panel with the electrical
+ * downtilt of the large-scale calibration, and cross-polarized isotropic
+ * terminals with a random bearing. The CDFs over the terminals of the coupling
+ * loss and the wideband SIR of the serving cell (attachment on the strongest
+ * CRS port 0 RSRP), and of the delay and angle spreads of the serving link
+ * (circular angle spread of TR 25.996), are compared at every reference
+ * percentile with the band spanned by the companies of the 3GPP calibration
+ * (R1-165975, TR 38.900 V14.0.0): the UMa SIR percentiles must lie in the
+ * band, while the confidence interval (3 standard deviations of the order
+ * statistic) of the other percentiles must overlap it, as the O2I cluster
+ * parameters of TR 38.900 V14.0.0 differ from TR 38.901, widened by
+ * kInHCouplingLossMarginDb for the InH coupling loss. The spreads
+ * whose TR 38.900 V14.0.0 parameters differ further (InH, and ASA and ZSA of the
+ * O2I links) are not compared with 3GPP, nor is the InH SIR, which depends on
+ * the angular spreads through the beam gains. The spreads of all the scenarios are
+ * compared with the Sionna TR 38.901 channel models, with attachment on the
+ * path loss without shadow fading and the angle spread of TR 38.901 Annex A,
+ * as is the InH coupling loss, with attachment on the CRS port 0 RSRP: the
+ * difference of the ns-3 and Sionna percentiles must be within 4 standard
+ * deviations of their combined confidence interval (see
+ * three-gpp-channel-calibration-reference.py).
+ */
+class ThreeGppFullCalibrationTestCase : public TestCase
+{
+  public:
+    /**
+     * Constructor.
+     * @param setup the calibration case
+     */
+    ThreeGppFullCalibrationTestCase(const FullCalibrationSetup& setup);
+
+  private:
+    void DoRun() override;
+
+    /**
+     * @brief Run the drops of one calibration case and check its CDFs.
+     * @param setup the calibration case
+     */
+    void RunSetup(const FullCalibrationSetup& setup);
+
+    /// Comparison of an ns-3 percentile with a reference percentile
+    enum class Criterion
+    {
+        POINT_IN_BAND, ///< the ns-3 percentile lies in the band of the 3GPP companies
+        BAND_OVERLAP,  ///< the ns-3 confidence interval overlaps the band
+        DIFFERENCE,    ///< the difference is within the combined confidence interval
+    };
+
+    /**
+     * @brief Check the samples of a metric at every percentile of a reference CDF.
+     *
+     * The confidence interval of the ns-3 percentile is given by 3 standard
+     * deviations of the order statistic.
+     *
+     * @param setup the calibration case
+     * @param sampleSet the samples of each metric, sorted in place
+     * @param ref the reference CDF
+     * @param source the name of the reference
+     * @param criterion the comparison of the percentiles
+     * @param margin the widening of each side of the reference band, in the
+     *        unit of the metric
+     */
+    void CheckPercentiles(const FullCalibrationSetup& setup,
+                          MetricSamples& sampleSet,
+                          const calibration::ReferenceCdf& ref,
+                          const std::string& source,
+                          Criterion criterion,
+                          double margin = 0);
+
+    FullCalibrationSetup m_setup; ///< the calibration case
+};
+
+ThreeGppFullCalibrationTestCase::ThreeGppFullCalibrationTestCase(const FullCalibrationSetup& setup)
+    : TestCase("TR 38.901 full calibration against R1-165975, " + setup.name + " at " +
+               std::to_string(static_cast<int>(setup.fcGHz)) + " GHz"),
+      m_setup(setup)
+{
+}
+
+void
+ThreeGppFullCalibrationTestCase::RunSetup(const FullCalibrationSetup& setup)
+{
+    const bool indoorScenario = setup.name == "InH";
+    auto uniform = CreateObject<UniformRandomVariable>();
+    MetricSamples samples;
+    // Spreads of the link attached on the path gain, with the angle spread of
+    // TR 38.901 Annex A, for the comparison with Sionna.
+    MetricSamples pathGainSamples;
+
+    // Every drop is an independent realization, as in the 3GPP calibration, so
+    // it uses its own run of the random number generator. The spatially
+    // consistent O2I building type and indoor state are properties of the
+    // terminal position, shared by all the sites: with a single run, all the
+    // drops would sample the same map of buildings, and the percentiles would
+    // carry the offset of that map.
+    const uint64_t firstRun = RngSeedManager::GetRun();
+    for (uint32_t drop = 0; drop < setup.numDrops; drop++)
+    {
+        RngSeedManager::SetRun(firstRun + drop);
+        // Sites, and for the wrapped layouts the 6 wrap-around images of each.
+        std::vector<Vector> sites;
+        if (indoorScenario)
+        {
+            // TR 38.901 Table 7.2-4: 12 sites on a 20 m grid, 120 m x 50 m hall.
+            for (double y : {-10.0, 10.0})
+            {
+                for (int i = 0; i < 6; i++)
+                {
+                    sites.emplace_back(-50.0 + 20.0 * i, y, setup.hBs);
+                }
+            }
+        }
+        else
+        {
+            sites = HexagonalSites(setup.isd, setup.hBs);
+        }
+        Ptr<HexagonalWraparoundModel> wrap;
+        if (!indoorScenario)
+        {
+            wrap = CreateObject<HexagonalWraparoundModel>(setup.isd, sites.size());
+            for (const auto& site : sites)
+            {
+                wrap->AddSitePosition(site);
+            }
+        }
+
+        // Terminals: TR 36.873 drop per sector for UMa and UMi, uniform in the
+        // hall for InH.
+        struct Ut
+        {
+            Vector pos;
+            bool indoor;
+        };
+
+        std::vector<Ut> uts;
+        const uint32_t numUts = kUtsPerSector * kSectorBoresightsDeg.size() * sites.size();
+        while (uts.size() < numUts)
+        {
+            Ut ut;
+            if (indoorScenario)
+            {
+                ut.pos = Vector(uniform->GetValue(-60, 60), uniform->GetValue(-25, 25), 1.0);
+                ut.indoor = false;
+            }
+            else
+            {
+                const Vector& site = sites[(uts.size() / (kUtsPerSector * 3)) % sites.size()];
+                const double r = setup.isd / std::sqrt(3.0);
+                const double dx = uniform->GetValue(-r, r);
+                const double dy = uniform->GetValue(-r, r);
+                if (!InSiteHexagon(dx, dy, setup.isd) || std::hypot(dx, dy) < setup.minDist2D)
+                {
+                    continue;
+                }
+                ut.indoor = uniform->GetValue() < 0.8;
+                double h = 1.5;
+                if (ut.indoor)
+                {
+                    const auto numFloors = static_cast<uint32_t>(uniform->GetInteger(4, 8));
+                    const auto floor = static_cast<uint32_t>(uniform->GetInteger(1, numFloors));
+                    h = 3.0 * (floor - 1) + 1.5;
+                }
+                ut.pos = Vector(site.x + dx, site.y + dy, h);
+            }
+            uts.push_back(ut);
+        }
+
+        // Nodes: for every terminal, one node per site at the wrap-around image
+        // of the site nearest to the terminal. They are created before the
+        // terminals, so that the sites are the departure end of the generated
+        // channel parameters.
+        NodeContainer siteNodes(uts.size() * sites.size());
+        std::vector<std::vector<Ptr<MobilityModel>>> siteMobs(uts.size());
+        for (size_t u = 0; u < uts.size(); u++)
+        {
+            for (size_t s = 0; s < sites.size(); s++)
+            {
+                auto mob = CreateObject<ConstantPositionMobilityModel>();
+                mob->SetPosition(indoorScenario ? sites[s]
+                                                : wrap->GetVirtualPosition(sites[s], uts[u].pos));
+                siteNodes.Get(u * sites.size() + s)->AggregateObject(mob);
+                siteMobs[u].emplace_back(mob);
+            }
+        }
+        NodeContainer utNodes(uts.size());
+        std::set<uint32_t> indoorIds;
+        for (size_t u = 0; u < uts.size(); u++)
+        {
+            auto mob = CreateObject<ConstantPositionMobilityModel>();
+            mob->SetPosition(uts[u].pos);
+            utNodes.Get(u)->AggregateObject(mob);
+            if (uts[u].indoor)
+            {
+                indoorIds.insert(utNodes.Get(u)->GetId());
+            }
+        }
+
+        Ptr<ChannelConditionModel> condModel;
+        Ptr<ThreeGppPropagationLossModel> lossModel;
+        if (setup.name == "UMa")
+        {
+            auto m = CreateObject<DropIndoorConditionModel<ThreeGppUmaChannelConditionModel>>();
+            m->SetIndoorNodes(indoorIds);
+            condModel = m;
+            lossModel = CreateObject<ThreeGppUmaPropagationLossModel>();
+        }
+        else if (setup.name == "UMi")
+        {
+            auto m = CreateObject<
+                DropIndoorConditionModel<ThreeGppUmiStreetCanyonChannelConditionModel>>();
+            m->SetIndoorNodes(indoorIds);
+            condModel = m;
+            lossModel = CreateObject<ThreeGppUmiStreetCanyonPropagationLossModel>();
+        }
+        else
+        {
+            condModel = CreateObject<ThreeGppIndoorOpenOfficeChannelConditionModel>();
+            lossModel = CreateObject<ThreeGppIndoorOfficePropagationLossModel>();
+        }
+        // TR 38.901 Table 7.8-1: 50% low-loss and 50% high-loss buildings.
+        condModel->SetAttribute("O2iLowLossThreshold", DoubleValue(0.5));
+        // The building type and indoor distance are properties of the terminal
+        // (TR 38.901 Sec. 7.4.3), which the spatial consistency provides:
+        // per-link draws would bias the attachment towards low-loss links.
+        condModel->SetAttribute("InterUeSpatialConsistency", BooleanValue(true));
+        lossModel->SetAttribute("Frequency", DoubleValue(setup.fcGHz * 1e9));
+        lossModel->SetAttribute("ShadowingEnabled", BooleanValue(true));
+        lossModel->SetAttribute("BuildingPenetrationLossesEnabled", BooleanValue(true));
+        lossModel->SetAttribute("ChannelConditionModel", PointerValue(condModel));
+        // Path loss without shadowing, for the attachment of the comparison with
+        // Sionna, as in three-gpp-channel-calibration-reference.py.
+        Ptr<ThreeGppPropagationLossModel> pathLossModel = DynamicCast<ThreeGppPropagationLossModel>(
+            ObjectFactory(lossModel->GetInstanceTypeId().GetName()).Create());
+        pathLossModel->SetAttribute("Frequency", DoubleValue(setup.fcGHz * 1e9));
+        pathLossModel->SetAttribute("ShadowingEnabled", BooleanValue(false));
+        pathLossModel->SetAttribute("BuildingPenetrationLossesEnabled", BooleanValue(true));
+        pathLossModel->SetAttribute("ChannelConditionModel", PointerValue(condModel));
+
+        // CRS port 0 of BS antenna configuration 1: the 4x4 +45-degree
+        // elements of the first panel, with the electrical downtilt.
+        std::vector<std::array<Ptr<UniformPlanarArray>, 3>> sectorAntennas(sites.size());
+        std::vector<std::array<PhasedArrayModel::ComplexVector, 3>> sectorWeights(sites.size());
+        for (size_t s = 0; s < sites.size(); s++)
+        {
+            for (size_t c = 0; c < 3; c++)
+            {
+                // UniformPlanarArray takes bearings in [-pi, pi].
+                const double bearing =
+                    std::remainder(kSectorBoresightsDeg[c] * M_PI / 180, 2 * M_PI);
+                auto ant = CreateObjectWithAttributes<UniformPlanarArray>(
+                    "NumColumns",
+                    UintegerValue(4),
+                    "NumRows",
+                    UintegerValue(4),
+                    "AntennaHorizontalSpacing",
+                    DoubleValue(0.5),
+                    "AntennaVerticalSpacing",
+                    DoubleValue(0.5),
+                    "PolSlantAngle",
+                    DoubleValue(M_PI / 4),
+                    "BearingAngle",
+                    DoubleValue(bearing),
+                    "AntennaElement",
+                    PointerValue(CreateObject<ThreeGppAntennaModel>()));
+                sectorAntennas[s][c] = ant;
+                // Beam pointed at the electrical tilt, see
+                // PhasedArrayModel::SetBeamformingVector.
+                auto w = ant->GetSteeringVector(Angles(bearing, setup.tiltDeg * M_PI / 180));
+                const double norm = std::sqrt(static_cast<double>(w.GetSize()));
+                for (size_t e = 0; e < w.GetSize(); e++)
+                {
+                    w[e] /= norm;
+                }
+                sectorWeights[s][c] = w;
+            }
+        }
+
+        for (size_t u = 0; u < uts.size(); u++)
+        {
+            Ptr<MobilityModel> utMob = utNodes.Get(u)->GetObject<MobilityModel>();
+            // Cross-polarized (0/90 degrees) isotropic terminal, uniformly
+            // random bearing and 90-degree downtilt (Table 7.8-2).
+            auto utAnt = CreateObjectWithAttributes<UniformPlanarArray>(
+                "NumColumns",
+                UintegerValue(1),
+                "NumRows",
+                UintegerValue(1),
+                "IsDualPolarized",
+                BooleanValue(true),
+                "PolSlantAngle",
+                DoubleValue(0),
+                "BearingAngle",
+                DoubleValue(uniform->GetValue(-M_PI, M_PI)),
+                "DowntiltAngle",
+                DoubleValue(M_PI / 2),
+                "AntennaElement",
+                PointerValue(CreateObject<IsotropicAntennaModel>()));
+
+            // A channel model per terminal keeps the memory bounded.
+            auto channel = CreateObject<ThreeGppChannelModel>();
+            channel->SetAttribute("Scenario", StringValue(setup.channelScenario));
+            channel->SetAttribute("Frequency", DoubleValue(setup.fcGHz * 1e9));
+            channel->SetAttribute("ChannelConditionModel", PointerValue(condModel));
+
+            std::vector<double> rsrp;
+            std::vector<double> pathGain;
+            for (size_t s = 0; s < sites.size(); s++)
+            {
+                Ptr<MobilityModel> siteMob = siteMobs[u][s];
+                const double lossDb = lossModel->CalcRxPower(0, siteMob, utMob);
+                pathGain.push_back(pathLossModel->CalcRxPower(0, siteMob, utMob));
+                for (size_t c = 0; c < 3; c++)
+                {
+                    const auto& bsAnt = sectorAntennas[s][c];
+                    const auto mat = channel->GetChannel(siteMob, utMob, bsAnt, utAnt);
+                    const bool reverse = mat->IsReverse(bsAnt->GetId(), utAnt->GetId());
+                    const auto& h = mat->m_channel;
+                    const auto& w = sectorWeights[s][c];
+                    const size_t numUt = utAnt->GetNumElems();
+                    const size_t numTaps = h.GetNumPages();
+                    double gain = 0;
+                    for (size_t e = 0; e < numUt; e++)
+                    {
+                        for (size_t n = 0; n < numTaps; n++)
+                        {
+                            std::complex<double> acc = 0;
+                            for (size_t b = 0; b < w.GetSize(); b++)
+                            {
+                                acc += (reverse ? h(b, e, n) : h(e, b, n)) * w[b];
+                            }
+                            gain += std::norm(acc);
+                        }
+                    }
+                    rsrp.push_back(lossDb + 10 * std::log10(gain / numUt));
+                }
+            }
+
+            // Attachment on the strongest CRS port 0 RSRP; SIR over all the
+            // other cells.
+            const auto best = std::max_element(rsrp.begin(), rsrp.end()) - rsrp.begin();
+            double interference = 0;
+            for (size_t i = 0; i < rsrp.size(); i++)
+            {
+                if (static_cast<long>(i) != best)
+                {
+                    interference += std::pow(10, rsrp[i] / 10);
+                }
+            }
+            samples[calibration::Metric::COUPLING_LOSS].push_back(rsrp[best]);
+            samples[calibration::Metric::SIR].push_back(rsrp[best] - 10 * std::log10(interference));
+
+            // Delay and angle spreads of the serving links
+            AddSpreads(channel,
+                       condModel,
+                       siteMobs[u][best / 3],
+                       utMob,
+                       &AngleSpread25996,
+                       samples);
+            const auto bestSite =
+                std::max_element(pathGain.begin(), pathGain.end()) - pathGain.begin();
+            AddSpreads(channel,
+                       condModel,
+                       siteMobs[u][bestSite],
+                       utMob,
+                       &AngleSpreadA1,
+                       pathGainSamples);
+        }
+    }
+    RngSeedManager::SetRun(firstRun);
+
+    for (const auto& ref : calibration::k3gppFullCalibration)
+    {
+        if (ref.scenario != setup.name || ref.fcGHz != setup.fcGHz)
+        {
+            continue;
+        }
+        // The 3GPP calibration used TR 38.900 V14.0.0, whose InH parameters,
+        // and O2I arrival parameters (cASA of 20 instead of 8 degrees, lgZSA and
+        // cZSA of Table 7.5-6), differ from those of TR 38.901, so these spreads
+        // are only compared with Sionna. With the cASA of TR 38.900 V14.0.0, the
+        // UMa and UMi ASA percentiles match the mean of the companies.
+        const bool isSpread = ref.metric != calibration::Metric::COUPLING_LOSS &&
+                              ref.metric != calibration::Metric::SIR;
+        // The InH SIR also differs, as the serving and interfering beam gains
+        // depend on the angular spreads, so only the InH coupling loss is kept.
+        const bool indoorSir = indoorScenario && ref.metric == calibration::Metric::SIR;
+        if (indoorSir || (isSpread && (indoorScenario || ref.metric == calibration::Metric::ASA ||
+                                       ref.metric == calibration::Metric::ZSA)))
+        {
+            continue;
+        }
+        // The SIR of UMa must lie in the band. The other coupling losses and SIRs
+        // only have to overlap it, widened for InH by kInHCouplingLossMarginDb:
+        // the UMa coupling loss at 30 GHz is about 1 dB below the mean loss of
+        // the companies, close enough to the edge of their band for a percentile
+        // to cross it by the sampling noise of a run.
+        const bool pointInBand = ref.metric == calibration::Metric::SIR && setup.name == "UMa";
+        const double margin = indoorScenario ? kInHCouplingLossMarginDb : 0;
+        CheckPercentiles(setup,
+                         samples,
+                         ref,
+                         "3GPP mean",
+                         pointInBand ? Criterion::POINT_IN_BAND : Criterion::BAND_OVERLAP,
+                         margin);
+    }
+    for (const auto& ref : calibration::kSionnaSpreads)
+    {
+        if (ref.scenario == setup.name && ref.fcGHz == setup.fcGHz)
+        {
+            CheckPercentiles(setup, pathGainSamples, ref, "Sionna", Criterion::DIFFERENCE);
+        }
+    }
+    for (const auto& ref : calibration::kSionnaCouplingLoss)
+    {
+        if (ref.scenario == setup.name && ref.fcGHz == setup.fcGHz)
+        {
+            CheckPercentiles(setup, samples, ref, "Sionna", Criterion::DIFFERENCE);
+        }
+    }
+}
+
+void
+ThreeGppFullCalibrationTestCase::CheckPercentiles(const FullCalibrationSetup& setup,
+                                                  MetricSamples& sampleSet,
+                                                  const calibration::ReferenceCdf& ref,
+                                                  const std::string& source,
+                                                  Criterion criterion,
+                                                  double margin)
+{
+    auto& x = sampleSet[ref.metric];
+    std::sort(x.begin(), x.end());
+    const auto n = static_cast<double>(x.size());
+    for (size_t i = 0; i < calibration::kReferencePercentiles.size(); i++)
+    {
+        const double p = calibration::kReferencePercentiles[i] / 100;
+        const double delta = 3 * std::sqrt(p * (1 - p) / n);
+        const double value = Quantile(x, p);
+        const double lo = Quantile(x, p - delta);
+        const double hi = Quantile(x, p + delta);
+        bool pass = false;
+        switch (criterion)
+        {
+        case Criterion::POINT_IN_BAND:
+            pass = value >= ref.low[i] && value <= ref.high[i];
+            break;
+        case Criterion::BAND_OVERLAP:
+            pass = hi >= ref.low[i] - margin && lo <= ref.high[i] + margin;
+            break;
+        case Criterion::DIFFERENCE:
+            // Both confidence intervals are asymmetric: use the half-widths
+            // facing each other, combined as independent errors, and widened
+            // from 3 to 4 standard deviations, as hundreds of percentiles are
+            // compared.
+            pass = value >= ref.mean[i]
+                       ? value - ref.mean[i] <=
+                             4.0 / 3 * std::hypot(value - lo, ref.high[i] - ref.mean[i])
+                       : ref.mean[i] - value <=
+                             4.0 / 3 * std::hypot(hi - value, ref.mean[i] - ref.low[i]);
+            break;
+        }
+        NS_LOG_INFO(setup.name << " " << setup.fcGHz << " GHz " << MetricName(ref.metric) << " "
+                               << calibration::kReferencePercentiles[i] << "% ns-3 " << value
+                               << " [" << lo << ", " << hi << "] " << source << " " << ref.mean[i]
+                               << " [" << ref.low[i] << ", " << ref.high[i] << "]");
+        NS_TEST_EXPECT_MSG_EQ(pass,
+                              true,
+                              setup.name << " " << setup.fcGHz << " GHz " << MetricName(ref.metric)
+                                         << " at " << calibration::kReferencePercentiles[i]
+                                         << "%: ns-3 " << value << " [" << lo << ", " << hi << "], "
+                                         << source << " " << ref.mean[i] << " [" << ref.low[i]
+                                         << ", " << ref.high[i] << "]");
+    }
+}
+
+void
+ThreeGppFullCalibrationTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+    RunSetup(m_setup);
+    Simulator::Destroy();
+}
+
 /**
  * @ingroup spectrum-tests
  *
@@ -759,3 +1618,59 @@ ThreeGppChannelCalibrationTestSuite::ThreeGppChannelCalibrationTestSuite()
 
 /// Static variable for test initialization
 static ThreeGppChannelCalibrationTestSuite g_threeGppChannelCalibrationTestSuite;
+
+/**
+ * @ingroup spectrum-tests
+ *
+ * Full calibration test suite of ThreeGppChannelModel against TR 38.901, with
+ * one calibration case per suite, so that the cases run in parallel.
+ */
+class ThreeGppFullCalibrationTestSuite : public TestSuite
+{
+  public:
+    /**
+     * Constructor.
+     * @param setup the calibration case
+     */
+    ThreeGppFullCalibrationTestSuite(const FullCalibrationSetup& setup);
+
+  private:
+    /**
+     * @brief Name of the suite of a calibration case.
+     * @param setup the calibration case
+     * @return the name, e.g. three-gpp-channel-calibration-uma-6ghz
+     */
+    static std::string GetSuiteName(const FullCalibrationSetup& setup);
+};
+
+ThreeGppFullCalibrationTestSuite::ThreeGppFullCalibrationTestSuite(
+    const FullCalibrationSetup& setup)
+    : TestSuite(GetSuiteName(setup), Type::SYSTEM)
+{
+    AddTestCase(new ThreeGppFullCalibrationTestCase(setup), Duration::TAKES_FOREVER);
+}
+
+std::string
+ThreeGppFullCalibrationTestSuite::GetSuiteName(const FullCalibrationSetup& setup)
+{
+    std::string scenario = setup.name;
+    std::transform(scenario.begin(), scenario.end(), scenario.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+    return "three-gpp-channel-calibration-" + scenario + "-" +
+           std::to_string(static_cast<int>(setup.fcGHz)) + "ghz";
+}
+
+/// Static variables for test initialization, one per calibration case
+static ThreeGppFullCalibrationTestSuite g_threeGppFullCalibrationUma6GhzTestSuite(
+    {"UMa", "UMa", 6, 500, 25, 35, 102, 16});
+static ThreeGppFullCalibrationTestSuite g_threeGppFullCalibrationUma30GhzTestSuite(
+    {"UMa", "UMa", 30, 500, 25, 35, 102, 16});
+static ThreeGppFullCalibrationTestSuite g_threeGppFullCalibrationUmi6GhzTestSuite(
+    {"UMi", "UMi-StreetCanyon", 6, 200, 10, 10, 102, 32});
+static ThreeGppFullCalibrationTestSuite g_threeGppFullCalibrationUmi30GhzTestSuite(
+    {"UMi", "UMi-StreetCanyon", 30, 200, 10, 10, 102, 32});
+static ThreeGppFullCalibrationTestSuite g_threeGppFullCalibrationInH6GhzTestSuite(
+    {"InH", "InH-OfficeOpen", 6, 20, 3, 0, 110, 8});
+static ThreeGppFullCalibrationTestSuite g_threeGppFullCalibrationInH30GhzTestSuite(
+    {"InH", "InH-OfficeOpen", 30, 20, 3, 0, 110, 8});
