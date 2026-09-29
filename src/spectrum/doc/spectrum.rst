@@ -787,6 +787,14 @@ together with the antenna objects of both devices; it does not read the
 vectors from the antenna objects itself, so the caller decides which vectors
 apply (``MultiModelSpectrumChannel`` passes the transmitter's vector captured
 when the transmission started).
+A beamforming vector holds the complex weights applied to the antenna elements,
+and it is used as is when transmitting and when receiving. Since the channel
+coefficients of Eq. 7.5-22 of [TR38901]_ carry the phase
+:math:`\exp(j 2 \pi \hat{r} \cdot \bar{d} / \lambda_0)` at both ends of the link,
+the long term component is :math:`\mathbf{w}_u^T \mathbf{H}_{u,s} \mathbf{w}_s`,
+and the vector returned by ``PhasedArrayModel::GetBeamformingVector(Angles)``,
+with entries proportional to :math:`\exp(-j 2 \pi \hat{r} \cdot \bar{d} / \lambda_0)`,
+points the beam towards the given direction for both transmission and reception.
 
 2. Retrieve the channel matrix and the channel params
 The ``ThreeGppSpectrumPropagationLossModel`` relies on the ``ThreeGppChannelModel`` class

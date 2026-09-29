@@ -121,7 +121,7 @@ PhasedArrayModel::GetBeamformingVector(Angles a) const
 
     for (size_t i = 0; i < GetNumElems(); i++)
     {
-        beamformingVector[i] = std::conj(beamformingVector[i]) / normRes;
+        beamformingVector[i] /= normRes;
     }
 
     return beamformingVector;

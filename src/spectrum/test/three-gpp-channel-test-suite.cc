@@ -2663,6 +2663,127 @@ ThreeGppReversedDirectionFieldPatternTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * Test that the beamforming vectors returned by
+ * PhasedArrayModel::GetBeamformingVector(Angles) point the beams of both link
+ * ends at each other, as combined by ThreeGppSpectrumPropagationLossModel.
+ *
+ * With only the LOS ray, the channel between two single-polarized arrays is
+ * rank one, and matched beams collect its whole power, i.e., the beamforming
+ * gain equals the squared Frobenius norm of the channel matrix. A beam
+ * pointed at the mirror image of the other end through the array plane only
+ * does so at broadside, so the tested geometries have the other end off the
+ * broadside of each array, and the gain is checked for both link directions.
+ */
+class ThreeGppBeamformingDirectionTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     */
+    ThreeGppBeamformingDirectionTest();
+
+  private:
+    /**
+     * Build the test scenario
+     */
+    void DoRun() override;
+};
+
+ThreeGppBeamformingDirectionTest::ThreeGppBeamformingDirectionTest()
+    : TestCase("Check that the beamforming vectors point the beams of both link ends")
+{
+}
+
+void
+ThreeGppBeamformingDirectionTest::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    auto lossModel = CreateObject<ThreeGppSpectrumPropagationLossModel>();
+    lossModel->SetChannelModelAttribute("Frequency", DoubleValue(28e9));
+    lossModel->SetChannelModelAttribute("Scenario", StringValue("UMa"));
+    lossModel->SetChannelModelAttribute(
+        "ChannelConditionModel",
+        PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+    lossModel->SetChannelModelAttribute("LosRayOnly", BooleanValue(true));
+
+    SpectrumValue5MhzFactory sf;
+    auto txParams = Create<SpectrumSignalParameters>();
+    txParams->psd = sf.CreateTxPowerSpectralDensity(0.1, 1);
+    const double txPsd = (*txParams->psd)[0];
+
+    /// Position and array bearing of the UE; the site is at (0, 0, 25) with bearing 0
+    struct Geometry
+    {
+        Vector uePos;        ///< UE position
+        double ueBearingDeg; ///< UE array bearing in degrees
+    };
+
+    for (const auto& [uePos, ueBearingDeg] :
+         std::vector<Geometry>{{{100, 60, 1.5}, 160}, {{60, -80, 20}, 110}, {{30, 90, 1.5}, -60}})
+    {
+        NodeContainer nodes(2);
+        auto siteMob = CreateObject<ConstantPositionMobilityModel>();
+        siteMob->SetPosition(Vector(0, 0, 25));
+        auto ueMob = CreateObject<ConstantPositionMobilityModel>();
+        ueMob->SetPosition(uePos);
+        nodes.Get(0)->AggregateObject(siteMob);
+        nodes.Get(1)->AggregateObject(ueMob);
+
+        auto makeAntenna = [](double bearingDeg) {
+            return CreateObjectWithAttributes<UniformPlanarArray>(
+                "NumColumns",
+                UintegerValue(4),
+                "NumRows",
+                UintegerValue(4),
+                "BearingAngle",
+                DoubleValue(bearingDeg * M_PI / 180),
+                "AntennaElement",
+                PointerValue(CreateObject<IsotropicAntennaModel>()));
+        };
+        Ptr<PhasedArrayModel> siteAnt = makeAntenna(0);
+        Ptr<PhasedArrayModel> ueAnt = makeAntenna(ueBearingDeg);
+        siteAnt->SetBeamformingVector(
+            siteAnt->GetBeamformingVector(Angles(ueMob->GetPosition(), siteMob->GetPosition())));
+        ueAnt->SetBeamformingVector(
+            ueAnt->GetBeamformingVector(Angles(siteMob->GetPosition(), ueMob->GetPosition())));
+
+        auto channel = lossModel->GetChannelModel()->GetChannel(siteMob, ueMob, siteAnt, ueAnt);
+        double frobeniusSq = 0;
+        for (const auto& h : channel->m_channel.GetValues())
+        {
+            frobeniusSq += std::norm(h);
+        }
+
+        auto gainDb = [&](Ptr<MobilityModel> txMob,
+                          Ptr<MobilityModel> rxMob,
+                          Ptr<PhasedArrayModel> txAnt,
+                          Ptr<PhasedArrayModel> rxAnt) {
+            auto rxParams = lossModel->DoCalcRxPowerSpectralDensity(txParams,
+                                                                    txMob,
+                                                                    rxMob,
+                                                                    txAnt,
+                                                                    rxAnt,
+                                                                    txAnt->GetBeamformingVector(),
+                                                                    rxAnt->GetBeamformingVector());
+            return 10 * std::log10((*rxParams->psd)[0] / txPsd / frobeniusSq);
+        };
+        NS_TEST_EXPECT_MSG_EQ_TOL(gainDb(siteMob, ueMob, siteAnt, ueAnt),
+                                  0,
+                                  0.01,
+                                  "Downlink beams are not pointed at each other, UE at " << uePos);
+        NS_TEST_EXPECT_MSG_EQ_TOL(gainDb(ueMob, siteMob, ueAnt, siteAnt),
+                                  0,
+                                  0.01,
+                                  "Uplink beams are not pointed at each other, UE at " << uePos);
+    }
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test case for the channel reciprocity of the ThreeGppChannelModel class, as assumed for
  * instance by TDD systems. Checks that:
  * 1) querying the channel in the reverse direction reuses the same stored realization
@@ -3310,6 +3431,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
 
     AddTestCase(new ThreeGppCalcLongTermMultiPortTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppReversedDirectionFieldPatternTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppBeamformingDirectionTest(), TestCase::Duration::QUICK);
 
     /**
      *  The TX and RX antennas are configured face-to-face.
