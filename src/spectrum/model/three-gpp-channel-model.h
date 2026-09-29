@@ -148,6 +148,21 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         ChannelCondition::LosConditionValue m_losCondition;
         /// contains the information about the O2I state of the channel
         ChannelCondition::O2iConditionValue m_o2iCondition;
+
+        /**
+         * Whether the fast fading has a LOS ray. The LOS state of an O2I link
+         * (i.e., of its outdoor part) sets its path loss and ZSD parameters,
+         * but TR 38.901 Table 7.5-6 has no K-factor for O2I, so its fast fading
+         * is generated as NLOS.
+         *
+         * @return true for a LOS link that is not O2I
+         */
+        bool HasLosRay() const
+        {
+            return m_losCondition == ChannelCondition::LOS &&
+                   m_o2iCondition != ChannelCondition::O2I;
+        }
+
         /*The following parameters are stored for spatially consistent updating. The notation is
         that of 3GPP technical reports, but it can apply also to other channel realizations*/
         /// store the blockages
