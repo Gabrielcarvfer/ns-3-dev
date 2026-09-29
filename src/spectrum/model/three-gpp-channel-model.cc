@@ -1501,13 +1501,16 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
     }
     else if (m_scenario == "UMa")
     {
+        // TR 38.901 Table 7.5-6 note 6 and Table 7.5-7 note 4: below 6 GHz, the
+        // frequency-dependent parameters use fc = 6 GHz.
+        const double fcLspGHz = std::max(fcGHz, 6.0);
         if (los && !o2i)
         {
             table3gpp->m_numOfCluster = 12;
             table3gpp->m_raysPerCluster = 20;
-            table3gpp->m_uLgDS = -6.955 - 0.0963 * log10(fcGHz);
+            table3gpp->m_uLgDS = -6.955 - 0.0963 * log10(fcLspGHz);
             table3gpp->m_sigLgDS = 0.66;
-            table3gpp->m_uLgASD = 1.06 + 0.1114 * log10(fcGHz);
+            table3gpp->m_uLgASD = 1.06 + 0.1114 * log10(fcLspGHz);
             table3gpp->m_sigLgASD = 0.28;
             table3gpp->m_uLgASA = 1.81;
             table3gpp->m_sigLgASA = 0.20;
@@ -1517,7 +1520,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
                 std::max(-0.5, -2.1 * distance2D / 1000.0 - 0.01 * (hUT - 1.5) + 0.75);
             table3gpp->m_sigLgZSD = 0.40;
             table3gpp->m_offsetZOD = 0;
-            table3gpp->m_cDS = std::max(0.25, -3.4084 * log10(fcGHz) + 6.5622) * 1e-9;
+            table3gpp->m_cDS = std::max(0.25, -3.4084 * log10(fcLspGHz) + 6.5622) * 1e-9;
             table3gpp->m_cASD = 5;
             table3gpp->m_cASA = 11;
             table3gpp->m_cZSA = 7;
@@ -1542,10 +1545,10 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
         {
             double uLgZSD = std::max(-0.5, -2.1 * distance2D / 1000.0 - 0.01 * (hUT - 1.5) + 0.9);
 
-            double afc = 0.208 * log10(fcGHz) - 0.782;
+            double afc = 0.208 * log10(fcLspGHz) - 0.782;
             double bfc = 25;
-            double cfc = -0.13 * log10(fcGHz) + 2.03;
-            double efc = 7.66 * log10(fcGHz) - 5.96;
+            double cfc = -0.13 * log10(fcLspGHz) + 2.03;
+            double efc = 7.66 * log10(fcLspGHz) - 5.96;
 
             double offsetZOD = efc - std::pow(10, afc * log10(std::max(bfc, distance2D)) + cfc);
 
@@ -1553,18 +1556,18 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             {
                 table3gpp->m_numOfCluster = 20;
                 table3gpp->m_raysPerCluster = 20;
-                table3gpp->m_uLgDS = -6.28 - 0.204 * log10(fcGHz);
+                table3gpp->m_uLgDS = -6.28 - 0.204 * log10(fcLspGHz);
                 table3gpp->m_sigLgDS = 0.39;
-                table3gpp->m_uLgASD = 1.5 - 0.1144 * log10(fcGHz);
+                table3gpp->m_uLgASD = 1.5 - 0.1144 * log10(fcLspGHz);
                 table3gpp->m_sigLgASD = 0.28;
-                table3gpp->m_uLgASA = 2.08 - 0.27 * log10(fcGHz);
+                table3gpp->m_uLgASA = 2.08 - 0.27 * log10(fcLspGHz);
                 table3gpp->m_sigLgASA = 0.11;
-                table3gpp->m_uLgZSA = -0.3236 * log10(fcGHz) + 1.512;
+                table3gpp->m_uLgZSA = -0.3236 * log10(fcLspGHz) + 1.512;
                 table3gpp->m_sigLgZSA = 0.16;
                 table3gpp->m_uLgZSD = uLgZSD;
                 table3gpp->m_sigLgZSD = 0.49;
                 table3gpp->m_offsetZOD = offsetZOD;
-                table3gpp->m_cDS = std::max(0.25, -3.4084 * log10(fcGHz) + 6.5622) * 1e-9;
+                table3gpp->m_cDS = std::max(0.25, -3.4084 * log10(fcLspGHz) + 6.5622) * 1e-9;
                 table3gpp->m_cASD = 2;
                 table3gpp->m_cASA = 15;
                 table3gpp->m_cZSA = 7;
