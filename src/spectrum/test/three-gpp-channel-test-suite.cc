@@ -287,14 +287,16 @@ ThreeGppChannelMatrixComputationTest::DoRun()
                                      m_rxAntennaElements) /
                    (sampleStd / std::sqrt(numIt));
 
-        // Using a significance level of 0.05, we reject the null hypothesis if |t| is
-        // greater than the critical value from a t-distribution with df = numIt-1
+        // The suite runs this test for several arrays and update periods, so
+        // each uses a significance level of 0.01 to keep the family-wise false
+        // alarm rate low: we reject the null hypothesis if |t| is greater than
+        // the two-sided critical value of a t-distribution with df = numIt-1.
 
         NS_TEST_ASSERT_MSG_EQ_TOL(
             std::abs(t),
             0,
-            1.65,
-            "We reject the hypothesis E[|H|^2] = M*N with a significance level of 0.05");
+            2.58,
+            "We reject the hypothesis E[|H|^2] = M*N with a significance level of 0.01");
     }
 
     Simulator::Destroy();
