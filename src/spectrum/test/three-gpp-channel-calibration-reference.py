@@ -61,7 +61,7 @@ SOURCE_ROW = 25
 # Sionna drops: scenarios and carrier frequencies of the test, and the number of
 # drops per building type (low and high loss, pooled into 50%/50%).
 SIONNA_FREQUENCIES = [6, 30]
-SIONNA_DROPS = 4
+SIONNA_DROPS = 16
 
 
 def metric_columns(ws):
