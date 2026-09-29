@@ -158,8 +158,11 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
     Ptr<MatrixBasedChannelModel::Complex3DVector> longTerm =
         Create<MatrixBasedChannelModel::Complex3DVector>(uPorts, sPorts, numClusters);
 
-    // Calculate the long term uW^H * Husn * sW for each port pair and cluster;
+    // Calculate the long term uW^T * Husn * sW for each port pair and cluster;
     // the result is a matrix with dimensions #uPorts, #sPorts, #clusters.
+    // The beamforming vectors hold the weights applied to the elements at
+    // either end (see PhasedArrayModel::SetBeamformingVector), so neither side
+    // is conjugated and the long term is the same for both link directions.
     //
     // The element walk within a port is the same for every port (sub-array
     // partition model, see PortElementOffsets), so precompute it once per
@@ -167,21 +170,14 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
     const std::vector<size_t> sOffsets = PortElementOffsets(sAnt);
     const std::vector<size_t> uOffsets = PortElementOffsets(uAnt);
 
-    // Copy the beamforming weights into plain vectors, with the rx side
-    // already conjugated, so the inner loops use indexed loads instead of
-    // a ValArray accessor and a std::conj per element.
+    // Copy the beamforming weights into plain vectors, so the inner loops use
+    // indexed loads instead of a ValArray accessor per element.
     // Note that the weight of a port's i-th element is indexed by the same
     // array offset as the element itself, per the sub-array partition model.
-    std::vector<std::complex<double>> uWeightsConj(uW.GetSize());
-    for (size_t k = 0; k < uW.GetSize(); ++k)
-    {
-        uWeightsConj[k] = std::conj(uW[k]);
-    }
-    std::vector<std::complex<double>> sWeights(sW.GetSize());
-    for (size_t k = 0; k < sW.GetSize(); ++k)
-    {
-        sWeights[k] = sW[k];
-    }
+    const std::vector<std::complex<double>> uWeights(std::begin(uW.GetValues()),
+                                                     std::end(uW.GetValues()));
+    const std::vector<std::complex<double>> sWeights(std::begin(sW.GetValues()),
+                                                     std::end(sW.GetValues()));
 
     // Each cluster page of the channel matrix is column-major: element
     // (uIndex, sIndex) lives at pagePtr[uIndex + numRows * sIndex].
@@ -202,12 +198,12 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
                 {
                     // One rx element per port (the typical NR UE layout):
                     // the rx-side reduction is a single multiply.
-                    const std::complex<double> uWeightConj0 = uWeightsConj[0];
+                    const std::complex<double> uWeight0 = uWeights[0];
                     for (size_t tIndex = 0; tIndex < sPortElems; ++tIndex)
                     {
                         const size_t sIndex = startS + sOffsets[tIndex];
                         txSum += sWeights[sOffsets[tIndex]] *
-                                 (uWeightConj0 * pagePtr[startU + numRows * sIndex]);
+                                 (uWeight0 * pagePtr[startU + numRows * sIndex]);
                     }
                 }
                 else
@@ -219,8 +215,7 @@ ThreeGppSpectrumPropagationLossModel::CalcLongTerm(
                         std::complex<double> rxSum(0, 0);
                         for (size_t rIndex = 0; rIndex < uPortElems; ++rIndex)
                         {
-                            rxSum +=
-                                uWeightsConj[uOffsets[rIndex]] * column[startU + uOffsets[rIndex]];
+                            rxSum += uWeights[uOffsets[rIndex]] * column[startU + uOffsets[rIndex]];
                         }
                         txSum += sWeights[sOffsets[tIndex]] * rxSum;
                     }

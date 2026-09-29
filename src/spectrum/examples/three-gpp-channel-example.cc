@@ -71,51 +71,43 @@ struct ComputeSnrParams
  * power across elements) and have the form:
  *
  *   w[i] = exp(j * phase_i) / sqrt(N),
- *   phase_i = sign * 2*pi * ( u · r_i )
+ *   phase_i = -2*pi * ( u . r_i )
  *
  * where `u` is the unit direction corresponding to the azimuth/inclination
  * angles of the line-of-sight vector between the nodes, `r_i` is the location of
- * element `i` in the array coordinate system, and `N` is the number of antenna
- * elements.
+ * element `i`, normalized to the wavelength, and `N` is the number of antenna
+ * elements. For a single-port array this is the vector returned by
+ * `PhasedArrayModel::GetBeamformingVector(Angles)`.
  *
- * Sign convention and how to use this function:
+ * Sign convention:
  *
  * The 3GPP channel coefficients are constructed using spatial phase terms of the
- * form exp(+j*2*pi*(u·r)) (see `ThreeGppChannelModel::GetNewChannel()`), i.e., the
- * array *response/steering vector* toward a direction is proportional to:
+ * form exp(+j*2*pi*(u.r)) at both ends of the link (see
+ * `ThreeGppChannelModel::GetNewChannel()`), i.e., the array response toward a
+ * direction, seen from either end, is proportional to:
  *
- *   a(theta)[i] = exp(+j*2*pi*(u·r_i)).
+ *   a(u)[i] = exp(+j*2*pi*(u.r_i)).
  *
- * In standard array processing, a transmit precoder that steers energy toward
- * that direction uses the complex conjugate of the response, therefore
- * sign = -1  (phase = -2*pi*(u·r_i)).
+ * A beamforming vector holds the weights applied to the antenna elements, and
+ * the channel model applies it as is both when transmitting and when receiving
+ * (see `PhasedArrayModel::SetBeamformingVector()`). The effective scalar channel
+ * is the bilinear form:
  *
- * For receive combining, the effective scalar channel is computed using the
- * Hermitian inner product:
+ *   h_eff = w_rx^T * H * w_tx ,
  *
- *   h_eff = w_rx^H * H * w_tx .
- *
- * To obtain matched-filter (maximum-ratio) receive combining toward the same
- * direction, the stored receive weight vector should be proportional to the
- * response a(theta), so that `w_rx^H` applies the conjugation at combining time
- * sign = +1  (phase = +2*pi*(u·r_i)).
- *
- * Therefore, when this function is used to set beamforming vectors explicitly in
- * this example:
- *   - Use `sign = -1` when generating TX weights (precoding).
- *   - Use `sign = +1` when generating RX weights (so that Hermitian combining
- *     applies the conjugation).
+ * without any conjugation of the receive weights. The weights that add the
+ * element contributions of a direction in phase are then the conjugate of the
+ * array response, with the negative phase above, at the transmitter and at the
+ * receiver alike. The same function is therefore used for both ends of the
+ * link, and a node keeps the same vector when the direction of the link is
+ * reversed.
  *
  * @param txMob The mobility model of the node for which the weights are generated.
  * @param thisAntenna The antenna array on which the beamforming vector is set.
  * @param rxMob The mobility model of the peer node toward/from which the beam is steered.
- * @param sign Phase progression sign: typically -1 for TX weights and +1 for RX weights.
  */
 static void
-DoBeamforming(Ptr<MobilityModel> txMob,
-              Ptr<PhasedArrayModel> thisAntenna,
-              Ptr<MobilityModel> rxMob,
-              double sign)
+DoBeamforming(Ptr<MobilityModel> txMob, Ptr<PhasedArrayModel> thisAntenna, Ptr<MobilityModel> rxMob)
 {
     // retrieve the position of the two nodes
     Vector aPos = txMob->GetPosition();
@@ -143,7 +135,7 @@ DoBeamforming(Ptr<MobilityModel> txMob,
     for (uint64_t ind = 0; ind < totNoArrayElements; ind++)
     {
         Vector loc = thisAntenna->GetElementLocation(ind);
-        double phase = sign * 2 * M_PI *
+        double phase = -2 * M_PI *
                        (sinVAngleRadian * cosHAngleRadian * loc.x +
                         sinVAngleRadian * sinHAngleRadian * loc.y + cosVAngleRadian * loc.z);
         antennaWeights[ind] = exp(std::complex<double>(0, phase)) * power;
@@ -155,11 +147,16 @@ DoBeamforming(Ptr<MobilityModel> txMob,
 
 /**
  * Build the RX matched-filter (maximum-ratio) combining vector by aggregating
- * the contributions of all clusters and normalizing the result:
+ * the contributions of all clusters, conjugating and normalizing the result:
  * \f[
  * \mathbf{g} = \sum_{c} \mathbf{H}_{c}\mathbf{w}_{\rm tx}, \qquad
- * \mathbf{w}_{\rm rx} = \frac{\mathbf{g}}{\|\mathbf{g}\|}
+ * \mathbf{w}_{\rm rx} = \frac{\mathbf{g}^{*}}{\|\mathbf{g}\|}
  * \f]
+ *
+ * The conjugate is taken because the channel model applies the receive weights
+ * as they are, \f$\mathbf{w}_{\rm rx}^{T}\mathbf{g}\f$, so that the conjugation of
+ * the matched filter has to be part of the stored vector (see
+ * ``PhasedArrayModel::SetBeamformingVector()``).
  *
  * The per-cluster channel matrix \f$\mathbf{H}_{c}\f$ is obtained from
  * ``params->m_channel(u, s, c)`` (u: RX element index, s: TX element index, c: cluster index).
@@ -206,7 +203,7 @@ BuildRxMatchedFilterOverAllClusters(
             g[u] += acc;
         }
     }
-    // Normalize: wRx = g / ||g||
+    // Conjugate and normalize: wRx = conj(g) / ||g||
     double norm2 = 0.0;
     for (uint64_t u = 0; u < nRx; ++u)
     {
@@ -217,7 +214,7 @@ BuildRxMatchedFilterOverAllClusters(
         const double invNorm = 1.0 / std::sqrt(norm2);
         for (uint64_t u = 0; u < nRx; ++u)
         {
-            g[u] *= invNorm;
+            g[u] = std::conj(g[u]) * invNorm;
         }
     }
     return g; // unit-norm (unless channel is all-zero)
@@ -260,10 +257,8 @@ ComputeSnr(const ComputeSnrParams& params)
     NS_ASSERT_MSG(params.rxAntenna, "params.rxAntenna is nullptr!");
 
     // set/update the beamforming vectors on each call
-    double sign = -1.0;
-    DoBeamforming(params.txMob, params.txAntenna, params.rxMob, sign);
-    sign = +1.0;
-    DoBeamforming(params.rxMob, params.rxAntenna, params.txMob, sign);
+    DoBeamforming(params.txMob, params.txAntenna, params.rxMob);
+    DoBeamforming(params.rxMob, params.rxAntenna, params.txMob);
     // apply the fast fading and the beamforming gain
     auto rxParams =
         m_spectrumLossModel->CalcRxPowerSpectralDensity(txParams,
