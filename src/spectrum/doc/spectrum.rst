@@ -976,7 +976,12 @@ distances of Table 7.5-6 (V2V and NTN fall back to the UMa distances). The
 fields are pure functions of position, identical across model instances, so
 links from the same site to nearby terminals obtain correlated LSPs, a channel
 re-generated at the same location reproduces them, and the LSPs of a moving UE
-evolve smoothly across re-generations.
+evolve smoothly across re-generations. The SF variate is taken from the field
+of the shadow fading applied by ``ThreeGppPropagationLossModel``, so the other
+LSPs keep the Table 7.5-6 cross-correlations with the shadow fading actually
+applied to the link, whose SF is a received power gain. Without the attribute,
+the SF variate is drawn independently of the shadow fading of the propagation
+loss model, so these cross-correlations are not reproduced.
 
 The cluster and ray specific random variables of the fast fading (cluster
 delays and shadowing, angle signs and offsets, random coupling of rays,

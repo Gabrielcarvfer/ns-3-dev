@@ -426,6 +426,11 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * cross-correlation are sampled from per-site, per-condition, per-LSP fields at
      * the terminal position (see SampleSpatiallyCorrelatedNormal), so links from the
      * same site to nearby terminals obtain correlated LSPs (TR 38.901 Sec. 7.6.3.1).
+     * The SF variate is then the one of the shadow fading applied by
+     * ThreeGppPropagationLossModel (see
+     * ThreeGppPropagationLossModel::SampleSpatiallyCorrelatedNormal), so the
+     * other LSPs are cross-correlated with it as in TR 38.901 Table 7.5-6.
+     * Otherwise, the SF variate is drawn independently of the shadow fading.
      *
      * @param channelCondition Channel condition of the link (LOS/NLOS and O2I state).
      * @param table3gpp Pointer to the 3GPP parameters table (means, std-devs, sqrt correlation).
