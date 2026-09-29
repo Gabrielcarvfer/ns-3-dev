@@ -25,19 +25,94 @@
 #include "ns3/test.h"
 #include "ns3/three-gpp-antenna-model.h"
 #include "ns3/three-gpp-channel-model.h"
+#include "ns3/three-gpp-propagation-loss-model.h"
 #include "ns3/three-gpp-spectrum-propagation-loss-model.h"
 #include "ns3/uinteger.h"
 #include "ns3/uniform-planar-array.h"
 
 #include <cmath>
 #include <complex>
+#include <functional>
 #include <limits>
+#include <numeric>
 #include <string>
 #include <valarray>
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("ThreeGppChannelTestSuite");
+
+/**
+ * Create a uniform planar array of isotropic antenna elements.
+ *
+ * @param rows Number of rows.
+ * @param columns Number of columns.
+ * @return The array.
+ */
+static Ptr<UniformPlanarArray>
+CreateIsotropicArray(uint32_t rows, uint32_t columns)
+{
+    return CreateObjectWithAttributes<UniformPlanarArray>(
+        "NumColumns",
+        UintegerValue(columns),
+        "NumRows",
+        UintegerValue(rows),
+        "AntennaElement",
+        PointerValue(CreateObject<IsotropicAntennaModel>()));
+}
+
+/**
+ * Create a 3GPP propagation loss model at 3.5 GHz.
+ *
+ * @tparam T Type of the propagation loss model.
+ * @param conditionModel Channel condition model of the propagation loss model.
+ * @param shadowing Whether the shadow fading is enabled.
+ * @return The propagation loss model.
+ */
+template <typename T>
+static Ptr<T>
+CreateLossModel(Ptr<ChannelConditionModel> conditionModel, bool shadowing)
+{
+    auto lossModel = CreateObject<T>();
+    lossModel->SetAttribute("Frequency", DoubleValue(3.5e9));
+    lossModel->SetAttribute("ShadowingEnabled", BooleanValue(shadowing));
+    lossModel->SetAttribute("ChannelConditionModel", PointerValue(conditionModel));
+    return lossModel;
+}
+
+/**
+ * Compute the sample covariance of two sample vectors, without the Bessel correction.
+ *
+ * @param x The first samples.
+ * @param y The second samples, as many as the first ones.
+ * @return The covariance.
+ */
+static double
+Covariance(const std::vector<double>& x, const std::vector<double>& y)
+{
+    const double mx = std::accumulate(x.begin(), x.end(), 0.0) / x.size();
+    const double my = std::accumulate(y.begin(), y.end(), 0.0) / y.size();
+    return std::transform_reduce(x.begin(),
+                                 x.end(),
+                                 y.begin(),
+                                 0.0,
+                                 std::plus<>(),
+                                 [mx, my](double a, double b) { return (a - mx) * (b - my); }) /
+           x.size();
+}
+
+/**
+ * Compute the Pearson correlation of two sample vectors.
+ *
+ * @param x The first samples.
+ * @param y The second samples, as many as the first ones.
+ * @return The sample correlation.
+ */
+static double
+Correlation(const std::vector<double>& x, const std::vector<double>& y)
+{
+    return Covariance(x, y) / std::sqrt(Covariance(x, x) * Covariance(y, y));
+}
 
 /**
  * @ingroup spectrum-tests
@@ -2499,6 +2574,104 @@ ThreeGppInterUeSpatialConsistencyTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * Test that, with the InterUeSpatialConsistency attribute of the channel
+ * condition model enabled, the delay spread drawn by ThreeGppChannelModel is
+ * correlated with the shadow fading applied by ThreeGppPropagationLossModel as
+ * in TR 38.901 Table 7.5-6, where the shadow fading is a received power gain.
+ *
+ * One UMi site serves UEs on a grid whose spacing is far beyond the Table 7.5-6
+ * correlation distances, so the links are independent samples, and the Pearson
+ * correlation of the shadow fading gain (in dB) and lg(DS) over the NLOS links
+ * must match the DS vs SF entry of Table 7.5-6.
+ */
+class ThreeGppShadowFadingLspCorrelationTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     */
+    ThreeGppShadowFadingLspCorrelationTest();
+
+  private:
+    /**
+     * Build the test scenario
+     */
+    void DoRun() override;
+};
+
+ThreeGppShadowFadingLspCorrelationTest::ThreeGppShadowFadingLspCorrelationTest()
+    : TestCase("Check the correlation of the shadow fading and the delay spread")
+{
+}
+
+void
+ThreeGppShadowFadingLspCorrelationTest::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    auto conditionModel = CreateObject<NeverLosChannelConditionModel>();
+    conditionModel->SetAttribute("InterUeSpatialConsistency", BooleanValue(true));
+    conditionModel->SetAttribute("SiteNetDeviceTypes", StringValue("ns3::SimpleNetDevice"));
+
+    auto channelModel = CreateObject<ThreeGppChannelModel>();
+    channelModel->SetAttribute("Frequency", DoubleValue(3.5e9));
+    channelModel->SetAttribute("Scenario", StringValue("UMi-StreetCanyon"));
+    channelModel->SetAttribute("ChannelConditionModel", PointerValue(conditionModel));
+    channelModel->AssignStreams(1);
+
+    // The shadow fading is the difference of the received powers with and
+    // without it
+    auto lossModel =
+        CreateLossModel<ThreeGppUmiStreetCanyonPropagationLossModel>(conditionModel, true);
+    auto lossModelNoShadowing =
+        CreateLossModel<ThreeGppUmiStreetCanyonPropagationLossModel>(conditionModel, false);
+
+    constexpr uint32_t gridSide = 30;
+    NodeContainer nodes(1 + gridSide * gridSide);
+    Ptr<Node> siteNode = nodes.Get(0);
+    auto siteDev = CreateObject<SimpleNetDevice>();
+    siteNode->AddDevice(siteDev);
+    siteDev->SetNode(siteNode);
+    auto siteMob = CreateObject<ConstantPositionMobilityModel>();
+    siteMob->SetPosition(Vector(0, 0, 10));
+    siteNode->AggregateObject(siteMob);
+
+    Ptr<PhasedArrayModel> siteAntenna = CreateIsotropicArray(1, 1);
+
+    // Grid with 100 m spacing, while the UMi NLOS correlation distances are
+    // at most 13 m
+    std::vector<double> sfGainDb;
+    std::vector<double> lgDs;
+    for (uint32_t i = 0; i < gridSide * gridSide; i++)
+    {
+        auto ueMob = CreateObject<ConstantPositionMobilityModel>();
+        ueMob->SetPosition(
+            Vector(50.0 + 100.0 * (i % gridSide), 50.0 + 100.0 * (i / gridSide), 1.5));
+        nodes.Get(1 + i)->AggregateObject(ueMob);
+
+        sfGainDb.push_back(lossModel->CalcRxPower(0, siteMob, ueMob) -
+                           lossModelNoShadowing->CalcRxPower(0, siteMob, ueMob));
+        channelModel->GetChannel(siteMob, ueMob, siteAntenna, CreateIsotropicArray(1, 1));
+        const auto params = DynamicCast<const ThreeGppChannelModel::ThreeGppChannelParams>(
+            channelModel->GetParams(siteMob, ueMob));
+        NS_TEST_ASSERT_MSG_NE(params, nullptr, "Channel params not found for generated link");
+        lgDs.push_back(std::log10(params->m_DS));
+    }
+
+    // With 900 links, the standard error of the sample correlation is about
+    // (1 - 0.7^2) / 30 = 0.017
+    NS_TEST_EXPECT_MSG_EQ_TOL(Correlation(sfGainDb, lgDs),
+                              -0.7,
+                              0.1,
+                              "The DS vs SF correlation of UMi NLOS links differs from TR 38.901 "
+                              "Table 7.5-6");
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test case that the total channel power is independent of the order in which
  * the two endpoints are passed to ThreeGppChannelModel::GetChannel, when a
  * DIRECTIONAL antenna element is used (channel reciprocity of the Frobenius
@@ -3294,6 +3467,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
                     LbConfig{.columns = 64, .expectedRaysBw = 8, .largeArrayAtRx = true}),
                 TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppInterUeSpatialConsistencyTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppShadowFadingLspCorrelationTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppIndoorLosLspOrderingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppSubClusterMappingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppLosBlockageAttenuationTest(), TestCase::Duration::QUICK);

@@ -23,6 +23,7 @@
 #include "ns3/simulator.h"
 #include "ns3/spatial-gaussian-field.h"
 #include "ns3/string.h"
+#include "ns3/three-gpp-propagation-loss-model.h"
 #include "ns3/uinteger.h"
 
 #include <algorithm>
@@ -2884,7 +2885,20 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
         const auto& corrDist = isO2i ? corrO2i : (isLos ? corrLos : corrNlos);
         const uint32_t siteNodeId = siteMob->GetObject<Node>()->GetId();
         const Vector termPos = termMob->GetPosition();
-        for (uint8_t paramId = 0; paramId < numLsps; paramId++)
+        // The SF variate is the one of the shadow fading applied by
+        // ThreeGppPropagationLossModel, which samples the same field with the
+        // same Table 7.5-6 correlation distance. As the first row of every
+        // m_sqrtC is (1, 0, ..., 0), the other LSPs then hold their Table 7.5-6
+        // cross-correlations with the shadow fading actually applied. The SF of
+        // the LSP vector is a received power gain, whereas the propagation loss
+        // model subtracts its shadowing value from the received power, hence the
+        // sign change.
+        lspIndepRandomVar[0] =
+            -ThreeGppPropagationLossModel::SampleSpatiallyCorrelatedNormal(siteNodeId,
+                                                                           condSlot,
+                                                                           termPos,
+                                                                           corrDist[0]);
+        for (uint8_t paramId = 1; paramId < numLsps; paramId++)
         {
             // The K-factor belongs to the LOS path, so its variate always comes
             // from the LOS field: the NLOS and O2I columns have no K entry.
@@ -2906,7 +2920,7 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
         }
     }
 
-    // NOTE the shadowing is generated in the propagation loss model
+    // NOTE the shadowing is applied by the propagation loss model
     LargeScaleParameters lsps;
     lsps.kFactor = lsp[1] * table3gpp->m_sigK + table3gpp->m_uK;
     lsps.DS = pow(10, lsp[2] * table3gpp->m_sigLgDS + table3gpp->m_uLgDS);

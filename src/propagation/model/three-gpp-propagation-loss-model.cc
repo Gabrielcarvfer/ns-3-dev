@@ -921,7 +921,7 @@ double
 ThreeGppPropagationLossModel::SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
                                                               uint8_t condSlot,
                                                               const Vector& position,
-                                                              double corrDist) const
+                                                              double corrDist)
 {
     // One independent field per (site, condition slot).
     const uint64_t fieldKey =
