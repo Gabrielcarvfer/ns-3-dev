@@ -1749,21 +1749,24 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
     }
     else if (m_scenario == "InH-OfficeMixed" || m_scenario == "InH-OfficeOpen")
     {
+        // TR 38.901 Table 7.5-6 Part-2 note 6 and Table 7.5-10 note 4: below
+        // 6 GHz, the frequency-dependent parameters use fc = 6 GHz.
+        const double fcLspGHz = std::max(fcGHz, 6.0);
         NS_ASSERT_MSG(!o2i, "The indoor scenario does out support outdoor to indoor");
         if (los)
         {
             table3gpp->m_numOfCluster = 15;
             table3gpp->m_raysPerCluster = 20;
-            table3gpp->m_uLgDS = -0.01 * log10(1 + fcGHz) - 7.692;
+            table3gpp->m_uLgDS = -0.01 * log10(1 + fcLspGHz) - 7.692;
             table3gpp->m_sigLgDS = 0.18;
             table3gpp->m_uLgASD = 1.60;
             table3gpp->m_sigLgASD = 0.18;
-            table3gpp->m_uLgASA = -0.19 * log10(1 + fcGHz) + 1.781;
-            table3gpp->m_sigLgASA = 0.12 * log10(1 + fcGHz) + 0.119;
-            table3gpp->m_uLgZSA = -0.26 * log10(1 + fcGHz) + 1.44;
-            table3gpp->m_sigLgZSA = -0.04 * log10(1 + fcGHz) + 0.264;
-            table3gpp->m_uLgZSD = -1.43 * log10(1 + fcGHz) + 2.228;
-            table3gpp->m_sigLgZSD = 0.13 * log10(1 + fcGHz) + 0.30;
+            table3gpp->m_uLgASA = -0.19 * log10(1 + fcLspGHz) + 1.781;
+            table3gpp->m_sigLgASA = 0.12 * log10(1 + fcLspGHz) + 0.119;
+            table3gpp->m_uLgZSA = -0.26 * log10(1 + fcLspGHz) + 1.44;
+            table3gpp->m_sigLgZSA = -0.04 * log10(1 + fcLspGHz) + 0.264;
+            table3gpp->m_uLgZSD = -1.43 * log10(1 + fcLspGHz) + 2.228;
+            table3gpp->m_sigLgZSD = 0.13 * log10(1 + fcLspGHz) + 0.30;
             table3gpp->m_offsetZOD = 0;
             table3gpp->m_cDS = 3.91e-9;
             table3gpp->m_cASD = 5;
@@ -1790,14 +1793,14 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
         {
             table3gpp->m_numOfCluster = 19;
             table3gpp->m_raysPerCluster = 20;
-            table3gpp->m_uLgDS = -0.28 * log10(1 + fcGHz) - 7.173;
-            table3gpp->m_sigLgDS = 0.1 * log10(1 + fcGHz) + 0.055;
+            table3gpp->m_uLgDS = -0.28 * log10(1 + fcLspGHz) - 7.173;
+            table3gpp->m_sigLgDS = 0.1 * log10(1 + fcLspGHz) + 0.055;
             table3gpp->m_uLgASD = 1.62;
             table3gpp->m_sigLgASD = 0.25;
-            table3gpp->m_uLgASA = -0.11 * log10(1 + fcGHz) + 1.863;
-            table3gpp->m_sigLgASA = 0.12 * log10(1 + fcGHz) + 0.059;
-            table3gpp->m_uLgZSA = -0.15 * log10(1 + fcGHz) + 1.387;
-            table3gpp->m_sigLgZSA = -0.09 * log10(1 + fcGHz) + 0.746;
+            table3gpp->m_uLgASA = -0.11 * log10(1 + fcLspGHz) + 1.863;
+            table3gpp->m_sigLgASA = 0.12 * log10(1 + fcLspGHz) + 0.059;
+            table3gpp->m_uLgZSA = -0.15 * log10(1 + fcLspGHz) + 1.387;
+            table3gpp->m_sigLgZSA = -0.09 * log10(1 + fcLspGHz) + 0.746;
             table3gpp->m_uLgZSD = 1.08;
             table3gpp->m_sigLgZSD = 0.36;
             table3gpp->m_offsetZOD = 0;
