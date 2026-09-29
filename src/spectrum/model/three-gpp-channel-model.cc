@@ -1600,9 +1600,13 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
                 table3gpp->m_sigLgASA = 0.16;
                 table3gpp->m_uLgZSA = 1.01;
                 table3gpp->m_sigLgZSA = 0.43;
-                table3gpp->m_uLgZSD = uLgZSD;
-                table3gpp->m_sigLgZSD = 0.49;
-                table3gpp->m_offsetZOD = offsetZOD;
+                // Table 7.5-7 note 5: the ZSD parameters of an O2I link are those of
+                // the LOS state of its outdoor part.
+                table3gpp->m_uLgZSD =
+                    los ? std::max(-0.5, -2.1 * distance2D / 1000.0 - 0.01 * (hUT - 1.5) + 0.75)
+                        : uLgZSD;
+                table3gpp->m_sigLgZSD = los ? 0.40 : 0.49;
+                table3gpp->m_offsetZOD = los ? 0 : offsetZOD;
                 table3gpp->m_cDS = 11e-9;
                 table3gpp->m_cASD = 5;
                 table3gpp->m_cASA = 8;
@@ -1721,9 +1725,14 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
                 table3gpp->m_sigLgASA = 0.16;
                 table3gpp->m_uLgZSA = 1.01;
                 table3gpp->m_sigLgZSA = 0.43;
-                table3gpp->m_uLgZSD = uLgZSD;
+                // Table 7.5-8 note 5: the ZSD parameters of an O2I link are those of
+                // the LOS state of its outdoor part.
+                table3gpp->m_uLgZSD =
+                    los ? std::max(-0.21,
+                                   -14.8 * distance2D / 1000.0 + 0.01 * std::abs(hUT - hBS) + 0.83)
+                        : uLgZSD;
                 table3gpp->m_sigLgZSD = 0.35;
-                table3gpp->m_offsetZOD = offsetZOD;
+                table3gpp->m_offsetZOD = los ? 0 : offsetZOD;
                 table3gpp->m_cDS = 11e-9;
                 table3gpp->m_cASD = 5;
                 table3gpp->m_cASA = 8;
