@@ -24,6 +24,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (point-to-point-layout) The `AssignIpv6Addresses` function signatures has changed and is now analogous to the one of `AssignIpv4Addresses`.
 * (internet-apps) The `LeaseInfo` class in DHCPv6 has been moved from the `ns3` namespace to become a private inner class of `Dhcp6Server` (`Dhcp6Server::LeaseInfo`), as it is an internal data structure not used in any public interface.
 * (mesh) `dot11s::IePreq::GetDestinationList()` is now a const method.
+* (antenna, spectrum) A `PhasedArrayModel` beamforming vector now holds the weights applied to the elements both when transmitting and when receiving: `PhasedArrayModel::GetBeamformingVector(Angles)` returns the normalized steering vector instead of its conjugate, and `ThreeGppSpectrumPropagationLossModel` and `SionnaRtSpectrumPropagationLossModel` no longer conjugate the receive-side weights. Previously, the vector returned by `GetBeamformingVector(Angles)` pointed the beam at the mirror image of the requested direction (through the array plane) when used at the transmitter, while hand-made weights like `exp(-j 2 pi r.u / lambda)` did so at the receiver. Custom beamforming vectors built for the receiver side must be conjugated.
 
 ### Changes to build system
 

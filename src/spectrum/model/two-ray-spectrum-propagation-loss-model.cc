@@ -1040,14 +1040,16 @@ TwoRaySpectrumPropagationLossModel::CalcBeamformingGain(
     std::complex<double> aArrayOverallResponse = 0;
     std::complex<double> bArrayOverallResponse = 0;
 
-    // Compute the dot products between the array responses and the beamforming vectors
+    // Compute the dot products between the array responses and the beamforming vectors.
+    // The array response is the conjugate of the steering vector, as in the 3GPP
+    // channel model, see PhasedArrayModel::SetBeamformingVector
     for (size_t i = 0; i < aPhasedArrayModel->GetNumElems(); i++)
     {
-        aArrayOverallResponse += aArrayResponse[i] * aBeamformingVector[i];
+        aArrayOverallResponse += std::conj(aArrayResponse[i]) * aBeamformingVector[i];
     }
     for (size_t i = 0; i < bPhasedArrayModel->GetNumElems(); i++)
     {
-        bArrayOverallResponse += bArrayResponse[i] * bBeamformingVector[i];
+        bArrayOverallResponse += std::conj(bArrayResponse[i]) * bBeamformingVector[i];
     }
 
     double gain = norm(aArrayOverallResponse) *

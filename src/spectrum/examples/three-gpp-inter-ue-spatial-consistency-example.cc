@@ -80,11 +80,8 @@ PointBeamTowards(Ptr<PhasedArrayModel> antenna,
                  bool taper)
 {
     Angles angles(targetPos, antennaPos);
-    // use the (un-conjugated) steering vector: the 3GPP channel model applies
-    // the ray phase exp(+j 2 pi r.d / lambda), so the coherent combining
-    // weights towards direction r are its element-wise conjugate, which is the
-    // steering vector itself (GetBeamformingVector would conjugate it,
-    // mirroring the beam through the array plane)
+    // start from the steering vector, since the taper is applied before the
+    // power normalization done by GetBeamformingVector
     PhasedArrayModel::ComplexVector bf = antenna->GetSteeringVector(angles);
     Ptr<UniformPlanarArray> upa = DynamicCast<UniformPlanarArray>(antenna);
     uint32_t numCols = upa->GetNumColumns();

@@ -178,7 +178,7 @@ SionnaRtSpectrumPropagationLossModel::CalculateLongTermComponent(
         auto uIndex = startU;
         for (size_t rIndex = 0; rIndex < uPortElems; rIndex++, uIndex++)
         {
-            rxSum += std::conj(uW[uIndex - startU]) * params->m_channel(uIndex, sIndex, cIndex);
+            rxSum += uW[uIndex - startU] * params->m_channel(uIndex, sIndex, cIndex);
             const auto testV = rIndex % uElemsPerPort;
             if (const auto ptInc = uElemsPerPort - 1; testV == ptInc)
             {
