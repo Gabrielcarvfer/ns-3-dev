@@ -1550,7 +1550,9 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             double cfc = -0.13 * log10(fcLspGHz) + 2.03;
             double efc = 7.66 * log10(fcLspGHz) - 5.96;
 
-            double offsetZOD = efc - std::pow(10, afc * log10(std::max(bfc, distance2D)) + cfc);
+            double offsetZOD =
+                efc -
+                std::pow(10, afc * log10(std::max(bfc, distance2D)) + cfc - 0.07 * (hUT - 1.5));
 
             if (!los && !o2i)
             {
