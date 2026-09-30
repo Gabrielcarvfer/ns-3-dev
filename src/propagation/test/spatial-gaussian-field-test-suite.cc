@@ -108,8 +108,8 @@ SpatialGaussianFieldDeterminismTestCase::DoRun()
  * @ingroup propagation-tests
  * The marginal of the field must be N(0,1), the sampled autocorrelation must
  * match the exact autocorrelation of the discrete filter, and the exact
- * autocorrelation must reach 1/e close to the correlation distance, for both
- * cell generators.
+ * autocorrelation must follow exp(-d/dcor) in every direction, for both cell
+ * generators.
  */
 class SpatialGaussianFieldStatisticsTestCase : public TestCase
 {
@@ -158,25 +158,33 @@ SpatialGaussianFieldStatisticsTestCase::ExactAutocorrelation(const Vector& a,
 {
     const auto wa = SpatialGaussianField::ComputeWindow(a, corrDist);
     const auto wb = SpatialGaussianField::ComputeWindow(b, corrDist);
-    // The windows share the cells whose grid coordinates coincide; the
-    // separable weights factorize the inner product into x and y sums.
-    double sx = 0.0;
-    double sy = 0.0;
-    for (std::size_t i = 0; i < SpatialGaussianField::WINDOW_CELLS; i++)
+    // The components are independent, so their covariances add. Within a
+    // component, the windows share the cells whose grid coordinates coincide,
+    // and the separable weights factorize the inner product into x and y sums.
+    double acf = 0.0;
+    for (std::size_t s = 0; s < SpatialGaussianField::NUM_SCALES; s++)
     {
-        for (std::size_t k = 0; k < SpatialGaussianField::WINDOW_CELLS; k++)
+        const auto& sa = wa.scales[s];
+        const auto& sb = wb.scales[s];
+        double sx = 0.0;
+        double sy = 0.0;
+        for (std::size_t i = 0; i < SpatialGaussianField::WINDOW_CELLS; i++)
         {
-            if (wa.ix + static_cast<int64_t>(i) == wb.ix + static_cast<int64_t>(k))
+            for (std::size_t k = 0; k < SpatialGaussianField::WINDOW_CELLS; k++)
             {
-                sx += wa.wx[i] * wb.wx[k];
-            }
-            if (wa.iy + static_cast<int64_t>(i) == wb.iy + static_cast<int64_t>(k))
-            {
-                sy += wa.wy[i] * wb.wy[k];
+                if (sa.ix + static_cast<int64_t>(i) == sb.ix + static_cast<int64_t>(k))
+                {
+                    sx += sa.wx[i] * sb.wx[k];
+                }
+                if (sa.iy + static_cast<int64_t>(i) == sb.iy + static_cast<int64_t>(k))
+                {
+                    sy += sa.wy[i] * sb.wy[k];
+                }
             }
         }
+        acf += sx * sy * sa.gain * sb.gain;
     }
-    return sx * sy * wa.invL2Norm * wb.invL2Norm;
+    return acf;
 }
 
 Vector
@@ -242,30 +250,27 @@ SpatialGaussianFieldStatisticsTestCase::DoRun()
                                                                 << " correlation distances");
     }
 
-    // The exact autocorrelation must reach 1/e close to the correlation
-    // distance (the TR 38.901 exp(-d/dcor) convention), averaged over
-    // directions and grid offsets.
-    const uint32_t nDirections = 90;
-    double crossing = 0.0;
-    for (uint32_t k = 0; k < nDirections; k++)
+    // The exact autocorrelation, averaged over grid offsets, must follow the
+    // exp(-d/dcor) of TR 38.901 in every direction.
+    const uint32_t nOffsets = 200;
+    for (double theta : {0.0, M_PI / 8, M_PI / 4, M_PI / 3})
     {
-        const Vector a(origin.x + 0.37 * k, origin.y + 0.11 * k, 0);
-        const double theta = 2.0 * M_PI * k / nDirections;
-        double lo = 0.0;
-        double hi = 2.0 * corrDist;
-        for (uint32_t it = 0; it < 30; it++)
+        for (double ratio : {0.02, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0})
         {
-            const double mid = 0.5 * (lo + hi);
-            (ExactAutocorrelation(a, Offset(a, mid, theta), corrDist) > std::exp(-1.0) ? lo : hi) =
-                mid;
+            double exact = 0.0;
+            for (uint32_t k = 0; k < nOffsets; k++)
+            {
+                const Vector a(origin.x + 0.173 * k, origin.y + 0.311 * k, 0);
+                exact += ExactAutocorrelation(a, Offset(a, ratio * corrDist, theta), corrDist);
+            }
+            exact /= nOffsets;
+            NS_TEST_ASSERT_MSG_EQ_TOL(exact,
+                                      std::exp(-ratio),
+                                      0.01,
+                                      "Autocorrelation at "
+                                          << ratio << " correlation distances, angle " << theta);
         }
-        crossing += lo;
     }
-    crossing /= nDirections;
-    NS_TEST_ASSERT_MSG_EQ_TOL(crossing / corrDist,
-                              1.0,
-                              0.01,
-                              "Autocorrelation 1/e point in correlation distances");
 
     RngSeedManager::SetSeed(savedSeed);
     RngSeedManager::SetRun(savedRun);
