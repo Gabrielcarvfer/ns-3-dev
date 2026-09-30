@@ -757,6 +757,28 @@ please have a look at the documentation of the classes
     One would expect the angles to be transposed to LCS before checking
     self-blockage.
 
+  * The model follows TR 38.901 V15.0.0. For the implemented UMa, UMi-Street
+    Canyon, RMa and InH scenarios, the tables and equations are unchanged up to
+    V18.0.0, which adds the InF scenario and new features (e.g., absolute time of
+    arrival, dual mobility), which are not implemented. The only V18.0.0 change
+    that affects the implemented model is Procedure A (Sec. 7.6.3.2), generalized
+    to moving base stations, e.g., non-terrestrial satellites. Completing it is
+    the only step left to move the reference from V15.0.0 to V18.0.0. The
+    implementation already includes both endpoint velocities in the delay update
+    (7.6-9) and the cluster-wise velocities (7.6-10b, 7.6-10c), but:
+
+    * only the horizontal (x, y) velocity components are used, in the delay and
+      angle updates, the velocity rotation and the 1 m update step check, while a
+      satellite has a vertical velocity component with respect to the UT;
+    * the y term of the ZOD update (7.6-12) has the opposite sign of the one of
+      :math:`\hat{\theta}(\theta, \phi)`;
+    * NTN nodes report ECEF positions and velocities (e.g.,
+      ``LeoCircularOrbitMobilityModel`` and ``GeocentricEcefMobilityModel``), whose
+      z axis is not the local vertical;
+    * at low Earth orbit speeds (about 7.5 km/s) a satellite moves 1 m in about
+      0.13 ms, so the channel is regenerated rather than updated for any realistic
+      ``UpdatePeriod``, and Procedure A is not applied.
+
   * No error model is provided in this module; a link-to-system campaign may be
     needed to incorporate it in existing modules.
 
