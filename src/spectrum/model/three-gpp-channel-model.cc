@@ -1440,7 +1440,9 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_uLgZSD =
                 std::max(-1.0, -0.19 * (distance2D / 1000.0) - 0.01 * (hUT - 1.5) + 0.28);
             table3gpp->m_sigLgZSD = 0.30;
-            table3gpp->m_offsetZOD = atan((35 - 3.5) / distance2D) - atan((35 - 1.5) / distance2D);
+            // Table 7.5-9 gives the offset through arctangents, in radians
+            table3gpp->m_offsetZOD =
+                RadiansToDegrees(atan((35 - 3.5) / distance2D) - atan((35 - 1.5) / distance2D));
             table3gpp->m_cDS = 3.91e-9;
             table3gpp->m_cASD = 2;
             table3gpp->m_cASA = 3;
@@ -1477,7 +1479,9 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_uLgZSD =
                 std::max(-1.0, -0.19 * (distance2D / 1000.0) - 0.01 * (hUT - 1.5) + 0.28);
             table3gpp->m_sigLgZSD = 0.30;
-            table3gpp->m_offsetZOD = atan((35 - 3.5) / distance2D) - atan((35 - 1.5) / distance2D);
+            // Table 7.5-9 gives the offset through arctangents, in radians
+            table3gpp->m_offsetZOD =
+                RadiansToDegrees(atan((35 - 3.5) / distance2D) - atan((35 - 1.5) / distance2D));
             table3gpp->m_cDS = 3.91e-9;
             table3gpp->m_cASD = 2;
             table3gpp->m_cASA = 3;

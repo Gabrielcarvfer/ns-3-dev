@@ -3375,6 +3375,53 @@ ThreeGppChannelWrapAnglesTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * Test that the RMa ZOD offset of TR 38.901 Table 7.5-9, given through
+ * arctangents, is converted from radians to degrees, as required by
+ * Equation 7.5-19, for the NLOS and O2I links.
+ */
+class ThreeGppRmaZodOffsetTest : public TestCase
+{
+  public:
+    ThreeGppRmaZodOffsetTest()
+        : TestCase("Check the unit of the RMa ZOD offset")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        auto channelModel = CreateObject<ThreeGppChannelModel>();
+        channelModel->SetAttribute("Frequency", DoubleValue(3.5e9));
+        channelModel->SetAttribute("Scenario", StringValue("RMa"));
+        channelModel->SetAttribute("ChannelConditionModel",
+                                   PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+
+        NodeContainer nodes(2);
+        auto siteMob = CreateObject<ConstantPositionMobilityModel>();
+        siteMob->SetPosition(Vector(0, 0, 35));
+        auto utMob = CreateObject<ConstantPositionMobilityModel>();
+        utMob->SetPosition(Vector(500, 0, 1.5));
+        nodes.Get(0)->AggregateObject(siteMob);
+        nodes.Get(1)->AggregateObject(utMob);
+
+        const double expectedDeg = (std::atan((35 - 3.5) / 500.0) - std::atan((35 - 1.5) / 500.0)) *
+                                   180 / M_PI; // about -0.23 degrees
+        for (auto o2i : {ChannelCondition::O2O, ChannelCondition::O2I})
+        {
+            auto cond = CreateObject<ChannelCondition>(ChannelCondition::NLOS, o2i);
+            NS_TEST_EXPECT_MSG_EQ_TOL(
+                channelModel->GetThreeGppTable(siteMob, utMob, cond)->m_offsetZOD,
+                expectedDeg,
+                1e-9,
+                "The RMa ZOD offset should be in degrees");
+        }
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test the K-factor of indoor LOS links. The LOS and O2I states are drawn
  * independently, so an indoor link can be LOS. Scenarios without an O2I column
  * in TR 38.901 Table 7.5-6, such as V2V-Urban, load the LOS column for it, so
@@ -3545,6 +3592,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(new ThreeGppInterUeSpatialConsistencyTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowFadingLspCorrelationTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppIndoorLosLspOrderingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppRmaZodOffsetTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppSubClusterMappingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppLosBlockageAttenuationTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppXprDistributionTest(), TestCase::Duration::QUICK);
