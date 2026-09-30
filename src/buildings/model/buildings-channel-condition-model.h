@@ -67,6 +67,18 @@ class BuildingsChannelConditionModel : public ChannelConditionModel
      */
     int64_t AssignStreams(int64_t stream) override;
 
+    /**
+     * @brief Get the spatial region of the terminal of a link, i.e., the floor
+     *        of the building it is in, counted from 0 for the ground floor.
+     *        Terminals outside buildings fall back to the parent class.
+     *
+     * @param terminal mobility model of the terminal endpoint
+     * @param cond the condition of the link
+     * @return The spatial region identifier.
+     */
+    uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                         Ptr<const ChannelCondition> cond) const override;
+
   private:
     /**
      * @brief Checks if the line of sight between position l1 and position l2 is

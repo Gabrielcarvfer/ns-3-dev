@@ -30,6 +30,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/uniform-planar-array.h"
 
+#include <array>
 #include <cmath>
 #include <complex>
 #include <functional>
@@ -2575,6 +2576,115 @@ ThreeGppInterUeSpatialConsistencyTest::DoRun()
  * @ingroup spectrum-tests
  *
  * Test that, with the InterUeSpatialConsistency attribute of the channel
+ * condition model enabled, the large scale parameters and the shadow fading of
+ * indoor UTs are correlated on the same floor and independent across floors, as
+ * required by Step 4 of TR 38.901 Sec. 7.5 and Table 7.6.3.4-2.
+ *
+ * One UMa site serves groups of three indoor UTs, with the groups far beyond the
+ * Table 7.5-6 correlation distances: a reference UT on the first floor, a UT
+ * 1 m away on the same floor, and a UT at the same horizontal position on the
+ * second floor. The correlation of lg(DS) and of the shadow fading over the
+ * groups must be high for the first pair and close to 0 for the second pair.
+ */
+class ThreeGppFloorSpatialConsistencyTest : public TestCase
+{
+  public:
+    ThreeGppFloorSpatialConsistencyTest()
+        : TestCase("Check the spatial consistency of indoor UTs on the same and different floors")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+ThreeGppFloorSpatialConsistencyTest::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    auto conditionModel = CreateObject<ThreeGppUmaChannelConditionModel>();
+    conditionModel->SetAttribute("O2iThreshold", DoubleValue(1.0)); // all UTs indoor
+    conditionModel->SetAttribute("InterUeSpatialConsistency", BooleanValue(true));
+    conditionModel->SetAttribute("SiteNetDeviceTypes", StringValue("ns3::SimpleNetDevice"));
+
+    auto channelModel = CreateObject<ThreeGppChannelModel>();
+    channelModel->SetAttribute("Frequency", DoubleValue(3.5e9));
+    channelModel->SetAttribute("Scenario", StringValue("UMa"));
+    channelModel->SetAttribute("ChannelConditionModel", PointerValue(conditionModel));
+    channelModel->AssignStreams(1);
+
+    // The shadow fading is the difference of the received powers with and
+    // without it
+    auto lossModel = CreateLossModel<ThreeGppUmaPropagationLossModel>(conditionModel, true);
+    auto lossModelNoShadowing =
+        CreateLossModel<ThreeGppUmaPropagationLossModel>(conditionModel, false);
+    lossModel->SetAttribute("BuildingPenetrationLossesEnabled", BooleanValue(false));
+    lossModelNoShadowing->SetAttribute("BuildingPenetrationLossesEnabled", BooleanValue(false));
+
+    constexpr uint32_t numGroups = 200;
+    NodeContainer nodes(1 + 3 * numGroups);
+    Ptr<Node> siteNode = nodes.Get(0);
+    auto siteDev = CreateObject<SimpleNetDevice>();
+    siteNode->AddDevice(siteDev);
+    siteDev->SetNode(siteNode);
+    auto siteMob = CreateObject<ConstantPositionMobilityModel>();
+    siteMob->SetPosition(Vector(0, 0, 25));
+    siteNode->AggregateObject(siteMob);
+
+    Ptr<PhasedArrayModel> siteAntenna = CreateIsotropicArray(1, 1);
+
+    // lg(DS) and shadow fading of the reference, same floor and upper floor UTs
+    std::array<std::vector<double>, 3> lgDs;
+    std::array<std::vector<double>, 3> sf;
+    for (uint32_t g = 0; g < numGroups; g++)
+    {
+        // Groups on a grid with 200 m spacing, beyond the UMa O2I correlation
+        // distances (at most 25 m)
+        const Vector ref(100.0 + 200.0 * (g % 20), 100.0 + 200.0 * (g / 20), 4.5);
+        const std::array<Vector, 3> positions{ref,
+                                              Vector(ref.x + 1, ref.y, ref.z),
+                                              Vector(ref.x, ref.y, ref.z + 3)};
+        for (uint32_t k = 0; k < 3; k++)
+        {
+            auto ueMob = CreateObject<ConstantPositionMobilityModel>();
+            ueMob->SetPosition(positions[k]);
+            nodes.Get(1 + 3 * g + k)->AggregateObject(ueMob);
+            channelModel->GetChannel(siteMob, ueMob, siteAntenna, CreateIsotropicArray(1, 1));
+            const auto params = DynamicCast<const ThreeGppChannelModel::ThreeGppChannelParams>(
+                channelModel->GetParams(siteMob, ueMob));
+            NS_TEST_ASSERT_MSG_NE(params, nullptr, "Channel params not found for generated link");
+            lgDs[k].push_back(std::log10(params->m_DS));
+            sf[k].push_back(lossModel->CalcRxPower(0, siteMob, ueMob) -
+                            lossModelNoShadowing->CalcRxPower(0, siteMob, ueMob));
+        }
+    }
+
+    const double dsSameFloor = Correlation(lgDs[0], lgDs[1]);
+    const double dsOtherFloor = Correlation(lgDs[0], lgDs[2]);
+    const double sfSameFloor = Correlation(sf[0], sf[1]);
+    const double sfOtherFloor = Correlation(sf[0], sf[2]);
+    NS_LOG_INFO("lg(DS) correlation: same floor " << dsSameFloor << ", other floor "
+                                                  << dsOtherFloor);
+    NS_LOG_INFO("SF correlation: same floor " << sfSameFloor << ", other floor " << sfOtherFloor);
+
+    // With the UMa O2I correlation distances of Table 7.5-6 (10 m for DS and
+    // 7 m for SF), UTs 1 m apart are strongly correlated; the exact value
+    // follows the autocorrelation of SpatialGaussianField, which is smooth at the
+    // origin. With 200 groups, the standard error of a sample correlation is at
+    // most about 0.07.
+    NS_TEST_EXPECT_MSG_GT(dsSameFloor, 0.8, "lg(DS) of UTs 1 m apart on the same floor");
+    NS_TEST_EXPECT_MSG_GT(sfSameFloor, 0.8, "SF of UTs 1 m apart on the same floor");
+    NS_TEST_EXPECT_MSG_EQ_TOL(dsOtherFloor, 0, 0.25, "lg(DS) of UTs on different floors");
+    NS_TEST_EXPECT_MSG_EQ_TOL(sfOtherFloor, 0, 0.25, "SF of UTs on different floors");
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
+ * Test that, with the InterUeSpatialConsistency attribute of the channel
  * condition model enabled, the delay spread drawn by ThreeGppChannelModel is
  * correlated with the shadow fading applied by ThreeGppPropagationLossModel as
  * in TR 38.901 Table 7.5-6, where the shadow fading is a received power gain.
@@ -3515,6 +3625,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
                 TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppInterUeSpatialConsistencyTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowFadingLspCorrelationTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppFloorSpatialConsistencyTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppIndoorLosLspOrderingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRmaZodOffsetTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppSubClusterMappingTest(), TestCase::Duration::QUICK);

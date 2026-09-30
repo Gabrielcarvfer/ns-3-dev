@@ -137,6 +137,17 @@ class SpatialGaussianField
      */
     double SampleUniform(uint64_t fieldKey, const Vector& position, double corrDist) const;
 
+    /**
+     * @brief Key of the field of a spatial region, e.g., a floor, so that the
+     *        fields of different regions are independent. Region 0 leaves the
+     *        key unchanged.
+     *
+     * @param fieldKey Per-field key, see Sample().
+     * @param region The spatial region identifier.
+     * @return The field key of the region.
+     */
+    static uint64_t InRegion(uint64_t fieldKey, uint32_t region);
+
   private:
     /**
      * @brief SplitMix64 mixing round.

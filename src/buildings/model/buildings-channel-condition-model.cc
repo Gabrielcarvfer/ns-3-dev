@@ -181,4 +181,18 @@ BuildingsChannelConditionModel::AssignStreams(int64_t /* stream */)
     return 0;
 }
 
+uint32_t
+BuildingsChannelConditionModel::GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                                            Ptr<const ChannelCondition> cond) const
+{
+    Ptr<MobilityBuildingInfo> info = terminal->GetObject<MobilityBuildingInfo>();
+    // IsIndoor() also updates the building information of a moved terminal
+    if (cond->GetO2iCondition() != ChannelCondition::O2I || !info || !info->IsIndoor())
+    {
+        return ChannelConditionModel::GetSpatialConsistencyRegion(terminal, cond);
+    }
+    // The floors of the buildings module are counted from 1
+    return info->GetFloorNumber() - 1;
+}
+
 } // namespace ns3
