@@ -1022,6 +1022,11 @@ the same attribute, this yields fully spatially-consistent SNR maps, see
 ``three-gpp-inter-ue-spatial-consistency-example``. The temporal evolution of
 an existing link is still governed by Procedure A through ``UpdatePeriod``.
 
+The fields are sampled at the horizontal (x, y) position of the terminal,
+which is not the local ground plane for NTN nodes reporting ECEF positions, so
+the inter-UE spatial consistency does not apply to NTN scenarios, see the
+``propagation`` module documentation.
+
 Procedure B (TR 38.901 Sec. 7.6.3.2) is not implemented in this model.
 
 The initial channel realization for a link is generated using the standard 3GPP
