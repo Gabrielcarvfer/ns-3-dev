@@ -70,38 +70,59 @@ SpatialGaussianField::CellFromPrefix(uint64_t prefix, int64_t ix, int64_t iy) co
     return (sum - 131070.0) * (1.0 / 37837.2267);
 }
 
+namespace
+{
+
+/**
+ * Kernel widths, in correlation distances, and weights of the field
+ * components. A Gaussian kernel of width a yields the autocorrelation
+ * exp(-tau^2 / (4 a^2)); the widths and weights are a least-squares fit of the
+ * weighted sum of these autocorrelations to exp(-tau), with the weights
+ * normalized to sum to one.
+ */
+constexpr std::array<std::pair<double, double>, SpatialGaussianField::NUM_SCALES> kScales{{
+    {0.0153703, 0.0362651},
+    {0.0765684, 0.1118550},
+    {0.2429810, 0.2667510},
+    {0.6088690, 0.3906800},
+    {1.2953600, 0.1944489},
+}};
+
+} // namespace
+
 SpatialGaussianField::Window
 SpatialGaussianField::ComputeWindow(const Vector& position, double corrDist)
 {
     Window win;
-    // Filtering white noise with an exponential kernel of decay length lambda
-    // yields a (1 + tau/lambda) * exp(-tau/lambda) autocorrelation in the
-    // continuum; the half-lambda grid and the 14-cell truncation below decay
-    // faster, so lambda is scaled by the numerically fitted constant that puts
-    // the 1/e point of the discrete filter at tau = corrDist, matching the
-    // exp(-d/dcor) autocorrelation of TR 38.901.
-    const double lambda = corrDist / 1.996;
-    // Grid spacing of half the kernel length resolves the exponential kernel
-    // shape; the 14-cell window covers the +-3*lambda filter support (the
-    // truncated tail carries weight exp(-3), absorbed by the L2
-    // normalization).
-    const double spacing = 0.5 * lambda;
-    win.ix = static_cast<int64_t>(std::floor(position.x / spacing)) - 6;
-    win.iy = static_cast<int64_t>(std::floor(position.y / spacing)) - 6;
-    double wx2Sum = 0.0;
-    double wy2Sum = 0.0;
-    // win.ix and win.iy are negative near the origin: keep the cell index
-    // arithmetic signed, or the sum wraps to a huge unsigned value.
-    for (int64_t k = 0; std::cmp_less(k, WINDOW_CELLS); k++)
+    for (std::size_t s = 0; s < NUM_SCALES; s++)
     {
-        win.wx[k] = std::exp(-std::abs((win.ix + k) * spacing - position.x) / lambda);
-        win.wy[k] = std::exp(-std::abs((win.iy + k) * spacing - position.y) / lambda);
-        wx2Sum += win.wx[k] * win.wx[k];
-        wy2Sum += win.wy[k] * win.wy[k];
+        auto& sw = win.scales[s];
+        const double width = kScales[s].first * corrDist;
+        // A grid spacing equal to the kernel width resolves the kernel shape;
+        // the 6-cell window keeps every cell within 3 widths of the position
+        // on the far side (the truncated tail, below exp(-4.5), is absorbed by
+        // the L2 normalization).
+        const double spacing = width;
+        sw.ix = static_cast<int64_t>(std::floor(position.x / spacing)) - 2;
+        sw.iy = static_cast<int64_t>(std::floor(position.y / spacing)) - 2;
+        const double invTwoWidth2 = 1.0 / (2.0 * width * width);
+        double wx2Sum = 0.0;
+        double wy2Sum = 0.0;
+        // sw.ix and sw.iy are negative near the origin: keep the cell index
+        // arithmetic signed, or the sum wraps to a huge unsigned value.
+        for (int64_t k = 0; std::cmp_less(k, WINDOW_CELLS); k++)
+        {
+            const double dx = (sw.ix + k) * spacing - position.x;
+            const double dy = (sw.iy + k) * spacing - position.y;
+            sw.wx[k] = std::exp(-dx * dx * invTwoWidth2);
+            sw.wy[k] = std::exp(-dy * dy * invTwoWidth2);
+            wx2Sum += sw.wx[k] * sw.wx[k];
+            wy2Sum += sw.wy[k] * sw.wy[k];
+        }
+        // The squared L2 norm of the separable 2D weights factorizes into the
+        // product of the squared 1D norms.
+        sw.gain = std::sqrt(kScales[s].second / (wx2Sum * wy2Sum));
     }
-    // The squared L2 norm of the separable 2D weights factorizes into the
-    // product of the squared 1D norms.
-    win.invL2Norm = 1.0 / std::sqrt(wx2Sum * wy2Sum);
     return win;
 }
 
@@ -115,18 +136,27 @@ double
 SpatialGaussianField::SampleWindowFromPrefix(uint64_t prefix, const Window& win) const
 {
     double acc = 0.0;
-    for (int64_t j = 0; std::cmp_less(j, WINDOW_CELLS); j++)
+    for (std::size_t s = 0; s < NUM_SCALES; s++)
     {
-        double rowAcc = 0.0;
-        for (int64_t i = 0; std::cmp_less(i, WINDOW_CELLS); i++)
+        const auto& sw = win.scales[s];
+        // Independent white noise per component.
+        const uint64_t scalePrefix = SplitMix64(prefix ^ (0xA24BAED4963EE407ULL * (s + 1)));
+        double scaleAcc = 0.0;
+        for (int64_t j = 0; std::cmp_less(j, WINDOW_CELLS); j++)
         {
-            rowAcc += win.wx[i] * CellFromPrefix(prefix, win.ix + i, win.iy + j);
+            double rowAcc = 0.0;
+            for (int64_t i = 0; std::cmp_less(i, WINDOW_CELLS); i++)
+            {
+                rowAcc += sw.wx[i] * CellFromPrefix(scalePrefix, sw.ix + i, sw.iy + j);
+            }
+            scaleAcc += sw.wy[j] * rowAcc;
         }
-        acc += win.wy[j] * rowAcc;
+        acc += sw.gain * scaleAcc;
     }
-    // i.i.d. N(0,1) cell values combined with L2-normalized weights yield an
-    // exactly N(0,1) marginal at every position.
-    return acc * win.invL2Norm;
+    // i.i.d. N(0,1) cell values combined with L2-normalized weights, and
+    // component weights summing to one, yield an exactly N(0,1) marginal at
+    // every position.
+    return acc;
 }
 
 double
