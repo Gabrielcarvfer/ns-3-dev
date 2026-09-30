@@ -45,6 +45,7 @@ but other contemporaneous versions may also work.
 ### Bugs fixed
 
 - (mesh) #682 Mesh regression tests no longer compare against reference PCAP files; they now check HWMP, peer management and FLAME behavior through trace sources.
+- (propagation) #1394 `ThreeGppPropagationLossModel` now draws the shadow fading of outdoor UMa and UMi links below 6 GHz with the standard deviation of TR 38.901 Table 7.4.1-1, instead of the 7 dB that Table 7.4.3-3 defines for O2I links only, and that of O2I links with the deviation and correlation distance of the O2I column of Table 7.5-6. A link whose O2I state changes now draws a new realization.
 
 ## Release 3.49
 

@@ -17,6 +17,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 ### New API
 
 * (mesh) Added the `PreqReceived`, `PrepReceived` and `PerrReceived` trace sources to `dot11s::HwmpProtocol`, fired when a PREQ, PREP or PERR element is received from a neighbor, and `flame::FlameProtocol::GetRoutingTable()`.
+* (propagation) `ThreeGppPropagationLossModel` gained the `GetO2iShadowingStd()` virtual method returning the shadow fading standard deviation of O2I links.
 
 ### Changes to existing API
 
@@ -34,6 +35,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (spectrum) `ThreeGppChannelModel` generates the fast fading of O2I links without a LOS ray, as TR 38.901 Table 7.5-6 has no K-factor for O2I; the LOS state of an O2I link still sets its path loss and ZSD parameters. Channel realizations of O2I links in LOS change.
 * (spectrum) `ThreeGppChannelModel` now converts the RMa NLOS and O2I ZOD offset of TR 38.901 Table 7.5-9, given through arctangents, from radians to degrees; the offset was previously about 57 times too small, so RMa channel realizations change.
 * (propagation, spectrum) With the `InterUeSpatialConsistency` attribute of the channel condition model enabled, the spatially consistent fields of UTs on different floors are independent, as required by TR 38.901: O2I links are assigned the floor of the UT height model (or of the building with `BuildingsChannelConditionModel`) through the new `ChannelConditionModel::GetSpatialConsistencyRegion` method, so realizations of indoor UTs above the ground floor change.
+* (propagation) `ThreeGppPropagationLossModel` now draws the shadow fading of O2I links with the standard deviation of the O2I column of TR 38.901 Table 7.5-6 (7 dB for UMa and UMi, 8 dB for RMa), and that of outdoor UMa and UMi links below 6 GHz with the one of Table 7.4.1-1. Previously every UMa and UMi link below 6 GHz used the 7 dB that Table 7.4.3-3 defines for O2I links only, and O2I links above 6 GHz used the value of their outdoor LOS/NLOS state, so path loss realizations change. With the `InterUeSpatialConsistency` attribute disabled, the shadowing of O2I links is also correlated over the O2I correlation distance of Table 7.5-6 instead of that of their outdoor LOS/NLOS state, and a link whose O2I state changes draws a new realization.
 
 ## Changes from ns-3.48 to ns-3.49
 

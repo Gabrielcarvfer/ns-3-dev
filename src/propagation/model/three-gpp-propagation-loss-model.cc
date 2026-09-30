@@ -836,6 +836,12 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
 {
     NS_LOG_FUNCTION(this);
 
+    // O2I links have their own shadow fading standard deviation (Table 7.5-6)
+    const auto linkCond = m_channelConditionModel->GetChannelCondition(a, b);
+    const bool isO2i = linkCond->GetO2iCondition() == ChannelCondition::O2iConditionValue::O2I;
+    const double shadowingStd =
+        isO2i ? GetO2iShadowingStd(a, b, cond) : GetShadowingStd(a, b, cond);
+
     if (m_channelConditionModel->IsInterUeSpatialConsistencyEnabled())
     {
         // Drop-based spatial consistency (TR 38.901 Sec. 7.6.3.1): draw the
@@ -849,8 +855,6 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
         const Vector termPos = terminal->GetPosition();
         // O2I links own a third field with the O2I correlation distance of
         // Table 7.5-6, as the spec treats O2I as its own state.
-        const auto linkCond = m_channelConditionModel->GetChannelCondition(a, b);
-        const bool isO2i = linkCond->GetO2iCondition() == ChannelCondition::O2iConditionValue::O2I;
         const uint8_t condSlot = isO2i ? 2 : (cond == ChannelCondition::LOS ? 0 : 1);
         const double corrDist =
             isO2i ? GetO2iShadowingCorrelationDistance() : GetShadowingCorrelationDistance(cond);
@@ -858,7 +862,7 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
         const uint32_t region =
             m_channelConditionModel->GetSpatialConsistencyRegion(terminal, linkCond);
         return SampleSpatiallyCorrelatedNormal(siteNodeId, condSlot, region, termPos, corrDist) *
-               GetShadowingStd(a, b, cond);
+               shadowingStd;
     }
 
     double shadowingValue;
@@ -875,7 +879,8 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
         // found the shadowing value in the map
         it = m_shadowingMap.find(key);
         newDistance = GetVectorDifference(a, b);
-        newCondition = (it->second.m_condition != cond); // true if the condition changed
+        // true if the LOS/NLOS or the O2I state changed
+        newCondition = (it->second.m_condition != cond || it->second.m_o2i != isO2i);
     }
     else
     {
@@ -889,17 +894,18 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
     if (notFound || newCondition)
     {
         // generate a new independent realization
-        shadowingValue = m_normRandomVariable->GetValue() * GetShadowingStd(a, b, cond);
+        shadowingValue = m_normRandomVariable->GetValue() * shadowingStd;
     }
     else
     {
         // compute a new correlated shadowing loss
         Vector2D displacement(newDistance.x - it->second.m_distance.x,
                               newDistance.y - it->second.m_distance.y);
-        double R = exp(-1 * displacement.GetLength() / GetShadowingCorrelationDistance(cond));
-        shadowingValue = R * it->second.m_shadowing + sqrt(1 - R * R) *
-                                                          m_normRandomVariable->GetValue() *
-                                                          GetShadowingStd(a, b, cond);
+        const double corrDist =
+            isO2i ? GetO2iShadowingCorrelationDistance() : GetShadowingCorrelationDistance(cond);
+        double R = exp(-1 * displacement.GetLength() / corrDist);
+        shadowingValue = R * it->second.m_shadowing +
+                         sqrt(1 - R * R) * m_normRandomVariable->GetValue() * shadowingStd;
     }
 
     // update the entry in the map
@@ -907,8 +913,18 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
     it->second.m_distance = newDistance; // Save the (0,0,0) vector in case it's the first time we
                                          // are calculating this value
     it->second.m_condition = cond;
+    it->second.m_o2i = isO2i;
 
     return shadowingValue;
+}
+
+double
+ThreeGppPropagationLossModel::GetO2iShadowingStd(Ptr<MobilityModel> a,
+                                                 Ptr<MobilityModel> b,
+                                                 ChannelCondition::LosConditionValue cond) const
+{
+    NS_LOG_FUNCTION(this);
+    return GetShadowingStd(a, b, cond);
 }
 
 double
@@ -1277,6 +1293,17 @@ ThreeGppRmaPropagationLossModel::GetShadowingStd(Ptr<MobilityModel> a,
 }
 
 double
+ThreeGppRmaPropagationLossModel::GetO2iShadowingStd(
+    Ptr<MobilityModel> /* a */,
+    Ptr<MobilityModel> /* b */,
+    ChannelCondition::LosConditionValue /* cond */) const
+{
+    NS_LOG_FUNCTION(this);
+    // See 3GPP TR 38.901, Table 7.5-6 Part-2, O2I column
+    return 8.0;
+}
+
+double
 ThreeGppRmaPropagationLossModel::GetO2iShadowingCorrelationDistance() const
 {
     NS_LOG_FUNCTION(this);
@@ -1529,26 +1556,31 @@ ThreeGppUmaPropagationLossModel::GetShadowingStd(Ptr<MobilityModel> /* a */,
 {
     NS_LOG_FUNCTION(this);
     double shadowingStd;
-    if (m_frequency < 6e9)
+    if (cond == ChannelCondition::LosConditionValue::LOS)
     {
-        shadowingStd = 7.0;
+        shadowingStd = 4.0;
+    }
+    else if (cond == ChannelCondition::LosConditionValue::NLOS)
+    {
+        shadowingStd = 6.0;
     }
     else
     {
-        if (cond == ChannelCondition::LosConditionValue::LOS)
-        {
-            shadowingStd = 4.0;
-        }
-        else if (cond == ChannelCondition::LosConditionValue::NLOS)
-        {
-            shadowingStd = 6.0;
-        }
-        else
-        {
-            NS_FATAL_ERROR("Unknown channel condition");
-        }
+        NS_FATAL_ERROR("Unknown channel condition");
     }
     return shadowingStd;
+}
+
+double
+ThreeGppUmaPropagationLossModel::GetO2iShadowingStd(
+    Ptr<MobilityModel> /* a */,
+    Ptr<MobilityModel> /* b */,
+    ChannelCondition::LosConditionValue /* cond */) const
+{
+    NS_LOG_FUNCTION(this);
+    // See 3GPP TR 38.901, Table 7.5-6 Part-1, O2I column, also the value of Table 7.4.3-3 below 6
+    // GHz
+    return 7.0;
 }
 
 double
@@ -1785,27 +1817,31 @@ ThreeGppUmiStreetCanyonPropagationLossModel::GetShadowingStd(
 {
     NS_LOG_FUNCTION(this);
     double shadowingStd;
-
-    if (m_frequency < 6e9)
+    if (cond == ChannelCondition::LosConditionValue::LOS)
     {
-        shadowingStd = 7.0;
+        shadowingStd = 4.0;
+    }
+    else if (cond == ChannelCondition::LosConditionValue::NLOS)
+    {
+        shadowingStd = 7.82;
     }
     else
     {
-        if (cond == ChannelCondition::LosConditionValue::LOS)
-        {
-            shadowingStd = 4.0;
-        }
-        else if (cond == ChannelCondition::LosConditionValue::NLOS)
-        {
-            shadowingStd = 7.82;
-        }
-        else
-        {
-            NS_FATAL_ERROR("Unknown channel condition");
-        }
+        NS_FATAL_ERROR("Unknown channel condition");
     }
     return shadowingStd;
+}
+
+double
+ThreeGppUmiStreetCanyonPropagationLossModel::GetO2iShadowingStd(
+    Ptr<MobilityModel> /* a */,
+    Ptr<MobilityModel> /* b */,
+    ChannelCondition::LosConditionValue /* cond */) const
+{
+    NS_LOG_FUNCTION(this);
+    // See 3GPP TR 38.901, Table 7.5-6 Part-1, O2I column, also the value of Table 7.4.3-3 below 6
+    // GHz
+    return 7.0;
 }
 
 double
