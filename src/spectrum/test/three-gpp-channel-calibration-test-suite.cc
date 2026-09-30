@@ -1507,8 +1507,8 @@ ThreeGppChannelCalibrationTestSuite::ThreeGppChannelCalibrationTestSuite()
     AddTestCase(new ThreeGppFullCalibrationTestCase({
                     {"UMa", "UMa", 6, 500, 25, 35, 102, 16},
                     {"UMa", "UMa", 30, 500, 25, 35, 102, 16},
-                    {"UMi", "UMi-StreetCanyon", 6, 200, 10, 10, 102, 8},
-                    {"UMi", "UMi-StreetCanyon", 30, 200, 10, 10, 102, 8},
+                    {"UMi", "UMi-StreetCanyon", 6, 200, 10, 10, 102, 32},
+                    {"UMi", "UMi-StreetCanyon", 30, 200, 10, 10, 102, 32},
                     {"InH", "InH-OfficeOpen", 6, 20, 3, 0, 110, 8},
                     {"InH", "InH-OfficeOpen", 30, 20, 3, 0, 110, 8},
                 }),
