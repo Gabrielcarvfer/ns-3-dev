@@ -1332,6 +1332,19 @@ nodes without such devices) take the endpoint with the lower node id as the
 site. Whether a node is a site is determined the first time it is queried and
 cached, so the devices must be installed before the channel is evaluated.
 
+The parameters of UTs on different floors are uncorrelated (TR 38.901 Sec. 7.5,
+Step 4, and Table 7.6.3.4-2), so every field is also owned by a spatial region
+of the terminal, given by the ``GetSpatialConsistencyRegion`` method of the
+channel condition model: fields of different regions are independent, while
+those of a region are correlated with the horizontal distance. By default, O2I
+links are assigned the floor :math:`n_{fl} - 1` of the UT height model
+:math:`h_{UT} = 3(n_{fl} - 1) + 1.5` m of TR 38.901 Table 7.2-1 (the ground
+floor being region 0, as the outdoor links), and the other links region 0. The
+``BuildingsChannelConditionModel`` uses the floor of the building the UT is in,
+while the indoor office models, whose UTs share a floor, and the NTN models,
+see above, use region 0 for all the UTs. As the regions only identify floors,
+UTs on the same floor of nearby buildings remain correlated.
+
 The fields are sampled at the horizontal (x, y) position of the terminal. NTN
 nodes report ECEF positions (e.g., ``GeocentricEcefMobilityModel`` and
 ``LeoCircularOrbitMobilityModel``), whose x and y do not span the local ground

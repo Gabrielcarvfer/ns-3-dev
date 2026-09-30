@@ -849,12 +849,15 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
         const Vector termPos = terminal->GetPosition();
         // O2I links own a third field with the O2I correlation distance of
         // Table 7.5-6, as the spec treats O2I as its own state.
-        const bool isO2i = m_channelConditionModel->GetChannelCondition(a, b)->GetO2iCondition() ==
-                           ChannelCondition::O2iConditionValue::O2I;
+        const auto linkCond = m_channelConditionModel->GetChannelCondition(a, b);
+        const bool isO2i = linkCond->GetO2iCondition() == ChannelCondition::O2iConditionValue::O2I;
         const uint8_t condSlot = isO2i ? 2 : (cond == ChannelCondition::LOS ? 0 : 1);
         const double corrDist =
             isO2i ? GetO2iShadowingCorrelationDistance() : GetShadowingCorrelationDistance(cond);
-        return SampleSpatiallyCorrelatedNormal(siteNodeId, condSlot, termPos, corrDist) *
+        // UTs on different floors have independent fields (TR 38.901 Sec. 7.5 Step 4)
+        const uint32_t region =
+            m_channelConditionModel->GetSpatialConsistencyRegion(terminal, linkCond);
+        return SampleSpatiallyCorrelatedNormal(siteNodeId, condSlot, region, termPos, corrDist) *
                GetShadowingStd(a, b, cond);
     }
 
@@ -920,13 +923,16 @@ ThreeGppPropagationLossModel::GetO2iShadowingCorrelationDistance() const
 double
 ThreeGppPropagationLossModel::SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
                                                               uint8_t condSlot,
+                                                              uint32_t region,
                                                               const Vector& position,
                                                               double corrDist)
 {
-    // One independent field per (site, condition slot).
+    // One independent field per (site, condition slot, spatial region).
     const uint64_t fieldKey =
         (static_cast<uint64_t>(siteNodeId) << 2) | static_cast<uint64_t>(condSlot);
-    return kShadowFadingField.Sample(fieldKey, position, corrDist);
+    return kShadowFadingField.Sample(SpatialGaussianField::InRegion(fieldKey, region),
+                                     position,
+                                     corrDist);
 }
 
 int64_t

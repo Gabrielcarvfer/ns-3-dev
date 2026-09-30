@@ -2760,14 +2760,16 @@ ThreeGppChannelModel::GetLspCorrelationDistances(std::array<double, 7>& los,
 double
 ThreeGppChannelModel::SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
                                                       uint8_t condSlot,
+                                                      uint32_t region,
                                                       uint32_t varId,
                                                       const Vector& position,
                                                       double corrDist) const
 {
-    // One independent field per (site, condition slot, variate).
-    const uint64_t fieldKey = (static_cast<uint64_t>(siteNodeId) << 32) |
-                              (static_cast<uint64_t>(condSlot) << 29) |
-                              static_cast<uint64_t>(varId);
+    // One independent field per (site, condition slot, spatial region, variate).
+    const uint64_t fieldKey = SpatialGaussianField::InRegion(
+        (static_cast<uint64_t>(siteNodeId) << 32) | (static_cast<uint64_t>(condSlot) << 29) |
+            static_cast<uint64_t>(varId),
+        region);
 
     if (corrDist <= 0.0)
     {
@@ -2832,6 +2834,7 @@ ThreeGppChannelModel::ScNormal(uint32_t varId) const
     }
     return SampleSpatiallyCorrelatedNormal(m_scDrawCtx.siteNodeId,
                                            m_scDrawCtx.condSlot,
+                                           m_scDrawCtx.region,
                                            varId,
                                            m_scDrawCtx.termPos,
                                            m_scDrawCtx.corrDist);
@@ -2889,6 +2892,9 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
         const auto& corrDist = isO2i ? corrO2i : (isLos ? corrLos : corrNlos);
         const uint32_t siteNodeId = siteMob->GetObject<Node>()->GetId();
         const Vector termPos = termMob->GetPosition();
+        // UTs on different floors have independent fields (TR 38.901 Sec. 7.5 Step 4)
+        const uint32_t region =
+            m_channelConditionModel->GetSpatialConsistencyRegion(termMob, channelCondition);
         // The SF variate is the one of the shadow fading applied by
         // ThreeGppPropagationLossModel, which samples the same field with the
         // same Table 7.5-6 correlation distance. As the first row of every
@@ -2900,6 +2906,7 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
         lspIndepRandomVar[0] =
             -ThreeGppPropagationLossModel::SampleSpatiallyCorrelatedNormal(siteNodeId,
                                                                            condSlot,
+                                                                           region,
                                                                            termPos,
                                                                            corrDist[0]);
         for (uint8_t paramId = 1; paramId < numLsps; paramId++)
@@ -2910,6 +2917,7 @@ ThreeGppChannelModel::GenerateLSPs(Ptr<const ChannelCondition> channelCondition,
             lspIndepRandomVar[paramId] =
                 SampleSpatiallyCorrelatedNormal(siteNodeId,
                                                 isK ? 0 : condSlot,
+                                                region,
                                                 paramId,
                                                 termPos,
                                                 isK ? corrLos[1] : corrDist[paramId]);
@@ -4290,6 +4298,8 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
         m_scDrawCtx.siteNodeId = siteMob->GetObject<Node>()->GetId();
         m_scDrawCtx.condSlot =
             isO2i ? 2 : (channelParams->m_losCondition == ChannelCondition::LOS ? 0 : 1);
+        m_scDrawCtx.region =
+            m_channelConditionModel->GetSpatialConsistencyRegion(termMob, channelCondition);
         m_scDrawCtx.termPos = termMob->GetPosition();
         m_scDrawCtx.corrDist = GetClusterCorrelationDistance(channelParams->m_losCondition, isO2i);
     }

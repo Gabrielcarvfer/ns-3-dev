@@ -317,6 +317,20 @@ ChannelConditionModel::GetSiteAndTerminal(Ptr<const MobilityModel> a,
     return {b, a};
 }
 
+uint32_t
+ChannelConditionModel::GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                                   Ptr<const ChannelCondition> cond) const
+{
+    if (cond->GetO2iCondition() != ChannelCondition::O2I)
+    {
+        return 0;
+    }
+    // Floor of the UT height model hUT = 3 (nfl - 1) + 1.5 of TR 38.901
+    // Table 7.2-1, the ground floor being region 0 as the outdoor UTs
+    const double floor = std::round((terminal->GetPosition().z - 1.5) / 3.0);
+    return floor > 0 ? static_cast<uint32_t>(floor) : 0;
+}
+
 // ------------------------------------------------------------------------- //
 
 NS_OBJECT_ENSURE_REGISTERED(AlwaysLosChannelConditionModel);
@@ -1163,6 +1177,54 @@ ThreeGppNTNRuralChannelConditionModel::ComputePlos(Ptr<const MobilityModel> a,
     // The elevation angle is first quantized to one of the reference angles.
     auto [elevAngle, quantizedElevAngle] = GetQuantizedElevationAngle(a, b);
     return SuburbanRuralLOSProb.at(quantizedElevAngle);
+}
+
+uint32_t
+ThreeGppIndoorMixedOfficeChannelConditionModel::GetSpatialConsistencyRegion(
+    Ptr<const MobilityModel> /* terminal */,
+    Ptr<const ChannelCondition> /* cond */) const
+{
+    return 0;
+}
+
+uint32_t
+ThreeGppIndoorOpenOfficeChannelConditionModel::GetSpatialConsistencyRegion(
+    Ptr<const MobilityModel> /* terminal */,
+    Ptr<const ChannelCondition> /* cond */) const
+{
+    return 0;
+}
+
+uint32_t
+ThreeGppNTNDenseUrbanChannelConditionModel::GetSpatialConsistencyRegion(
+    Ptr<const MobilityModel> /* terminal */,
+    Ptr<const ChannelCondition> /* cond */) const
+{
+    return 0;
+}
+
+uint32_t
+ThreeGppNTNUrbanChannelConditionModel::GetSpatialConsistencyRegion(
+    Ptr<const MobilityModel> /* terminal */,
+    Ptr<const ChannelCondition> /* cond */) const
+{
+    return 0;
+}
+
+uint32_t
+ThreeGppNTNSuburbanChannelConditionModel::GetSpatialConsistencyRegion(
+    Ptr<const MobilityModel> /* terminal */,
+    Ptr<const ChannelCondition> /* cond */) const
+{
+    return 0;
+}
+
+uint32_t
+ThreeGppNTNRuralChannelConditionModel::GetSpatialConsistencyRegion(
+    Ptr<const MobilityModel> /* terminal */,
+    Ptr<const ChannelCondition> /* cond */) const
+{
+    return 0;
 }
 
 } // namespace ns3
