@@ -268,7 +268,7 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         double m_uLgZSD = 0;
         //! Standard deviation of 10-base logarithm of zenith angle spread of departure
         double m_sigLgZSD = 0;
-        double m_offsetZOD = 0;              //!< Offset of a zenith angle of departure
+        double m_offsetZOD = 0;              //!< Offset of a zenith angle of departure [deg]
         double m_cDS = 0;                    //!< Cluster DS
         double m_cASD = 0;                   //!< Cluster ASD (Azimuth angle Spread of Departure)
         double m_cASA = 0;                   //!< Cluster ASA (Azimuth angle Spread of Arrival)
