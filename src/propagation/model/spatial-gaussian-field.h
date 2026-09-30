@@ -28,17 +28,18 @@ namespace ns3
  * spatial consistency of 3GPP TR 38.901 Sec. 7.6.3.1, and the absence of
  * mutable state makes the field thread-safe.
  *
- * The field is white noise on a fixed grid (one hashed N(0,1) value per cell)
- * filtered with a separable exponential kernel, L2-normalized so that every
- * position has an exactly N(0,1) marginal, with the decay length scaled so
- * that the autocorrelation equals 1/e at the correlation distance as the
- * exp(-d/dcor) of TR 38.901.
+ * The field is the sum of NUM_SCALES independent components, each white
+ * noise on a grid (one hashed N(0,1) value per cell) filtered with a separable
+ * Gaussian kernel. A Gaussian kernel yields a Gaussian autocorrelation, which
+ * is both separable and isotropic, and the exponential is a scale mixture of
+ * Gaussians, so weighting components of geometrically spread kernel widths
+ * reproduces the exp(-d/dcor) autocorrelation of TR 38.901 in every
+ * direction. Each component is L2-normalized and the weights sum to one, so
+ * every position has an exactly N(0,1) marginal.
  *
- * @note The autocorrelation is not exactly exponential: it is smooth at the
- * origin, within about 0.04 of exp(-d/dcor) up to three correlation distances
- * and exactly zero beyond. A spec-exact sum-of-sinusoids field (the QuaDRiGa
- * approach) would carry a ripple of about 0.05 at every lag and cost more per
- * sample, which was judged not worth the complexity.
+ * @note The autocorrelation is within 0.006 of exp(-d/dcor) at every lag and
+ * direction; the residual is the error of the five-component fit, largest
+ * below 0.1 correlation distances, where the exponential has its cusp.
  */
 class SpatialGaussianField
 {
@@ -52,21 +53,34 @@ class SpatialGaussianField
         IrwinHall
     };
 
-    /// Number of grid cells per dimension of a filter window.
-    static constexpr std::size_t WINDOW_CELLS = 14;
+    /// Number of Gaussian-kernel components summed into the field.
+    static constexpr std::size_t NUM_SCALES = 5;
+
+    /// Number of grid cells per dimension of the filter window of a component.
+    static constexpr std::size_t WINDOW_CELLS = 6;
 
     /**
-     * @brief Filter window of one sampling position (grid origin, separable weights and
-     *        their L2 normalization), computed once with ComputeWindow() and reusable
-     *        with SampleWindow() for every field sampled at that position.
+     * @brief Filter window of one component at one sampling position (grid
+     *        origin, separable weights and gain).
      */
-    struct Window
+    struct ScaleWindow
     {
         int64_t ix{0};                         ///< grid x-coordinate of the first window cell
         int64_t iy{0};                         ///< grid y-coordinate of the first window cell
         std::array<double, WINDOW_CELLS> wx{}; ///< separable filter weights along x
         std::array<double, WINDOW_CELLS> wy{}; ///< separable filter weights along y
-        double invL2Norm{0};                   ///< reciprocal L2 norm of the 2D weights
+        /// Square root of the component weight over the L2 norm of the 2D filter weights
+        double gain{0};
+    };
+
+    /**
+     * @brief Filter windows of every component at one sampling position,
+     *        computed once with ComputeWindow() and reusable with
+     *        SampleWindow() for every field sampled at that position.
+     */
+    struct Window
+    {
+        std::array<ScaleWindow, NUM_SCALES> scales{}; ///< per-component windows
     };
 
     /**

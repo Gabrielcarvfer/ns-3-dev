@@ -1322,7 +1322,11 @@ consistent by construction.
 
 The spatially consistent random variables are samples of
 ``SpatialGaussianField`` random fields owned by the site (base station)
-endpoint of a link and evaluated at the position of the terminal endpoint. A
+endpoint of a link and evaluated at the position of the terminal endpoint.
+Their autocorrelation is the exp(-d/dcor) of TR 38.901 in every horizontal
+direction, within 0.006: as the exponential is a scale mixture of Gaussians,
+each field is a weighted sum of five independent white-noise grids filtered
+with Gaussian kernels of geometrically spread widths. A
 site is a node holding a net device of one of the types listed in the
 "SiteNetDeviceTypes" attribute, by default the LTE eNB and NR gNB devices. The
 types are looked up by name, so the ``propagation`` module does not depend on
