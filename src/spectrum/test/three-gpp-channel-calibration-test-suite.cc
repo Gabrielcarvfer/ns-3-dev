@@ -1071,8 +1071,16 @@ ThreeGppFullCalibrationTestCase::RunSetup(const FullCalibrationSetup& setup)
     // TR 38.901 Annex A, for the comparison with Sionna.
     std::map<calibration::Metric, std::vector<double>> pathGainSamples;
 
+    // Every drop is an independent realization, as in the 3GPP calibration, so
+    // it uses its own run of the random number generator. The spatially
+    // consistent O2I building type and indoor state are properties of the
+    // terminal position, shared by all the sites: with a single run, all the
+    // drops would sample the same map of buildings, and the percentiles would
+    // carry the offset of that map.
+    const uint64_t firstRun = RngSeedManager::GetRun();
     for (uint32_t drop = 0; drop < setup.numDrops; drop++)
     {
+        RngSeedManager::SetRun(firstRun + drop);
         // Sites, and for the wrapped layouts the 6 wrap-around images of each.
         std::vector<Vector> sites;
         if (indoorScenario)
@@ -1358,6 +1366,7 @@ ThreeGppFullCalibrationTestCase::RunSetup(const FullCalibrationSetup& setup)
             addSpreads(pathGainSamples, siteMobs[u][bestSite], &AngleSpreadA1);
         }
     }
+    RngSeedManager::SetRun(firstRun);
 
     const std::map<calibration::Metric, std::string> names{
         {calibration::Metric::COUPLING_LOSS, "coupling loss (dB)"},
