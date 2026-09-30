@@ -998,7 +998,9 @@ enabled (see the ``propagation`` module documentation, which also describes how
 the site nodes are designated), the normal variates feeding the LSP
 cross-correlation are samples of ``SpatialGaussianField`` random fields
 evaluated at the terminal position (TR 38.901 Sec. 7.6.3.1), one field per
-site, channel condition (LOS/NLOS/O2I) and LSP, with the correlation
+site, channel condition (LOS/NLOS/O2I), spatial region (the floor of an indoor
+UT, as the parameters of UTs on different floors are uncorrelated) and LSP,
+with the correlation
 distances of Table 7.5-6 (V2V and NTN fall back to the UMa distances). The
 fields are pure functions of position, identical across model instances, so
 links from the same site to nearby terminals obtain correlated LSPs, a channel

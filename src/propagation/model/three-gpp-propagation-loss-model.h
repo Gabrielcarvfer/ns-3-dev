@@ -84,8 +84,9 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
 
     /**
      * @brief Sample the SpatialGaussianField of shadow fading owned by a
-     *        (site, condition slot) pair, see the InterUeSpatialConsistency
-     *        attribute of ChannelConditionModel.
+     *        (site, condition slot, spatial region) triple, see the
+     *        InterUeSpatialConsistency attribute and the
+     *        GetSpatialConsistencyRegion() method of ChannelConditionModel.
      *
      * The shadow fading of a link is this sample times the shadow fading
      * standard deviation. ThreeGppChannelModel draws the SF entry of its large
@@ -95,6 +96,7 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
      *
      * @param siteNodeId Node id of the site endpoint owning the field.
      * @param condSlot Channel condition slot (0 = LOS, 1 = NLOS, 2 = O2I).
+     * @param region Spatial region of the terminal, e.g., its floor.
      * @param position Sampling position (only x and y are used).
      * @param corrDist Correlation distance in meters; non-positive values
      *        degrade to a single deterministic draw at the position.
@@ -102,6 +104,7 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
      */
     static double SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
                                                   uint8_t condSlot,
+                                                  uint32_t region,
                                                   const Vector& position,
                                                   double corrDist);
 

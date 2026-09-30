@@ -33,6 +33,12 @@ SpatialGaussianField::SplitMix64(uint64_t x)
 }
 
 uint64_t
+SpatialGaussianField::InRegion(uint64_t fieldKey, uint32_t region)
+{
+    return region == 0 ? fieldKey : SplitMix64(fieldKey ^ SplitMix64(region));
+}
+
+uint64_t
 SpatialGaussianField::Prefix(uint64_t fieldKey) const
 {
     uint64_t h = SplitMix64(static_cast<uint64_t>(RngSeedManager::GetSeed()));

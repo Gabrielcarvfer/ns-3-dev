@@ -479,11 +479,13 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
 
     /**
      * @brief Sample the SpatialGaussianField owned by a (site, condition slot,
-     *        variate) triple, see the InterUeSpatialConsistency attribute of
-     *        ChannelConditionModel.
+     *        spatial region, variate) quadruple, see the
+     *        InterUeSpatialConsistency attribute of ChannelConditionModel.
      *
      * @param siteNodeId Node id of the site endpoint owning the field.
      * @param condSlot Channel condition slot (0=LOS, 1=NLOS, 2=O2I).
+     * @param region Spatial region of the terminal, e.g., its floor, see
+     *        ChannelConditionModel::GetSpatialConsistencyRegion().
      * @param varId Identifier of the random variate (LSP index, or a
      *        cluster/ray-specific variate id, see ScFieldNormal).
      * @param position Sampling position (only x and y are used).
@@ -493,6 +495,7 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      */
     double SampleSpatiallyCorrelatedNormal(uint32_t siteNodeId,
                                            uint8_t condSlot,
+                                           uint32_t region,
                                            uint32_t varId,
                                            const Vector& position,
                                            double corrDist) const;
@@ -522,6 +525,7 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         bool active{false};     ///< whether spatially-consistent draws are active
         uint32_t siteNodeId{0}; ///< node id of the site endpoint
         uint8_t condSlot{0};    ///< condition slot (0=LOS, 1=NLOS, 2=O2I)
+        uint32_t region{0};     ///< spatial region of the terminal, e.g., its floor
         Vector termPos;         ///< terminal position sampling the fields
         double corrDist{0};     ///< cluster-RV correlation distance in meters
     };

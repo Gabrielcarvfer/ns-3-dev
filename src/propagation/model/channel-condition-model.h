@@ -300,6 +300,24 @@ class ChannelConditionModel : public Object
         Ptr<const MobilityModel> a,
         Ptr<const MobilityModel> b) const;
 
+    /**
+     * @brief Get the spatial region of the terminal of a link, i.e., its floor.
+     *
+     * TR 38.901 Step 4 of Sec. 7.5 and Table 7.6.3.4-2 require the parameters of
+     * UTs on different floors to be uncorrelated, so the spatially consistent
+     * random fields of different regions are independent (see
+     * SpatialGaussianField::InRegion()), while those of a region are correlated
+     * with the horizontal distance. By default, O2I links are assigned the floor
+     * of the UT height model of TR 38.901 Table 7.2-1,
+     * \f$h_{UT} = 3(n_{fl} - 1) + 1.5\f$, and the other links region 0.
+     *
+     * @param terminal mobility model of the terminal endpoint, see GetSiteAndTerminal()
+     * @param cond the condition of the link
+     * @return The spatial region identifier.
+     */
+    virtual uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                                 Ptr<const ChannelCondition> cond) const;
+
   private:
     /**
      * @brief Check whether a node is a site, i.e., whether it holds a net
@@ -805,6 +823,17 @@ class ThreeGppIndoorMixedOfficeChannelConditionModel : public ThreeGppChannelCon
 
     double GetLosNlosStateCorrelationDistance() const override;
 
+    /**
+     * @brief Get the spatial region of the terminal of a link. All the UTs of
+     *        the single-floor office share one region.
+     *
+     * @param terminal mobility model of the terminal endpoint
+     * @param cond the condition of the link
+     * @return 0
+     */
+    uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                         Ptr<const ChannelCondition> cond) const override;
+
   private:
     /**
      * Compute the LOS probability as specified in Table 7.4.2-1 of 3GPP TR 38.901
@@ -847,6 +876,17 @@ class ThreeGppIndoorOpenOfficeChannelConditionModel : public ThreeGppChannelCond
 
     double GetLosNlosStateCorrelationDistance() const override;
 
+    /**
+     * @brief Get the spatial region of the terminal of a link. All the UTs of
+     *        the single-floor office share one region.
+     *
+     * @param terminal mobility model of the terminal endpoint
+     * @param cond the condition of the link
+     * @return 0
+     */
+    uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                         Ptr<const ChannelCondition> cond) const override;
+
   private:
     /**
      * Compute the LOS probability as specified in Table 7.4.2-1 of 3GPP TR 38.901
@@ -886,6 +926,18 @@ class ThreeGppNTNDenseUrbanChannelConditionModel : public ThreeGppChannelConditi
      */
     ~ThreeGppNTNDenseUrbanChannelConditionModel() override = default;
 
+    /**
+     * @brief Get the spatial region of the terminal of a link. NTN nodes report
+     *        ECEF positions, whose z axis is not the local vertical, so all the
+     *        UTs share one region.
+     *
+     * @param terminal mobility model of the terminal endpoint
+     * @param cond the condition of the link
+     * @return 0
+     */
+    uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                         Ptr<const ChannelCondition> cond) const override;
+
   private:
     /**
      * @copydoc ThreeGppChannelConditionModel::ComputePlos
@@ -922,6 +974,18 @@ class ThreeGppNTNUrbanChannelConditionModel : public ThreeGppChannelConditionMod
      * Destructor for the ThreeGppNTNUrbanChannelConditionModel class
      */
     ~ThreeGppNTNUrbanChannelConditionModel() override = default;
+
+    /**
+     * @brief Get the spatial region of the terminal of a link. NTN nodes report
+     *        ECEF positions, whose z axis is not the local vertical, so all the
+     *        UTs share one region.
+     *
+     * @param terminal mobility model of the terminal endpoint
+     * @param cond the condition of the link
+     * @return 0
+     */
+    uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                         Ptr<const ChannelCondition> cond) const override;
 
   private:
     /**
@@ -960,6 +1024,18 @@ class ThreeGppNTNSuburbanChannelConditionModel : public ThreeGppChannelCondition
      */
     ~ThreeGppNTNSuburbanChannelConditionModel() override = default;
 
+    /**
+     * @brief Get the spatial region of the terminal of a link. NTN nodes report
+     *        ECEF positions, whose z axis is not the local vertical, so all the
+     *        UTs share one region.
+     *
+     * @param terminal mobility model of the terminal endpoint
+     * @param cond the condition of the link
+     * @return 0
+     */
+    uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                         Ptr<const ChannelCondition> cond) const override;
+
   private:
     /**
      * @copydoc ThreeGppChannelConditionModel::ComputePlos
@@ -996,6 +1072,18 @@ class ThreeGppNTNRuralChannelConditionModel : public ThreeGppChannelConditionMod
      * Destructor for the ThreeGppNTNRuralChannelConditionModel class
      */
     ~ThreeGppNTNRuralChannelConditionModel() override = default;
+
+    /**
+     * @brief Get the spatial region of the terminal of a link. NTN nodes report
+     *        ECEF positions, whose z axis is not the local vertical, so all the
+     *        UTs share one region.
+     *
+     * @param terminal mobility model of the terminal endpoint
+     * @param cond the condition of the link
+     * @return 0
+     */
+    uint32_t GetSpatialConsistencyRegion(Ptr<const MobilityModel> terminal,
+                                         Ptr<const ChannelCondition> cond) const override;
 
   private:
     /**

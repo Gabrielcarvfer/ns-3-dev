@@ -33,6 +33,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (propagation, spectrum) With the `InterUeSpatialConsistency` attribute of the channel condition model enabled, `ThreeGppChannelModel` draws the shadow fading entry of its large scale parameter vector from the shadow fading field of `ThreeGppPropagationLossModel`, so the delay and angular spreads are cross-correlated with the shadow fading applied to the link as in TR 38.901 Table 7.5-6; channel realizations change.
 * (spectrum) `ThreeGppChannelModel` generates the fast fading of O2I links without a LOS ray, as TR 38.901 Table 7.5-6 has no K-factor for O2I; the LOS state of an O2I link still sets its path loss and ZSD parameters. Channel realizations of O2I links in LOS change.
 * (spectrum) `ThreeGppChannelModel` now converts the RMa NLOS and O2I ZOD offset of TR 38.901 Table 7.5-9, given through arctangents, from radians to degrees; the offset was previously about 57 times too small, so RMa channel realizations change.
+* (propagation, spectrum) With the `InterUeSpatialConsistency` attribute of the channel condition model enabled, the spatially consistent fields of UTs on different floors are independent, as required by TR 38.901: O2I links are assigned the floor of the UT height model (or of the building with `BuildingsChannelConditionModel`) through the new `ChannelConditionModel::GetSpatialConsistencyRegion` method, so realizations of indoor UTs above the ground floor change.
 
 ## Changes from ns-3.48 to ns-3.49
 
