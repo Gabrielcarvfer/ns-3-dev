@@ -15,6 +15,7 @@
 #include "ns3/log.h"
 #include "ns3/mobility-helper.h"
 #include "ns3/node.h"
+#include "ns3/pointer.h"
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simple-net-device.h"
 #include "ns3/simulator.h"
@@ -22,6 +23,9 @@
 #include "ns3/test.h"
 #include "ns3/three-gpp-propagation-loss-model.h"
 #include "ns3/three-gpp-v2v-propagation-loss-model.h"
+
+#include <functional>
+#include <numeric>
 
 using namespace ns3;
 
@@ -1245,8 +1249,8 @@ ThreeGppShadowingTestCase::DoRun()
     testVector.m_hBs = 25;
     testVector.m_hUt = 1.6;
     testVector.m_distance = 100;
-    testVector.m_shadowingStdLos = 7;
-    testVector.m_shadowingStdNlos = 7;
+    testVector.m_shadowingStdLos = 4;
+    testVector.m_shadowingStdNlos = 6;
     m_testVectors.Add(testVector);
 
     testVector.m_frequency = 3.5e9;
@@ -1254,8 +1258,8 @@ ThreeGppShadowingTestCase::DoRun()
     testVector.m_hBs = 10;
     testVector.m_hUt = 1.6;
     testVector.m_distance = 100;
-    testVector.m_shadowingStdLos = 7;
-    testVector.m_shadowingStdNlos = 7;
+    testVector.m_shadowingStdLos = 4;
+    testVector.m_shadowingStdNlos = 7.82;
     m_testVectors.Add(testVector);
 
     uint16_t numSamples = 400;
@@ -1330,6 +1334,339 @@ ThreeGppShadowingTestCase::DoRun()
                 "Null hypothesis test (NLOS case) for the shadowing component rejected");
         }
     }
+}
+
+/**
+ * @ingroup propagation-tests
+ *
+ * Test that the standard deviation of the shadow fading follows TR 38.901
+ * Table 7.5-6: the one of Table 7.4.1-1 for the outdoor LOS and NLOS states,
+ * and the one of the O2I column for O2I links, whatever the LOS state of their
+ * outdoor part, below and above 6 GHz. The shadow fading is the difference
+ * between the losses with and without shadowing; with the inter-UE spatial
+ * consistency enabled the O2I penetration loss, drawn from a field at the
+ * terminal position, is the same in both and cancels out. Every sample has its
+ * own site, so that the fields of the samples are independent.
+ */
+class ThreeGppShadowingStdTestCase : public TestCase
+{
+  public:
+    ThreeGppShadowingStdTestCase();
+
+  private:
+    void DoRun() override;
+
+    /// Scenario under test
+    struct Scenario
+    {
+        std::string lossModel;      ///< the propagation loss model type id
+        std::string conditionModel; ///< the channel condition model type id
+        double hBs;                 ///< the BS height in meters
+        double distance;            ///< the 2D distance in meters
+        double stdLos;              ///< the expected shadowing std of outdoor LOS links in dB
+        double stdNlos;             ///< the expected shadowing std of outdoor NLOS links in dB
+        double stdO2i;              ///< the expected shadowing std of O2I links in dB
+    };
+};
+
+ThreeGppShadowingStdTestCase::ThreeGppShadowingStdTestCase()
+    : TestCase("Test the standard deviation of the shadow fading per link state")
+{
+}
+
+void
+ThreeGppShadowingStdTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    const uint32_t numSites = 3000;
+    // Sites first, so that they have the lowest node ids and are the site
+    // endpoint of every link.
+    NodeContainer sites;
+    sites.Create(numSites);
+    for (auto it = sites.Begin(); it != sites.End(); ++it)
+    {
+        (*it)->AggregateObject(CreateObject<ConstantPositionMobilityModel>());
+    }
+    Ptr<Node> terminal = CreateObject<Node>();
+    Ptr<MobilityModel> termMob = CreateObject<ConstantPositionMobilityModel>();
+    terminal->AggregateObject(termMob);
+
+    // The RMa distance is below the LOS breakpoint distance.
+    const std::vector<Scenario> scenarios{
+        {"ns3::ThreeGppUmaPropagationLossModel",
+         "ns3::ThreeGppUmaChannelConditionModel",
+         25,
+         50,
+         4,
+         6,
+         7},
+        {"ns3::ThreeGppUmiStreetCanyonPropagationLossModel",
+         "ns3::ThreeGppUmiStreetCanyonChannelConditionModel",
+         10,
+         30,
+         4,
+         7.82,
+         7},
+        {"ns3::ThreeGppRmaPropagationLossModel",
+         "ns3::ThreeGppRmaChannelConditionModel",
+         35,
+         1000,
+         4,
+         8,
+         8},
+    };
+    for (const auto& sc : scenarios)
+    {
+        for (double fc : {3.5e9, 28e9})
+        {
+            if (sc.lossModel == "ns3::ThreeGppRmaPropagationLossModel" && fc > 7e9)
+            {
+                continue;
+            }
+            for (bool o2i : {false, true})
+            {
+                ObjectFactory condFactory(sc.conditionModel);
+                condFactory.Set("InterUeSpatialConsistency", BooleanValue(true));
+                condFactory.Set("O2iThreshold", DoubleValue(o2i ? 1.0 : 0.0));
+                auto condModel = condFactory.Create<ChannelConditionModel>();
+                ObjectFactory lossFactory(sc.lossModel);
+                lossFactory.Set("Frequency", DoubleValue(fc));
+                lossFactory.Set("ChannelConditionModel", PointerValue(condModel));
+                auto lossOn = lossFactory.Create<ThreeGppPropagationLossModel>();
+                lossFactory.Set("ShadowingEnabled", BooleanValue(false));
+                auto lossOff = lossFactory.Create<ThreeGppPropagationLossModel>();
+
+                termMob->SetPosition(Vector(sc.distance, 0, 1.5));
+                // shadow fading samples of the LOS and NLOS outdoor states
+                std::array<std::vector<double>, 2> sf;
+                for (auto it = sites.Begin(); it != sites.End(); ++it)
+                {
+                    auto siteMob = (*it)->GetObject<MobilityModel>();
+                    siteMob->SetPosition(Vector(0, 0, sc.hBs));
+                    const bool los = condModel->GetChannelCondition(siteMob, termMob)->IsLos();
+                    sf[los ? 0 : 1].push_back(lossOn->CalcRxPower(0, siteMob, termMob) -
+                                              lossOff->CalcRxPower(0, siteMob, termMob));
+                }
+                for (bool los : {true, false})
+                {
+                    const auto& x = sf[los ? 0 : 1];
+                    NS_ABORT_MSG_IF(x.size() < 300, "Too few samples of a link state");
+                    double mean = 0;
+                    double var = 0;
+                    for (double v : x)
+                    {
+                        mean += v / x.size();
+                    }
+                    for (double v : x)
+                    {
+                        var += (v - mean) * (v - mean) / (x.size() - 1);
+                    }
+                    const double expected = o2i ? sc.stdO2i : (los ? sc.stdLos : sc.stdNlos);
+                    // The standard error of a sample standard deviation is
+                    // sigma / sqrt(2 n); the tolerance is 4 standard errors.
+                    NS_TEST_EXPECT_MSG_EQ_TOL(std::sqrt(var),
+                                              expected,
+                                              4 * expected / std::sqrt(2.0 * x.size()),
+                                              sc.lossModel << " at " << fc / 1e9 << " GHz, "
+                                                           << (o2i ? "O2I, " : "")
+                                                           << (los ? "LOS" : "NLOS"));
+                }
+            }
+        }
+    }
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-tests
+ *
+ * Test case for the shadowing of O2I links with the inter-UE spatial consistency
+ * disabled, where each link correlates its shadowing with its previous
+ * evaluation. A moving O2I link must decorrelate with the O2I correlation
+ * distance of TR 38.901 Table 7.5-6 (7 m for UMa), not with the one of its
+ * outdoor LOS state, and a static link whose O2I state changes with the same
+ * LOS state must draw a new realization with the standard deviation of its new
+ * state.
+ */
+class ThreeGppO2iShadowingMapTestCase : public TestCase
+{
+  public:
+    ThreeGppO2iShadowingMapTestCase();
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Channel condition model returning the same condition for every link.
+     */
+    class FixedConditionModel : public ChannelConditionModel
+    {
+      public:
+        Ptr<ChannelCondition> m_cond{CreateObject<ChannelCondition>()}; ///< the condition
+
+        Ptr<ChannelCondition> GetChannelCondition(Ptr<const MobilityModel> a,
+                                                  Ptr<const MobilityModel> b) const override
+        {
+            return m_cond;
+        }
+
+        int64_t AssignStreams(int64_t stream) override
+        {
+            return 0;
+        }
+    };
+
+    /**
+     * Compute the correlation of two sample vectors and the standard deviation
+     * of the second one.
+     *
+     * @param x The first samples.
+     * @param y The second samples, as many as the first ones.
+     * @return The correlation and the sample standard deviation of y.
+     */
+    static std::pair<double, double> CorrelationAndStd(const std::vector<double>& x,
+                                                       const std::vector<double>& y);
+
+    /**
+     * Compute the shadowing of a link, as the difference of the received powers
+     * with and without it.
+     *
+     * @param a The mobility model of one end.
+     * @param b The mobility model of the other end.
+     * @return The shadowing gain in dB.
+     */
+    double GetShadowing(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;
+
+    /**
+     * Draw the shadowing of new links, change their O2I state and move their
+     * terminals, and draw it again. Each call uses its own links, so that their
+     * map entries are new.
+     *
+     * @param first The O2I state of the first draw.
+     * @param second The O2I state of the second draw.
+     * @param move The displacement of the terminals between the draws, in meters.
+     * @return The correlation of the two draws and the standard deviation of the second.
+     */
+    std::pair<double, double> RunScenario(ChannelCondition::O2iConditionValue first,
+                                          ChannelCondition::O2iConditionValue second,
+                                          double move);
+
+    static constexpr uint32_t NUM_LINKS = 4000;  ///< number of links of each scenario
+    Ptr<FixedConditionModel> m_condModel;        ///< channel condition model of the links
+    Ptr<ThreeGppPropagationLossModel> m_lossOn;  ///< loss model with the shadowing
+    Ptr<ThreeGppPropagationLossModel> m_lossOff; ///< loss model without the shadowing
+};
+
+ThreeGppO2iShadowingMapTestCase::ThreeGppO2iShadowingMapTestCase()
+    : TestCase("Test the shadowing of O2I links without the inter-UE spatial consistency")
+{
+}
+
+std::pair<double, double>
+ThreeGppO2iShadowingMapTestCase::CorrelationAndStd(const std::vector<double>& x,
+                                                   const std::vector<double>& y)
+{
+    const double mx = std::accumulate(x.begin(), x.end(), 0.0) / x.size();
+    const double my = std::accumulate(y.begin(), y.end(), 0.0) / y.size();
+    const double sxy =
+        std::transform_reduce(x.begin(),
+                              x.end(),
+                              y.begin(),
+                              0.0,
+                              std::plus<>(),
+                              [mx, my](double u, double v) { return (u - mx) * (v - my); });
+    const double sxx =
+        std::transform_reduce(x.begin(), x.end(), 0.0, std::plus<>(), [mx](double u) {
+            return (u - mx) * (u - mx);
+        });
+    const double syy =
+        std::transform_reduce(y.begin(), y.end(), 0.0, std::plus<>(), [my](double v) {
+            return (v - my) * (v - my);
+        });
+    return {sxy / std::sqrt(sxx * syy), std::sqrt(syy / (y.size() - 1))};
+}
+
+double
+ThreeGppO2iShadowingMapTestCase::GetShadowing(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
+{
+    return m_lossOn->CalcRxPower(0, a, b) - m_lossOff->CalcRxPower(0, a, b);
+}
+
+std::pair<double, double>
+ThreeGppO2iShadowingMapTestCase::RunScenario(ChannelCondition::O2iConditionValue first,
+                                             ChannelCondition::O2iConditionValue second,
+                                             double move)
+{
+    NodeContainer nodes;
+    nodes.Create(2 * NUM_LINKS);
+    std::vector<double> x(NUM_LINKS);
+    std::vector<double> y(NUM_LINKS);
+    std::vector<Ptr<MobilityModel>> sites(NUM_LINKS);
+    std::vector<Ptr<MobilityModel>> terminals(NUM_LINKS);
+    for (uint32_t i = 0; i < NUM_LINKS; i++)
+    {
+        sites[i] = CreateObject<ConstantPositionMobilityModel>();
+        terminals[i] = CreateObject<ConstantPositionMobilityModel>();
+        nodes.Get(2 * i)->AggregateObject(sites[i]);
+        nodes.Get(2 * i + 1)->AggregateObject(terminals[i]);
+        sites[i]->SetPosition(Vector(0, 0, 25));
+        terminals[i]->SetPosition(Vector(200, 0, 1.5));
+    }
+    m_condModel->m_cond->SetO2iCondition(first);
+    for (uint32_t i = 0; i < NUM_LINKS; i++)
+    {
+        x[i] = GetShadowing(sites[i], terminals[i]);
+        terminals[i]->SetPosition(Vector(200, move, 1.5));
+    }
+    m_condModel->m_cond->SetO2iCondition(second);
+    for (uint32_t i = 0; i < NUM_LINKS; i++)
+    {
+        y[i] = GetShadowing(sites[i], terminals[i]);
+    }
+    return CorrelationAndStd(x, y);
+}
+
+void
+ThreeGppO2iShadowingMapTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    m_condModel = CreateObject<FixedConditionModel>();
+    m_condModel->m_cond->SetLosCondition(ChannelCondition::NLOS);
+    ObjectFactory lossFactory("ns3::ThreeGppUmaPropagationLossModel");
+    lossFactory.Set("Frequency", DoubleValue(3.5e9));
+    lossFactory.Set("BuildingPenetrationLossesEnabled", BooleanValue(false));
+    lossFactory.Set("ChannelConditionModel", PointerValue(m_condModel));
+    m_lossOn = lossFactory.Create<ThreeGppPropagationLossModel>();
+    lossFactory.Set("ShadowingEnabled", BooleanValue(false));
+    m_lossOff = lossFactory.Create<ThreeGppPropagationLossModel>();
+
+    // The standard error of a correlation r is (1 - r^2) / sqrt(n), and that of
+    // a sample standard deviation sigma / sqrt(2 n); tolerances are 4 of them.
+    const double n = NUM_LINKS;
+    const double rho = std::exp(-7.0 / 7.0);
+    auto [corrMove, stdMove] = RunScenario(ChannelCondition::O2I, ChannelCondition::O2I, 7);
+    NS_TEST_EXPECT_MSG_EQ_TOL(corrMove,
+                              rho,
+                              4 * (1 - rho * rho) / std::sqrt(n),
+                              "O2I link moved by the O2I correlation distance");
+    NS_TEST_EXPECT_MSG_EQ_TOL(stdMove, 7, 4 * 7 / std::sqrt(2 * n), "O2I std after a move");
+
+    auto [corrIn, stdIn] = RunScenario(ChannelCondition::O2O, ChannelCondition::O2I, 0);
+    NS_TEST_EXPECT_MSG_EQ_TOL(corrIn, 0, 4 / std::sqrt(n), "Static link from O2O to O2I");
+    NS_TEST_EXPECT_MSG_EQ_TOL(stdIn, 7, 4 * 7 / std::sqrt(2 * n), "O2I std after O2O");
+
+    auto [corrOut, stdOut] = RunScenario(ChannelCondition::O2I, ChannelCondition::O2O, 0);
+    NS_TEST_EXPECT_MSG_EQ_TOL(corrOut, 0, 4 / std::sqrt(n), "Static link from O2I to O2O");
+    NS_TEST_EXPECT_MSG_EQ_TOL(stdOut, 6, 4 * 6 / std::sqrt(2 * n), "NLOS std after O2I");
+
+    m_condModel = nullptr;
+    m_lossOn = nullptr;
+    m_lossOff = nullptr;
+    Simulator::Destroy();
 }
 
 /**
@@ -1569,6 +1906,8 @@ ThreeGppPropagationLossModelsTestSuite::ThreeGppPropagationLossModelsTestSuite()
     AddTestCase(new ThreeGppV2vUrbanPropagationLossModelTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppV2vHighwayPropagationLossModelTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppShadowingStdTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppO2iShadowingMapTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppColocatedSpatialConsistencyTestCase, TestCase::Duration::QUICK);
 }
 
