@@ -280,6 +280,19 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
                                    ChannelCondition::LosConditionValue cond) const = 0;
 
     /**
+     * @brief Returns the shadow fading standard deviation of O2I links (3GPP
+     *        TR 38.901 Table 7.5-6, O2I column); scenarios without an O2I
+     *        column reuse the one of the outdoor LOS/NLOS state.
+     * @param a tx mobility model
+     * @param b rx mobility model
+     * @param cond the LOS/NLOS channel condition of the outdoor part
+     * @return shadowing std in dB
+     */
+    virtual double GetO2iShadowingStd(Ptr<MobilityModel> a,
+                                      Ptr<MobilityModel> b,
+                                      ChannelCondition::LosConditionValue cond) const;
+
+    /**
      * @brief Returns the shadow fading correlation distance
      * @param cond the LOS/NLOS channel condition
      * @return shadowing correlation distance in meters
@@ -501,6 +514,9 @@ class ThreeGppRmaPropagationLossModel : public ThreeGppPropagationLossModel
      */
     double GetShadowingCorrelationDistance(ChannelCondition::LosConditionValue cond) const override;
     double GetO2iShadowingCorrelationDistance() const override;
+    double GetO2iShadowingStd(Ptr<MobilityModel> a,
+                              Ptr<MobilityModel> b,
+                              ChannelCondition::LosConditionValue cond) const override;
 
     /**
      * @brief Computes the PL1 formula for the RMa scenario
@@ -621,6 +637,9 @@ class ThreeGppUmaPropagationLossModel : public ThreeGppPropagationLossModel
      */
     double GetShadowingCorrelationDistance(ChannelCondition::LosConditionValue cond) const override;
     double GetO2iShadowingCorrelationDistance() const override;
+    double GetO2iShadowingStd(Ptr<MobilityModel> a,
+                              Ptr<MobilityModel> b,
+                              ChannelCondition::LosConditionValue cond) const override;
 
     /**
      * @brief Computes the breakpoint distance
@@ -731,6 +750,9 @@ class ThreeGppUmiStreetCanyonPropagationLossModel : public ThreeGppPropagationLo
      */
     double GetShadowingCorrelationDistance(ChannelCondition::LosConditionValue cond) const override;
     double GetO2iShadowingCorrelationDistance() const override;
+    double GetO2iShadowingStd(Ptr<MobilityModel> a,
+                              Ptr<MobilityModel> b,
+                              ChannelCondition::LosConditionValue cond) const override;
 
     /**
      * @brief Computes the breakpoint distance

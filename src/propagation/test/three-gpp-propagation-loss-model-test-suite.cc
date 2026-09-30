@@ -15,6 +15,7 @@
 #include "ns3/log.h"
 #include "ns3/mobility-helper.h"
 #include "ns3/node.h"
+#include "ns3/pointer.h"
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simple-net-device.h"
 #include "ns3/simulator.h"
@@ -1245,8 +1246,8 @@ ThreeGppShadowingTestCase::DoRun()
     testVector.m_hBs = 25;
     testVector.m_hUt = 1.6;
     testVector.m_distance = 100;
-    testVector.m_shadowingStdLos = 7;
-    testVector.m_shadowingStdNlos = 7;
+    testVector.m_shadowingStdLos = 4;
+    testVector.m_shadowingStdNlos = 6;
     m_testVectors.Add(testVector);
 
     testVector.m_frequency = 3.5e9;
@@ -1254,8 +1255,8 @@ ThreeGppShadowingTestCase::DoRun()
     testVector.m_hBs = 10;
     testVector.m_hUt = 1.6;
     testVector.m_distance = 100;
-    testVector.m_shadowingStdLos = 7;
-    testVector.m_shadowingStdNlos = 7;
+    testVector.m_shadowingStdLos = 4;
+    testVector.m_shadowingStdNlos = 7.82;
     m_testVectors.Add(testVector);
 
     uint16_t numSamples = 400;
@@ -1330,6 +1331,149 @@ ThreeGppShadowingTestCase::DoRun()
                 "Null hypothesis test (NLOS case) for the shadowing component rejected");
         }
     }
+}
+
+/**
+ * @ingroup propagation-tests
+ *
+ * Test that the standard deviation of the shadow fading follows TR 38.901
+ * Table 7.5-6: the one of Table 7.4.1-1 for the outdoor LOS and NLOS states,
+ * and the one of the O2I column for O2I links, whatever the LOS state of their
+ * outdoor part, below and above 6 GHz. The shadow fading is the difference
+ * between the losses with and without shadowing; with the inter-UE spatial
+ * consistency enabled the O2I penetration loss, drawn from a field at the
+ * terminal position, is the same in both and cancels out. Every sample has its
+ * own site, so that the fields of the samples are independent.
+ */
+class ThreeGppShadowingStdTestCase : public TestCase
+{
+  public:
+    ThreeGppShadowingStdTestCase();
+
+  private:
+    void DoRun() override;
+
+    /// Scenario under test
+    struct Scenario
+    {
+        std::string lossModel;      ///< the propagation loss model type id
+        std::string conditionModel; ///< the channel condition model type id
+        double hBs;                 ///< the BS height in meters
+        double distance;            ///< the 2D distance in meters
+        double stdLos;              ///< the expected shadowing std of outdoor LOS links in dB
+        double stdNlos;             ///< the expected shadowing std of outdoor NLOS links in dB
+        double stdO2i;              ///< the expected shadowing std of O2I links in dB
+    };
+};
+
+ThreeGppShadowingStdTestCase::ThreeGppShadowingStdTestCase()
+    : TestCase("Test the standard deviation of the shadow fading per link state")
+{
+}
+
+void
+ThreeGppShadowingStdTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    const uint32_t numSites = 3000;
+    // Sites first, so that they have the lowest node ids and are the site
+    // endpoint of every link.
+    NodeContainer sites;
+    sites.Create(numSites);
+    for (auto it = sites.Begin(); it != sites.End(); ++it)
+    {
+        (*it)->AggregateObject(CreateObject<ConstantPositionMobilityModel>());
+    }
+    Ptr<Node> terminal = CreateObject<Node>();
+    Ptr<MobilityModel> termMob = CreateObject<ConstantPositionMobilityModel>();
+    terminal->AggregateObject(termMob);
+
+    // The RMa distance is below the LOS breakpoint distance.
+    const std::vector<Scenario> scenarios{
+        {"ns3::ThreeGppUmaPropagationLossModel",
+         "ns3::ThreeGppUmaChannelConditionModel",
+         25,
+         50,
+         4,
+         6,
+         7},
+        {"ns3::ThreeGppUmiStreetCanyonPropagationLossModel",
+         "ns3::ThreeGppUmiStreetCanyonChannelConditionModel",
+         10,
+         30,
+         4,
+         7.82,
+         7},
+        {"ns3::ThreeGppRmaPropagationLossModel",
+         "ns3::ThreeGppRmaChannelConditionModel",
+         35,
+         1000,
+         4,
+         8,
+         8},
+    };
+    for (const auto& sc : scenarios)
+    {
+        for (double fc : {3.5e9, 28e9})
+        {
+            if (sc.lossModel == "ns3::ThreeGppRmaPropagationLossModel" && fc > 7e9)
+            {
+                continue;
+            }
+            for (bool o2i : {false, true})
+            {
+                ObjectFactory condFactory(sc.conditionModel);
+                condFactory.Set("InterUeSpatialConsistency", BooleanValue(true));
+                condFactory.Set("O2iThreshold", DoubleValue(o2i ? 1.0 : 0.0));
+                auto condModel = condFactory.Create<ChannelConditionModel>();
+                ObjectFactory lossFactory(sc.lossModel);
+                lossFactory.Set("Frequency", DoubleValue(fc));
+                lossFactory.Set("ChannelConditionModel", PointerValue(condModel));
+                auto lossOn = lossFactory.Create<ThreeGppPropagationLossModel>();
+                lossFactory.Set("ShadowingEnabled", BooleanValue(false));
+                auto lossOff = lossFactory.Create<ThreeGppPropagationLossModel>();
+
+                termMob->SetPosition(Vector(sc.distance, 0, 1.5));
+                // shadow fading samples of the LOS and NLOS outdoor states
+                std::array<std::vector<double>, 2> sf;
+                for (auto it = sites.Begin(); it != sites.End(); ++it)
+                {
+                    auto siteMob = (*it)->GetObject<MobilityModel>();
+                    siteMob->SetPosition(Vector(0, 0, sc.hBs));
+                    const bool los = condModel->GetChannelCondition(siteMob, termMob)->IsLos();
+                    sf[los ? 0 : 1].push_back(lossOn->CalcRxPower(0, siteMob, termMob) -
+                                              lossOff->CalcRxPower(0, siteMob, termMob));
+                }
+                for (bool los : {true, false})
+                {
+                    const auto& x = sf[los ? 0 : 1];
+                    NS_ABORT_MSG_IF(x.size() < 300, "Too few samples of a link state");
+                    double mean = 0;
+                    double var = 0;
+                    for (double v : x)
+                    {
+                        mean += v / x.size();
+                    }
+                    for (double v : x)
+                    {
+                        var += (v - mean) * (v - mean) / (x.size() - 1);
+                    }
+                    const double expected = o2i ? sc.stdO2i : (los ? sc.stdLos : sc.stdNlos);
+                    // The standard error of a sample standard deviation is
+                    // sigma / sqrt(2 n); the tolerance is 4 standard errors.
+                    NS_TEST_EXPECT_MSG_EQ_TOL(std::sqrt(var),
+                                              expected,
+                                              4 * expected / std::sqrt(2.0 * x.size()),
+                                              sc.lossModel << " at " << fc / 1e9 << " GHz, "
+                                                           << (o2i ? "O2I, " : "")
+                                                           << (los ? "LOS" : "NLOS"));
+                }
+            }
+        }
+    }
+    Simulator::Destroy();
 }
 
 /**
@@ -1569,6 +1713,7 @@ ThreeGppPropagationLossModelsTestSuite::ThreeGppPropagationLossModelsTestSuite()
     AddTestCase(new ThreeGppV2vUrbanPropagationLossModelTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppV2vHighwayPropagationLossModelTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppShadowingStdTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppColocatedSpatialConsistencyTestCase, TestCase::Duration::QUICK);
 }
 

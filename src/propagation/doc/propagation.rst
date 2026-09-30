@@ -887,7 +887,10 @@ GetLossLos or GetLossNlos depending on the LOS/NLOS channel condition, and their
 implementation is left to the derived classes. The shadow fading is computed by
 the method GetShadowing, which generates an additional random loss component
 characterized by Gaussian distribution with zero mean and scenario-specific
-standard deviation. Subsequent shadowing components of each BS-UT link are
+standard deviation: the one of TR 38.901 Table 7.4.1-1 for the LOS and NLOS
+states, and the one of the O2I column of Table 7.5-6 for O2I links (method
+GetO2iShadowingStd), which below 6 GHz is also the value of Table 7.4.3-3.
+Subsequent shadowing components of each BS-UT link are
 correlated as described in 3GPP TR 38.901, Sec. 7.4.4 [9]_.
 
 When the attribute "InterUeSpatialConsistency" of the channel condition model
