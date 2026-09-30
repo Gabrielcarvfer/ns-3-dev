@@ -1332,6 +1332,15 @@ nodes without such devices) take the endpoint with the lower node id as the
 site. Whether a node is a site is determined the first time it is queried and
 cached, so the devices must be installed before the channel is evaluated.
 
+The fields are sampled at the horizontal (x, y) position of the terminal. NTN
+nodes report ECEF positions (e.g., ``GeocentricEcefMobilityModel`` and
+``LeoCircularOrbitMobilityModel``), whose x and y do not span the local ground
+plane: distances in the field then differ from the ground distances, and
+terminals far apart with close x and y coordinates may even share correlated
+values. Spatially consistent NTN simulations would require sampling the fields
+in a local tangent (east-north) plane of the terminals, which is not
+implemented.
+
 Testing
 ~~~~~~~
 The test suite :cpp:class:`ChannelConditionModelsTestSuite` contains a single test case:
