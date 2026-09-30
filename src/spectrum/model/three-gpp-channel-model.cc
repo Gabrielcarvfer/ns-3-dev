@@ -3439,6 +3439,9 @@ ThreeGppChannelModel::UpdateClusterAngles(Ptr<const ThreeGppChannelParams> chann
                                           const DoubleVector& prevClusterDelay) const
 {
     NS_LOG_FUNCTION(this);
+    // Known limitations with respect to TR 38.901 V18.0.0 Procedure A for moving
+    // base stations (only horizontal velocities, sign of the y term of the ZOD
+    // update, ECEF frames of NTN nodes), see the spectrum module documentation
     NS_ASSERT(prevClusterDelay.size() == channelParams->m_reducedClusterNumber);
     const DoubleVector prevClusterAoa = channelParams->m_angle[AOA_INDEX];
     const DoubleVector prevClusterZoa = channelParams->m_angle[ZOA_INDEX];
