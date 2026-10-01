@@ -524,3 +524,126 @@ References
 ==========
 * :rfc:`8415` - Dynamic Host Configuration Protocol for IPv6 (DHCPv6)
 * Infoblox Blog <https://blogs.infoblox.com/ipv6-coe/slaac-to-basics-part-2-of-2-configuring-slaac/ > to understand how SLAAC and DHCPv6 operate at the same time.
+
+DNS resolver
+************
+
+The ``DnsResolver`` class implements a DNS stub resolver (:rfc:`1035`). It is aggregated to a
+node and resolves host names to IPv4 and IPv6 addresses on behalf of the node's applications.
+The resolver does not perform recursion itself; it sends recursive queries for A and AAAA
+records to one or more configured DNS servers, which must be recursive resolvers. The servers
+can be simulated nodes, or real servers when the node is connected to a real network (e.g.,
+through an emulated network device).
+
+The result of each resolution is passed to a callback, together with the host name. The address
+list contains ``Ipv4Address`` and ``Ipv6Address`` instances, with IPv6 addresses first when both
+families are requested. The list is empty if the resolution failed, i.e., if the name does not
+exist, is not a valid host name, has no address of the requested family, or if no server
+answered.
+
+DNS messages are modeled by the ``DnsHeader`` class. It serializes and deserializes the header,
+the question and the three record sections, follows name compression pointers, and decodes the
+RDATA of A, AAAA, CNAME, NS and SOA records, as well as the EDNS(0) OPT pseudo-record
+(:rfc:`6891`).
+
+Behavior
+========
+
+Address families
+  ``Resolve()`` requests IPv4 addresses (A records), IPv6 addresses (AAAA records), or both. When
+  both are requested, the two queries are sent in parallel.
+
+Host names
+  Names must be valid host names as defined in :rfc:`1123` (letters, digits and hyphens, with a
+  last label that is not all-numeric), optionally followed by a trailing dot. Names are compared
+  case-insensitively. IPv4 addresses in dotted-decimal notation (without leading zeros) and IPv6
+  addresses are returned immediately, without a query, if they match the requested family.
+
+Transport
+  Queries are sent over UDP, on IPv4 or IPv6 depending on the server address. Each query uses a
+  random source port in the dynamic range 49152-65535 (:rfc:`5452`); if no free port is found
+  after a few attempts, a shared socket is used instead. Concurrent resolutions of the same name
+  and record type share a single query. Query IDs and source ports are drawn from ns-3 random
+  variables, so they are reproducible for a given seed and run (see ``AssignStreams()``).
+
+  Queries advertise an EDNS(0) UDP payload size, set by the ``EdnsUdpPayloadSize`` attribute
+  (1232 bytes by default). If a server answers FORMERR or NOTIMP without an OPT record, the query
+  is resent without EDNS(0), and that server is queried without EDNS(0) for the duration given
+  by the ``NoEdnsTime`` attribute. A response with an unknown EDNS version is treated as a
+  server failure, unless its RCODE is BADVERS. Truncated UDP responses are retried over TCP
+  (:rfc:`7766`); a truncated TCP response is treated as a server failure.
+
+Response validation
+  A response is accepted only if it comes from a server the query was sent to, and if its ID,
+  opcode and question match the query (:rfc:`5452`). Addresses are taken from the records of the
+  queried name or, if the name is an alias, from the end of its CNAME chain. Other records in
+  the answer section are ignored, and duplicate addresses are removed. CNAME loops and
+  conflicting CNAMEs are treated as server failures. If a CNAME chain ends without the target's
+  records, a new query is sent for the target. Malformed messages are discarded.
+
+Failover
+  If a query is not answered within the ``Timeout`` attribute, it is retransmitted to the next
+  server. The same happens if the current server returns an error such as SERVFAIL or REFUSED,
+  returns a referral because it does not support recursion, or cannot be reached (e.g., no
+  route). A query is retransmitted at most ``Retransmissions`` times, with at most three
+  attempts per server (:rfc:`9520`). The timeout doubles after each round of servers. Late
+  answers from previously queried servers are still accepted, but their errors and empty
+  responses are ignored. NXDOMAIN is a valid answer and is not retried.
+
+Caching
+  Answers are cached for the minimum TTL of their address and CNAME records, up to the
+  ``MaxTtl`` attribute. Answers without addresses are cached for the negative TTL taken from the
+  SOA record of the zone (:rfc:`2308`), up to the ``MaxNegativeTtl`` attribute (3 hours by
+  default). NXDOMAIN is cached for both address families, but does not replace cached addresses
+  of the other family. Resolution failures (no server answered) are cached for the
+  ``FailureTtl`` attribute (5 seconds by default), doubled on each consecutive failure up to 5
+  minutes, and are forgotten when the server list changes (:rfc:`9520`).
+
+  The cache holds at most ``MaxCacheEntries`` entries; when it is full, the entry closest to
+  expiry is evicted. ``FlushCache()`` empties the cache, and the ``CacheEnabled`` attribute
+  disables it. The cache is used even when no server is configured. Results served from the
+  cache are still reported asynchronously, after ``Resolve()`` returns.
+
+Usage
+=====
+
+``DnsResolverHelper`` aggregates a resolver to each node, configured with a list of DNS servers
+in the order in which they are queried. Since ns-3 applications are configured with addresses,
+a host name must be resolved before the application that uses it is set up:
+
+.. sourcecode:: cpp
+
+  DnsResolverHelper resolverHelper({Ipv4Address("8.8.8.8"), Ipv6Address("2001:4860:4860::8888")});
+  resolverHelper.Install(node);
+
+  auto startPing = [node](const std::string& name, const std::vector<Address>& addresses) {
+      if (!addresses.empty())
+      {
+          PingHelper ping(addresses.front());
+          ping.Install(node).Start(Seconds(0));
+      }
+  };
+  node->GetObject<DnsResolver>()->Resolve("www.nsnam.org", startPing, DnsResolver::ANY);
+
+The server list can be changed at run time with ``SetServers()`` and ``AddServer()``. Pending
+queries continue with the new servers, or fail if the list is empty. Without servers,
+``Resolve()`` returns an empty result unless the answer is cached. The callback may be null,
+e.g., to pre-fill the cache, or when results are collected through the ``Resolved`` trace
+source, which fires for every resolution. Pending resolutions are dropped without notification
+when the resolver is disposed.
+
+Scope and Limitations
+=====================
+
+* Only A and AAAA records are resolved. Reverse lookups and other record types are not
+  supported.
+* The resolver relies on recursive servers and does not perform iterative resolution.
+* Search lists for unqualified names, DNSSEC validation and EDNS(0) options are not supported.
+* At most 65536 queries (the number of query IDs) can be pending at the same time.
+
+Validation
+==========
+
+The ``dns-resolver`` test suite checks ``DnsHeader`` serialization on valid and malformed
+messages, the parsing of crafted responses, and end-to-end resolution through a simulated DNS
+server, covering failover, caching, the EDNS(0) and TCP fallbacks, and IPv6 servers.

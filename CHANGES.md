@@ -23,6 +23,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (visualizer) Added `visualizer.enable_flow_monitor()` to plot FlowMonitor statistics; `PyViz::ConnectTrace()`, which connects one of the generic handlers `Tx`, `Rx` and `Drop` to a Config path; and `PyViz::RecordTx()`, `RecordRx()` and `RecordDrop()`.
 * (visualizer) Added `visualizer.set_speed()` and `visualizer.skip_to()`, and the `PyVizSpeed` and `PyVizStartTime` global values (`--PyVizSpeed`, `--PyVizStartTime`), to set the initial playback speed and skip the start of a simulation.
 * (visualizer) Plugins can add values to each node's snapshot with `add_node_info()` and hold the simulation with `add_step_guard()`.
+* (internet-apps) Added `DnsResolver` and `DnsResolverHelper`, to resolve the IPv4 and IPv6 addresses of host names through DNS servers, and `DnsHeader`, the DNS message format.
 
 ### Changes to existing API
 
