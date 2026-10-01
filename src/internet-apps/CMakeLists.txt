@@ -3,6 +3,7 @@ build_lib(
   SOURCE_FILES
     helper/dhcp-helper.cc
     helper/dhcp6-helper.cc
+    helper/dns-resolver-helper.cc
     helper/ping-helper.cc
     helper/radvd-helper.cc
     helper/v4traceroute-helper.cc
@@ -14,6 +15,7 @@ build_lib(
     model/dhcp6-header.cc
     model/dhcp6-options.cc
     model/dhcp6-server.cc
+    model/dns-resolver.cc
     model/ping.cc
     model/radvd-interface.cc
     model/radvd-prefix.cc
@@ -22,6 +24,7 @@ build_lib(
   HEADER_FILES
     helper/dhcp-helper.h
     helper/dhcp6-helper.h
+    helper/dns-resolver-helper.h
     helper/ping-helper.h
     helper/radvd-helper.h
     helper/v4traceroute-helper.h
@@ -33,6 +36,7 @@ build_lib(
     model/dhcp6-header.h
     model/dhcp6-options.h
     model/dhcp6-server.h
+    model/dns-resolver.h
     model/ping.h
     model/radvd-interface.h
     model/radvd-prefix.h
@@ -42,6 +46,7 @@ build_lib(
   TEST_SOURCES
     test/dhcp-test.cc
     test/dhcp6-test.cc
+    test/dns-resolver-test.cc
     test/ipv6-radvd-test.cc
     test/ping-test.cc
 )
