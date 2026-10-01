@@ -16,6 +16,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### New API
 
+* (internet-apps) Added `DnsResolver` and `DnsResolverHelper`, to resolve the IPv4 and IPv6 addresses of host names through DNS servers, and `DnsHeader`, the DNS message format.
+
 ### Changes to existing API
 
 ### Changes to build system

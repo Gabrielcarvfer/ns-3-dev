@@ -42,6 +42,8 @@ but other contemporaneous versions may also work.
 
 ### New user-visible features
 
+- (internet-apps) New `DnsResolver` class, a DNS stub resolver of the IPv4 and IPv6 addresses of host names, aggregated to the nodes with `DnsResolverHelper`. It queries recursive DNS servers over UDP (IPv4 or IPv6) with EDNS(0), falls back to TCP for truncated responses, fails over to the next server, and caches the answers for their TTL.
+
 ### Bugs fixed
 
 ## Release 3.49
