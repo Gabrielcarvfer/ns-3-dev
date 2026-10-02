@@ -60,6 +60,7 @@ Python 3.10 to 3.14.
 
 ### Bugs fixed
 
+- (propagation) The shadowing that `ThreeGppPropagationLossModel` draws on the first evaluation of a link is now kept by the following evaluations of a static link. The first evaluation stored a zero distance vector with its realization, so the second evaluation saw a displacement as long as the link and drew an almost independent realization: the first path loss of every link, which cell selection procedures rely on, did not match the rest of the simulation, by up to 10 dB and more.
 - (spectrum) The received PSD of a signal without precoding matrix from a transmitter with several antenna ports, computed by `ThreeGppSpectrumPropagationLossModel`, now splits the transmit power evenly across the ports without a common phase. It used to sum the ports co-phased, which formed a fixed beam whose nulls depend on the port layout of the array: with 8 horizontal ports, many receivers lost 20 to 30 dB.
 - (spectrum) #1369 The phased-array beamforming gain of a signal is now computed with the transmitter's beamforming vector at transmission time rather than at arrival time, which differed whenever the array was re-steered while the signal was propagating.
 - (spectrum) The number of rays per cluster of the large bandwidth modeling of the 3GPP TR 38.901 fast-fading model (Equation 7.6-8) now uses the maximum antenna aperture over the two link ends, as Sec. 7.6.2.1 prescribes, instead of the aperture of the lowest node id end.

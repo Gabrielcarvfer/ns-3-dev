@@ -1479,6 +1479,61 @@ ThreeGppShadowingStdTestCase::DoRun()
 /**
  * @ingroup propagation-tests
  *
+ * Test case for the shadowing of a static link: the shadowing of the first evaluation of a
+ * link must be kept by the following evaluations. The first evaluation used to store a zero
+ * distance vector with its realization, so the second evaluation saw a displacement as long
+ * as the link and drew an almost independent realization: the first evaluation of a link,
+ * which a cell selection may rely on, did not match the rest of the simulation.
+ */
+class ThreeGppShadowingFirstEvaluationTestCase : public TestCase
+{
+  public:
+    ThreeGppShadowingFirstEvaluationTestCase()
+        : TestCase("Test that the shadowing of the first evaluation of a static link is kept")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+ThreeGppShadowingFirstEvaluationTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    auto lossModel = CreateObject<ThreeGppUmaPropagationLossModel>();
+    lossModel->SetAttribute("Frequency", DoubleValue(3.5e9));
+    lossModel->SetAttribute("ShadowingEnabled", BooleanValue(true));
+    lossModel->SetChannelConditionModel(CreateObject<NeverLosChannelConditionModel>());
+
+    for (uint32_t i = 0; i < 50; i++)
+    {
+        Ptr<Node> site = CreateObject<Node>();
+        Ptr<MobilityModel> siteMob = CreateObject<ConstantPositionMobilityModel>();
+        siteMob->SetPosition(Vector(0, 0, 25));
+        site->AggregateObject(siteMob);
+        Ptr<Node> terminal = CreateObject<Node>();
+        Ptr<MobilityModel> termMob = CreateObject<ConstantPositionMobilityModel>();
+        termMob->SetPosition(Vector(30 + 5 * i, 20, 1.5));
+        terminal->AggregateObject(termMob);
+
+        const double first = lossModel->CalcRxPower(0, siteMob, termMob);
+        const double second = lossModel->CalcRxPower(0, siteMob, termMob);
+        NS_TEST_EXPECT_MSG_EQ_TOL(second,
+                                  first,
+                                  1e-9,
+                                  "The shadowing of a static link changed after its first "
+                                  "evaluation, link "
+                                      << i);
+    }
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-tests
+ *
  * Test case for the inter-UE (drop-based) spatial consistency of TR 38.901
  * Sec. 7.6.3. With the InterUeSpatialConsistency attribute of the channel
  * condition model enabled, two co-located terminals served by the same site
@@ -1714,6 +1769,7 @@ ThreeGppPropagationLossModelsTestSuite::ThreeGppPropagationLossModelsTestSuite()
     AddTestCase(new ThreeGppV2vHighwayPropagationLossModelTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingStdTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppShadowingFirstEvaluationTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppColocatedSpatialConsistencyTestCase, TestCase::Duration::QUICK);
 }
 

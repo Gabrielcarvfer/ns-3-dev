@@ -870,15 +870,16 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
     // compute the channel key
     uint32_t key = GetKey(a, b);
 
-    bool notFound = false;          // indicates if the shadowing value has not been computed yet
-    bool newCondition = false;      // indicates if the channel condition has changed
-    Vector newDistance;             // the distance vector, that is not a distance but a difference
+    bool notFound = false;     // indicates if the shadowing value has not been computed yet
+    bool newCondition = false; // indicates if the channel condition has changed
+    // the distance vector, that is not a distance but a difference; it is stored with a new
+    // realization too, so that the next evaluation correlates with it
+    const Vector newDistance = GetVectorDifference(a, b);
     auto it = m_shadowingMap.end(); // the shadowing map iterator
     if (m_shadowingMap.find(key) != m_shadowingMap.end())
     {
         // found the shadowing value in the map
         it = m_shadowingMap.find(key);
-        newDistance = GetVectorDifference(a, b);
         newCondition = (it->second.m_condition != cond); // true if the condition changed
     }
     else
@@ -907,8 +908,7 @@ ThreeGppPropagationLossModel::GetShadowing(Ptr<MobilityModel> a,
 
     // update the entry in the map
     it->second.m_shadowing = shadowingValue;
-    it->second.m_distance = newDistance; // Save the (0,0,0) vector in case it's the first time we
-                                         // are calculating this value
+    it->second.m_distance = newDistance;
     it->second.m_condition = cond;
 
     return shadowingValue;
