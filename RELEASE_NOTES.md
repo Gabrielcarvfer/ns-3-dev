@@ -60,6 +60,7 @@ Python 3.10 to 3.14.
 
 ### Bugs fixed
 
+- (spectrum) The received PSD of a signal without precoding matrix from a transmitter with several antenna ports, computed by `ThreeGppSpectrumPropagationLossModel`, now splits the transmit power evenly across the ports without a common phase. It used to sum the ports co-phased, which formed a fixed beam whose nulls depend on the port layout of the array: with 8 horizontal ports, many receivers lost 20 to 30 dB.
 - (spectrum) #1369 The phased-array beamforming gain of a signal is now computed with the transmitter's beamforming vector at transmission time rather than at arrival time, which differed whenever the array was re-steered while the signal was propagating.
 - (spectrum) The number of rays per cluster of the large bandwidth modeling of the 3GPP TR 38.901 fast-fading model (Equation 7.6-8) now uses the maximum antenna aperture over the two link ends, as Sec. 7.6.2.1 prescribes, instead of the aperture of the lowest node id end.
 - (spectrum) The fixed ray-to-subcluster mapping of the two strongest clusters of the 3GPP TR 38.901 fast-fading model now follows Table 7.5-5; the previous mapping was shifted by one ray.

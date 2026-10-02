@@ -340,27 +340,22 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     const uint32_t numRb = rxParams->psd->GetValuesN();
     if (!rxParams->precodingMatrix)
     {
-        // When no precoding matrix is set, the default is a single isotropic
-        // column P[tx, 0, rb] = 1/sqrt(numTx). In that case H*P reduces to
-        // the row sums of H scaled by 1/sqrt(numTx), so
-        //   PSD[rb] = (1/numTx) * sum_rx |sum_tx H[rx, tx, rb]|^2
-        // and the H*P product never needs to be formed.
-        const size_t numRxPorts = specMat->GetNumRows();
+        // Without a precoding matrix, the transmit power is split evenly across
+        // the transmit ports without a common phase, so that the PSD is the mean
+        // over the transmit ports of the power each port delivers:
+        //   PSD[rb] = (1/numTx) * sum_rx sum_tx |H[rx, tx, rb]|^2
+        // A co-phased sum of the ports would instead form a fixed beam, whose
+        // nulls depend on the port layout of the array.
         const size_t numTxPorts = specMat->GetNumCols();
+        const size_t pageSize = specMat->GetNumRows() * numTxPorts;
         const double invNumTxPorts = 1.0 / static_cast<double>(numTxPorts);
         for (uint32_t rb = 0; rb < numRb; ++rb)
         {
-            // Each per-RB page is column-major: (rx, tx) is page[rx + numRxPorts * tx].
             const std::complex<double>* page = specMat->GetPagePtr(rb);
             double psd = 0.0;
-            for (size_t rx = 0; rx < numRxPorts; ++rx)
+            for (size_t i = 0; i < pageSize; ++i)
             {
-                std::complex<double> rowSum(0.0, 0.0);
-                for (size_t tx = 0; tx < numTxPorts; ++tx)
-                {
-                    rowSum += page[rx + numRxPorts * tx];
-                }
-                psd += std::norm(rowSum);
+                psd += std::norm(page[i]);
             }
             (*rxParams->psd)[rb] = psd * invNumTxPorts;
         }

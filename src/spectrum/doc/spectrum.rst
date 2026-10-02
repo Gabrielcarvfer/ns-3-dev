@@ -896,6 +896,10 @@ Finally, the frequency domain 3D spectrum channel matrix is used to obtain the
 received PSD. In case of multiple ports at the transmitter the PSD is calculated
 by summing per each RB the real parts of the diagonal elements of the (H*P)^h * (H*P),
 where H is the frequency domain spectrum channel matrix and P is the precoding matrix.
+Without a precoding matrix, the transmit power is split evenly across the transmit ports
+without a common phase, and the PSD of each RB is the sum of the squared magnitudes of the
+elements of H divided by the number of transmit ports. A co-phased sum of the ports would
+form a fixed beam, whose nulls depend on the port layout of the array.
 
 
 ThreeGppChannelModel
