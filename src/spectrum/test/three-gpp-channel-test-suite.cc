@@ -3050,6 +3050,126 @@ ThreeGppBeamformingDirectionTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * Test case for the received PSD of a signal without precoding matrix from a transmitter
+ * with several antenna ports. The transmit power is split evenly across the ports without a
+ * common phase, so the received PSD must be the mean over the transmit ports of the PSD
+ * received when all the power is sent from that port alone. A co-phased sum of the ports
+ * would instead form a fixed beam, with nulls that depend on the port layout of the array.
+ */
+class ThreeGppUnprecodedMultiPortPsdTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     */
+    ThreeGppUnprecodedMultiPortPsdTest();
+
+  private:
+    /**
+     * Build the test scenario
+     */
+    void DoRun() override;
+};
+
+ThreeGppUnprecodedMultiPortPsdTest::ThreeGppUnprecodedMultiPortPsdTest()
+    : TestCase("Check that the PSD without precoding splits the power evenly across the ports")
+{
+}
+
+void
+ThreeGppUnprecodedMultiPortPsdTest::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    auto lossModel = CreateObject<ThreeGppSpectrumPropagationLossModel>();
+    lossModel->SetChannelModelAttribute("Frequency", DoubleValue(3.5e9));
+    lossModel->SetChannelModelAttribute("Scenario", StringValue("UMa"));
+    lossModel->SetChannelModelAttribute(
+        "ChannelConditionModel",
+        PointerValue(CreateObject<NeverLosChannelConditionModel>()));
+
+    SpectrumValue5MhzFactory sf;
+    auto txParams = Create<SpectrumSignalParameters>();
+    txParams->psd = sf.CreateTxPowerSpectralDensity(0.1, 1);
+    const uint32_t numRb = txParams->psd->GetValuesN();
+
+    NodeContainer nodes(2);
+    auto siteMob = CreateObject<ConstantPositionMobilityModel>();
+    siteMob->SetPosition(Vector(0, 0, 25));
+    auto ueMob = CreateObject<ConstantPositionMobilityModel>();
+    nodes.Get(0)->AggregateObject(siteMob);
+    nodes.Get(1)->AggregateObject(ueMob);
+    auto makeAntenna = [](uint32_t columns, uint32_t horizontalPorts) {
+        return CreateObjectWithAttributes<UniformPlanarArray>(
+            "NumColumns",
+            UintegerValue(columns),
+            "NumRows",
+            UintegerValue(2),
+            "NumHorizontalPorts",
+            UintegerValue(horizontalPorts),
+            "IsDualPolarized",
+            BooleanValue(true),
+            "AntennaElement",
+            PointerValue(CreateObject<IsotropicAntennaModel>()));
+    };
+    // 4 horizontal ports of 2x2 elements, dual-polarized: 8 transmit ports
+    Ptr<PhasedArrayModel> siteAnt = makeAntenna(8, 4);
+    Ptr<PhasedArrayModel> ueAnt = makeAntenna(1, 1);
+    const size_t numTxPorts = siteAnt->GetNumPorts();
+    NS_TEST_ASSERT_MSG_EQ(numTxPorts, 8, "Unexpected number of transmit ports");
+
+    for (const auto& uePos : std::vector<Vector>{{100, 60, 1.5}, {60, -80, 1.5}, {-30, 90, 1.5}})
+    {
+        ueMob->SetPosition(uePos);
+        siteAnt->SetBeamformingVector(
+            siteAnt->GetBeamformingVector(Angles(ueMob->GetPosition(), siteMob->GetPosition())));
+        ueAnt->SetBeamformingVector(
+            ueAnt->GetBeamformingVector(Angles(siteMob->GetPosition(), ueMob->GetPosition())));
+        auto psdWith = [&](Ptr<const ComplexMatrixArray> precoding) {
+            auto params = txParams->Copy();
+            params->precodingMatrix = precoding;
+            return lossModel
+                ->DoCalcRxPowerSpectralDensity(params,
+                                               siteMob,
+                                               ueMob,
+                                               siteAnt,
+                                               ueAnt,
+                                               siteAnt->GetBeamformingVector(),
+                                               ueAnt->GetBeamformingVector())
+                ->psd;
+        };
+
+        auto unprecoded = psdWith(nullptr);
+        std::vector<double> meanOverPorts(numRb, 0.0);
+        for (size_t port = 0; port < numTxPorts; ++port)
+        {
+            auto onePort = Create<ComplexMatrixArray>(numTxPorts, 1, numRb);
+            for (uint32_t rb = 0; rb < numRb; ++rb)
+            {
+                onePort->Elem(port, 0, rb) = 1.0;
+            }
+            auto psd = psdWith(onePort);
+            for (uint32_t rb = 0; rb < numRb; ++rb)
+            {
+                meanOverPorts[rb] += (*psd)[rb] / numTxPorts;
+            }
+        }
+        for (uint32_t rb = 0; rb < numRb; ++rb)
+        {
+            NS_TEST_EXPECT_MSG_EQ_TOL((*unprecoded)[rb],
+                                      meanOverPorts[rb],
+                                      1e-9 * meanOverPorts[rb],
+                                      "Unprecoded PSD differs from the mean over the ports, UE at "
+                                          << uePos << ", RB " << rb);
+        }
+    }
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test case for the channel reciprocity of the ThreeGppChannelModel class, as assumed for
  * instance by TDD systems. Checks that:
  * 1) querying the channel in the reverse direction reuses the same stored realization
@@ -3748,6 +3868,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(new ThreeGppCalcLongTermMultiPortTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppReversedDirectionFieldPatternTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppBeamformingDirectionTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppUnprecodedMultiPortPsdTest(), TestCase::Duration::QUICK);
 
     /**
      *  The TX and RX antennas are configured face-to-face.
