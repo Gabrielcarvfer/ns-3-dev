@@ -11,6 +11,9 @@
 
 #include "ns3/mobility-model.h"
 
+#include <map>
+#include <utility>
+
 namespace ns3
 {
 class WraparoundModel : public Object
@@ -28,8 +31,14 @@ class WraparoundModel : public Object
     static TypeId GetTypeId();
 
     /**
-     * @brief Creates a disposable virtual mobility model for tx based on rx distance and
-     * a wraparound model
+     * @brief Get the virtual mobility model of tx with respect to rx, placed by the wraparound
+     * model
+     *
+     * The virtual mobility model of a pair of transmitter and receiver is created once and then
+     * moved to the current virtual position of the transmitter, so it is shared by the signals
+     * of the pair; it is created again when the velocity of the transmitter changes, which a
+     * copy cannot follow.
+     *
      * @param tx Transmitter mobility model
      * @param rx Receiver Mobility model
      * @return virtual mobility model for transmitter
@@ -44,6 +53,15 @@ class WraparoundModel : public Object
      * @return virtual position of transmitter in respect to receiver position
      */
     virtual Vector3D GetVirtualPosition(const Vector3D tx, const Vector3D rx) const;
+
+  protected:
+    void DoDispose() override;
+
+  private:
+    /// Virtual mobility model of each pair of transmitter and receiver mobility models
+    mutable std::map<std::pair<Ptr<const MobilityModel>, Ptr<const MobilityModel>>,
+                     Ptr<MobilityModel>>
+        m_virtualMobilityModels;
 };
 } // namespace ns3
 
