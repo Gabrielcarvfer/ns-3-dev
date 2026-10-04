@@ -35,25 +35,44 @@ WraparoundModel::GetVirtualMobilityModel(Ptr<const MobilityModel> tx,
                  << tx->GetPosition() << ", receiver position " << rx->GetPosition()
                  << ", wrapped position "
                  << GetVirtualPosition(tx->GetPosition(), rx->GetPosition()) << ".");
-    auto virtualMm = tx->Copy();
-    // Set the transmitter to its virtual position respective to receiver
-    virtualMm->SetPosition(GetVirtualPosition(tx->GetPosition(), rx->GetPosition()));
-
-    // Unidirectionally aggregate NodeId to it, so it can be fetched later by
-    // propagation models
-    auto node = tx->GetObject<Node>();
-    if (node)
+    // Creating a virtual mobility model for every signal and receiver dominated the cost of large
+    // deployments; the propagation and channel models key their state by node, not by mobility
+    // model, so the virtual mobility model of a pair can be reused and moved.
+    auto& virtualMm = m_virtualMobilityModels[{tx, rx}];
+    if (!virtualMm || virtualMm->GetVelocity() != tx->GetVelocity())
     {
-        virtualMm->UnidirectionalAggregateObject(node);
+        virtualMm = tx->Copy();
+
+        // Unidirectionally aggregate NodeId to it, so it can be fetched later by
+        // propagation models
+        auto node = tx->GetObject<Node>();
+        if (node)
+        {
+            virtualMm->UnidirectionalAggregateObject(node);
+        }
+
+        // Some mobility models access building info related to mobility model
+        auto mbi = tx->GetObject<MobilityBuildingInfo>();
+        if (mbi)
+        {
+            virtualMm->UnidirectionalAggregateObject(mbi);
+        }
     }
 
-    // Some mobility models access building info related to mobility model
-    auto mbi = tx->GetObject<MobilityBuildingInfo>();
-    if (mbi)
+    // Set the transmitter to its virtual position respective to receiver
+    const auto virtualPosition = GetVirtualPosition(tx->GetPosition(), rx->GetPosition());
+    if (virtualMm->GetPosition() != virtualPosition)
     {
-        virtualMm->UnidirectionalAggregateObject(mbi);
+        virtualMm->SetPosition(virtualPosition);
     }
     return virtualMm;
+}
+
+void
+WraparoundModel::DoDispose()
+{
+    m_virtualMobilityModels.clear();
+    Object::DoDispose();
 }
 
 Vector3D
