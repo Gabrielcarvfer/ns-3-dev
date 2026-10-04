@@ -8,6 +8,8 @@
 
 #include "ns3/boolean.h"
 #include "ns3/config.h"
+#include "ns3/constant-position-mobility-model.h"
+#include "ns3/constant-velocity-mobility-model.h"
 #include "ns3/hexagonal-wraparound-model.h"
 #include "ns3/mobility-helper.h"
 #include "ns3/node-container.h"
@@ -235,6 +237,70 @@ WraparoundModelTest::DoRun()
 /**
  * @ingroup propagation-test
  *
+ * @brief Test of the reuse of the virtual mobility models of WraparoundModel
+ *
+ * The virtual mobility model of a pair of transmitter and receiver used to be created for every
+ * signal and receiver. It is now created once per pair and moved: the test checks that the same
+ * pair gets the same object, that it follows the transmitter when it moves, that it is created
+ * again when the velocity of the transmitter changes, and that another receiver gets another one.
+ */
+class WraparoundVirtualMobilityReuseTest : public TestCase
+{
+  public:
+    WraparoundVirtualMobilityReuseTest()
+        : TestCase("Check the reuse of the virtual mobility models")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+WraparoundVirtualMobilityReuseTest::DoRun()
+{
+    auto wraparound = CreateObject<WraparoundModel>();
+    NodeContainer nodes(3);
+    auto tx = CreateObject<ConstantVelocityMobilityModel>();
+    tx->SetPosition(Vector(10, 20, 25));
+    nodes.Get(0)->AggregateObject(tx);
+    auto rx = CreateObject<ConstantPositionMobilityModel>();
+    rx->SetPosition(Vector(100, 0, 1.5));
+    nodes.Get(1)->AggregateObject(rx);
+    auto otherRx = CreateObject<ConstantPositionMobilityModel>();
+    otherRx->SetPosition(Vector(-100, 0, 1.5));
+    nodes.Get(2)->AggregateObject(otherRx);
+
+    auto first = wraparound->GetVirtualMobilityModel(tx, rx);
+    NS_TEST_ASSERT_MSG_EQ(first->GetPosition(), tx->GetPosition(), "wrong virtual position");
+    NS_TEST_ASSERT_MSG_EQ(first->GetObject<Node>(), nodes.Get(0), "the node must be aggregated");
+    NS_TEST_ASSERT_MSG_EQ(wraparound->GetVirtualMobilityModel(tx, rx),
+                          first,
+                          "the same pair must reuse its virtual mobility model");
+
+    tx->SetPosition(Vector(30, 40, 25));
+    auto moved = wraparound->GetVirtualMobilityModel(tx, rx);
+    NS_TEST_ASSERT_MSG_EQ(moved, first, "a move must not create another virtual mobility model");
+    NS_TEST_ASSERT_MSG_EQ(moved->GetPosition(), tx->GetPosition(), "the move must be followed");
+
+    tx->SetVelocity(Vector(1, 0, 0));
+    auto accelerated = wraparound->GetVirtualMobilityModel(tx, rx);
+    NS_TEST_ASSERT_MSG_EQ(accelerated->GetVelocity(),
+                          tx->GetVelocity(),
+                          "a change of velocity must be followed");
+    NS_TEST_ASSERT_MSG_EQ(accelerated->GetPosition(), tx->GetPosition(), "wrong virtual position");
+
+    NS_TEST_ASSERT_MSG_NE(wraparound->GetVirtualMobilityModel(tx, otherRx),
+                          accelerated,
+                          "another receiver must get another virtual mobility model");
+
+    wraparound->Dispose();
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-test
+ *
  * @brief Wraparound Model Test Suite
  */
 static struct WraparoundModelTestSuite : public TestSuite
@@ -253,5 +319,6 @@ static struct WraparoundModelTestSuite : public TestSuite
             AddTestCase(new WraparoundModelTest("Check wraparound with 3 rings", 3, altConf),
                         TestCase::Duration::QUICK);
         }
+        AddTestCase(new WraparoundVirtualMobilityReuseTest(), TestCase::Duration::QUICK);
     }
 } g_WraparoundModelTestSuite; ///< the test suite
