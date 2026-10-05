@@ -3934,6 +3934,117 @@ ThreeGppRayShiftTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * A channel matrix built from either end of a link is the transpose of the
+ * one built from the other, also between dual-polarized arrays. The cross-
+ * polarized phases of a ray (7.5-28) belong to the direction the parameters
+ * were drawn in, so built the other way they trade places. They did not, so
+ * an update triggered by the terminal's transmission redrew the cross-
+ * polarized part of the channel.
+ */
+class ThreeGppDualPolarizedReciprocityTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     * @param los whether the link is LOS
+     */
+    explicit ThreeGppDualPolarizedReciprocityTest(bool los);
+
+  private:
+    void DoRun() override;
+    bool m_los; ///< whether the link is LOS
+
+    /// Exposes the matrix generation of the model.
+    class Replay : public ThreeGppChannelModel
+    {
+      public:
+        /// @copydoc ThreeGppChannelModel::GetNewChannel
+        using ThreeGppChannelModel::GetNewChannel;
+        /// @copydoc ThreeGppChannelModel::GetThreeGppTable
+        using ThreeGppChannelModel::GetThreeGppTable;
+    };
+};
+
+ThreeGppDualPolarizedReciprocityTest::ThreeGppDualPolarizedReciprocityTest(bool los)
+    : TestCase(std::string("A dual-polarized channel built from either end is the transpose, ") +
+               (los ? "LOS" : "NLOS")),
+      m_los(los)
+{
+}
+
+void
+ThreeGppDualPolarizedReciprocityTest::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+    auto channel = CreateObject<Replay>();
+    channel->SetAttribute("Frequency", DoubleValue(3.5e9));
+    channel->SetAttribute("Scenario", StringValue("UMa"));
+    Ptr<ChannelConditionModel> conditions;
+    if (m_los)
+    {
+        conditions = CreateObject<AlwaysLosChannelConditionModel>();
+    }
+    else
+    {
+        conditions = CreateObject<NeverLosChannelConditionModel>();
+    }
+    channel->SetAttribute("ChannelConditionModel", PointerValue(conditions));
+    channel->AssignStreams(1);
+
+    auto makeArray = [](uint32_t rows, uint32_t cols, uint32_t hPorts) {
+        return CreateObjectWithAttributes<UniformPlanarArray>("NumRows",
+                                                              UintegerValue(rows),
+                                                              "NumColumns",
+                                                              UintegerValue(cols),
+                                                              "IsDualPolarized",
+                                                              BooleanValue(true),
+                                                              "NumHorizontalPorts",
+                                                              UintegerValue(hPorts));
+    };
+    auto site = CreateObject<ConstantPositionMobilityModel>();
+    site->SetPosition(Vector(0.0, 0.0, 25.0));
+    CreateObject<Node>()->AggregateObject(site);
+    auto term = CreateObject<ConstantPositionMobilityModel>();
+    term->SetPosition(Vector(80.0, 40.0, 1.5));
+    CreateObject<Node>()->AggregateObject(term);
+    auto siteArray = makeArray(4, 4, 4);
+    auto termArray = makeArray(1, 2, 2);
+
+    auto forward = channel->GetChannel(site, term, siteArray, termArray);
+    auto params = DynamicCast<const ThreeGppChannelModel::ThreeGppChannelParams>(
+        channel->GetParams(site, term));
+    NS_TEST_ASSERT_MSG_NE(params, nullptr, "no channel parameters");
+    auto table = channel->GetThreeGppTable(site, term, conditions->GetChannelCondition(site, term));
+    auto reverse = channel->GetNewChannel(params, table, term, site, termArray, siteArray);
+
+    const auto& f = forward->m_channel;
+    const auto& r = reverse->m_channel;
+    NS_TEST_ASSERT_MSG_EQ(r.GetNumRows(), f.GetNumCols(), "the reverse matrix has another shape");
+    NS_TEST_ASSERT_MSG_EQ(r.GetNumCols(), f.GetNumRows(), "the reverse matrix has another shape");
+    NS_TEST_ASSERT_MSG_EQ(r.GetNumPages(), f.GetNumPages(), "the reverse matrix has another shape");
+    double error = 0.0;
+    double power = 0.0;
+    for (size_t c = 0; c < f.GetNumPages(); ++c)
+    {
+        for (size_t i = 0; i < f.GetNumRows(); ++i)
+        {
+            for (size_t j = 0; j < f.GetNumCols(); ++j)
+            {
+                error += std::norm(f(i, j, c) - r(j, i, c));
+                power += std::norm(f(i, j, c));
+            }
+        }
+    }
+    NS_TEST_ASSERT_MSG_GT(power, 0.0, "the channel carries no power");
+    NS_TEST_EXPECT_MSG_LT(error / power,
+                          1e-20,
+                          "the reverse matrix is not the transpose of the forward one");
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * A Procedure A update (TR 38.901 Sec. 7.6.3.2) evolves the received spectrum
  * as the motion since the previous update does, without a jump of its own.
  * The Doppler term already rotates every cluster by the phase of that motion,
@@ -4150,6 +4261,8 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
         TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRayShiftTest(true), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRayShiftTest(false), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppDualPolarizedReciprocityTest(true), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppDualPolarizedReciprocityTest(false), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppUpdateContinuityTest(true), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppUpdateContinuityTest(false), TestCase::Duration::QUICK);
 
