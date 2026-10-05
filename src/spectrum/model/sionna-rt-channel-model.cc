@@ -505,6 +505,7 @@ SionnaRtChannelModel::CalculateChannelParamsFromPaths(const py::object paths,
     py::module_ np = py::module_::import("numpy");
 
     channelParams->m_generatedTime = Simulator::Now();
+    channelParams->m_frequency = m_sceneConfigs.frequency;
 
     channelParams->m_delay = CalculateTauFromPaths(np, paths);
     channelParams->m_doppler = CalculateDopplerFromPaths(np, paths);
