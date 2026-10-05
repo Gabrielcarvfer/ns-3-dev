@@ -30,6 +30,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/uniform-planar-array.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
@@ -3654,6 +3655,199 @@ ThreeGppIndoorLosLspOrderingTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * A Procedure A update (TR 38.901 Sec. 7.6.3.2) moves the rays of a cluster
+ * with the cluster: every ray keeps its offset from its own cluster mean, on the
+ * arrival and on the departure side.
+ */
+class ThreeGppRayShiftTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     * @param los whether the link is LOS
+     */
+    explicit ThreeGppRayShiftTest(bool los);
+
+  private:
+    void DoRun() override;
+
+    /// Offsets of the rays from their cluster mean, in degrees, of the AOA, ZOA, AOD and ZOD
+    using Offsets = std::array<std::vector<std::vector<double>>, 4>;
+
+    /**
+     * Compute the offset of every ray from its cluster mean.
+     *
+     * @param p The channel parameters.
+     * @return The offsets, in degrees, per direction, cluster and ray.
+     */
+    static Offsets GetRayOffsets(Ptr<const ThreeGppChannelModel::ThreeGppChannelParams> p);
+
+    /**
+     * Check whether a ray arrives or departs within 2 degrees of a pole, where
+     * its azimuth is ill-defined.
+     *
+     * @param p The channel parameters.
+     * @param n The cluster index.
+     * @param m The ray index.
+     * @return True if the ZOA or ZOD of the ray is within 2 degrees of a pole.
+     */
+    static bool IsNearPole(Ptr<const ThreeGppChannelModel::ThreeGppChannelParams> p,
+                           size_t n,
+                           size_t m);
+
+    bool m_los; ///< whether the link is LOS
+};
+
+ThreeGppRayShiftTest::ThreeGppRayShiftTest(bool los)
+    : TestCase(std::string("A channel update keeps every ray on its cluster, ") +
+               (los ? "LOS" : "NLOS")),
+      m_los(los)
+{
+}
+
+ThreeGppRayShiftTest::Offsets
+ThreeGppRayShiftTest::GetRayOffsets(Ptr<const ThreeGppChannelModel::ThreeGppChannelParams> p)
+{
+    Offsets out;
+    const std::array<const MatrixBasedChannelModel::Double2DVector*, 4> rays{&p->m_rayAoaRadian,
+                                                                             &p->m_rayZoaRadian,
+                                                                             &p->m_rayAodRadian,
+                                                                             &p->m_rayZodRadian};
+    const std::array<uint8_t, 4> dir{MatrixBasedChannelModel::AOA_INDEX,
+                                     MatrixBasedChannelModel::ZOA_INDEX,
+                                     MatrixBasedChannelModel::AOD_INDEX,
+                                     MatrixBasedChannelModel::ZOD_INDEX};
+    for (size_t k = 0; k < rays.size(); ++k)
+    {
+        for (size_t n = 0; n < p->m_reducedClusterNumber; ++n)
+        {
+            std::vector<double> row;
+            for (double r : (*rays[k])[n])
+            {
+                row.push_back(std::remainder(RadiansToDegrees(r) - p->m_angle[dir[k]][n], 360.0));
+            }
+            out[k].push_back(row);
+        }
+    }
+    return out;
+}
+
+bool
+ThreeGppRayShiftTest::IsNearPole(Ptr<const ThreeGppChannelModel::ThreeGppChannelParams> p,
+                                 size_t n,
+                                 size_t m)
+{
+    constexpr double poleMarginDeg = 2.0;
+    const std::array<double, 2> zenithDeg{RadiansToDegrees(p->m_rayZoaRadian[n][m]),
+                                          RadiansToDegrees(p->m_rayZodRadian[n][m])};
+    return std::any_of(zenithDeg.begin(), zenithDeg.end(), [](double deg) {
+        return deg < poleMarginDeg || deg > 180.0 - poleMarginDeg;
+    });
+}
+
+void
+ThreeGppRayShiftTest::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+    auto channel = CreateObject<ThreeGppChannelModel>();
+    channel->SetAttribute("Frequency", DoubleValue(4e9));
+    channel->SetAttribute("Scenario", StringValue("UMa"));
+    channel->SetAttribute("UpdatePeriod", TimeValue(MilliSeconds(10)));
+    if (m_los)
+    {
+        channel->SetAttribute("ChannelConditionModel",
+                              PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+    }
+    else
+    {
+        channel->SetAttribute("ChannelConditionModel",
+                              PointerValue(CreateObject<NeverLosChannelConditionModel>()));
+    }
+    channel->AssignStreams(1);
+
+    auto site = CreateObject<ConstantPositionMobilityModel>();
+    site->SetPosition(Vector(0.0, 0.0, 25.0));
+    CreateObject<Node>()->AggregateObject(site);
+    // The update moves the clusters with the terminal velocity (7.6-10, 7.6-11).
+    auto term = CreateObject<ConstantVelocityMobilityModel>();
+    term->SetPosition(Vector(80.0, 40.0, 1.5));
+    term->SetVelocity(Vector(24.0, 18.0, 0.0));
+    CreateObject<Node>()->AggregateObject(term);
+    auto siteAnt = CreateObjectWithAttributes<UniformPlanarArray>("NumRows",
+                                                                  UintegerValue(2),
+                                                                  "NumColumns",
+                                                                  UintegerValue(2));
+    auto termAnt = CreateObjectWithAttributes<UniformPlanarArray>("NumRows",
+                                                                  UintegerValue(1),
+                                                                  "NumColumns",
+                                                                  UintegerValue(2));
+
+    // Offset of every ray from its cluster mean, in degrees, per direction. The
+    // terminal covers 0.33 m before the update: an update (Procedure A), not a
+    // new realization.
+    Offsets before;
+    MatrixBasedChannelModel::Double2DVector anglesBefore;
+    Ptr<const ThreeGppChannelModel::ThreeGppChannelParams> after;
+    Simulator::Schedule(MilliSeconds(1), [&]() {
+        channel->GetChannel(site, term, siteAnt, termAnt);
+        auto p = DynamicCast<const ThreeGppChannelModel::ThreeGppChannelParams>(
+            channel->GetParams(site, term));
+        before = GetRayOffsets(p);
+        anglesBefore = p->m_angle;
+    });
+    Simulator::Schedule(MilliSeconds(12), [&]() {
+        channel->GetChannel(site, term, siteAnt, termAnt);
+        after = DynamicCast<const ThreeGppChannelModel::ThreeGppChannelParams>(
+            channel->GetParams(site, term));
+    });
+    Simulator::Stop(MilliSeconds(20));
+    Simulator::Run();
+    Simulator::Destroy();
+
+    NS_TEST_ASSERT_MSG_NE(after, nullptr, "no channel parameters after the update");
+    const Offsets now = GetRayOffsets(after);
+    NS_TEST_ASSERT_MSG_EQ(now[0].size(), before[0].size(), "the update changed the clusters");
+    uint32_t checked = 0;
+    uint32_t moved = 0;
+    double worst = 0.0;
+    for (size_t k = 0; k < 4; ++k)
+    {
+        for (size_t n = 0; n < now[k].size(); ++n)
+        {
+            for (size_t m = 0; m < now[k][n].size(); ++m)
+            {
+                if (IsNearPole(after, n, m))
+                {
+                    continue;
+                }
+                ++checked;
+                const double d = std::abs(std::remainder(now[k][n][m] - before[k][n][m], 360.0));
+                worst = std::max(worst, d);
+                moved += d > 1e-6;
+            }
+        }
+    }
+    NS_TEST_ASSERT_MSG_GT(checked, 0, "no ray to check");
+    double clusterMove = 0.0;
+    for (size_t k = 0; k < anglesBefore.size(); ++k)
+    {
+        for (size_t n = 0; n < after->m_reducedClusterNumber; ++n)
+        {
+            clusterMove =
+                std::max(clusterMove, std::abs(after->m_angle[k][n] - anglesBefore[k][n]));
+        }
+    }
+    NS_TEST_ASSERT_MSG_GT(clusterMove, 0.0, "the update did not move the clusters");
+    NS_TEST_EXPECT_MSG_EQ(moved,
+                          0,
+                          "rays left their cluster mean in the update (largest offset change "
+                              << worst << " deg)");
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test suite for the ThreeGppChannelModel class
  */
 class ThreeGppChannelTestSuite : public TestSuite
@@ -3693,6 +3887,8 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(
         new ThreeGppChannelConsistencyTest(ChannelCondition::LosConditionValue::NLOS, 10, 4e9),
         TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppRayShiftTest(true), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppRayShiftTest(false), TestCase::Duration::QUICK);
 
     AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 1, 1), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 1, 1, true),
