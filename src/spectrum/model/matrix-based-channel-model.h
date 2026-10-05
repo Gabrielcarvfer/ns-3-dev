@@ -113,6 +113,11 @@ class MatrixBasedChannelModel : public Object
         Time m_generatedTime;
 
         /**
+         * Carrier frequency [Hz] for which the channel was generated.
+         */
+        double m_frequency = 0.0;
+
+        /**
          * Cluster delay in nanoseconds.
          */
         DoubleVector m_delay;

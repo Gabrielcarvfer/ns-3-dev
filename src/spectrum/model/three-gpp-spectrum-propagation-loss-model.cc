@@ -252,7 +252,7 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
     // NOTE the update of Doppler is simplified by only taking the center angle of
     // each cluster in to consideration.
     const double slotTime = Simulator::Now().GetSeconds();
-    const double factor = 2 * M_PI * slotTime * GetFrequency() / 3e8;
+    const double factor = 2 * M_PI * slotTime * channelParams->m_frequency / 3e8;
     PhasedArrayModel::ComplexVector doppler(numCluster);
 
     // Make sure that all the structures that are passed to this function
@@ -441,7 +441,8 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
         auto sbit = inPsd->ConstBandsBegin(); // band iterator
         for (unsigned i = 0; i < numRb; i++)
         {
-            const double fsb = sbit->fc; // center frequency of the sub-band
+            // offset of the sub-band center from the carrier
+            const double fsb = sbit->fc - channelParams->m_frequency;
             for (std::size_t cIndex = 0; cIndex < numCluster; cIndex++)
             {
                 const double delay = -2 * M_PI * fsb * channelParams->m_delay[cIndex];

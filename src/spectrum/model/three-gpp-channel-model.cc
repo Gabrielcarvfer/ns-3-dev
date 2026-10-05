@@ -4258,6 +4258,7 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
     Ptr<ThreeGppChannelParams> channelParams = Create<ThreeGppChannelParams>();
     // Set basic parameters
     channelParams->m_generatedTime = Simulator::Now();
+    channelParams->m_frequency = m_frequency;
     channelParams->m_nodeIds = {aMobOrdered->GetObject<Node>()->GetId(),
                                 bMobOrdered->GetObject<Node>()->GetId()};
     channelParams->m_losCondition = channelCondition->GetLosCondition();
