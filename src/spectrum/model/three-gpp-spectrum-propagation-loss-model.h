@@ -150,6 +150,8 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
      * @param numTxPorts the number of antenna ports at the transmitter
      * @param numRxPorts the number of antenna ports at the receiver
      * @param isReverse true if params and longTerm were computed with RX->TX switched
+     * @param carrierFrequency the carrier frequency [Hz]; the cluster delays phase the
+     *        sub-bands by their offset from it
      * @return 3D spectrum channel matrix with dimensions numRxPorts * numTxPorts * numRBs
      */
     static Ptr<MatrixBasedChannelModel::Complex3DVector> GenSpectrumChannelMatrix(
@@ -160,7 +162,8 @@ class ThreeGppSpectrumPropagationLossModel : public PhasedArraySpectrumPropagati
         const PhasedArrayModel::ComplexVector& doppler,
         const uint8_t numTxPorts,
         const uint8_t numRxPorts,
-        const bool isReverse);
+        const bool isReverse,
+        double carrierFrequency);
 
     /**
      * Get the operating frequency

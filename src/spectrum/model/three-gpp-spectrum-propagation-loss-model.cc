@@ -322,7 +322,8 @@ ThreeGppSpectrumPropagationLossModel::CalcBeamformingGain(
                                                                doppler,
                                                                numTxPorts,
                                                                numRxPorts,
-                                                               isReverse);
+                                                               isReverse,
+                                                               GetFrequency());
 
     NS_ASSERT_MSG(rxParams->psd->GetValuesN() == rxParams->spectrumChannelMatrix->GetNumPages(),
                   "RX PSD and the spectrum channel matrix should have the same number of RBs ");
@@ -390,7 +391,8 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
     const PhasedArrayModel::ComplexVector& doppler,
     uint8_t numTxPorts,
     uint8_t numRxPorts,
-    const bool isReverse)
+    const bool isReverse,
+    double carrierFrequency)
 {
     const size_t numCluster = channelMatrix->m_channel.GetNumPages();
     const auto numRb = inPsd->GetValuesN();
@@ -436,7 +438,8 @@ ThreeGppSpectrumPropagationLossModel::GenSpectrumChannelMatrix(
         auto sbit = inPsd->ConstBandsBegin(); // band iterator
         for (unsigned i = 0; i < numRb; i++)
         {
-            const double fsb = sbit->fc; // center frequency of the sub-band
+            // offset of the sub-band center from the carrier
+            const double fsb = sbit->fc - carrierFrequency;
             for (std::size_t cIndex = 0; cIndex < numCluster; cIndex++)
             {
                 const double delay = -2 * M_PI * fsb * channelParams->m_delay[cIndex];

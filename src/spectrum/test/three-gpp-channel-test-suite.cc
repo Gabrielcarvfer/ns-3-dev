@@ -3934,6 +3934,178 @@ ThreeGppRayShiftTest::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * A Procedure A update (TR 38.901 Sec. 7.6.3.2) evolves the received spectrum
+ * as the motion since the previous update does, without a jump of its own.
+ * The Doppler term already rotates every cluster by the phase of that motion,
+ * so the updated cluster delays may not turn it again: they phase the
+ * sub-bands by their offset from the carrier. Turning them at the carrier
+ * frequency made each update a jump worth the Doppler rotation of the whole
+ * period.
+ */
+class ThreeGppUpdateContinuityTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     * @param los whether the links are LOS
+     */
+    explicit ThreeGppUpdateContinuityTest(bool los);
+
+  private:
+    void DoRun() override;
+    bool m_los; ///< whether the links are LOS
+};
+
+ThreeGppUpdateContinuityTest::ThreeGppUpdateContinuityTest(bool los)
+    : TestCase(std::string("A channel update evolves the spectrum without a jump, ") +
+               (los ? "LOS" : "NLOS")),
+      m_los(los)
+{
+}
+
+void
+ThreeGppUpdateContinuityTest::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+    auto channel = CreateObject<ThreeGppChannelModel>();
+    auto spectrumLoss = CreateObject<ThreeGppSpectrumPropagationLossModel>();
+    spectrumLoss->SetChannelModel(channel);
+    spectrumLoss->SetChannelModelAttribute("Frequency", DoubleValue(3.5e9));
+    spectrumLoss->SetChannelModelAttribute("Scenario", StringValue("UMa"));
+    spectrumLoss->SetChannelModelAttribute("UpdatePeriod", TimeValue(MilliSeconds(10)));
+    if (m_los)
+    {
+        spectrumLoss->SetChannelModelAttribute(
+            "ChannelConditionModel",
+            PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+    }
+    else
+    {
+        spectrumLoss->SetChannelModelAttribute(
+            "ChannelConditionModel",
+            PointerValue(CreateObject<NeverLosChannelConditionModel>()));
+    }
+    channel->AssignStreams(1);
+
+    auto makeAntenna = [](uint32_t rows, uint32_t cols) {
+        auto ant = CreateObjectWithAttributes<UniformPlanarArray>("NumRows",
+                                                                  UintegerValue(rows),
+                                                                  "NumColumns",
+                                                                  UintegerValue(cols));
+        PhasedArrayModel::ComplexVector w(ant->GetNumElems());
+        for (size_t e = 0; e < ant->GetNumElems(); ++e)
+        {
+            w[e] = 1.0 / std::sqrt(double(ant->GetNumElems()));
+        }
+        ant->SetBeamformingVector(w);
+        return ant;
+    };
+    auto site = CreateObject<ConstantPositionMobilityModel>();
+    site->SetPosition(Vector(0.0, 0.0, 25.0));
+    CreateObject<Node>()->AggregateObject(site);
+    auto siteAnt = makeAntenna(4, 4);
+
+    // Terminals walking at 3 km/h in different directions.
+    const uint32_t numLinks = 40;
+    std::vector<Ptr<MobilityModel>> terms;
+    std::vector<Ptr<UniformPlanarArray>> termAnts;
+    for (uint32_t u = 0; u < numLinks; ++u)
+    {
+        const double a = 2.0 * M_PI * u / numLinks;
+        const double r = 50.0 + 4.0 * u;
+        auto walking = CreateObject<ConstantVelocityMobilityModel>();
+        walking->SetPosition(Vector(r * std::cos(a), r * std::sin(a), 1.5));
+        walking->SetVelocity(Vector(0.8333 * std::cos(1.7 * u), 0.8333 * std::sin(1.7 * u), 0.0));
+        CreateObject<Node>()->AggregateObject(walking);
+        terms.push_back(walking);
+        termAnts.push_back(makeAntenna(1, 2));
+    }
+
+    Bands bands;
+    for (uint32_t rb = 0; rb < 51; ++rb)
+    {
+        BandInfo bi;
+        bi.fl = 3.5e9 - 9.18e6 + rb * 360e3;
+        bi.fc = bi.fl + 180e3;
+        bi.fh = bi.fl + 360e3;
+        bands.push_back(bi);
+    }
+    auto spectrumModel = Create<SpectrumModel>(bands);
+
+    // Per link and per 1 ms step: the normalized change of the received PSD,
+    // and whether the parameters were updated within the step.
+    std::vector<std::vector<double>> last(numLinks);
+    std::vector<Time> lastGenerated(numLinks);
+    std::vector<uint32_t> updates(numLinks, 0);
+    double updateStep = 0.0;
+    uint32_t numUpdateSteps = 0;
+    double plainStep = 0.0;
+    uint32_t numPlainSteps = 0;
+    for (uint32_t ms = 1; ms <= 60; ++ms)
+    {
+        Simulator::Schedule(MilliSeconds(ms), [&]() {
+            for (uint32_t l = 0; l < numLinks; ++l)
+            {
+                auto params = Create<SpectrumSignalParameters>();
+                params->psd = Create<SpectrumValue>(spectrumModel);
+                (*params->psd) = 1.0;
+                auto rx =
+                    spectrumLoss->CalcRxPowerSpectralDensity(params,
+                                                             site,
+                                                             terms[l],
+                                                             siteAnt,
+                                                             termAnts[l],
+                                                             siteAnt->GetBeamformingVector(),
+                                                             termAnts[l]->GetBeamformingVector());
+                std::vector<double> psd(rx->psd->ConstValuesBegin(), rx->psd->ConstValuesEnd());
+                const Time generated = channel->GetParams(site, terms[l])->m_generatedTime;
+                if (!last[l].empty())
+                {
+                    double num = 0.0;
+                    double den = 0.0;
+                    for (size_t rb = 0; rb < psd.size(); ++rb)
+                    {
+                        num += (psd[rb] - last[l][rb]) * (psd[rb] - last[l][rb]);
+                        den += psd[rb] * psd[rb] + last[l][rb] * last[l][rb];
+                    }
+                    if (generated != lastGenerated[l])
+                    {
+                        updateStep += num / den;
+                        ++numUpdateSteps;
+                        ++updates[l];
+                    }
+                    else
+                    {
+                        plainStep += num / den;
+                        ++numPlainSteps;
+                    }
+                }
+                last[l] = std::move(psd);
+                lastGenerated[l] = generated;
+            }
+        });
+    }
+    Simulator::Stop(MilliSeconds(70));
+    Simulator::Run();
+    Simulator::Destroy();
+
+    NS_TEST_ASSERT_MSG_GT(numUpdateSteps, 3 * numLinks, "the channel was not updated");
+    NS_TEST_ASSERT_MSG_GT(numPlainSteps, 0u, "no step without an update");
+    updateStep /= numUpdateSteps;
+    plainStep /= numPlainSteps;
+    // An update step spans one 1 ms step of motion, as a plain step does; the
+    // cluster drift and the shadowing walk add little at 3 km/h.
+    NS_TEST_EXPECT_MSG_LT(updateStep,
+                          4.0 * plainStep,
+                          "a channel update jumps by "
+                              << updateStep / plainStep
+                              << " times the change of a step without one");
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test suite for the ThreeGppChannelModel class
  */
 class ThreeGppChannelTestSuite : public TestSuite
@@ -3975,6 +4147,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
         TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRayShiftTest(true), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRayShiftTest(false), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppUpdateContinuityTest(false), TestCase::Duration::QUICK);
 
     AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 1, 1), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 1, 1, true),
