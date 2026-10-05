@@ -3937,10 +3937,13 @@ ThreeGppRayShiftTest::DoRun()
  * A Procedure A update (TR 38.901 Sec. 7.6.3.2) evolves the received spectrum
  * as the motion since the previous update does, without a jump of its own.
  * The Doppler term already rotates every cluster by the phase of that motion,
- * so the updated cluster delays may not turn it again: they phase the
- * sub-bands by their offset from the carrier. Turning them at the carrier
- * frequency made each update a jump worth the Doppler rotation of the whole
- * period.
+ * so neither the updated cluster delays nor the updated LOS distance may turn
+ * it again: the delays phase the sub-bands by their offset from the carrier,
+ * and the LOS ray keeps the distance it was drawn at. The cluster powers of a
+ * LOS link are drawn from the delays before their LOS scaling (7.5-4), at the
+ * draw and at every update. Turning the LOS ray at the carrier frequency made
+ * each update a jump worth the Doppler rotation of the whole period, and the
+ * scaled delays moved the LOS cluster powers at the first update.
  */
 class ThreeGppUpdateContinuityTest : public TestCase
 {
@@ -4147,6 +4150,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
         TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRayShiftTest(true), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRayShiftTest(false), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppUpdateContinuityTest(true), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppUpdateContinuityTest(false), TestCase::Duration::QUICK);
 
     AddTestCase(new ThreeGppChannelMatrixComputationTest(2, 2, 1, 1), TestCase::Duration::QUICK);
