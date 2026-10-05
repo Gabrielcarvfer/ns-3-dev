@@ -4536,10 +4536,10 @@ ThreeGppChannelModel::UpdateChannelParameters(Ptr<ThreeGppChannelParams> channel
     ShiftRayAnglesToUpdatedClusterMeans(table3gpp,
                                         channelParams,
                                         previousAngles,
-                                        &channelParams->m_rayAoaRadian,
                                         &channelParams->m_rayAodRadian,
-                                        &channelParams->m_rayZoaRadian,
-                                        &channelParams->m_rayZodRadian);
+                                        &channelParams->m_rayAoaRadian,
+                                        &channelParams->m_rayZodRadian,
+                                        &channelParams->m_rayZoaRadian);
 
     FindStrongestClusters(channelParams,
                           table3gpp,
@@ -5235,15 +5235,16 @@ ThreeGppChannelModel::ShiftRayAnglesToUpdatedClusterMeans(
 
     for (size_t n = 0; n < channelParams->m_reducedClusterNumber; ++n)
     {
-        // Compute per-cluster deltas (degrees) and convert to radians
-        const double dAoaRad = DegreesToRadians(prevClusterAngles[AOA_INDEX][n] -
-                                                channelParams->m_angle[AOA_INDEX][n]);
-        const double dAodRad = DegreesToRadians(prevClusterAngles[AOD_INDEX][n] -
-                                                channelParams->m_angle[AOD_INDEX][n]);
-        const double dZoaRad = DegreesToRadians(prevClusterAngles[ZOA_INDEX][n] -
-                                                channelParams->m_angle[ZOA_INDEX][n]);
-        const double dZodRad = DegreesToRadians(prevClusterAngles[ZOD_INDEX][n] -
-                                                channelParams->m_angle[ZOD_INDEX][n]);
+        // Per-cluster displacement of the means (updated minus previous, degrees),
+        // in radians: the rays move with their cluster.
+        const double dAoaRad = DegreesToRadians(channelParams->m_angle[AOA_INDEX][n] -
+                                                prevClusterAngles[AOA_INDEX][n]);
+        const double dAodRad = DegreesToRadians(channelParams->m_angle[AOD_INDEX][n] -
+                                                prevClusterAngles[AOD_INDEX][n]);
+        const double dZoaRad = DegreesToRadians(channelParams->m_angle[ZOA_INDEX][n] -
+                                                prevClusterAngles[ZOA_INDEX][n]);
+        const double dZodRad = DegreesToRadians(channelParams->m_angle[ZOD_INDEX][n] -
+                                                prevClusterAngles[ZOD_INDEX][n]);
 
         // Apply deltas to each ray, preserving coupling and offsets
         for (size_t m = 0; m < table3gpp->m_raysPerCluster; ++m)
