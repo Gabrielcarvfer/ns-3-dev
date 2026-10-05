@@ -3121,15 +3121,19 @@ ThreeGppChannelModel::RemoveWeakClusters(DoubleVector* clusterPowers,
     return clusterPowersForAngles;
 }
 
+double
+ThreeGppChannelModel::LosDelayScaling(double kFactor)
+{
+    return 0.7705 - 0.0433 * kFactor + 2e-4 * pow(kFactor, 2) + 17e-6 * pow(kFactor, 3); //(7.5-3)
+}
+
 void
 ThreeGppChannelModel::AdjustClusterDelaysForLosCondition(DoubleVector* clusterDelays,
                                                          const uint16_t reducedClusterNumber,
                                                          const double kFactor) const
 {
     NS_LOG_FUNCTION(this);
-    const double cTau = 0.7705 - 0.0433 * kFactor + 2e-4 * pow(kFactor, 2) +
-                        17e-6 * pow(kFactor,
-                                    3); //(7.5-3)
+    const double cTau = LosDelayScaling(kFactor);
     for (uint16_t cIndex = 0; cIndex < reducedClusterNumber; cIndex++)
     {
         (*clusterDelays)[cIndex] = (*clusterDelays)[cIndex] / cTau; //(7.5-4)
@@ -4274,6 +4278,7 @@ ThreeGppChannelModel::GenerateChannelParameters(Ptr<const ChannelCondition> chan
                        &channelParams->m_lastPositionFirst,
                        &channelParams->m_lastPositionSecond,
                        &channelParams->m_lastRelativePosition2D);
+    channelParams->m_losPhaseDistance3D = channelParams->m_dis3D;
 
     // Step 4: Generate large-scale parameters. LSPs are cross-correlated per the
     // 3GPP table; when InterUeSpatialConsistency is enabled they are additionally
@@ -4504,7 +4509,18 @@ ThreeGppChannelModel::UpdateChannelParameters(Ptr<ThreeGppChannelParams> channel
     // According to 3GPP 38.901. Procedure A, cluster powers are updated as in Step 6 using the
     // cluster delays from Equation (7.6-10a).
 
-    GenerateClusterPowers(channelParams->m_delay,
+    // The LOS delays carry the scaling of (7.5-4), which the powers are not drawn
+    // with (Step 6).
+    DoubleVector powerDelays = channelParams->m_delay;
+    if (channelParams->HasLosRay())
+    {
+        const double cTau = LosDelayScaling(channelParams->m_K_factor);
+        for (auto& d : powerDelays)
+        {
+            d *= cTau;
+        }
+    }
+    GenerateClusterPowers(powerDelays,
                           channelParams->m_DS,
                           table3gpp,
                           channelParams->m_clusterShadowing,
@@ -4642,7 +4658,7 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
     NS_ASSERT(nRays <= rayAoaRadian[0].size());
     NS_ASSERT(nRays <= rayAodRadian[0].size());
 
-    double distance3D = channelParams->m_dis3D;
+    double distance3D = channelParams->m_losPhaseDistance3D;
 
     Angles sAngle(uMob->GetPosition(), sMob->GetPosition());
     Angles uAngle(sMob->GetPosition(), uMob->GetPosition());

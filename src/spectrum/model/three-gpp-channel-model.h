@@ -189,6 +189,7 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         Double2DVector m_crossPolarizationPowerRatios; //!< cross-polarization power ratios
         double m_dis2D;                                //!< 2D distance between tx and rx
         double m_dis3D;                                //!< 3D distance between tx and rx
+        double m_losPhaseDistance3D{0.0};              //!< 3D distance of the LOS ray phase
         DoubleVector m_clusterShadowing;               //!< cluster shadowing
         DoubleVector m_clusterPower;                   //!< cluster powers
         DoubleVector m_attenuation_dB; //!< vector that stores the attenuation of the blockage
@@ -644,6 +645,14 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
                                     Ptr<const ParamsTable> table3gpp,
                                     const double kFactor,
                                     double* powerMax) const;
+
+    /**
+     * Delay scaling factor of a LOS link (TR 38.901 Equation 7.5-3).
+     *
+     * @param kFactor The Rician K-factor [dB].
+     * @return the factor c_tau the LOS cluster delays are divided by
+     */
+    static double LosDelayScaling(double kFactor);
 
     /**
      * @brief Adjusts cluster delays for LOS channel condition based on the K-factor.
