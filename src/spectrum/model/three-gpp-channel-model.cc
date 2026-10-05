@@ -4706,9 +4706,15 @@ ThreeGppChannelModel::GetNewChannel(Ptr<const ThreeGppChannelParams> channelPara
 
             // std::polar(1, x) folds the cos+sin call to a single sincos
             // on modern libstdc++/libc++.
+            // The phases were drawn for the parameters' direction (7.5-28); built
+            // the other way, the receiver is the parameters' transmitter, so the
+            // two cross-polarized terms trade places and the matrix is the
+            // transpose of the forward one.
             const std::complex<double> ph0 = std::polar(1.0, initialPhase[0]);
-            const std::complex<double> ph1 = std::polar(1.0, initialPhase[1]) * sqrtInvK;
-            const std::complex<double> ph2 = std::polar(1.0, initialPhase[2]) * sqrtInvK;
+            const std::complex<double> ph1 =
+                std::polar(1.0, initialPhase[isSameDirection ? 1 : 2]) * sqrtInvK;
+            const std::complex<double> ph2 =
+                std::polar(1.0, initialPhase[isSameDirection ? 2 : 1]) * sqrtInvK;
             const std::complex<double> ph3 = std::polar(1.0, initialPhase[3]);
 
             const double rxAoa = rayAoaRadian[nIndex][mIndex];
