@@ -213,9 +213,18 @@ Users can disable specific checks using the corresponding flags.
   * - Tabs
     - Check if there are no tabs. Respects clang-format guards.
     - ``--no-tabs``
+  * - Invisible characters
+    - Check if there are no invisible characters (zero-width, bidirectional control,
+      non-printable control and non-breaking space characters). Always checked.
+    - ``--no-invisible-chars``
   * - File encoding
     - Check if files have the correct encoding (UTF-8). Always checked.
     - ``--no-encoding``
+  * - Commit messages
+    - Check if the messages of the commits of the current branch, up to the nearest branch
+      (or the one given by ``--commits-base REF``), have no invisible characters.
+      Only performed when the ``--commits`` flag is given.
+    - ``--commits``
 
 Additional information about the formatting issues detected by the script can be enabled
 by adding the ``-v, --verbose`` flag.
@@ -224,8 +233,13 @@ In addition to checking the files, the script can automatically fix detected iss
 This mode is enabled by adding the ``--fix`` flag.
 
 The formatting and tabs checks respect clang-format guards, which mark code blocks
-that should not be checked. Trailing whitespace is always checked regardless of
-clang-format guards.
+that should not be checked. Trailing whitespace, invisible characters and file encoding
+are always checked regardless of clang-format guards.
+
+When ``--commits`` is combined with ``--fix``, the commits whose messages contain invisible
+characters are rewritten with the fixed messages (preserving their trees, authors and dates)
+and the current branch is updated to the rewritten history. Commit signatures are not
+preserved, and the previous history remains available in the reflog.
 
 The complete API of the ``check-style-clang-format.py`` script can be obtained with the
 following command:
@@ -249,6 +263,9 @@ For quick-reference, the most used commands are listed below:
 
   # Files modified by the current branch, relative to the master branch
   git diff --name-only master | xargs ./utils/check-style-clang-format.py --fix
+
+  # Files modified by the current branch and the messages of its commits, relative to the master branch
+  git diff --name-only master | xargs ./utils/check-style-clang-format.py --fix --commits --commits-base master
 
 Clang-tidy
 **********

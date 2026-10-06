@@ -18,7 +18,11 @@ the ".clang-format" file. This script performs the following checks / fixes:
 - Check / fix emacs file style comments. Respects clang-format guards.
 - Check / trim trailing whitespace. Always checked.
 - Check / replace tabs with spaces. Respects clang-format guards.
+- Check / delete invisible characters (zero-width, bidirectional control, non-printable
+  control and non-breaking space characters). Always checked.
 - Check file encoding. Always checked.
+- Check / delete invisible characters in the commit messages of the current branch
+  (optional, see "--commits").
 
 This script can be applied to all text files in a given path or to individual files.
 
@@ -35,7 +39,8 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Callable, Dict, List, Tuple
+import unicodedata
+from typing import Callable, Dict, List, Optional, Tuple
 
 ###########################################################
 # PARAMETERS
@@ -81,6 +86,7 @@ CHECKS = [
     "emacs",
     "whitespace",
     "tabs",
+    "invisible_chars",
     "formatting",
     "encoding",
 ]
@@ -99,6 +105,7 @@ FILES_TO_CHECK["tabs"] = [
 FILES_TO_CHECK["whitespace"] = FILES_TO_CHECK["tabs"] + [
     "Makefile",
 ]
+FILES_TO_CHECK["invisible_chars"] = FILES_TO_CHECK["whitespace"]
 
 # File extensions to check
 FILE_EXTENSIONS_TO_CHECK: Dict[str, List[str]] = {c: [] for c in CHECKS}
@@ -160,10 +167,29 @@ FILE_EXTENSIONS_TO_CHECK["whitespace"] = FILE_EXTENSIONS_TO_CHECK["tabs"] + [
     ".seqdiag",
     ".txt",
 ]
+FILE_EXTENSIONS_TO_CHECK["invisible_chars"] = [
+    ".c",
+    ".cc",
+    ".cmake",
+    ".h",
+    ".hpp",
+    ".py",
+    ".rst",
+    ".txt",
+]
 
 # Other check parameters
 TAB_SIZE = 4
 FILE_ENCODING = "UTF-8"
+
+# Invisible characters are detected by Unicode category:
+# - Cc (control): non-printable control characters, except tab, line feed and carriage return
+# - Cf (format): zero-width, bidirectional control, byte order mark, soft hyphen, ...
+# - Zs (space separator): non-breaking and other exotic spaces, except the regular space
+# Characters in the Cc and Cf categories are deleted, while those in Zs are replaced by a space.
+INVISIBLE_CHAR_CATEGORIES_TO_DELETE = ("Cc", "Cf")
+INVISIBLE_CHAR_CATEGORIES_TO_REPLACE = ("Zs",)
+INVISIBLE_CHAR_EXCEPTIONS = ("\t", "\n", "\r", " ")
 
 
 ###########################################################
@@ -332,6 +358,7 @@ def check_style_clang_format(
         "emacs": "emacs file style comments",
         "whitespace": "trailing whitespace",
         "tabs": "tabs",
+        "invisible_chars": "invisible characters",
         "formatting": "bad code formatting",
         "encoding": f"bad file encoding ({FILE_ENCODING})",
     }
@@ -384,6 +411,13 @@ def check_style_clang_format(
             "kwargs": {
                 "respect_clang_format_guards": True,
                 "check_style_line_function": check_tabs_line,
+            },
+        },
+        "invisible_chars": {
+            "function": check_manually_file,
+            "kwargs": {
+                "respect_clang_format_guards": False,
+                "check_style_line_function": check_invisible_chars_line,
             },
         },
         "formatting": {
@@ -994,6 +1028,324 @@ def check_tabs_line(
     return (is_line_compliant, line_fixed, verbose_infos)
 
 
+def find_invisible_chars(text: str) -> List[Tuple[int, str]]:
+    """Find invisible characters in a string.
+
+    Args:
+        text: The string to check.
+
+    Returns:
+        List of tuples (index of the invisible character, Unicode name of the character).
+    """
+
+    invisible_chars: List[Tuple[int, str]] = []
+
+    for i, c in enumerate(text):
+        if c in INVISIBLE_CHAR_EXCEPTIONS:
+            continue
+
+        category = unicodedata.category(c)
+
+        if (
+            category in INVISIBLE_CHAR_CATEGORIES_TO_DELETE
+            or category in INVISIBLE_CHAR_CATEGORIES_TO_REPLACE
+        ):
+            name = unicodedata.name(c, "<unnamed>")
+            invisible_chars.append((i, f"U+{ord(c):04X} {name}"))
+
+    return invisible_chars
+
+
+def remove_invisible_chars(text: str) -> str:
+    """Delete / replace invisible characters from a string.
+
+    Args:
+        text: The string to fix.
+
+    Returns:
+        The string without invisible characters.
+    """
+
+    text_fixed: List[str] = []
+
+    for c in text:
+        if c in INVISIBLE_CHAR_EXCEPTIONS:
+            text_fixed.append(c)
+            continue
+
+        category = unicodedata.category(c)
+
+        if category in INVISIBLE_CHAR_CATEGORIES_TO_DELETE:
+            continue
+        elif category in INVISIBLE_CHAR_CATEGORIES_TO_REPLACE:
+            text_fixed.append(" ")
+        else:
+            text_fixed.append(c)
+
+    return "".join(text_fixed)
+
+
+def check_invisible_chars_line(
+    line: str,
+    filename: str,
+    line_number: int,
+) -> Tuple[bool, str, List[str]]:
+    """Check / fix invisible characters in a line.
+
+    Args:
+        line: The line to check.
+        filename: Name of the file to be checked.
+        line_number: The number of the line checked.
+
+    Returns:
+        Tuple (Whether the line is compliant with the style (before the check),
+               Fixed line,
+               Verbose information)
+    """
+
+    is_line_compliant = True
+    line_fixed = line
+    verbose_infos: List[str] = []
+
+    invisible_chars = find_invisible_chars(line)
+
+    if invisible_chars:
+        is_line_compliant = False
+        line_fixed = remove_invisible_chars(line)
+        line_stripped = line.rstrip("\n")
+
+        for index, description in invisible_chars:
+            verbose_infos.extend(
+                [
+                    f"{filename}:{line_number + 1}:{index + 1}: error: Invisible character detected ({description})",
+                    f"    {line_stripped}",
+                    f"    {'':>{index}}^",
+                ]
+            )
+
+    return (is_line_compliant, line_fixed, verbose_infos)
+
+
+###########################################################
+# COMMIT MESSAGE FUNCTIONS
+###########################################################
+def run_git(args: List[str], input_data: Optional[bytes] = None, env=None) -> bytes:
+    """Run a git command and return its output.
+
+    Args:
+        args: Arguments to git.
+        input_data: Data to pass to the standard input of git.
+        env: Environment variables of the git process.
+
+    Returns:
+        The standard output of git.
+    """
+
+    return subprocess.run(
+        ["git", *args],
+        input=input_data,
+        env=env,
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
+def find_nearest_branch() -> str:
+    """Find the branch whose merge base with HEAD is the nearest to HEAD.
+
+    The branches that point to the same commit as HEAD (including the current one) are
+    excluded. The upstream branch of the current branch, if any, is preferred over other
+    branches at the same distance.
+
+    Returns:
+        The name of the nearest branch.
+    """
+
+    head = run_git(["rev-parse", "HEAD"]).decode().strip()
+
+    def list_refs(*args: str) -> List[str]:
+        refs = run_git(["for-each-ref", "--format=%(refname:short) %(objectname)", *args]).decode()
+        return [
+            branch
+            for branch, commit in (line.split() for line in refs.splitlines())
+            if commit != head and not branch.endswith("/HEAD")
+        ]
+
+    other_branches = list_refs("refs/heads", "refs/remotes")
+
+    if not other_branches:
+        raise RuntimeError("Could not find a branch to compare the commit messages against")
+
+    # Walk the history once: the boundary commits are the nearest commits of HEAD
+    # that are reachable from the other branches
+    boundary_commits = [
+        line[1:]
+        for line in run_git(["rev-list", "--boundary", "HEAD", "--not", *other_branches])
+        .decode()
+        .splitlines()
+        if line.startswith("-")
+    ]
+    nearest_commit = boundary_commits[0] if boundary_commits else head
+
+    candidates = list_refs("--contains", nearest_commit, "refs/heads", "refs/remotes")
+
+    try:
+        upstream = run_git(["rev-parse", "--abbrev-ref", "@{upstream}"]).decode().strip()
+    except subprocess.CalledProcessError:
+        upstream = ""
+
+    return upstream if upstream in candidates else candidates[0]
+
+
+def check_invisible_chars_commit_messages(
+    base: Optional[str],
+    fix: bool,
+    verbose: bool,
+) -> bool:
+    """Check / fix invisible characters in the commit messages of the current branch.
+
+    The commits checked are those reachable from HEAD but not from the base branch.
+    In fix mode, the commits are rewritten with the fixed messages (preserving the trees,
+    authors and dates), and the current branch is updated to point to the rewritten history.
+
+    Args:
+        base: Branch or commit to compare against. If None, the nearest branch is used.
+        fix: Whether to fix (True) or just check (False) the commit messages.
+        verbose: Show the lines that are not compliant with the style.
+
+    Returns:
+        Whether all commit messages are compliant with the style.
+    """
+
+    if base is None:
+        base = find_nearest_branch()
+
+    style_check_str = f"invisible characters in commit messages (since {base})"
+
+    commits = run_git(["rev-list", "--reverse", "--topo-order", f"{base}..HEAD"]).decode().split()
+
+    non_compliant_commits: List[str] = []
+    fixed_messages: Dict[str, bytes] = {}
+    commits_verbose_infos: Dict[str, List[str]] = {}
+
+    for commit in commits:
+        message = run_git(["log", "-1", "--format=%B", commit]).decode(FILE_ENCODING)
+        subject = run_git(["log", "-1", "--format=%s", commit]).decode(FILE_ENCODING).strip()
+        short_commit = commit[:10]
+        verbose_infos: List[str] = []
+        is_commit_compliant = True
+
+        for line_number, line in enumerate(message.split("\n")):
+            invisible_chars = find_invisible_chars(line)
+
+            if invisible_chars:
+                is_commit_compliant = False
+
+                for index, description in invisible_chars:
+                    verbose_infos.extend(
+                        [
+                            f"{short_commit}:{line_number + 1}:{index + 1}: error: Invisible character detected ({description})",
+                            f"    {line}",
+                            f"    {'':>{index}}^",
+                        ]
+                    )
+
+        if not is_commit_compliant:
+            non_compliant_commits.append(f"{short_commit} {remove_invisible_chars(subject)}")
+            commits_verbose_infos[commit] = verbose_infos
+            fixed_messages[commit] = remove_invisible_chars(message).encode(FILE_ENCODING)
+
+    if not non_compliant_commits:
+        print(f"- No commits detected with {style_check_str}")
+        return True
+
+    if fix:
+        rewrite_commit_messages(commits, fixed_messages)
+        print(f"- Fixed {style_check_str} in the commits ({len(non_compliant_commits)}):")
+    else:
+        print(f"- Detected {style_check_str} in the commits ({len(non_compliant_commits)}):")
+
+    for commit, commit_str in zip(fixed_messages, non_compliant_commits):
+        if verbose:
+            print(*[f"    {l}" for l in commits_verbose_infos[commit]], sep="\n")
+        else:
+            print(f"    - {commit_str}")
+
+    return fix
+
+
+def rewrite_commit_messages(commits: List[str], fixed_messages: Dict[str, bytes]) -> None:
+    """Rewrite the messages of the given commits and update the current branch.
+
+    Every commit in the list is recreated with the same tree, author, committer and dates,
+    with its parents remapped to the rewritten commits and its message replaced if fixed.
+    Commit signatures are not preserved.
+
+    Args:
+        commits: Commits to rewrite, in topological order (oldest first).
+        fixed_messages: Fixed messages of the non-compliant commits.
+    """
+
+    rewritten: Dict[str, str] = {}
+
+    for commit in commits:
+        info = run_git(
+            ["log", "-1", "--format=%T%n%P%n%an%n%ae%n%aD%n%cn%n%ce%n%cD", commit]
+        ).decode(FILE_ENCODING)
+        tree, parents, an, ae, ad, cn, ce, cd = info.split("\n")[:8]
+
+        new_parents = [rewritten.get(p, p) for p in parents.split()]
+
+        if commit not in fixed_messages and all(p not in rewritten for p in parents.split()):
+            continue
+
+        message = fixed_messages.get(commit)
+        if message is None:
+            message = run_git(["log", "-1", "--format=%B", commit])
+
+        env = dict(os.environ)
+        env.update(
+            {
+                "GIT_AUTHOR_NAME": an,
+                "GIT_AUTHOR_EMAIL": ae,
+                "GIT_AUTHOR_DATE": ad,
+                "GIT_COMMITTER_NAME": cn,
+                "GIT_COMMITTER_EMAIL": ce,
+                "GIT_COMMITTER_DATE": cd,
+            }
+        )
+
+        parent_args = [arg for p in new_parents for arg in ("-p", p)]
+        new_commit = (
+            run_git(["commit-tree", tree, *parent_args, "-F", "-"], input_data=message, env=env)
+            .decode()
+            .strip()
+        )
+        rewritten[commit] = new_commit
+
+    if not rewritten:
+        return
+
+    old_head = run_git(["rev-parse", "HEAD"]).decode().strip()
+    new_head = rewritten.get(old_head, old_head)
+
+    try:
+        branch_ref = run_git(["symbolic-ref", "-q", "HEAD"]).decode().strip()
+    except subprocess.CalledProcessError:
+        branch_ref = "HEAD"
+
+    run_git(
+        [
+            "update-ref",
+            "-m",
+            "check-style-clang-format: remove invisible characters from commit messages",
+            branch_ref,
+            new_head,
+            old_head,
+        ]
+    )
+
+
 ###########################################################
 # MAIN
 ###########################################################
@@ -1012,7 +1364,7 @@ if __name__ == "__main__":
         "paths",
         action="store",
         type=str,
-        nargs="+",
+        nargs="*",
         help="List of paths to the files to check",
     )
     parser.add_argument(
@@ -1056,9 +1408,29 @@ if __name__ == "__main__":
         help="Do not check / fix code formatting (respects clang-format guards)",
     )
     parser.add_argument(
+        "--no-invisible-chars",
+        action="store_true",
+        help="Do not check / fix invisible characters (zero-width, bidirectional control, non-printable control and non-breaking space characters)",
+    )
+    parser.add_argument(
         "--no-encoding",
         action="store_true",
         help=f"Do not check / fix file encoding ({FILE_ENCODING})",
+    )
+    parser.add_argument(
+        "--commits",
+        action="store_true",
+        help="Check / fix invisible characters in the messages of the commits of the current branch, "
+        "up to the nearest branch (or the branch given by --commits-base). "
+        'In "fix mode", the commits are rewritten with the fixed messages (commit signatures are not preserved)',
+    )
+    parser.add_argument(
+        "--commits-base",
+        action="store",
+        type=str,
+        default=None,
+        metavar="REF",
+        help="Branch or commit up to which (exclusive) the commit messages are checked (default: nearest branch)",
     )
     parser.add_argument(
         "--fix",
@@ -1080,24 +1452,45 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    if not args.paths and not args.commits:
+        parser.error("at least one path or --commits is required")
+
     try:
-        all_checks_successful = check_style_clang_format(
-            paths=args.paths,
-            checks_enabled={
-                "include_prefixes": not args.no_include_prefixes,
-                "include_quotes": not args.no_include_quotes,
-                "doxygen_tags": not args.no_doxygen_tags,
-                "license": not args.no_licenses,
-                "emacs": not args.no_emacs,
-                "whitespace": not args.no_whitespace,
-                "tabs": not args.no_tabs,
-                "formatting": not args.no_formatting,
-                "encoding": not args.no_encoding,
-            },
-            fix=args.fix,
-            verbose=args.verbose,
-            n_jobs=args.jobs,
-        )
+        all_checks_successful = True
+
+        if args.paths:
+            all_checks_successful = check_style_clang_format(
+                paths=args.paths,
+                checks_enabled={
+                    "include_prefixes": not args.no_include_prefixes,
+                    "include_quotes": not args.no_include_quotes,
+                    "doxygen_tags": not args.no_doxygen_tags,
+                    "license": not args.no_licenses,
+                    "emacs": not args.no_emacs,
+                    "whitespace": not args.no_whitespace,
+                    "tabs": not args.no_tabs,
+                    "invisible_chars": not args.no_invisible_chars,
+                    "formatting": not args.no_formatting,
+                    "encoding": not args.no_encoding,
+                },
+                fix=args.fix,
+                verbose=args.verbose,
+                n_jobs=args.jobs,
+            )
+
+        if args.commits:
+            if args.paths:
+                print("")
+
+            all_checks_successful &= check_invisible_chars_commit_messages(
+                base=args.commits_base,
+                fix=args.fix,
+                verbose=args.verbose,
+            )
+
+    except subprocess.CalledProcessError as ex:
+        print("ERROR:", ex, ex.stderr.decode(errors="replace") if ex.stderr else "")
+        sys.exit(1)
 
     except Exception as ex:
         print("ERROR:", ex)
@@ -1112,6 +1505,8 @@ if __name__ == "__main__":
                 "      $ ./utils/check-style-clang-format.py --fix path [path ...]",
                 "  - To fix the formatting of all files modified by this branch, run this script in the following way:",
                 "      $ git diff --name-only master | xargs ./utils/check-style-clang-format.py --fix",
+                "  - To fix the commit messages of this branch, run this script in the following way:",
+                "      $ ./utils/check-style-clang-format.py --fix --commits",
                 sep="\n",
             )
 
