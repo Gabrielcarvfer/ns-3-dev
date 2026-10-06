@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <utility>
+#include <vector>
 
 namespace ns3
 {
@@ -88,6 +89,25 @@ constexpr std::array<std::pair<double, double>, SpatialGaussianField::NUM_SCALES
     {1.2953600, 0.1944489},
 }};
 
+/**
+ * The cells of one component window, as last drawn. A terminal moves by a
+ * small fraction of a cell between samples, so consecutive samples of a link
+ * mostly fall on the same window and only the kernel weights change.
+ */
+struct CellWindowEntry
+{
+    uint64_t scalePrefix{0}; ///< field and component of the cells
+    int generator{0};        ///< cell generator that drew them
+    int64_t ix{0};           ///< first cell along x
+    int64_t iy{0};           ///< first cell along y
+    bool valid{false};       ///< whether the entry holds cells
+    std::array<double, SpatialGaussianField::WINDOW_CELLS * SpatialGaussianField::WINDOW_CELLS>
+        cells{}; ///< cell values, row by row
+};
+
+/// Direct-mapped: a collision only redraws the cells, which are deterministic.
+constexpr std::size_t CELL_CACHE_SLOTS = 1 << 14;
+
 } // namespace
 
 SpatialGaussianField::Window
@@ -135,19 +155,42 @@ SpatialGaussianField::SampleWindow(uint64_t fieldKey, const Window& window) cons
 double
 SpatialGaussianField::SampleWindowFromPrefix(uint64_t prefix, const Window& win) const
 {
+    static thread_local std::vector<CellWindowEntry> cache(CELL_CACHE_SLOTS);
     double acc = 0.0;
     for (std::size_t s = 0; s < NUM_SCALES; s++)
     {
         const auto& sw = win.scales[s];
         // Independent white noise per component.
         const uint64_t scalePrefix = SplitMix64(prefix ^ (0xA24BAED4963EE407ULL * (s + 1)));
+        const int generator = static_cast<int>(m_generator);
+        const uint64_t slotHash =
+            SplitMix64(scalePrefix ^ SplitMix64(static_cast<uint64_t>(sw.ix)) ^
+                       (static_cast<uint64_t>(sw.iy) << 1));
+        auto& entry = cache[slotHash & (CELL_CACHE_SLOTS - 1)];
+        if (!entry.valid || entry.scalePrefix != scalePrefix || entry.generator != generator ||
+            entry.ix != sw.ix || entry.iy != sw.iy)
+        {
+            for (int64_t j = 0; std::cmp_less(j, WINDOW_CELLS); j++)
+            {
+                for (int64_t i = 0; std::cmp_less(i, WINDOW_CELLS); i++)
+                {
+                    entry.cells[j * WINDOW_CELLS + i] =
+                        CellFromPrefix(scalePrefix, sw.ix + i, sw.iy + j);
+                }
+            }
+            entry.scalePrefix = scalePrefix;
+            entry.generator = generator;
+            entry.ix = sw.ix;
+            entry.iy = sw.iy;
+            entry.valid = true;
+        }
         double scaleAcc = 0.0;
         for (int64_t j = 0; std::cmp_less(j, WINDOW_CELLS); j++)
         {
             double rowAcc = 0.0;
             for (int64_t i = 0; std::cmp_less(i, WINDOW_CELLS); i++)
             {
-                rowAcc += sw.wx[i] * CellFromPrefix(scalePrefix, sw.ix + i, sw.iy + j);
+                rowAcc += sw.wx[i] * entry.cells[j * WINDOW_CELLS + i];
             }
             scaleAcc += sw.wy[j] * rowAcc;
         }
