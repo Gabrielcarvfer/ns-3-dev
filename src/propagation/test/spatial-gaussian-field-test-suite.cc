@@ -11,6 +11,8 @@
 #include "ns3/test.h"
 
 #include <cmath>
+#include <thread>
+#include <vector>
 
 /**
  * @file
@@ -99,6 +101,81 @@ SpatialGaussianFieldDeterminismTestCase::DoRun()
     RngSeedManager::SetSeed(1);
     RngSeedManager::SetRun(2);
     NS_TEST_ASSERT_MSG_NE(f.Sample(7, pos, corrDist), ref, "Sample ignores the run");
+
+    RngSeedManager::SetSeed(savedSeed);
+    RngSeedManager::SetRun(savedRun);
+}
+
+/**
+ * @ingroup propagation-tests
+ * A sample must not depend on what was sampled before it: fields that differ
+ * only in salt, key or cell generator, sampled interleaved along a walk that
+ * keeps them on the same cells, give the values each gives when sampled alone.
+ */
+class SpatialGaussianFieldSampleOrderTestCase : public TestCase
+{
+  public:
+    SpatialGaussianFieldSampleOrderTestCase()
+        : TestCase("SpatialGaussianField samples do not depend on the sampling order")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+SpatialGaussianFieldSampleOrderTestCase::DoRun()
+{
+    const uint32_t savedSeed = RngSeedManager::GetSeed();
+    const uint64_t savedRun = RngSeedManager::GetRun();
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    const std::vector<SpatialGaussianField> fields{
+        SpatialGaussianField{SpatialGaussianField::Salt::SHADOW_FADING},
+        SpatialGaussianField{SpatialGaussianField::Salt::O2I_PENETRATION},
+        SpatialGaussianField{SpatialGaussianField::Salt::SHADOW_FADING,
+                             SpatialGaussianField::CellGenerator::IrwinHall}};
+    const std::vector<uint64_t> keys{7, 8};
+    const double corrDist = 37.0;
+    const size_t steps = 200;
+    auto position = [](size_t step) { return Vector(-3.0 + 0.05 * step, 11.0, 1.5); };
+
+    // Each field and key alone, in a thread of its own, so that nothing else
+    // was sampled before.
+    std::vector<std::vector<double>> alone;
+    for (const auto& field : fields)
+    {
+        for (const auto key : keys)
+        {
+            std::vector<double> values(steps);
+            std::thread t([&]() {
+                for (size_t k = 0; k < steps; k++)
+                {
+                    values[k] = field.Sample(key, position(k), corrDist);
+                }
+            });
+            t.join();
+            alone.push_back(std::move(values));
+        }
+    }
+
+    for (size_t k = 0; k < steps; k++)
+    {
+        size_t c = 0;
+        for (const auto& field : fields)
+        {
+            for (const auto key : keys)
+            {
+                NS_TEST_ASSERT_MSG_EQ(field.Sample(key, position(k), corrDist),
+                                      alone[c][k],
+                                      "Sample " << c << " at step " << k
+                                                << " depends on the samples before it");
+                c++;
+            }
+        }
+    }
 
     RngSeedManager::SetSeed(savedSeed);
     RngSeedManager::SetRun(savedRun);
@@ -287,6 +364,7 @@ class SpatialGaussianFieldTestSuite : public TestSuite
         : TestSuite("propagation-spatial-gaussian-field", Type::UNIT)
     {
         AddTestCase(new SpatialGaussianFieldDeterminismTestCase, Duration::QUICK);
+        AddTestCase(new SpatialGaussianFieldSampleOrderTestCase, Duration::QUICK);
         AddTestCase(new SpatialGaussianFieldStatisticsTestCase(
                         SpatialGaussianField::CellGenerator::BoxMuller),
                     Duration::QUICK);
