@@ -90,12 +90,12 @@
  * This version of the macro allows the user to specify a namespace
  * for the template class and a different namespace for the template parameter.
  *
- * The `nst` parameter is the namespace of the templated class, which must be
+ * The `nst` parameter is the namespace of the templated class, which must be
  * in the `ns3` namespace and can be in a nested namespace, e.g., `ns3::aodv`.
  * Adding the leading `ns3` namespace is optional for nested namespace, while for
  * classes in the `ns3` namespace is mandatory.
  *
- * The `nsp` parameter is the namespace of the template parameter, and can be
+ * The `nsp` parameter is the namespace of the template parameter, and can be
  * any namespace, including `std`, `ns3`, or a nested namespace like `ns3::aodv`.
  * Also in this case, adding the leading `ns3` namespace is optional for nested
  * namespace, while for objects in the `ns3` namespace is mandatory.

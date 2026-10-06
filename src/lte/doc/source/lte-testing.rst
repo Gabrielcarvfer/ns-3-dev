@@ -1,4 +1,4 @@
-﻿.. include:: replace.txt
+.. include:: replace.txt
 .. highlight:: bash
 
 
