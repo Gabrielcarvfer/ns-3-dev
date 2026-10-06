@@ -65,6 +65,7 @@ but other contemporaneous versions may also work.
 
 ### Bugs fixed
 
+- (core) The default value of `uint8_t` and `int8_t` arguments of `CommandLine::AddValue()` and `CommandLine::AddNonOption()` is now printed as a number in the help and introspected documentation, instead of as a raw byte.
 - (spectrum) #1369 The phased-array beamforming gain of a signal is now computed with the transmitter's beamforming vector at transmission time rather than at arrival time, which differed whenever the array was re-steered while the signal was propagating.
 - (spectrum) The number of rays per cluster of the large bandwidth modeling of the 3GPP TR 38.901 fast-fading model (Equation 7.6-8) now uses the maximum antenna aperture over the two link ends, as Sec. 7.6.2.1 prescribes, instead of the aperture of the lowest node id end.
 - (spectrum) The fixed ray-to-subcluster mapping of the two strongest clusters of the 3GPP TR 38.901 fast-fading model now follows Table 7.5-5; the previous mapping was shifted by one ray.

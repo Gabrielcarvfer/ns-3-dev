@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <vector>
 
 /**
@@ -795,7 +796,15 @@ CommandLine::AddValue(const std::string& name, const std::string& help, T& value
     item->m_valuePtr = &value;
 
     std::stringstream ss;
-    ss << value;
+    // Byte-sized integers would be streamed as raw characters
+    if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+    {
+        ss << +value;
+    }
+    else
+    {
+        ss << value;
+    }
     item->m_default = ss.str(); // Including white spaces
 
     m_options.push_back(item);
@@ -812,7 +821,15 @@ CommandLine::AddNonOption(const std::string& name, const std::string& help, T& v
     item->m_valuePtr = &value;
 
     std::stringstream ss;
-    ss << value;
+    // Byte-sized integers would be streamed as raw characters
+    if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+    {
+        ss << +value;
+    }
+    else
+    {
+        ss << value;
+    }
     ss >> item->m_default;
     m_nonOptions.push_back(item);
     ++m_NNonOptions;

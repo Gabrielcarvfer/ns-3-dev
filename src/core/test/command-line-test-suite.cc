@@ -212,6 +212,12 @@ CommandLineUint8tTestCase::DoRun()
 
     cmd.AddValue("my-uint8", "help", myUint8);
 
+    std::ostringstream help;
+    cmd.PrintHelp(help);
+    NS_TEST_ASSERT_MSG_NE(help.str().find("[10]"),
+                          std::string::npos,
+                          "CommandLine did not print the uint8_t default value as a number");
+
     Parse(cmd, 1, "--my-uint8=1");
     NS_TEST_ASSERT_MSG_EQ(myUint8,
                           1,
