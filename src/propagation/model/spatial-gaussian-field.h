@@ -25,8 +25,10 @@ namespace ns3
  * seed and run, a class-specific salt and a per-field key, so every instance
  * and every call observes the same realization, even when the models sampling
  * it are regenerated (e.g. by a REM generator). This suits the drop-based
- * spatial consistency of 3GPP TR 38.901 Sec. 7.6.3.1, and the absence of
- * mutable state makes the field thread-safe.
+ * spatial consistency of 3GPP TR 38.901 Sec. 7.6.3.1. The only mutable state
+ * is a per-thread cache of the cells last drawn, keyed by their hash prefix and
+ * position, which saves redrawing them without changing any value, so the field
+ * is thread-safe.
  *
  * The field is the sum of NUM_SCALES independent components, each white
  * noise on a grid (one hashed N(0,1) value per cell) filtered with a separable
