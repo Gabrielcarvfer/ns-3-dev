@@ -186,7 +186,9 @@ class TcpSocketState : public Object
         0}; //!< Next seqnum to be sent (SND.NXT), ReTx pushes it back
 
     uint32_t m_rcvTimestampValue{0};     //!< Receiver Timestamp value
-    uint32_t m_rcvTimestampEchoReply{0}; //!< Sender Timestamp echoed by the receiver
+    uint32_t m_rcvTimestampEchoReply{0}; //!< Sender Timestamp echoed by the receiver, without
+                                         //!< the offset of this end
+    uint32_t m_timestampOffset{0};       //!< Offset added to the timestamps sent (RFC 7323)
 
     // Pacing related variables
     bool m_pacing{false};                  //!< Pacing status

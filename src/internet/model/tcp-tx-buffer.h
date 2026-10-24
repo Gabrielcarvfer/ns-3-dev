@@ -349,6 +349,51 @@ class TcpTxBuffer : public Object
     bool IsHeadRetransmitted() const;
 
     /**
+     * @brief Get the time at which the first segment in the sent list was
+     * last transmitted
+     *
+     * @return the last transmission time of the head, or Time::Max() if no
+     * segment is outstanding
+     */
+    Time GetHeadLastSent() const;
+
+    /**
+     * @brief Get the oldest transmission time among the segments newly
+     * SACKed by the last call to Update() which were never retransmitted
+     *
+     * This is the send time from which Linux measures its SACK RTT sample
+     * (first_sackt in tcp_sacktag_one()).
+     *
+     * @return the oldest transmission time, or Time::Max() if the last
+     * Update() SACKed no segment sent only once
+     */
+    Time GetOldestNewlySackedSentTime() const;
+
+    /**
+     * @brief Check if the receiver reneged on its SACKs
+     *
+     * With SACK, a cumulative ACK reaching a SACKed segment shows that the
+     * receiver dropped data it had SACKed. The indication holds until the
+     * SACK information is reset (SetSentListLost() with resetSack).
+     *
+     * @return true if the receiver reneged since the last reset
+     */
+    bool IsSackReneged() const;
+
+    /**
+     * @brief Get the number of cumulative ACKs that reached a SACKed segment
+     * @return the number of SACK reneging events detected
+     */
+    uint32_t GetRenegingEvents() const;
+
+    /**
+     * @brief Set whether the head a cumulative ACK reaches while SACKed is
+     * marked lost (the default), or left for the retransmission timeout
+     * @param mark true to mark it lost
+     */
+    void SetMarkRenegedHeadLost(bool mark);
+
+    /**
      * @brief DeleteRetransmittedFlagFromHead
      */
     void DeleteRetransmittedFlagFromHead();
@@ -629,12 +674,16 @@ class TcpTxBuffer : public Object
     uint32_t m_sackedOut{0}; //!< Number of sacked bytes
     uint32_t m_retrans{0};   //!< Number of retransmitted bytes
 
-    uint32_t m_dupAckThresh{0}; //!< Duplicate Ack threshold from TcpSocketBase
-    uint32_t m_segmentSize{0};  //!< Segment size from TcpSocketBase
-    bool m_sackEnabled{true};   //!< Indicates if SACK is enabled on this connection
-    bool m_sackSeen{false};     //!< Indicates if a SACK was received
+    uint32_t m_dupAckThresh{0};       //!< Duplicate Ack threshold from TcpSocketBase
+    uint32_t m_segmentSize{0};        //!< Segment size from TcpSocketBase
+    bool m_sackEnabled{true};         //!< Indicates if SACK is enabled on this connection
+    bool m_sackSeen{false};           //!< Indicates if a SACK was received
+    bool m_sackReneged{false};        //!< Indicates if the receiver reneged on its SACKs
+    uint32_t m_renegingEvents{0};     //!< Cumulative ACKs that reached a SACKed segment
+    bool m_markRenegedHeadLost{true}; //!< Mark lost the head the receiver reneged on
 
-    bool m_lostRetransDetection{true}; //!< Detect lost retransmissions from the SACKs
+    bool m_lostRetransDetection{true};         //!< Detect lost retransmissions from the SACKs
+    Time m_oldestNewlySackedSent{Time::Max()}; //!< See GetOldestNewlySackedSentTime()
 
     INTERNET_EXPORT static inline Callback<void, TcpTxItem*> m_nullCb =
         MakeNullCallback<void, TcpTxItem*>(); //!< Null callback for an item

@@ -350,6 +350,7 @@ TcpTxBuffer::GetTransmittedSegment(uint32_t numBytes, const SequenceNumber32& se
         m_retrans += item->m_packet->GetSize();
         item->m_retrans = true;
     }
+    item->m_everRetrans = true;
 
     return item;
 }
@@ -389,6 +390,7 @@ TcpTxBuffer::SplitItems(TcpTxItem* t1, TcpTxItem* t2, uint32_t size) const
     t1->m_sacked = t2->m_sacked;
     t1->m_lastSent = t2->m_lastSent;
     t1->m_retrans = t2->m_retrans;
+    t1->m_everRetrans = t2->m_everRetrans;
     t1->m_lost = t2->m_lost;
 
     t2->m_startSeq += size;
@@ -618,6 +620,7 @@ TcpTxBuffer::MergeItems(TcpTxItem* t1, TcpTxItem* t2) const
     {
         t1->m_lastSent = t2->m_lastSent;
     }
+    t1->m_everRetrans = t1->m_everRetrans || t2->m_everRetrans;
 
     t1->m_packet->AddAtEnd(t2->m_packet);
 
@@ -747,7 +750,27 @@ TcpTxBuffer::DiscardUpTo(const SequenceNumber32& seq, const Callback<void, TcpTx
     if (!m_sentList.empty())
     {
         TcpTxItem* head = m_sentList.front();
-        if (head->m_sacked)
+        if (head->m_sacked && m_sackEnabled)
+        {
+            // The cumulative ACK reached data the receiver had SACKed: the
+            // receiver reneged on its SACKs, and dropped this segment, and
+            // possibly all the data it SACKed. Detecting it one segment at a
+            // time, as the cumulative ACK reaches each, would repair one
+            // segment per RTT, and the ACKs would keep the retransmission
+            // timer from expiring: as at a retransmission timeout, the SACK
+            // information is discarded and the data is retransmitted from
+            // the left edge (RFC 2018, Section 8)
+            NS_LOG_INFO("SACK reneging: the head " << head->m_startSeq << " was SACKed");
+            head->m_sacked = false;
+            m_sackedOut -= head->m_packet->GetSize();
+            m_sackReneged = true;
+            ++m_renegingEvents;
+            if (m_markRenegedHeadLost)
+            {
+                SetSentListLost(true);
+            }
+        }
+        else if (head->m_sacked)
         {
             NS_ASSERT(!head->m_lost);
             // It is not possible to have the UNA sacked; otherwise, it would
@@ -757,12 +780,6 @@ TcpTxBuffer::DiscardUpTo(const SequenceNumber32& seq, const Callback<void, TcpTx
             m_sackedOut -= head->m_packet->GetSize();
             NS_LOG_INFO("Moving the SACK flag from the HEAD to another segment");
             AddRenoSack();
-            // Without SACK, the socket decides whether the head is lost,
-            // because that depends on the congestion state
-            if (m_sackEnabled)
-            {
-                MarkHeadAsLost();
-            }
         }
 
         NS_ASSERT_MSG(head->m_startSeq == seq,
@@ -792,6 +809,7 @@ TcpTxBuffer::Update(const TcpOptionSack::SackList& list, const Callback<void, Tc
 
     uint32_t bytesSacked = 0;
     Time newestSackedSentTime = Time::Min();
+    m_oldestNewlySackedSent = Time::Max();
 
     for (auto option_it = list.begin(); option_it != list.end(); ++option_it)
     {
@@ -846,6 +864,11 @@ TcpTxBuffer::Update(const TcpOptionSack::SackList& list, const Callback<void, Tc
                     m_sackedOut += (*item_it)->m_packet->GetSize();
                     bytesSacked += (*item_it)->m_packet->GetSize();
                     newestSackedSentTime = std::max(newestSackedSentTime, (*item_it)->m_lastSent);
+                    if (!(*item_it)->m_everRetrans)
+                    {
+                        m_oldestNewlySackedSent =
+                            std::min(m_oldestNewlySackedSent, (*item_it)->m_lastSent);
+                    }
 
                     if (m_highestSack.first == m_sentList.end() ||
                         m_highestSack.second <= beginOfCurrentPacket + pktSize)
@@ -1331,6 +1354,7 @@ TcpTxBuffer::SetSentListLost(bool resetSack)
 
     if (resetSack)
     {
+        m_sackReneged = false;
         m_sackedOut = 0;
         m_lostOut = m_sentSize;
         m_sackSeen = false;
@@ -1382,6 +1406,40 @@ TcpTxBuffer::IsHeadRetransmitted() const
     }
 
     return m_sentList.front()->m_retrans;
+}
+
+Time
+TcpTxBuffer::GetHeadLastSent() const
+{
+    if (m_sentList.empty())
+    {
+        return Time::Max();
+    }
+    return m_sentList.front()->m_lastSent;
+}
+
+Time
+TcpTxBuffer::GetOldestNewlySackedSentTime() const
+{
+    return m_oldestNewlySackedSent;
+}
+
+bool
+TcpTxBuffer::IsSackReneged() const
+{
+    return m_sackReneged;
+}
+
+uint32_t
+TcpTxBuffer::GetRenegingEvents() const
+{
+    return m_renegingEvents;
+}
+
+void
+TcpTxBuffer::SetMarkRenegedHeadLost(bool mark)
+{
+    m_markRenegedHeadLost = mark;
 }
 
 void

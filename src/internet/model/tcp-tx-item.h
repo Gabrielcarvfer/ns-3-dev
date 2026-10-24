@@ -103,6 +103,7 @@ class TcpTxItem
     Time m_lastSent{
         Time::Max()};     //!< Timestamp of the time at which the segment has been sent last time
     bool m_sacked{false}; //!< Indicates if the segment has been SACKed
+    bool m_everRetrans{false}; //!< Indicates if the segment has ever been retransmitted
 
     RateInformation m_rateInfo; //!< Rate information of the item
 };

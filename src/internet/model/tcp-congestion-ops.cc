@@ -117,6 +117,7 @@ TcpNewReno::TcpNewReno()
 TcpNewReno::TcpNewReno(const TcpNewReno& sock)
     : TcpCongestionOps(sock),
       m_countAckedSegments(sock.m_countAckedSegments),
+      m_cWndCnt(sock.m_cWndCnt),
       m_betaLoss(sock.m_betaLoss),
       m_betaEcn(sock.m_betaEcn)
 {
@@ -207,8 +208,11 @@ TcpNewReno::SlowStart(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
  *
  * During congestion avoidance, cwnd is incremented by roughly 1 full-sized
  * segment per round-trip time (RTT): by SMSS*SMSS/cwnd for each ACK, as
- * RFC 5681 equation 3 states, or for each acknowledged segment with the
- * CountAckedSegments attribute set.
+ * RFC 5681 equation 3 states. With the CountAckedSegments attribute set, the
+ * acknowledged segments are counted instead (RFC 3465), as Linux
+ * tcp_cong_avoid_ai() does: cwnd grows by one segment for every cwnd worth
+ * of acknowledged segments, and the count is cleared when the window is
+ * reduced.
  *
  * @param tcb internal congestion state
  * @param segmentsAcked count of segments acked
@@ -218,18 +222,58 @@ TcpNewReno::CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
 
-    uint32_t increments = CountsAckedSegments() ? segmentsAcked : std::min(segmentsAcked, 1U);
-    for (uint32_t i = 0; i < increments; ++i)
+    if (CountsAckedSegments())
+    {
+        // RFC 3465 byte counting, in segments as Linux tcp_cong_avoid_ai():
+        // the window grows by one segment for every window of acknowledged
+        // segments
+        CountedIncrease(tcb, segmentsAcked, tcb->m_cWnd / tcb->m_segmentSize);
+        return;
+    }
+
+    if (segmentsAcked > 0)
     {
         double adder =
             static_cast<double>(tcb->m_segmentSize * tcb->m_segmentSize) / tcb->m_cWnd.Get();
         adder = std::max(1.0, adder);
         tcb->m_cWnd += static_cast<uint32_t>(adder);
-    }
-    if (increments > 0)
-    {
         NS_LOG_INFO("In CongAvoid, updated to cwnd " << tcb->m_cWnd << " ssthresh "
                                                      << tcb->m_ssThresh);
+    }
+}
+
+void
+TcpNewReno::CountedIncrease(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, uint32_t w)
+{
+    NS_LOG_FUNCTION(this << tcb << segmentsAcked << w);
+    w = std::max<uint32_t>(w, 1);
+    if (m_cWndCnt >= w)
+    {
+        m_cWndCnt = 0;
+        tcb->m_cWnd += tcb->m_segmentSize;
+    }
+    m_cWndCnt += segmentsAcked;
+    if (m_cWndCnt >= w)
+    {
+        uint32_t delta = m_cWndCnt / w;
+        m_cWndCnt -= delta * w;
+        tcb->m_cWnd += delta * tcb->m_segmentSize;
+    }
+    NS_LOG_INFO("In CongAvoid, updated to cwnd " << tcb->m_cWnd << " ssthresh " << tcb->m_ssThresh
+                                                 << " count " << m_cWndCnt);
+}
+
+void
+TcpNewReno::CongestionStateSet(Ptr<TcpSocketState> tcb,
+                               const TcpSocketState::TcpCongState_t newState)
+{
+    NS_LOG_FUNCTION(this << tcb << newState);
+    // A window reduction clears the count of acknowledged segments, as
+    // Linux tcp_init_cwnd_reduction() and tcp_enter_loss() do
+    if (newState == TcpSocketState::CA_RECOVERY || newState == TcpSocketState::CA_CWR ||
+        newState == TcpSocketState::CA_LOSS)
+    {
+        m_cWndCnt = 0;
     }
 }
 

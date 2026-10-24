@@ -358,10 +358,55 @@ TcpRxBuffer::ClearSackList(const SequenceNumber32& seq)
     }
 }
 
+uint32_t
+TcpRxBuffer::PruneLastOutOfOrder(const SequenceNumber32& seq)
+{
+    NS_LOG_FUNCTION(this << seq);
+    if (m_data.empty())
+    {
+        return 0;
+    }
+    auto last = std::prev(m_data.end());
+    if (last->first <= m_nextRxSeq || seq > last->first)
+    {
+        return 0;
+    }
+    uint32_t size = last->second->GetSize();
+    NS_LOG_LOGIC("Pruning " << size << " bytes at " << last->first);
+    m_size -= size;
+    m_data.erase(last);
+    return size;
+}
+
+void
+TcpRxBuffer::ResetSackList()
+{
+    NS_LOG_FUNCTION(this);
+    m_sackList.clear();
+}
+
 TcpOptionSack::SackList
 TcpRxBuffer::GetSackList() const
 {
     return m_sackList;
+}
+
+std::vector<std::pair<uint32_t, uint32_t>>
+TcpRxBuffer::GetDataRuns() const
+{
+    std::vector<std::pair<uint32_t, uint32_t>> runs;
+    SequenceNumber32 end;
+    for (const auto& [seq, packet] : m_data)
+    {
+        if (runs.empty() || seq != end)
+        {
+            runs.emplace_back(0, 0);
+        }
+        runs.back().first += packet->GetSize();
+        runs.back().second++;
+        end = seq + packet->GetSize();
+    }
+    return runs;
 }
 
 Ptr<Packet>

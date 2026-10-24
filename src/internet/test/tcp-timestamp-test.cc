@@ -7,8 +7,10 @@
 
 #include "tcp-general-test.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
+#include "ns3/rtt-estimator.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-option-ts.h"
 
@@ -367,6 +369,105 @@ TimestampEchoTestCase::FinalChecks()
 /**
  * @ingroup internet-test
  *
+ * @brief Random per-connection timestamp offsets (RFC 7323, Section 5.4)
+ *
+ * With the RandomTimestampOffset attribute set on both ends, every segment
+ * of a connection carries the timestamp clock plus the same offset, which
+ * differs between the two ends (the receiver end is a fork of the listening
+ * socket), while the echoed timestamps are taken back to the local clock:
+ * the RTT samples and the echoed timestamp kept for the congestion control
+ * do not see the offset.
+ */
+class TimestampOffsetTestCase : public TcpGeneralTest
+{
+  public:
+    TimestampOffsetTestCase()
+        : TcpGeneralTest("Random timestamp offsets")
+    {
+    }
+
+  protected:
+    void ConfigureEnvironment() override;
+    void ConfigureProperties() override;
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void ProcessedAck(const Ptr<const TcpSocketState> tcb,
+                      const TcpHeader& h,
+                      SocketWho who) override;
+    void FinalChecks() override;
+
+  private:
+    std::optional<uint32_t> m_offset[2]; //!< Offset of the timestamps of each end
+    uint32_t m_checkedAcks{0};           //!< ACKs whose echoed timestamp was checked
+};
+
+void
+TimestampOffsetTestCase::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetAppPktCount(20);
+    SetPropagationDelay(MilliSeconds(50));
+}
+
+void
+TimestampOffsetTestCase::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    GetSenderSocket()->SetAttribute("RandomTimestampOffset", BooleanValue(true));
+    GetReceiverSocket()->SetAttribute("RandomTimestampOffset", BooleanValue(true));
+}
+
+void
+TimestampOffsetTestCase::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (!h.HasOption(TcpOption::TS))
+    {
+        return;
+    }
+    uint32_t offset = DynamicCast<const TcpOptionTS>(h.GetOption(TcpOption::TS))->GetTimestamp() -
+                      TcpOptionTS::NowToTsValue();
+    if (!m_offset[who])
+    {
+        m_offset[who] = offset;
+    }
+    NS_TEST_ASSERT_MSG_EQ(offset, *m_offset[who], "The timestamp offset changed");
+}
+
+void
+TimestampOffsetTestCase::ProcessedAck(const Ptr<const TcpSocketState> tcb,
+                                      const TcpHeader& h,
+                                      SocketWho who)
+{
+    if (who != SENDER)
+    {
+        return;
+    }
+    uint32_t now = TcpOptionTS::NowToTsValue();
+    NS_TEST_ASSERT_MSG_LT_OR_EQ(tcb->m_rcvTimestampEchoReply,
+                                now,
+                                "The echoed timestamp is not on the local clock");
+    NS_TEST_ASSERT_MSG_GT_OR_EQ(tcb->m_rcvTimestampEchoReply + 1000,
+                                now,
+                                "The echoed timestamp is not on the local clock");
+    ++m_checkedAcks;
+}
+
+void
+TimestampOffsetTestCase::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_GT(m_checkedAcks, 0, "No ACK was checked");
+    NS_TEST_ASSERT_MSG_EQ((m_offset[SENDER] && m_offset[RECEIVER]), true, "No timestamp sent");
+    NS_TEST_ASSERT_MSG_NE(*m_offset[SENDER], 0, "No offset on the sender timestamps");
+    NS_TEST_ASSERT_MSG_NE(*m_offset[SENDER],
+                          *m_offset[RECEIVER],
+                          "The two ends share the same offset");
+    Time rtt = GetRttEstimator(SENDER)->GetEstimate();
+    NS_TEST_ASSERT_MSG_GT_OR_EQ(rtt, MilliSeconds(100), "RTT estimate too small");
+    NS_TEST_ASSERT_MSG_LT(rtt, MilliSeconds(200), "RTT estimate too large");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP TimeStamp TestSuite.
  */
 class TcpTimestampTestSuite : public TestSuite
@@ -383,6 +484,7 @@ class TcpTimestampTestSuite : public TestSuite
         AddTestCase(new TimestampTestCase(TimestampTestCase::ENABLED), TestCase::Duration::QUICK);
         AddTestCase(new TimestampEchoTestCase(false), TestCase::Duration::QUICK);
         AddTestCase(new TimestampEchoTestCase(true), TestCase::Duration::QUICK);
+        AddTestCase(new TimestampOffsetTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TimestampValueTestCase(0.0, 0.01, "Value Check"),
                     TestCase::Duration::QUICK);
         AddTestCase(new TimestampValueTestCase(3.0, 0.5, "Value Check"), TestCase::Duration::QUICK);

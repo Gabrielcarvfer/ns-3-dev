@@ -196,6 +196,12 @@ TcpHtcp::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& 
                                          (Simulator::Now().GetSeconds() - m_lastCon.GetSeconds()));
 
     UpdateAlpha();
+    // An ACK without RTT sample does not change the RTT range (Linux
+    // measure_achieved_throughput())
+    if (!rtt.IsStrictlyPositive())
+    {
+        return;
+    }
     if (rtt < m_minRtt)
     {
         m_minRtt = rtt;

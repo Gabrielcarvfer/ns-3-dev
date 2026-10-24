@@ -71,6 +71,8 @@ class TcpPrrRecovery : public TcpClassicRecovery
     uint32_t m_prrOut{0};             //!< total bytes sent during recovery phase
     uint32_t m_recoveryFlightSize{0}; //!< FlightSize (SND.NXT - SND.UNA) at the start of recovery
                                       //!< phase (RFC 9937 RecoverFS)
+    bool m_segmentQuota{false};       //!< Round the proportional send quota up to whole segments
+    bool m_priorCwndRecoverFs{false}; //!< RecoverFS is the window at the start of the recovery
 };
 } // namespace ns3
 

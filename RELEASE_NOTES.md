@@ -45,12 +45,33 @@ but other contemporaneous versions may also work.
 - (internet) Added several RFC 9293 conformance features to TCP: the keep-alives (`KeepAlive`, `KeepAliveTime`, `KeepAliveInterval` and `KeepAliveRetries` attributes), the urgent mechanism (`MSG_FLAG_OOB`, `Socket::SetUrgentDataCallback()` and `Socket::GetUrgentDataSize()`), clock driven initial sequence numbers (`TcpL4Protocol::ClockDrivenIsn` attribute), the completion of a simultaneous open, receiver silly window syndrome avoidance, and the IPv4 loose source route option with `TcpSocketBase::SetIpv4SourceRoute()`. The new tcp-rfc9293 test suite tracks the conformance status requirement by requirement.
 - (internet) The detection of lost retransmissions of the TCP SACK recovery can be disabled with the `TcpTxBuffer::LostRetransmissionDetection` attribute.
 - (internet) Added the `TcpSocketBase::FillReceiveWindow` attribute, with which the TCP sender fills the receive window of the peer with a short segment, as Linux does.
+- (internet) Added the `TcpSocketBase::ForcedPush` attribute, with which the TCP sender sets PSH as Linux does.
+- (internet) Added the `TcpSocketBase::PruneOverhead` attribute, with which the TCP receiver prunes its out-of-order queue under receive buffer pressure as Linux does.
+- (internet) Added the `TcpSocketBase::SackRenegingTimeout` attribute, with which the TCP sender recovers from SACK reneging after a short timeout as Linux does.
+
+- (internet) Added the `TcpSocketBase::NonSackUndo` attribute, which reproduces the undo by Linux of the window reduction of non-SACK recoveries.
+- (internet) Added the `TcpPrrRecovery::SegmentQuota` attribute, which rounds the send quota of PRR up to whole segments as Linux.
+- (internet) A TCP retransmission timeout during a fast recovery can keep the slow start threshold of the recovery, as Linux, with the `TcpSocketBase::KeepRecoverySsThresh` attribute.
+- (internet) The TCP retransmission timer can be restarted by the SACKs of the data sent before the retransmission of the first unacknowledged segment, as Linux, with the `TcpSocketBase::SackRestartsRto` attribute.
+- (internet) TCP can take RTT samples from the ACKs SACKing new data, as Linux, with the `TcpSocketBase::SackRttSamples` attribute.
+- (internet) The TCP retransmission timer can be restarted by a retransmission of the first unacknowledged segment, as Linux, with the `TcpSocketBase::RetransmitRestartsRto` attribute.
+- (internet) The TCP retransmission timer can expire on the ticks of a Linux timer wheel with the `TcpSocketBase::RtoTimerGranularity` attribute.
+- (internet) Added the `TcpSocketBase::LinuxRcvWindow` attribute, which derives the advertised window from the memory left in the receive buffer as Linux.
+- (internet) TCP can add a random per-connection offset to its timestamps (`TcpSocketBase::RandomTimestampOffset` attribute), as RFC 7323 recommends and Linux does.
 
 ### Bugs fixed
 
 - (mesh) #682 Mesh regression tests no longer compare against reference PCAP files; they now check HWMP, peer management and FLAME behavior through trace sources.
+- (tcp) `TcpVeno` (on a random loss) and `TcpIllinois` reduced the data in flight, which excludes the lost and SACKed segments, instead of the congestion window, as their papers and Linux do; `TcpCubic` kept the ACKs counted towards its next window increase across a window reduction.
+- (tcp) `TcpLinuxReno` halved the window in bytes instead of whole segments as Linux, dropped the segments acknowledged beyond the slow start threshold, and kept its count of acknowledged segments across window reductions; `TcpNewReno` with `CountAckedSegments` rounded down its per-segment increase and also kept that count. `TcpYeah` entered its Slow mode on any queueing delay, the 1/Phy threshold of the congestion level being computed in integers; `TcpYeah` with `CountAckedSegments` kept a separate count for its Fast mode, never cleared by a window reduction, unlike Linux.
+- (tcp) `TcpHybla` increased its window once per acknowledged segment in congestion avoidance, instead of once per ACK as in the Hybla paper and in Linux, and its forked instances lost the reference RTT.
+- (tcp) `TcpLp` departed from the TCP-LP paper: it reacted to the delay on every ACK instead of once per round trip time, from the start of the connection instead of the first loss, and on duplicate ACKs, reset its minimum and maximum one way delays on each reaction (as Linux does), took the absolute value of the one way delay (wrong with a clock offset) and ignored the null ones, kept growing its window in slow start within the inference, and indicated congestion on delay variations below the 1 ms granularity of the timestamps.
 - (tcp) #78, #248, #940, #946, #979, #988, #996 Fixed several TCP conformance defects: the RTO reset on partial ACKs, dupack guesses with a single segment in flight, duplicate TCP options, the MSS option in every SYN, forced retransmissions on SACK partial ACKs, the segment size accounting for the TCP options, the advertised MSS bound by the interface MTU, invalid remote addresses on `Connect()`, discarding segments to or from broadcast or multicast addresses, resetting on malformed options, keeping the bound local address, PSH on the last segment of the buffered data, and the detection of a lost retransmission.
 - (tcp) The TCP sender no longer stalls when the receive window of the peer stays below one MSS: it sends segments of at least half the largest window offered (RFC 9293, Section 3.8.6.2.1).
+- (internet) `TcpHighSpeed` applied its congestion avoidance increase per acknowledged segment instead of per ACK (RFC 3649), doubling the increase with delayed ACKs.
+- (internet) `TcpWestwoodPlus` started its bandwidth filter from zero, underestimating the bandwidth for tens of RTTs, left the count of acknowledged segments uninitialized in the copies used by the sockets, and lost in those copies the attributes set on the object.
+- (tcp) Fixed the Proportional Rate Reduction of fast recoveries without SACK, which sent one new segment per duplicate ACK, sizing the window on bytes in flight that did not account for the segment reported by the duplicate ACK, and credited the segments reported by the duplicate ACKs again as delivered data on the cumulative ACKs.
+- (tcp) The TCP sender no longer corrupts its SACK scoreboard, and aborts, when the receiver reneges on its SACKs; it discards the SACK information and retransmits from the left edge as soon as it detects the reneging.
 
 ## Release 3.49
 

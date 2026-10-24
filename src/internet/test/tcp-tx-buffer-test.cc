@@ -49,6 +49,9 @@ class TcpTxBufferTestCase : public TestCase
     /** @brief Test that the retransmit accounting is cleared when a
      * retransmitted segment is SACKed (@issueid{1190}) */
     void TestRetransmittedSegmentSacked();
+    /** @brief Test that a cumulative ACK reaching SACKed data (SACK
+     * reneging) keeps the scoreboard consistent and is reported */
+    void TestSackReneging();
     /**
      * @brief Callback to provide a value of receiver window
      * @returns the receiver window size
@@ -99,6 +102,7 @@ TcpTxBufferTestCase::DoRun()
                         this);
 
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestRetransmittedSegmentSacked, this);
+    Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestSackReneging, this);
 
     Simulator::Run();
     Simulator::Destroy();
@@ -270,13 +274,12 @@ TcpTxBufferTestCase::TestNextSeg()
     // Well now we receive a partial ACK, corresponding to the segment we retransmitted.
     // Unfortunately, the next one is lost as well; but NextSeg should be smart enough
     // to give us the next segment (head + segmentSize) to retransmit.
-    /* In this particular case, we are checking the fact that we have badly crafted
-     * the SACK blocks. Talking in segment, we transmitted 1,2,3,4,5 ... and then
-     * received dupack for 1. While receiving these, we crafted SACK block in the
-     * way that 2,3,4,... were correctly received. Now, if we receive an ACK for 2,
-     * we clearly crafted the corresponding ACK wrongly. TcpTxBuffer should be able
-     * to "backoff" that flag on its HEAD (segment 2). We still don't know for segment
-     * 3,4 .. so keep them.
+    /* In this particular case, the receiver reneges on its SACKs. Talking in
+     * segments, we transmitted 1,2,3,4,5 ... and then received dupacks for 1,
+     * whose SACK blocks reported 2,3,4,... as received. Now, an ACK for 2 shows
+     * that the receiver dropped segment 2, and possibly the others it SACKed:
+     * TcpTxBuffer discards the SACK information, and the data is retransmitted
+     * from the left edge (RFC 2018, Section 8).
      */
     head = head + segmentSize;
     txBuf->DiscardUpTo(head);
@@ -298,8 +301,8 @@ TcpTxBufferTestCase::TestNextSeg()
                           true,
                           "No NextSeq with SACK block after recv dupacks after partial ack");
     NS_TEST_ASSERT_MSG_EQ(ret,
-                          lastRet + segmentSize,
-                          "Different NextSeq than expected after recv dupacks after partial ack");
+                          head + segmentSize,
+                          "Reneged data not retransmitted from the left edge");
     txBuf->CopyFromSequence(segmentSize, ret);
     sack->ClearSackList();
     head = lastRet = ret + segmentSize;
@@ -307,19 +310,17 @@ TcpTxBufferTestCase::TestNextSeg()
     // And now ack everything we sent to date!
     txBuf->DiscardUpTo(head);
 
-    // And continue normally until the end
-    for (uint32_t i = 0; i < 93; ++i)
+    // And continue until the end: the reneged data below the highest SACK,
+    // the new data, and the reneged data above the highest SACK, once new
+    // SACKs make it lost
+    uint32_t sent = 0;
+    while (txBuf->NextSeg(&ret, &retHigh, false) && sent < 300)
     {
-        NS_TEST_ASSERT_MSG_EQ(txBuf->NextSeg(&ret, &retHigh, false),
-                              true,
-                              "No NextSeq with data while \"transmitting\"");
-        NS_TEST_ASSERT_MSG_EQ(ret,
-                              head + (segmentSize * i),
-                              "Different NextSeq than expected while \"transmitting\"");
         txBuf->CopyFromSequence(segmentSize, ret);
+        ++sent;
     }
-
-    txBuf->DiscardUpTo(ret + segmentSize);
+    NS_TEST_ASSERT_MSG_EQ(txBuf->SizeFromSequence(txBuf->TailSequence()), 0, "Data left unsent");
+    txBuf->DiscardUpTo(txBuf->TailSequence());
     NS_TEST_ASSERT_MSG_EQ(txBuf->Size(), 0, "Data inside the buffer");
 }
 
@@ -547,6 +548,74 @@ TcpTxBufferTestCase::TestRetransmittedSegmentSacked()
     NS_TEST_ASSERT_MSG_EQ(txBuf->BytesInFlight(),
                           2 * segmentSize,
                           "SACKed retransmitted segment must not inflate BytesInFlight");
+}
+
+void
+TcpTxBufferTestCase::TestSackReneging()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpTxBuffer> txBuf = CreateObject<TcpTxBuffer>();
+    txBuf->SetRWndCallback(MakeCallback(&TcpTxBufferTestCase::GetRWnd, this));
+    txBuf->SetHeadSequence(SequenceNumber32(1));
+    txBuf->SetSegmentSize(segmentSize);
+    txBuf->SetDupAckThresh(3);
+    txBuf->SetSackEnabled(true);
+
+    // Send 10 segments; the receiver SACKs segments 3 to 10, so that the
+    // first two are lost
+    txBuf->Add(Create<Packet>(10 * segmentSize));
+    for (uint8_t i = 0; i < 10; ++i)
+    {
+        txBuf->CopyFromSequence(segmentSize, SequenceNumber32((i * segmentSize) + 1));
+    }
+    Ptr<TcpOptionSack> sack = CreateObject<TcpOptionSack>();
+    sack->AddSackBlock(TcpOptionSack::SackBlock(SequenceNumber32(2001), SequenceNumber32(10001)));
+    txBuf->Update(sack->GetSackList());
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), 8 * segmentSize, "Eight segments SACKed");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->IsSackReneged(), false, "No reneging yet");
+
+    // The receiver drops the data it SACKed, and acknowledges the first
+    // two segments only once they are retransmitted: the cumulative ACK
+    // reaches the SACKed segment 3. The SACK information is discarded, and
+    // all the data is to be retransmitted from the left edge
+    txBuf->DiscardUpTo(SequenceNumber32(2001));
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetRenegingEvents(), 1, "Reneging not detected");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), 0, "SACK marks left after reneging");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetLost(), 8 * segmentSize, "All segments are to be lost");
+    SequenceNumber32 next;
+    SequenceNumber32 nextHigh;
+    NS_TEST_ASSERT_MSG_EQ(txBuf->NextSeg(&next, &nextHigh, false), true, "Nothing to send");
+    NS_TEST_ASSERT_MSG_EQ(next, SequenceNumber32(2001), "Not retransmitting from the left edge");
+
+    // As Linux (SackRenegingTimeout), the head only loses its SACK mark,
+    // and the rest waits for the retransmission timeout
+    txBuf = CreateObject<TcpTxBuffer>();
+    txBuf->SetRWndCallback(MakeCallback(&TcpTxBufferTestCase::GetRWnd, this));
+    txBuf->SetHeadSequence(SequenceNumber32(1));
+    txBuf->SetSegmentSize(segmentSize);
+    txBuf->SetDupAckThresh(3);
+    txBuf->SetSackEnabled(true);
+    txBuf->SetMarkRenegedHeadLost(false);
+    txBuf->Add(Create<Packet>(10 * segmentSize));
+    for (uint8_t i = 0; i < 10; ++i)
+    {
+        txBuf->CopyFromSequence(segmentSize, SequenceNumber32((i * segmentSize) + 1));
+    }
+    txBuf->Update(sack->GetSackList());
+    txBuf->DiscardUpTo(SequenceNumber32(2001));
+    NS_TEST_ASSERT_MSG_EQ(txBuf->IsSackReneged(), true, "Reneging not detected");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(),
+                          7 * segmentSize,
+                          "Only the head is to lose its SACK mark");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked() + txBuf->GetLost() <= 8 * segmentSize,
+                          true,
+                          "A segment is both SACKed and lost");
+
+    // At the retransmission timeout, the SACK information is discarded
+    txBuf->SetSentListLost(true);
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), 0, "SACK marks left after the timeout");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetLost(), 8 * segmentSize, "All segments are to be lost");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->IsSackReneged(), false, "Reneging still reported");
 }
 
 void

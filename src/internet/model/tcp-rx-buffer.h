@@ -18,6 +18,7 @@
 #include "ns3/traced-value.h"
 
 #include <map>
+#include <vector>
 
 namespace ns3
 {
@@ -165,6 +166,29 @@ class TcpRxBuffer : public Object
      * @return the size of the sack block list; can be empty
      */
     uint32_t GetSackListSize() const;
+
+    /**
+     * @brief Get the runs of contiguous data held in the buffer
+     *
+     * @return the number of bytes and of segments of each run, in sequence order
+     */
+    std::vector<std::pair<uint32_t, uint32_t>> GetDataRuns() const;
+
+    /**
+     * @brief Remove the out-of-order segment of highest sequence number, as
+     * tcp_prune_ofo_queue() of Linux
+     *
+     * Nothing is removed if a segment starting at seq would land above it.
+     *
+     * @param seq Sequence number of the incoming segment
+     * @return the number of bytes removed, 0 if none
+     */
+    uint32_t PruneLastOutOfOrder(const SequenceNumber32& seq);
+
+    /**
+     * @brief Forget all the SACK blocks
+     */
+    void ResetSackList();
 
     /**
      * @brief Says if a FIN bit has been received

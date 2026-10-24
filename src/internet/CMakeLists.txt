@@ -357,6 +357,8 @@ set(test_sources
     test/tcp-error-model.cc
     test/tcp-fack-test.cc
     test/tcp-fast-retr-test.cc
+    test/tcp-flight-size-test.cc
+    test/tcp-forced-push-test.cc
     test/tcp-general-test.cc
     test/tcp-header-test.cc
     test/tcp-highspeed-test.cc
@@ -365,10 +367,12 @@ set(test_sources
     test/tcp-illinois-test.cc
     test/tcp-ledbat-test.cc
     test/tcp-linux-reno-test.cc
+    test/tcp-linux-rcv-window-test.cc
     test/tcp-loss-test.cc
     test/tcp-lost-retransmission-test.cc
     test/tcp-lp-test.cc
     test/tcp-no-sack-dupack-test.cc
+    test/tcp-no-sack-recovery-test.cc
     test/tcp-option-test.cc
     test/tcp-mss-test.cc
     test/tcp-pacing-test.cc
@@ -377,6 +381,7 @@ set(test_sources
     test/tcp-pkts-acked-test.cc
     test/tcp-quick-ack-test.cc
     test/tcp-prr-recovery-test.cc
+    test/tcp-prune-test.cc
     test/tcp-rate-ops-test.cc
     test/tcp-rfc9293-test.cc
     test/tcp-rto-test.cc

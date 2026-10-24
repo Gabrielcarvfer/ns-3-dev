@@ -110,6 +110,7 @@ TcpSocketState::TcpSocketState(const TcpSocketState& other)
       m_nextTxSequence(other.m_nextTxSequence),
       m_rcvTimestampValue(other.m_rcvTimestampValue),
       m_rcvTimestampEchoReply(other.m_rcvTimestampEchoReply),
+      m_timestampOffset(other.m_timestampOffset),
       m_pacing(other.m_pacing),
       m_maxPacingRate(other.m_maxPacingRate),
       m_pacingRate(other.m_pacingRate),

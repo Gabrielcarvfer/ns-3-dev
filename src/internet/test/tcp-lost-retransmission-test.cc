@@ -9,6 +9,8 @@
 #include "tcp-error-model.h"
 #include "tcp-general-test.h"
 
+#include "ns3/config.h"
+#include "ns3/data-rate.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
@@ -16,6 +18,7 @@
 #include "ns3/simple-net-device.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-l4-protocol.h"
+#include "ns3/tcp-option-sack.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-tx-buffer.h"
 #include "ns3/test.h"
@@ -415,6 +418,353 @@ TcpReorderedRetransmissionTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
+ * @brief Test the Linux behaviours of TcpSocketBase which change the
+ * retransmission timeout ending a recovery whose retransmission is lost.
+ *
+ * As in TcpLostRetransmissionTest without the lost retransmission detection,
+ * a segment and its fast retransmission are dropped, and the retransmission
+ * timeout repairs the loss. The cumulative ACK stays on the dropped segment
+ * until then, while the receiver SACKs the segments sent around the
+ * retransmission. Each test case enables (or not) one attribute and checks:
+ *
+ * - KeepRecoverySsThresh: the slow start threshold after the timeout is the
+ *   one the recovery set, instead of half of the bytes in flight.
+ * - SackRestartsRto: the timeout expires one RTO after the last ACK which
+ *   SACKs a segment, never retransmitted, sent before the retransmission of
+ *   the first unacknowledged segment, instead of earlier.
+ * - SackRttSamples: the smoothed RTT changes on the ACKs SACKing new data,
+ *   whereas it does not change during the recovery without the attribute.
+ * - RetransmitRestartsRto: the timeout expires one RTO after the fast
+ *   retransmission, instead of one RTO after the last cumulative ACK.
+ * - RtoTimerGranularity (with SackRestartsRto): the timeout expires on the
+ *   tick of the Linux timer wheel, instead of exactly one RTO after the
+ *   last restart of the timer.
+ */
+class TcpLinuxRtoRecoveryTest : public TcpGeneralTest
+{
+  public:
+    /// The attribute under test
+    enum Option
+    {
+        KEEP_SSTHRESH,     //!< KeepRecoverySsThresh
+        SACK_RESTARTS_RTO, //!< SackRestartsRto
+        SACK_RTT_SAMPLES,  //!< SackRttSamples
+        RETX_RESTARTS_RTO, //!< RetransmitRestartsRto
+        TIMER_GRANULARITY, //!< RtoTimerGranularity, with SackRestartsRto
+    };
+
+    /**
+     * @brief Constructor.
+     * @param name Test description.
+     * @param option The attribute under test.
+     * @param enabled Whether the attribute is enabled.
+     * @param granularity The RtoTimerGranularity, when enabled.
+     */
+    TcpLinuxRtoRecoveryTest(const std::string& name,
+                            Option option,
+                            bool enabled,
+                            Time granularity = Time(0))
+        : TcpGeneralTest(name),
+          m_option(option),
+          m_enabled(enabled),
+          m_granularity(granularity)
+    {
+    }
+
+  protected:
+    void ConfigureProperties() override;
+    void ConfigureEnvironment() override;
+    void DoTeardown() override;
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
+    Ptr<ErrorModel> CreateReceiverErrorModel() override;
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                        const TcpSocketState::TcpCongState_t newValue) override;
+    void RttTrace(Time oldTime, Time newTime) override;
+    void BeforeRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
+    void AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
+    void FinalChecks() override;
+
+  private:
+    static constexpr uint32_t LOST_SEQ = 10001; //!< Sequence number of the dropped segment
+
+    /**
+     * @brief Get the expiry of a Linux timer armed at a given time
+     * @param armed The time the timer is armed at.
+     * @param rto The timeout.
+     * @return The time the timer expires at, on a tick of m_granularity.
+     */
+    Time GetTickExpiry(Time armed, Time rto) const;
+
+    Option m_option;    //!< The attribute under test
+    bool m_enabled;     //!< Whether the attribute is enabled
+    Time m_granularity; //!< RtoTimerGranularity, when enabled
+
+    std::map<uint32_t, Time> m_firstTx;     //!< First transmission time per data sequence
+    Time m_headLastTx;                      //!< Last transmission of the dropped segment
+    Time m_headRetx;                        //!< Fast retransmission of the dropped segment
+    uint32_t m_sackRight{0};                //!< Highest SACKed sequence number so far
+    Time m_lastRestartingSack{Time::Min()}; //!< Last ACK SACKing data sent before m_headLastTx
+    bool m_recoveryEntered{false};          //!< True once fast recovery was entered
+    uint32_t m_rtoCount{0};                 //!< Number of RTO expirations at the sender
+    uint32_t m_srttChanges{0};              //!< Changes of the smoothed RTT in the recovery
+    Time m_rtoTime;                         //!< Time of the first RTO expiration
+    Time m_rtoValue;                        //!< RTO at the first expiration
+    uint32_t m_ssThreshBefore{0};           //!< ssthresh before the first RTO
+    uint32_t m_ssThreshAfter{0};            //!< ssthresh after the first RTO
+};
+
+void
+TcpLinuxRtoRecoveryTest::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetAppPktSize(500);
+    SetAppPktCount(60);
+    SetPropagationDelay(MilliSeconds(50));
+    // The segments of a burst leave one after the other, so that those
+    // sent with the fast retransmission are sent after it
+    Config::SetDefault("ns3::SimpleNetDevice::DataRate", DataRateValue(DataRate("10Mb/s")));
+}
+
+void
+TcpLinuxRtoRecoveryTest::DoTeardown()
+{
+    Config::SetDefault("ns3::SimpleNetDevice::DataRate", DataRateValue(DataRate("0b/s")));
+    TcpGeneralTest::DoTeardown();
+}
+
+void
+TcpLinuxRtoRecoveryTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
+Ptr<TcpSocketMsgBase>
+TcpLinuxRtoRecoveryTest::CreateSenderSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
+    socket->SetAttribute("InitialCwnd", UintegerValue(10));
+    socket->SetAttribute("Sack", BooleanValue(true));
+    socket->GetTxBuffer()->SetAttribute("LostRetransmissionDetection", BooleanValue(false));
+    socket->SetAttribute("KeepRecoverySsThresh",
+                         BooleanValue(m_option == KEEP_SSTHRESH && m_enabled));
+    socket->SetAttribute("SackRestartsRto",
+                         BooleanValue((m_option == SACK_RESTARTS_RTO && m_enabled) ||
+                                      m_option == TIMER_GRANULARITY));
+    socket->SetAttribute("SackRttSamples", BooleanValue(m_option == SACK_RTT_SAMPLES && m_enabled));
+    socket->SetAttribute("RetransmitRestartsRto",
+                         BooleanValue(m_option == RETX_RESTARTS_RTO && m_enabled));
+    socket->SetAttribute(
+        "RtoTimerGranularity",
+        TimeValue(m_option == TIMER_GRANULARITY && m_enabled ? m_granularity : Time(0)));
+    return socket;
+}
+
+Ptr<ErrorModel>
+TcpLinuxRtoRecoveryTest::CreateReceiverErrorModel()
+{
+    Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
+    errorModel->AddSeqToKill(SequenceNumber32(LOST_SEQ));
+    errorModel->AddSeqToKill(SequenceNumber32(LOST_SEQ));
+    return errorModel;
+}
+
+void
+TcpLinuxRtoRecoveryTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who != SENDER || p->GetSize() == 0)
+    {
+        return;
+    }
+    uint32_t seq = ToRelativeSeq(SENDER, h.GetSequenceNumber()).GetValue();
+    if (seq == LOST_SEQ && m_firstTx.contains(seq) && m_headRetx.IsZero())
+    {
+        m_headRetx = Simulator::Now();
+    }
+    m_firstTx.emplace(seq, Simulator::Now());
+    if (seq == LOST_SEQ)
+    {
+        m_headLastTx = Simulator::Now();
+    }
+}
+
+void
+TcpLinuxRtoRecoveryTest::Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who != SENDER || !h.HasOption(TcpOption::SACK) ||
+        ToRelativeSeq(SENDER, h.GetAckNumber()).GetValue() != LOST_SEQ)
+    {
+        return;
+    }
+    auto sack = DynamicCast<const TcpOptionSack>(h.GetOption(TcpOption::SACK));
+    uint32_t right = 0;
+    uint32_t left = 0;
+    for (const auto& [begin, end] : sack->GetSackList())
+    {
+        if (ToRelativeSeq(SENDER, end).GetValue() > right)
+        {
+            right = ToRelativeSeq(SENDER, end).GetValue();
+            left = ToRelativeSeq(SENDER, begin).GetValue();
+        }
+    }
+    if (right <= m_sackRight)
+    {
+        return;
+    }
+    // The segments are SACKed in order: the oldest newly SACKed one starts
+    // at the previous right edge
+    uint32_t oldest = m_sackRight == 0 ? left : m_sackRight;
+    m_sackRight = right;
+    if (m_rtoCount == 0 && m_firstTx.contains(oldest) && m_firstTx[oldest] < m_headLastTx)
+    {
+        m_lastRestartingSack = Simulator::Now();
+    }
+}
+
+void
+TcpLinuxRtoRecoveryTest::CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                                        const TcpSocketState::TcpCongState_t newValue)
+{
+    if (newValue == TcpSocketState::CA_RECOVERY)
+    {
+        m_recoveryEntered = true;
+    }
+}
+
+void
+TcpLinuxRtoRecoveryTest::RttTrace(Time oldTime, Time newTime)
+{
+    if (m_recoveryEntered && m_rtoCount == 0)
+    {
+        m_srttChanges++;
+    }
+}
+
+void
+TcpLinuxRtoRecoveryTest::BeforeRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who)
+{
+    if (who == SENDER && m_rtoCount == 0)
+    {
+        m_rtoTime = Simulator::Now();
+        m_rtoValue = GetRto(SENDER);
+        m_ssThreshBefore = tcb->m_ssThresh;
+    }
+}
+
+void
+TcpLinuxRtoRecoveryTest::AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who)
+{
+    if (who == SENDER)
+    {
+        if (m_rtoCount == 0)
+        {
+            m_ssThreshAfter = tcb->m_ssThresh;
+        }
+        m_rtoCount++;
+    }
+}
+
+Time
+TcpLinuxRtoRecoveryTest::GetTickExpiry(Time armed, Time rto) const
+{
+    int64_t g = m_granularity.GetTimeStep();
+    int64_t now = armed.GetTimeStep() / g;
+    int64_t ticks = (rto.GetTimeStep() + g - 1) / g;
+    // Levels of the Linux timer wheel: 1 tick below 63 ticks, 8 below 504
+    int64_t step = ticks < 63 ? 1 : 8;
+    NS_ASSERT(ticks < 504);
+    return m_granularity * (((now + ticks) / step + 1) * step);
+}
+
+void
+TcpLinuxRtoRecoveryTest::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_EQ(m_recoveryEntered, true, "Fast recovery was not entered");
+    NS_TEST_ASSERT_MSG_EQ(m_rtoCount, 1, "The RTO did not repair the lost retransmission");
+
+    switch (m_option)
+    {
+    case KEEP_SSTHRESH:
+        if (m_enabled)
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_ssThreshAfter,
+                                  m_ssThreshBefore,
+                                  "The RTO changed the ssthresh of the recovery");
+        }
+        else
+        {
+            NS_TEST_ASSERT_MSG_LT(m_ssThreshAfter,
+                                  m_ssThreshBefore,
+                                  "The RTO did not compute the ssthresh again");
+        }
+        break;
+    case SACK_RESTARTS_RTO:
+        NS_TEST_ASSERT_MSG_EQ(m_lastRestartingSack.IsStrictlyPositive(),
+                              true,
+                              "No SACK of the data sent before the retransmission");
+        if (m_enabled)
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_rtoTime,
+                                  m_lastRestartingSack + m_rtoValue,
+                                  "The RTO did not expire one RTO after the last SACK "
+                                  "of the data sent before the retransmission");
+        }
+        else
+        {
+            NS_TEST_ASSERT_MSG_LT(m_rtoTime,
+                                  m_lastRestartingSack + m_rtoValue,
+                                  "The SACKs restarted the RTO");
+        }
+        break;
+    case SACK_RTT_SAMPLES:
+        if (m_enabled)
+        {
+            NS_TEST_ASSERT_MSG_GT(m_srttChanges, 0, "No RTT sample from the SACKs");
+        }
+        else
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_srttChanges, 0, "RTT samples from the SACKs");
+        }
+        break;
+    case RETX_RESTARTS_RTO:
+        NS_TEST_ASSERT_MSG_EQ(m_headRetx.IsStrictlyPositive(), true, "No fast retransmission");
+        if (m_enabled)
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_rtoTime,
+                                  m_headRetx + m_rtoValue,
+                                  "The RTO did not expire one RTO after the retransmission");
+        }
+        else
+        {
+            NS_TEST_ASSERT_MSG_LT(m_rtoTime,
+                                  m_headRetx + m_rtoValue,
+                                  "The retransmission restarted the RTO");
+        }
+        break;
+    case TIMER_GRANULARITY:
+        if (m_enabled)
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_rtoTime,
+                                  GetTickExpiry(m_lastRestartingSack, m_rtoValue),
+                                  "The RTO did not expire on the tick of the timer wheel");
+        }
+        else
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_rtoTime,
+                                  m_lastRestartingSack + m_rtoValue,
+                                  "The RTO did not expire one RTO after its restart");
+        }
+        break;
+    }
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief Lost retransmission detection TestSuite
  */
 class TcpLostRetransmissionTestSuite : public TestSuite
@@ -433,6 +783,41 @@ class TcpLostRetransmissionTestSuite : public TestSuite
         AddTestCase(new TcpReorderedRetransmissionTest(
                         "Reordered retransmission resent with no reordering window"),
                     TestCase::Duration::QUICK);
+        for (bool enabled : {false, true})
+        {
+            std::string onOff = enabled ? " on" : " off";
+            AddTestCase(new TcpLinuxRtoRecoveryTest("KeepRecoverySsThresh" + onOff,
+                                                    TcpLinuxRtoRecoveryTest::KEEP_SSTHRESH,
+                                                    enabled),
+                        TestCase::Duration::QUICK);
+            AddTestCase(new TcpLinuxRtoRecoveryTest("SackRestartsRto" + onOff,
+                                                    TcpLinuxRtoRecoveryTest::SACK_RESTARTS_RTO,
+                                                    enabled),
+                        TestCase::Duration::QUICK);
+            AddTestCase(new TcpLinuxRtoRecoveryTest("SackRttSamples" + onOff,
+                                                    TcpLinuxRtoRecoveryTest::SACK_RTT_SAMPLES,
+                                                    enabled),
+                        TestCase::Duration::QUICK);
+            AddTestCase(new TcpLinuxRtoRecoveryTest("RetransmitRestartsRto" + onOff,
+                                                    TcpLinuxRtoRecoveryTest::RETX_RESTARTS_RTO,
+                                                    enabled),
+                        TestCase::Duration::QUICK);
+        }
+        AddTestCase(new TcpLinuxRtoRecoveryTest("RtoTimerGranularity off",
+                                                TcpLinuxRtoRecoveryTest::TIMER_GRANULARITY,
+                                                false),
+                    TestCase::Duration::QUICK);
+        // A timeout of fewer than 63 ticks, and one of more
+        for (Time granularity : {MilliSeconds(100), MilliSeconds(10)})
+        {
+            AddTestCase(
+                new TcpLinuxRtoRecoveryTest(
+                    "RtoTimerGranularity " + std::to_string(granularity.GetMilliSeconds()) + " ms",
+                    TcpLinuxRtoRecoveryTest::TIMER_GRANULARITY,
+                    true,
+                    granularity),
+                TestCase::Duration::QUICK);
+        }
     }
 };
 

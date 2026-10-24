@@ -354,6 +354,12 @@ TcpCubic::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time&
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked << rtt);
 
+    // An ACK without RTT sample (Linux cubictcp_acked(), rtt_us < 0)
+    if (!rtt.IsStrictlyPositive())
+    {
+        return;
+    }
+
     /* Discard delay samples right after fast recovery */
     if (m_epochStart != Time::Min() && (Simulator::Now() - m_epochStart) < m_cubicDelta)
     {

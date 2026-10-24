@@ -92,7 +92,9 @@ class TcpCongestionOps : public Object
      * reordering factor).
      *
      * @param tcb internal congestion state
-     * @param bytesInFlight total bytes in flight
+     * @param bytesInFlight the FlightSize of RFC 5681 (the data sent and not
+     *        cumulatively acknowledged, including the segments SACKed or
+     *        deemed lost), bounded by the congestion window
      * @return Slow start threshold
      */
     virtual uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) = 0;
@@ -120,7 +122,8 @@ class TcpCongestionOps : public Object
      *
      * @param tcb internal congestion state
      * @param segmentsAcked count of segments acked
-     * @param rtt RTT sample of the last ACKed segment (not the smoothed RTT)
+     * @param rtt RTT sample of the last ACKed segment (not the smoothed RTT),
+     *        or zero when the ACK gives no new sample (e.g., a duplicate ACK)
      */
     virtual void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt);
 
@@ -229,6 +232,8 @@ class TcpNewReno : public TcpCongestionOps
 
     void IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
     uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
+    void CongestionStateSet(Ptr<TcpSocketState> tcb,
+                            const TcpSocketState::TcpCongState_t newState) override;
     Ptr<TcpCongestionOps> Fork() override;
 
   protected:
@@ -254,10 +259,26 @@ class TcpNewReno : public TcpCongestionOps
         return m_countAckedSegments;
     }
 
+    /**
+     * @brief Grow the window by one segment for every w acknowledged
+     * segments, as Linux tcp_cong_avoid_ai()
+     *
+     * The count of acknowledged segments is the one of the congestion
+     * avoidance of TcpNewReno (Linux snd_cwnd_cnt), cleared when the window
+     * is reduced, so that derived models whose Linux implementation shares
+     * snd_cwnd_cnt between several increase rules (such as YeAH) share it too.
+     *
+     * @param tcb internal congestion state
+     * @param segmentsAcked count of segments acked
+     * @param w segments to acknowledge per segment of growth (at least 1)
+     */
+    void CountedIncrease(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, uint32_t w);
+
   private:
     bool m_countAckedSegments{false}; //!< Grow the window per acknowledged segment
-    double m_betaLoss{0};             //!< Beta for New-Reno multiplicative decrease
-    double m_betaEcn{0};              //!< Beta for New-Reno multiplicative decrease with ABE
+    uint32_t m_cWndCnt{0}; //!< Acknowledged segments not yet counted in the window growth
+    double m_betaLoss{0};  //!< Beta for New-Reno multiplicative decrease
+    double m_betaEcn{0};   //!< Beta for New-Reno multiplicative decrease with ABE
 };
 
 } // namespace ns3

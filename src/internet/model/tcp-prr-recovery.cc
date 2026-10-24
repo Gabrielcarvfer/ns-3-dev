@@ -13,6 +13,7 @@
 
 #include "tcp-socket-state.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 
 namespace ns3
@@ -24,10 +25,28 @@ NS_OBJECT_ENSURE_REGISTERED(TcpPrrRecovery);
 TypeId
 TcpPrrRecovery::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::TcpPrrRecovery")
-                            .SetParent<TcpClassicRecovery>()
-                            .AddConstructor<TcpPrrRecovery>()
-                            .SetGroupName("Internet");
+    static TypeId tid =
+        TypeId("ns3::TcpPrrRecovery")
+            .SetParent<TcpClassicRecovery>()
+            .AddConstructor<TcpPrrRecovery>()
+            .SetGroupName("Internet")
+            .AddAttribute("SegmentQuota",
+                          "Round the proportional send quota of PRR up to "
+                          "whole segments, as Linux, which counts PRR in "
+                          "packets (tcp_cwnd_reduction()). RFC 9937 counts "
+                          "bytes, and a quota smaller than a segment then "
+                          "waits for the next ACK",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpPrrRecovery::m_segmentQuota),
+                          MakeBooleanChecker())
+            .AddAttribute("PriorCwndRecoverFs",
+                          "Use the congestion window at the start of the "
+                          "recovery as RecoverFS, as Linux (prior_cwnd in "
+                          "tcp_cwnd_reduction()), instead of the flight size "
+                          "of RFC 9937",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpPrrRecovery::m_priorCwndRecoverFs),
+                          MakeBooleanChecker());
     return tid;
 }
 
@@ -41,7 +60,9 @@ TcpPrrRecovery::TcpPrrRecovery(const TcpPrrRecovery& recovery)
     : TcpClassicRecovery(recovery),
       m_prrDelivered(recovery.m_prrDelivered),
       m_prrOut(recovery.m_prrOut),
-      m_recoveryFlightSize(recovery.m_recoveryFlightSize)
+      m_recoveryFlightSize(recovery.m_recoveryFlightSize),
+      m_segmentQuota(recovery.m_segmentQuota),
+      m_priorCwndRecoverFs(recovery.m_priorCwndRecoverFs)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -92,6 +113,13 @@ TcpPrrRecovery::EnterRecovery(Ptr<TcpSocketState> tcb,
             static_cast<uint32_t>(std::max<int64_t>(recoverFs, tcb->m_segmentSize));
     }
 
+    if (m_priorCwndRecoverFs)
+    {
+        // Linux tcp_init_cwnd_reduction(): the window before the reduction,
+        // which a congestion control may have cut below the flight size
+        m_recoveryFlightSize = std::max(tcb->m_cWnd.Get(), tcb->m_segmentSize);
+    }
+
     NS_LOG_INFO("Enter recovery: cWnd " << tcb->m_cWnd << " ssThresh " << tcb->m_ssThresh
                                         << " recoveryFlightSize " << m_recoveryFlightSize
                                         << " unAckDataCount " << unAckDataCount << " bytesSacked "
@@ -136,6 +164,11 @@ TcpPrrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes, boo
         // Integer ceiling division: ceil(a/b) = a/b + (a%b != 0)
         uint64_t quotient = dividend / static_cast<uint64_t>(m_recoveryFlightSize) +
                             (dividend % static_cast<uint64_t>(m_recoveryFlightSize) != 0);
+        if (m_segmentQuota)
+        {
+            uint64_t smss = tcb->m_segmentSize;
+            quotient = (quotient + smss - 1) / smss * smss;
+        }
         sendCount = static_cast<int64_t>(quotient) - static_cast<int64_t>(m_prrOut);
 
         NS_LOG_DEBUG("PRR: prrDelivered " << m_prrDelivered << " ssThresh " << tcb->m_ssThresh

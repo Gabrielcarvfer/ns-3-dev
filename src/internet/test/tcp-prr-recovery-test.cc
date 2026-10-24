@@ -9,6 +9,10 @@
  *
  */
 
+#include "tcp-error-model.h"
+#include "tcp-general-test.h"
+
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/string.h"
 #include "ns3/tcp-congestion-ops.h"
@@ -227,6 +231,224 @@ PrrRecoveryArithmeticTest::DoRun()
 /**
  * @ingroup internet-test
  *
+ * @brief Check the SegmentQuota attribute of TcpPrrRecovery
+ *
+ * With 1000-byte segments, ssThresh 12000 and RecoverFS 26000, the third
+ * duplicate ACK of the recovery (the first one counted by EnterRecovery)
+ * brings prrDelivered to 3000 bytes, and the proportional quota to
+ * CEIL(3000 * 12000 / 26000) = 1385 bytes, of which 1000 were sent (the fast
+ * retransmission). Counted in bytes (RFC 9937), the 385 bytes left are less
+ * than a segment; rounded up to whole segments, as Linux counts PRR in
+ * packets, the quota is 2000 bytes and allows one more segment.
+ */
+class PrrSegmentQuotaTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param segmentQuota Value of the SegmentQuota attribute.
+     * @param expectedSendCount Expected cwnd minus bytes in flight after the ACK.
+     * @param name Test description.
+     */
+    PrrSegmentQuotaTest(bool segmentQuota, uint32_t expectedSendCount, const std::string& name)
+        : TestCase(name),
+          m_segmentQuota(segmentQuota),
+          m_expectedSendCount(expectedSendCount)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    bool m_segmentQuota;          //!< Value of the SegmentQuota attribute.
+    uint32_t m_expectedSendCount; //!< Expected cwnd minus bytes in flight after the ACK.
+};
+
+void
+PrrSegmentQuotaTest::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_ssThresh = 12000;
+    state->m_bytesInFlight = 22000;
+    state->m_sackEnabled = false;
+
+    Ptr<TcpPrrRecovery> recovery = CreateObject<TcpPrrRecovery>();
+    recovery->SetAttribute("SegmentQuota", BooleanValue(m_segmentQuota));
+
+    recovery->EnterRecovery(state, 3, 26000, 0, 0);
+    recovery->UpdateBytesSent(segmentSize);
+    state->m_bytesInFlight = 22000;
+    recovery->DoRecovery(state, 0, true);
+    recovery->DoRecovery(state, 0, true);
+
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get() - state->m_bytesInFlight.Get(),
+                          m_expectedSendCount,
+                          "Unexpected send quota");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Test the PriorCwndRecoverFs attribute of TcpPrrRecovery
+ *
+ * A congestion control has cut cWnd to one segment, below the 149 segments in
+ * flight, when the recovery starts, with a slow start threshold of two
+ * segments. On the first duplicate ACK (without SACK, one segment delivered),
+ * RecoverFS is the flight size by default (RFC 9937): the proportional quota,
+ * CEIL(1000 * 2000 / 149000) = 14 bytes, gives way to the fast retransmission
+ * of one segment. With the attribute set, RecoverFS is the window before the
+ * recovery (one segment, as prior_cwnd of Linux): the quota is 2000 bytes.
+ */
+class PrrPriorCwndTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param priorCwnd Value of the PriorCwndRecoverFs attribute.
+     * @param expectedSendCount Expected cwnd minus bytes in flight after the ACK.
+     * @param name Test description.
+     */
+    PrrPriorCwndTest(bool priorCwnd, uint32_t expectedSendCount, const std::string& name)
+        : TestCase(name),
+          m_priorCwnd(priorCwnd),
+          m_expectedSendCount(expectedSendCount)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    bool m_priorCwnd;             //!< Value of the PriorCwndRecoverFs attribute.
+    uint32_t m_expectedSendCount; //!< Expected cwnd minus bytes in flight after the ACK.
+};
+
+void
+PrrPriorCwndTest::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_cWnd = segmentSize;
+    state->m_ssThresh = 2 * segmentSize;
+    state->m_bytesInFlight = 149 * segmentSize;
+    state->m_sackEnabled = false;
+
+    Ptr<TcpPrrRecovery> recovery = CreateObject<TcpPrrRecovery>();
+    recovery->SetAttribute("PriorCwndRecoverFs", BooleanValue(m_priorCwnd));
+    recovery->EnterRecovery(state, 3, 149 * segmentSize, 0, 0);
+
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get() - state->m_bytesInFlight.Get(),
+                          m_expectedSendCount,
+                          "Unexpected send quota");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief A congestion control which cuts the window to one segment on every
+ * ACK of a fast recovery, as TCP-LP may do
+ */
+class TcpRecoveryCutter : public TcpNewReno
+{
+  public:
+    /**
+     * @brief Get the type ID.
+     * @return the object TypeId
+     */
+    static TypeId GetTypeId()
+    {
+        static TypeId tid = TypeId("ns3::TcpRecoveryCutter")
+                                .SetParent<TcpNewReno>()
+                                .AddConstructor<TcpRecoveryCutter>()
+                                .SetGroupName("Internet");
+        return tid;
+    }
+
+    void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt) override
+    {
+        if (tcb->m_congState == TcpSocketState::CA_RECOVERY)
+        {
+            tcb->m_cWnd = tcb->m_segmentSize;
+        }
+    }
+
+    Ptr<TcpCongestionOps> Fork() override
+    {
+        return CopyObject<TcpRecoveryCutter>(this);
+    }
+};
+
+NS_OBJECT_ENSURE_REGISTERED(TcpRecoveryCutter);
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief The window that PRR sets on an ACK of a fast recovery is the final one
+ *
+ * The congestion control is told of an ACK before the recovery sets the
+ * window (as Linux calls pkts_acked() before tcp_cwnd_reduction()): a window
+ * that the congestion control cuts on the ACK does not override the one PRR
+ * computes, cWnd = pipe + sndcnt (RFC 9937), which stays above the segments in
+ * flight during the recovery.
+ */
+class PrrCongestionControlCutTest : public TcpGeneralTest
+{
+  public:
+    PrrCongestionControlCutTest()
+        : TcpGeneralTest("Prr sets the window after the congestion control")
+    {
+    }
+
+  protected:
+    void ConfigureEnvironment() override
+    {
+        TcpGeneralTest::ConfigureEnvironment();
+        SetAppPktCount(60);
+        SetCongestionControl(TcpRecoveryCutter::GetTypeId());
+        SetRecoveryAlgorithm(TcpPrrRecovery::GetTypeId());
+    }
+
+    void ConfigureProperties() override
+    {
+        TcpGeneralTest::ConfigureProperties();
+        SetInitialCwnd(SENDER, 20);
+    }
+
+    Ptr<ErrorModel> CreateReceiverErrorModel() override
+    {
+        Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
+        // The first segment of the sixth write of 500 bytes
+        errorModel->AddSeqToKill(SequenceNumber32(1 + 5 * 500));
+        return errorModel;
+    }
+
+    void ProcessedAck(const Ptr<const TcpSocketState> tcb,
+                      const TcpHeader& h,
+                      SocketWho who) override
+    {
+        if (who == SENDER && tcb->m_congState == TcpSocketState::CA_RECOVERY)
+        {
+            ++m_recoveryAcks;
+            NS_TEST_ASSERT_MSG_GT(tcb->m_cWnd.Get(),
+                                  tcb->m_segmentSize,
+                                  "The congestion control overrode the window of PRR");
+        }
+    }
+
+    void FinalChecks() override
+    {
+        NS_TEST_ASSERT_MSG_GT(m_recoveryAcks, 1, "No fast recovery");
+    }
+
+  private:
+    uint32_t m_recoveryAcks{0}; //!< ACKs processed in fast recovery
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief PRR Recovery TestSuite
  */
 class PrrRecoveryTestSuite : public TestSuite
@@ -307,6 +529,17 @@ class PrrRecoveryTestSuite : public TestSuite
                                           51000,
                                           "Prr CRB branch must not wrap unsigned subtraction"),
             TestCase::Duration::QUICK);
+
+        AddTestCase(new PrrSegmentQuotaTest(false, 385, "Prr send quota counted in bytes"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(
+            new PrrSegmentQuotaTest(true, 1000, "Prr send quota rounded up to whole segments"),
+            TestCase::Duration::QUICK);
+        AddTestCase(new PrrPriorCwndTest(false, 1000, "Prr RecoverFS is the flight size"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new PrrPriorCwndTest(true, 2000, "Prr RecoverFS is the prior window"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new PrrCongestionControlCutTest(), TestCase::Duration::QUICK);
     }
 };
 
