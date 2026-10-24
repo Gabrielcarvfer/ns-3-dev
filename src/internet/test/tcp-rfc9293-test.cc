@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
+#include "tcp-test-pair.h"
+
 #include "ns3/boolean.h"
 #include "ns3/callback.h"
 #include "ns3/config.h"
@@ -119,6 +121,55 @@
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpRfc9293TestSuite");
+
+/**
+ * @ingroup internet-test
+ *
+ * Build a TCP segment byte by byte, with a window of 4096 bytes and a zero
+ * checksum: TcpHeader derives its data offset from the options it carries,
+ * so that a malformed option cannot be expressed through it.
+ *
+ * @param srcPort the source port
+ * @param dstPort the destination port
+ * @param seq the sequence number
+ * @param ack the acknowledgment number
+ * @param flags the flags
+ * @param options the option bytes, a multiple of 4 bytes long
+ * @return the segment
+ */
+static Ptr<Packet>
+RawTcpSegment(uint16_t srcPort,
+              uint16_t dstPort,
+              uint32_t seq,
+              uint32_t ack,
+              uint8_t flags,
+              const std::vector<uint8_t>& options = {})
+{
+    std::vector<uint8_t> segment = {
+        static_cast<uint8_t>(srcPort >> 8),
+        static_cast<uint8_t>(srcPort & 0xff),
+        static_cast<uint8_t>(dstPort >> 8),
+        static_cast<uint8_t>(dstPort & 0xff),
+        static_cast<uint8_t>(seq >> 24),
+        static_cast<uint8_t>(seq >> 16),
+        static_cast<uint8_t>(seq >> 8),
+        static_cast<uint8_t>(seq),
+        static_cast<uint8_t>(ack >> 24),
+        static_cast<uint8_t>(ack >> 16),
+        static_cast<uint8_t>(ack >> 8),
+        static_cast<uint8_t>(ack),
+        static_cast<uint8_t>((5 + options.size() / 4) << 4), // data offset
+        flags,
+        0x10,
+        0x00, // window size
+        0x00,
+        0x00, // checksum
+        0x00,
+        0x00, // urgent pointer
+    };
+    segment.insert(segment.end(), options.begin(), options.end());
+    return Create<Packet>(segment.data(), segment.size());
+}
 
 /**
  * @ingroup internet-test
@@ -540,17 +591,7 @@ TcpIcmpSourceQuenchTestCase::StateChanged(TcpSocket::TcpStates_t oldState,
 void
 TcpIcmpSourceQuenchTestCase::DoRun()
 {
-    m_nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(m_nodes);
-
-    InternetStackHelper stack;
-    stack.Install(m_nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(m_nodes);
 
     const uint16_t serverPort = 4478;
 
@@ -702,34 +743,8 @@ TcpMalformedOptionsResetTestCase::SendMalformedSyn(Ptr<Socket> socket, Ipv4Addre
     // be expressed through it. The header claims one word of options holding
     // a timestamp option (kind 8) which announces a length of 10 bytes, more
     // than the option space it lies in
-    const uint8_t segment[24] = {
-        static_cast<uint8_t>(m_proberPort >> 8),
-        static_cast<uint8_t>(m_proberPort & 0xff), // source port
-        static_cast<uint8_t>(m_targetPort >> 8),
-        static_cast<uint8_t>(m_targetPort & 0xff), // destination port
-        0x00,
-        0x00,
-        0x00,
-        0x01, // sequence number
-        0x00,
-        0x00,
-        0x00,
-        0x00,           // acknowledgment number
-        0x60,           // data offset: 6 words
-        TcpHeader::SYN, // flags
-        0x10,
-        0x00, // window size
-        0x00,
-        0x00, // checksum
-        0x00,
-        0x00, // urgent pointer
-        0x08,
-        0x0a,
-        0x00,
-        0x00 // malformed timestamp option
-    };
-
-    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    Ptr<Packet> packet =
+        RawTcpSegment(m_proberPort, m_targetPort, 1, 0, TcpHeader::SYN, {0x08, 0x0a, 0x00, 0x00});
     socket->SendTo(packet, 0, InetSocketAddress(dst, 0));
 }
 
@@ -737,17 +752,7 @@ void
 TcpMalformedOptionsResetTestCase::DoRun()
 {
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     // The target listens, so that a well-formed SYN would be answered with a
     // SYN+ACK rather than with a RST
@@ -867,17 +872,7 @@ TcpInitialSequenceNumberTestCase::DoRun()
     Config::SetDefault("ns3::TcpL4Protocol::ClockDrivenIsn", BooleanValue(true));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
     server->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_targetPort));
@@ -1200,17 +1195,7 @@ void
 TcpUrgentDataTestCase::DoRun()
 {
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9301;
 
@@ -1963,17 +1948,7 @@ void
 TcpPassiveOpenTestCase::DoRun()
 {
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9701;
 
@@ -2200,17 +2175,7 @@ TcpTimeWaitTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocketBase::MaxSegLifetime", DoubleValue(msl.GetSeconds()));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9901;
 
@@ -2480,17 +2445,7 @@ TcpDelayedAckTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(segmentSize));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9903;
 
@@ -2583,17 +2538,7 @@ void
 TcpTosAndTtlTestCase::DoRun()
 {
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9904;
     const uint8_t tos = 0xb8; // Expedited forwarding
@@ -2810,18 +2755,7 @@ TcpZeroWindowProbeTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocketBase::PersistTimeout", TimeValue(Seconds(1)));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(10));
 
     const uint16_t port = 9905;
 
@@ -2981,17 +2915,7 @@ TcpPushFlagTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(segmentSize));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9906;
 
@@ -3182,30 +3106,7 @@ TcpBroadcastSynTestCase::ReceiveSpoofed(Ptr<Socket> socket)
 void
 TcpBroadcastSynTestCase::SendSynFrom(Ipv4Address source)
 {
-    const uint8_t segment[20] = {
-        static_cast<uint8_t>(m_proberPort >> 8),
-        static_cast<uint8_t>(m_proberPort & 0xff),
-        static_cast<uint8_t>(m_targetPort >> 8),
-        static_cast<uint8_t>(m_targetPort & 0xff),
-        0x00,
-        0x00,
-        0x00,
-        0x01, // sequence number
-        0x00,
-        0x00,
-        0x00,
-        0x00, // acknowledgment number
-        0x50, // data offset
-        TcpHeader::SYN,
-        0x10,
-        0x00, // window size
-        0x00,
-        0x00, // checksum
-        0x00,
-        0x00 // urgent pointer
-    };
-
-    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    Ptr<Packet> packet = RawTcpSegment(m_proberPort, m_targetPort, 1, 0, TcpHeader::SYN);
     Ipv4Header ipv4;
     ipv4.SetSource(source);
     ipv4.SetDestination(m_interfaces.GetAddress(1));
@@ -3228,30 +3129,7 @@ TcpBroadcastSynTestCase::SendSynFrom(Ipv4Address source)
 void
 TcpBroadcastSynTestCase::SendSynTo(Ipv4Address destination)
 {
-    const uint8_t segment[20] = {
-        static_cast<uint8_t>(m_proberPort >> 8),
-        static_cast<uint8_t>(m_proberPort & 0xff),
-        static_cast<uint8_t>(m_targetPort >> 8),
-        static_cast<uint8_t>(m_targetPort & 0xff),
-        0x00,
-        0x00,
-        0x00,
-        0x01, // sequence number
-        0x00,
-        0x00,
-        0x00,
-        0x00, // acknowledgment number
-        0x50, // data offset
-        TcpHeader::SYN,
-        0x10,
-        0x00, // window size
-        0x00,
-        0x00, // checksum
-        0x00,
-        0x00 // urgent pointer
-    };
-
-    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    Ptr<Packet> packet = RawTcpSegment(m_proberPort, m_targetPort, 1, 0, TcpHeader::SYN);
     m_prober->SendTo(packet, 0, InetSocketAddress(destination, 0));
 }
 
@@ -3450,30 +3328,7 @@ TcpIpv6MulticastSynTestCase::ReceiveRaw(uint32_t* counter, Ptr<Socket> socket)
 void
 TcpIpv6MulticastSynTestCase::SendSyn()
 {
-    const uint8_t segment[20] = {
-        0x24,
-        0xba, // source port 9402
-        static_cast<uint8_t>(m_targetPort >> 8),
-        static_cast<uint8_t>(m_targetPort & 0xff),
-        0x00,
-        0x00,
-        0x00,
-        0x01, // sequence number
-        0x00,
-        0x00,
-        0x00,
-        0x00, // acknowledgment number
-        0x50, // data offset
-        TcpHeader::SYN,
-        0x10,
-        0x00, // window size
-        0x00,
-        0x00, // checksum
-        0x00,
-        0x00 // urgent pointer
-    };
-
-    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    Ptr<Packet> packet = RawTcpSegment(9402, m_targetPort, 1, 0, TcpHeader::SYN);
     m_prober->SendTo(packet, 0, Inet6SocketAddress(Ipv6Address::GetAllNodesMulticast(), 0));
 }
 
@@ -3623,18 +3478,7 @@ TcpUnsignedWindowTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(bytes));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(5)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(5));
 
     const uint16_t port = 9908;
 
@@ -3965,34 +3809,12 @@ TcpMalformedOptionsAbortTestCase::SendMalformedAck()
 {
     // An acknowledgment carrying a timestamp option (kind 8) which announces
     // a length of 10 bytes, more than the word of option space it lies in
-    const uint8_t segment[24] = {
-        static_cast<uint8_t>(m_proberPort >> 8),
-        static_cast<uint8_t>(m_proberPort & 0xff),
-        static_cast<uint8_t>(m_targetPort >> 8),
-        static_cast<uint8_t>(m_targetPort & 0xff),
-        0x00,
-        0x00,
-        0x00,
-        0x02, // sequence number
-        static_cast<uint8_t>((m_targetIsn + 1).GetValue() >> 24),
-        static_cast<uint8_t>((m_targetIsn + 1).GetValue() >> 16),
-        static_cast<uint8_t>((m_targetIsn + 1).GetValue() >> 8),
-        static_cast<uint8_t>((m_targetIsn + 1).GetValue()), // acknowledgment number
-        0x60,                                               // data offset: 6 words
-        TcpHeader::ACK,
-        0x10,
-        0x00, // window size
-        0x00,
-        0x00, // checksum
-        0x00,
-        0x00, // urgent pointer
-        0x08,
-        0x0a,
-        0x00,
-        0x00 // malformed timestamp option
-    };
-
-    Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+    Ptr<Packet> packet = RawTcpSegment(m_proberPort,
+                                       m_targetPort,
+                                       2,
+                                       (m_targetIsn + 1).GetValue(),
+                                       TcpHeader::ACK,
+                                       {0x08, 0x0a, 0x00, 0x00});
     m_prober->SendTo(packet, 0, InetSocketAddress(m_interfaces.GetAddress(1), 0));
 }
 
@@ -4652,17 +4474,8 @@ TcpKeepAliveTestCase::RunUnansweredKeepAlives(uint32_t retries)
     m_highestSent.reset();
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    NetDeviceContainer devices;
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", Time(0), &devices);
 
     const uint16_t port = 9910;
 
@@ -4711,17 +4524,7 @@ TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy, bool passive)
     m_watchAccepted = passive;
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9909;
 
@@ -5310,17 +5113,7 @@ void
 TcpSendAfterShutdownTestCase::DoRun()
 {
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9920;
 
@@ -5969,17 +5762,7 @@ TcpZeroWindowProbeUrgentTestCase::Run(uint32_t beyond)
     Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     const uint16_t port = 9921;
 
@@ -6157,18 +5940,7 @@ TcpLongUrgentDataTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(300000));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(5)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(5));
 
     const uint16_t port = 9922;
 
@@ -7430,18 +7202,7 @@ TcpRightEdgeBaseTestCase::Run(uint32_t buffer,
     Config::SetDefault("ns3::TcpSocketBase::WindowScaling", BooleanValue(scaling));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(1)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(1));
 
     const uint16_t port = 9924;
 
@@ -7609,18 +7370,7 @@ TcpWindowUpdateAfterReadTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(1)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(1));
 
     const uint16_t port = 9925;
 
@@ -7795,18 +7545,8 @@ TcpPushScenariosTestCase::Run(const std::vector<std::pair<Time, uint32_t>>& writ
     Config::SetDefault("ns3::TcpSocket::TcpNoDelay", BooleanValue(noDelay));
 
     NodeContainer nodes;
-    nodes.Create(2);
-
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    NetDeviceContainer devices;
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(10), &devices);
 
     const uint16_t port = 9926;
 
@@ -11212,29 +10952,7 @@ class TcpOtherInterfaceBroadcastSynTestCase : public TcpRawSegmentTestCase
      */
     void SendSynTo(Ipv4Address destination)
     {
-        const uint8_t segment[20] = {
-            static_cast<uint8_t>(m_proberPort >> 8),
-            static_cast<uint8_t>(m_proberPort & 0xff),
-            static_cast<uint8_t>(m_targetPort >> 8),
-            static_cast<uint8_t>(m_targetPort & 0xff),
-            0x00,
-            0x00,
-            0x00,
-            0x01, // sequence number
-            0x00,
-            0x00,
-            0x00,
-            0x00, // acknowledgment number
-            0x50, // data offset
-            TcpHeader::SYN,
-            0x10,
-            0x00, // window size
-            0x00,
-            0x00, // checksum
-            0x00,
-            0x00 // urgent pointer
-        };
-        Ptr<Packet> packet = Create<Packet>(segment, sizeof(segment));
+        Ptr<Packet> packet = RawTcpSegment(m_proberPort, m_targetPort, 1, 0, TcpHeader::SYN);
         m_prober->SendTo(packet, 0, InetSocketAddress(destination, 0));
     }
 };

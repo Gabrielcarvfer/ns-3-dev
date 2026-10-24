@@ -7,6 +7,7 @@
  */
 
 #include "tcp-general-test.h"
+#include "tcp-test-pair.h"
 
 #include "ns3/boolean.h"
 #include "ns3/inet-socket-address.h"
@@ -384,14 +385,7 @@ TcpSegmentDataSizeTestCase::DoRun()
     const uint16_t port = 9600;
 
     NodeContainer nodes;
-    nodes.Create(2);
-    SimpleNetDeviceHelper devHelper;
-    NetDeviceContainer devices = devHelper.Install(nodes);
-    InternetStackHelper stack;
-    stack.Install(nodes);
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
     server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));

@@ -11,13 +11,13 @@
 
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
+#include "ns3/iana-internet-protocol-numbers.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/simple-channel.h"
 #include "ns3/simple-net-device.h"
 #include "ns3/tcp-header.h"
-#include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-option-sack.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-tx-buffer.h"
@@ -224,7 +224,7 @@ class TcpRetransmissionReorderingChannel : public SimpleChannel
         copy->RemoveHeader(ipHeader);
         bool isData = false;
         uint32_t seq = 0;
-        if (ipHeader.GetProtocol() == TcpL4Protocol::PROT_NUMBER)
+        if (ipHeader.GetProtocol() == iana::internetprotocolnumbers::TCP)
         {
             copy->RemoveHeader(tcpHeader);
             if (tcpHeader.GetFlags() == TcpHeader::SYN)

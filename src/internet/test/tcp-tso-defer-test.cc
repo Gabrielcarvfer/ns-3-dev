@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
+#include "tcp-test-pair.h"
+
 #include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
@@ -158,16 +160,7 @@ TcpTsoDeferTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocketBase::TsoDefer", BooleanValue(m_defer));
 
     NodeContainer nodes;
-    nodes.Create(2);
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetDeviceAttribute("DataRate", DataRateValue(DataRate("10Mbps")));
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-    InternetStackHelper stack;
-    stack.Install(nodes);
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(10));
 
     const uint16_t port = 9908;
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
@@ -333,16 +326,7 @@ TcpTsoDeferFillTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::DelAckCount", UintegerValue(m_delAckCount));
 
     NodeContainer nodes;
-    nodes.Create(2);
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetDeviceAttribute("DataRate", DataRateValue(DataRate("10Mbps")));
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(50)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-    InternetStackHelper stack;
-    stack.Install(nodes);
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(50));
 
     const uint16_t port = 9909;
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
@@ -494,16 +478,7 @@ TcpTsoDeferSplitTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::TcpNoDelay", BooleanValue(false));
 
     NodeContainer nodes;
-    nodes.Create(2);
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetDeviceAttribute("DataRate", DataRateValue(DataRate("10Mbps")));
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(50)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-    InternetStackHelper stack;
-    stack.Install(nodes);
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(50));
 
     const uint16_t port = 9912;
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
@@ -621,16 +596,7 @@ TcpTsoDeferNagleTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocketBase::TsoDefer", BooleanValue(m_defer));
 
     NodeContainer nodes;
-    nodes.Create(2);
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetDeviceAttribute("DataRate", DataRateValue(DataRate("100Mbps")));
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-    InternetStackHelper stack;
-    stack.Install(nodes);
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "100Mbps", MilliSeconds(10));
 
     const uint16_t port = 9913;
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
@@ -924,16 +890,7 @@ TcpTsoDeferFillNagleTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::TcpNoDelay", BooleanValue(!m_nagle));
 
     NodeContainer nodes;
-    nodes.Create(2);
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetDeviceAttribute("DataRate", DataRateValue(DataRate("10Mbps")));
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(50)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-    InternetStackHelper stack;
-    stack.Install(nodes);
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(50));
 
     const uint16_t port = 9914;
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());

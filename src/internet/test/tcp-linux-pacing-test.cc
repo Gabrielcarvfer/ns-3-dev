@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
+#include "tcp-test-pair.h"
+
 #include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
@@ -144,15 +146,7 @@ TcpLinuxPacingTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocketBase::ForcedPush", BooleanValue(m_linux));
 
     NodeContainer nodes;
-    nodes.Create(2);
-    SimpleNetDeviceHelper devHelper;
-    devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
-    NetDeviceContainer devices = devHelper.Install(nodes);
-    InternetStackHelper stack;
-    stack.Install(nodes);
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+    Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(10));
 
     const uint16_t port = 9909;
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
