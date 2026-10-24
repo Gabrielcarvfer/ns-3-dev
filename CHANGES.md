@@ -18,17 +18,25 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 * (mesh) Added the `PreqReceived`, `PrepReceived` and `PerrReceived` trace sources to `dot11s::HwmpProtocol`, fired when a PREQ, PREP or PERR element is received from a neighbor, and `flame::FlameProtocol::GetRoutingTable()`.
 * (sixlowpan) Added `SixLowPanAdaptiveFlooding`, a mesh-under forwarding policy that adapts the re-broadcast rate to the observed network activity using the Trickle algorithm (RFC 6206), with per-packet forwarding deadlines and redundancy-based discarding.
+* (visualizer) Added `visualizer.enable_flow_monitor()` to plot FlowMonitor statistics; `PyViz::ConnectTrace()`, which connects one of the generic handlers `Tx`, `Rx` and `Drop` to a Config path; and `PyViz::RecordTx()`, `RecordRx()` and `RecordDrop()`.
+* (visualizer) Plugins can add values to each node's snapshot with `add_node_info()` and hold the simulation with `add_step_guard()`.
 * (flow-monitor) Added `FlowMonitorHelper::HasMonitor()`, which tells whether a FlowMonitor was created in the current simulation.
+* (lte) Added `Tx` and `Rx` trace sources to `LteNetDevice`, fired when a UE or eNB device is given a packet to send and when a device passes a received packet up the stack.
 
 ### Changes to existing API
 
 * (csma-layout) The `CsmaStarHelper::AssignIpv6Addresses` function signature has changed and is now analogous to the one of `CsmaStarHelper::AssignIpv4Addresses`.
 * (point-to-point-layout) The `AssignIpv6Addresses` function signatures has changed and is now analogous to the one of `AssignIpv4Addresses`.
 * (internet) The `Ipv[4,6]AddressGenerator` classes are now deprecated in favor of `Ipv[4,6]AddressHelper`.
+* (visualizer) `visualizer.start()` now opens a browser based visualizer. The GTK visualizer (`visualizer.core`), its plugins, and their `populate-node-menu`/`simulation-periodic-update` signals were removed. Hooks and plugins registered with `add_initialization_hook()` and `register_plugin()` now receive the web visualizer object, which provides `add_node_panel()`, `add_panel()`, `add_overlay()`, `add_periodic_update()`, `add_tooltip_info()` and `set_node_color()`/`set_node_label()`/`set_node_size()`/`set_node_icon()`.
+* (visualizer) The `PyViz` constructor no longer connects to trace sources; the Python visualizer connects them, skipping types whose modules are not built. The device-specific `PyViz` trace handlers were replaced by the generic `Tx`, `Rx` and `Drop` handlers, and the destination and source addresses of last-packet samples are no longer filled in.
 * (internet-apps) The `LeaseInfo` class in DHCPv6 has been moved from the `ns3` namespace to become a private inner class of `Dhcp6Server` (`Dhcp6Server::LeaseInfo`), as it is an internal data structure not used in any public interface.
 * (mesh) `dot11s::IePreq::GetDestinationList()` is now a const method.
 
 ### Changes to build system
+
+* (visualizer) PyViz no longer needs GTK+ 3, GooCanvas, PyGObject, pygraphviz or IPython; it only requires the Python bindings. GTK+ 3 is still used by `GtkConfigStore`.
+* (visualizer) The visualizer library now links only against the core and network modules instead of internet, wifi, lr-wpan and point-to-point.
 
 ### Changed behavior
 

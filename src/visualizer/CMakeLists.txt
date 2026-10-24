@@ -19,12 +19,10 @@ build_lib(
     model/visual-simulator-impl.cc
   HEADER_FILES model/fast-clipping.h
                model/pyviz.h
-  LIBRARIES_TO_LINK
-    ${python_libraries}
-    ${libinternet}
-    ${libwifi}
-    ${liblr-wpan}
-    ${libpoint-to-point}
+  # Device and protocol trace sources are connected from Python
+  # (visualizer/traces.py), so only the network module is needed here.
+  LIBRARIES_TO_LINK ${python_libraries}
+                    ${libnetwork}
 )
 
 # move visualizer folder to build/bindings/python, which allows us to add only
@@ -62,6 +60,8 @@ else()
   install(
     DIRECTORY ./visualizer
     DESTINATION ${NS3_BINDINGS_INSTALL_DIR}/
+    PATTERN "__pycache__"
+            EXCLUDE
   )
 
   add_custom_target(

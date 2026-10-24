@@ -43,10 +43,16 @@ but other contemporaneous versions may also work.
 ### New user-visible features
 
 - (sixlowpan) !2881 Added `SixLowPanAdaptiveFlooding`, a mesh-under forwarding policy that adapts the re-broadcast rate to the observed network activity using the Trickle algorithm (RFC 6206).
+- (visualizer) PyViz was rewritten as a browser based visualizer with no GTK dependencies. It adds a recursive object inspector with attribute editing, a TypeId browser, multi-node selection, movable and minimizable panel windows, optional FlowMonitor plots with zoom, battery indicators for nodes with an energy source, mobility trails, LTE and NR transmissions, links from LTE and NR UEs to their serving cell, and restart of C++ programs. The GTK visualizer was removed.
+- (lte) `LteNetDevice` has new `Tx` and `Rx` trace sources.
 
 ### Bugs fixed
 
 - (mesh) #682 Mesh regression tests no longer compare against reference PCAP files; they now check HWMP, peer management and FLAME behavior through trace sources.
+- (visualizer) PyViz no longer aborts when trace sources of modules that are not built (such as LTE) are missing.
+- (visualizer) PyViz simulations no longer slow down over time: stepping now goes through `Simulator::Run()`, which stops `Time` from tracking every `Time` object.
+- (visualizer) Restarting a PyViz simulation no longer aborts when the scenario uses `Names`, and no longer frees objects the scenario created from Python.
+- (visualizer) CSMA receptions are no longer counted twice by PyViz.
 
 ## Release 3.49
 
