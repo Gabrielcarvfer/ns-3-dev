@@ -36,20 +36,26 @@ TcpScalable::GetTypeId()
                             .SetGroupName("Internet")
                             .AddAttribute("AIFactor",
                                           "Additive Increase Factor",
-                                          UintegerValue(50),
+                                          UintegerValue(100),
                                           MakeUintegerAccessor(&TcpScalable::m_aiFactor),
                                           MakeUintegerChecker<uint32_t>())
                             .AddAttribute("MDFactor",
                                           "Multiplicative Decrease Factor",
                                           DoubleValue(0.125),
                                           MakeDoubleAccessor(&TcpScalable::m_mdFactor),
-                                          MakeDoubleChecker<double>());
+                                          MakeDoubleChecker<double>())
+                            .AddAttribute("LinuxDecrease",
+                                          "Compute the multiplicative decrease as Linux does: "
+                                          "the decrease, rounded down, is subtracted from cWnd, "
+                                          "instead of scaling the bytes in flight",
+                                          BooleanValue(false),
+                                          MakeBooleanAccessor(&TcpScalable::m_linuxDecrease),
+                                          MakeBooleanChecker());
     return tid;
 }
 
 TcpScalable::TcpScalable()
     : TcpNewReno(),
-      m_ackCnt(0),
       m_aiFactor(50),
       m_mdFactor(0.125)
 {
@@ -58,9 +64,9 @@ TcpScalable::TcpScalable()
 
 TcpScalable::TcpScalable(const TcpScalable& sock)
     : TcpNewReno(sock),
-      m_ackCnt(sock.m_ackCnt),
       m_aiFactor(sock.m_aiFactor),
-      m_mdFactor(sock.m_mdFactor)
+      m_mdFactor(sock.m_mdFactor),
+      m_linuxDecrease(sock.m_linuxDecrease)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -84,29 +90,10 @@ TcpScalable::CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked
     uint32_t segCwnd = tcb->GetCwndInSegments();
     NS_ASSERT(segCwnd >= 1);
 
-    uint32_t oldCwnd = segCwnd;
-    uint32_t w = std::min(segCwnd, m_aiFactor);
-
-    if (m_ackCnt >= w)
-    {
-        m_ackCnt = 0;
-        segCwnd++;
-    }
-
-    m_ackCnt += segmentsAcked;
-    if (m_ackCnt >= w)
-    {
-        uint32_t delta = m_ackCnt / w;
-        m_ackCnt = 0;
-        segCwnd += delta;
-    }
-
-    if (segCwnd != oldCwnd)
-    {
-        tcb->m_cWnd = segCwnd * tcb->m_segmentSize;
-        NS_LOG_INFO("In CongAvoid, updated to cwnd " << tcb->m_cWnd << " ssthresh "
-                                                     << tcb->m_ssThresh);
-    }
+    // One segment of growth every min(cwnd, AIFactor) acknowledged segments,
+    // with the count cleared when the window is reduced, as Linux
+    // tcp_cong_avoid_ai() on snd_cwnd_cnt
+    CountedIncrease(tcb, segmentsAcked, std::min(segCwnd, m_aiFactor));
 }
 
 std::string
@@ -121,6 +108,14 @@ TcpScalable::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
 
     uint32_t segCwnd = bytesInFlight / tcb->m_segmentSize;
+
+    if (m_linuxDecrease)
+    {
+        // tcp_scalable_ssthresh(): cwnd - (cwnd >> 3)
+        segCwnd = tcb->GetCwndInSegments();
+        auto decrease = static_cast<uint32_t>(segCwnd * m_mdFactor);
+        return std::max(segCwnd - decrease, 2U) * tcb->m_segmentSize;
+    }
 
     double b = 1.0 - m_mdFactor;
     uint32_t ssThresh = static_cast<uint32_t>(std::max(2.0, segCwnd * b));

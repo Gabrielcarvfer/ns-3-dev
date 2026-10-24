@@ -127,12 +127,27 @@ TcpLinuxReno::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
     {
         NS_LOG_DEBUG("In slow start, m_cWnd " << tcb->m_cWnd << " m_ssThresh " << tcb->m_ssThresh);
         segmentsAcked = SlowStart(tcb, segmentsAcked);
+        // Linux tcp_reno_cong_avoid(): the segments acknowledged beyond
+        // ssThresh go to the congestion avoidance
+        if (segmentsAcked == 0)
+        {
+            return;
+        }
     }
-    else
+    NS_LOG_DEBUG("In cong. avoidance, m_cWnd " << tcb->m_cWnd << " m_ssThresh " << tcb->m_ssThresh);
+    CongestionAvoidance(tcb, segmentsAcked);
+}
+
+void
+TcpLinuxReno::CongestionStateSet(Ptr<TcpSocketState> tcb,
+                                 const TcpSocketState::TcpCongState_t newState)
+{
+    NS_LOG_FUNCTION(this << tcb << newState);
+    // Linux tcp_init_cwnd_reduction() and tcp_enter_loss() clear snd_cwnd_cnt
+    if (newState == TcpSocketState::CA_RECOVERY || newState == TcpSocketState::CA_CWR ||
+        newState == TcpSocketState::CA_LOSS)
     {
-        NS_LOG_DEBUG("In cong. avoidance, m_cWnd " << tcb->m_cWnd << " m_ssThresh "
-                                                   << tcb->m_ssThresh);
-        CongestionAvoidance(tcb, segmentsAcked);
+        m_cWndCnt = 0;
     }
 }
 
@@ -149,11 +164,19 @@ TcpLinuxReno::GetSsThresh(Ptr<const TcpSocketState> state, uint32_t bytesInFligh
 
     if (state->m_abeEnabled && state->m_ecnState == TcpSocketState::ECN_ECE_RCVD)
     {
-        return std::max<uint32_t>(2 * state->m_segmentSize,
-                                  state->m_cWnd * m_betaEcn); // According to RFC 8511 (ABE)
+        return ReducedWindow(state, m_betaEcn); // According to RFC 8511 (ABE)
     }
 
-    return std::max<uint32_t>(2 * state->m_segmentSize, state->m_cWnd * m_betaLoss);
+    return ReducedWindow(state, m_betaLoss);
+}
+
+uint32_t
+TcpLinuxReno::ReducedWindow(Ptr<const TcpSocketState> state, double beta) const
+{
+    // Linux tcp_reno_ssthresh() counts the window in whole segments:
+    // max(snd_cwnd >> 1, 2)
+    uint32_t segCwnd = state->m_cWnd / state->m_segmentSize;
+    return std::max<uint32_t>(2, static_cast<uint32_t>(segCwnd * beta)) * state->m_segmentSize;
 }
 
 Ptr<TcpCongestionOps>

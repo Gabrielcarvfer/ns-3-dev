@@ -35,6 +35,7 @@
 #include "ns3/bulk-send-helper.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
+#include "ns3/enum.h"
 #include "ns3/error-model.h"
 #include "ns3/gnuplot.h"
 #include "ns3/inet-socket-address.h"
@@ -53,6 +54,7 @@
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
+#include "ns3/tcp-cubic.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-socket-base.h"
@@ -433,8 +435,9 @@ Ns3TcpCubicTestCase::DoRun()
         NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(1), Seconds(19), 60, 110),
                               true,
                               "cwnd outside range");
-        // Initial convex region does not have much variation
-        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(4), Seconds(6), 83, 88),
+        // The plateau around the maximum reduced by fast convergence does not
+        // have much variation
+        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(4), Seconds(7), 73, 79),
                               true,
                               "cwnd outside range");
     }
@@ -442,11 +445,11 @@ Ns3TcpCubicTestCase::DoRun()
     {
         // Between time 11 and 15, cwnd should be fairly constant
         // because without TCP friendliness, Cubic does not respond quickly
-        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(11), Seconds(15), 107, 123),
+        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(11), Seconds(15), 85, 95),
                               true,
                               "cwnd outside range");
         // After time 17.5, cwnd should have grown much higher
-        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(17.5), Seconds(18.5), 169, 215),
+        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(17.5), Seconds(18.5), 114, 155),
                               true,
                               "cwnd outside range");
     }
@@ -459,6 +462,299 @@ Ns3TcpCubicTestCase::DoRun()
     }
 
     Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Check the thresholds of the HyStart exit from slow start.
+ *
+ * With a minimum RTT of 100 ms, as in Linux (hystart_update()):
+ * - the delay detection exits the slow start once the minimum RTT of a round
+ *   exceeds the minimum RTT by one eighth of it (12.5 ms), clamped between
+ *   HyStartDelayMin and HyStartDelayMax (16 ms);
+ * - the ACK train detection exits the slow start once closely spaced ACKs
+ *   have arrived for half the minimum RTT (50 ms) since the start of the
+ *   round, i.e., the forward one way delay, when the flow is not paced.
+ */
+class Ns3TcpCubicHystartTestCase : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param mode The HyStart detection mechanism to check
+     * @param desc Test description.
+     */
+    Ns3TcpCubicHystartTestCase(TcpCubic::HybridSSDetectionMode mode, const std::string& desc)
+        : TestCase(desc),
+          m_mode(mode)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * @brief Process an ACK of one segment, as the socket does.
+     * @param rtt The RTT sample of the ACK
+     */
+    void Ack(Time rtt);
+
+    TcpCubic::HybridSSDetectionMode m_mode; //!< HyStart detection mechanism
+    Ptr<TcpSocketState> m_state;            //!< TCP socket state
+    Ptr<TcpCubic> m_cubic;                  //!< The congestion control
+};
+
+void
+Ns3TcpCubicHystartTestCase::Ack(Time rtt)
+{
+    m_cubic->PktsAcked(m_state, 1, rtt);
+    m_cubic->IncreaseWindow(m_state, 1);
+}
+
+void
+Ns3TcpCubicHystartTestCase::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    m_state = CreateObject<TcpSocketState>();
+    m_state->m_segmentSize = segmentSize;
+    m_state->m_cWnd = 20 * segmentSize;
+    m_state->m_ssThresh = UINT32_MAX;
+    m_state->m_isCwndLimited = true;
+    m_state->m_lastAckedSeq = SequenceNumber32(1);
+    m_state->m_highTxMark = SequenceNumber32(20 * segmentSize + 1);
+
+    m_cubic = CreateObject<TcpCubic>();
+    m_cubic->SetAttribute("HyStartDetect", EnumValue(m_mode));
+    m_cubic->Init(m_state);
+
+    // The first sample sets the minimum RTT
+    Ack(MilliSeconds(100));
+
+    if (m_mode == TcpCubic::HybridSSDetectionMode::DELAY)
+    {
+        // A new round, whose RTT samples are 15 ms above the minimum
+        m_state->m_lastAckedSeq = SequenceNumber32(20 * segmentSize + 2);
+        m_state->m_highTxMark = SequenceNumber32(60 * segmentSize + 1);
+        for (uint32_t i = 0; i < 12; i++)
+        {
+            Ack(MilliSeconds(115));
+        }
+    }
+    else
+    {
+        // ACKs 1 ms apart for 60 ms, within the round
+        for (uint32_t i = 1; i <= 60; i++)
+        {
+            Simulator::Schedule(MilliSeconds(i),
+                                &Ns3TcpCubicHystartTestCase::Ack,
+                                this,
+                                MilliSeconds(100));
+        }
+        Simulator::Run();
+    }
+
+    NS_TEST_ASSERT_MSG_NE(m_state->m_ssThresh.Get(),
+                          UINT32_MAX,
+                          "HyStart did not exit the slow start");
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Check that the ACKs counted towards the next window increase are
+ * discarded when the window is reduced.
+ *
+ * As tp->snd_cwnd_cnt in Linux, which tcp_init_cwnd_reduction() and
+ * tcp_enter_loss() clear, the ACKs counted at the window of before a loss
+ * must not hasten the first increase of the reduced window.
+ */
+class Ns3TcpCubicCwndCntResetTestCase : public TestCase
+{
+  public:
+    Ns3TcpCubicCwndCntResetTestCase()
+        : TestCase("ACK count discarded on a window reduction")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+Ns3TcpCubicCwndCntResetTestCase::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_cWnd = 100 * segmentSize;
+    state->m_ssThresh = 50 * segmentSize;
+    state->m_isCwndLimited = true;
+
+    Ptr<TcpCubic> cubic = CreateObject<TcpCubic>();
+    cubic->Init(state);
+
+    // With a minimum delay of 4.2 s, the cubic function of the first epoch
+    // grows the window by a segment every 3 ACKs: two ACKs are counted
+    cubic->PktsAcked(state, 1, Seconds(4.2));
+    cubic->IncreaseWindow(state, 1);
+    cubic->IncreaseWindow(state, 1);
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 100 * segmentSize, "Unexpected window increase");
+
+    // A loss reduces the window to 70 segments; the new epoch, 4.2 s from
+    // its origin of 100 segments, grows it by a segment every 2 ACKs
+    cubic->CongestionStateSet(state, TcpSocketState::CA_RECOVERY);
+    state->m_ssThresh = cubic->GetSsThresh(state, 100 * segmentSize);
+    NS_TEST_ASSERT_MSG_EQ(state->m_ssThresh.Get(), 70 * segmentSize, "Unexpected ssThresh");
+    state->m_cWnd = state->m_ssThresh;
+    cubic->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+
+    cubic->IncreaseWindow(state, 1);
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                          70 * segmentSize,
+                          "The ACKs counted before the loss hastened the increase");
+    cubic->IncreaseWindow(state, 1);
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 71 * segmentSize, "Unexpected window increase");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Check the CntUpdateInterval attribute of TcpCubic.
+ *
+ * With a window of 100 segments and no previous maximum, the first ACK
+ * finds the cubic target at the window, and the count is clamped to 20
+ * ACKs per increase. Three seconds later the target is 110 segments, so
+ * that the count becomes 10, unless, as in Linux bictcp_update(), it is
+ * kept because the window did not change within CntUpdateInterval.
+ */
+class Ns3TcpCubicCntUpdateIntervalTestCase : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param interval The CntUpdateInterval attribute.
+     * @param expectedCwnd The expected window, in segments.
+     * @param desc Test description.
+     */
+    Ns3TcpCubicCntUpdateIntervalTestCase(Time interval,
+                                         uint32_t expectedCwnd,
+                                         const std::string& desc)
+        : TestCase(desc),
+          m_interval(interval),
+          m_expectedCwnd(expectedCwnd)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    Time m_interval;         //!< The CntUpdateInterval attribute
+    uint32_t m_expectedCwnd; //!< Expected window, in segments
+};
+
+void
+Ns3TcpCubicCntUpdateIntervalTestCase::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_cWnd = 100 * segmentSize;
+    state->m_ssThresh = 50 * segmentSize;
+    state->m_isCwndLimited = true;
+
+    Ptr<TcpCubic> cubic = CreateObject<TcpCubic>();
+    cubic->SetAttribute("CntUpdateInterval", TimeValue(m_interval));
+    cubic->Init(state);
+    cubic->PktsAcked(state, 1, MilliSeconds(1));
+    cubic->IncreaseWindow(state, 1);
+
+    Simulator::Schedule(Seconds(3), [cubic, state]() {
+        for (uint32_t i = 0; i < 10; ++i)
+        {
+            cubic->IncreaseWindow(state, 1);
+        }
+    });
+    Simulator::Run();
+    Simulator::Destroy();
+
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), m_expectedCwnd * segmentSize, "Unexpected window");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Check the Linux arithmetic of TcpCubic (LinuxHz attribute).
+ *
+ * A loss at 1427 segments sets ssThresh to 999 segments, with beta = 717/1024
+ * (998 with 0.7). The new epoch starts from a window of 999 segments, below
+ * the maximum of 1427, with a minimum delay of 95 ms, which Linux rounds up
+ * to 10 jiffies (HZ = 100): its cube root and fixed point cubic function give
+ * a target of 1013 segments, hence a segment of growth every 71 ACKs, where
+ * the published function (a delay of 95 ms, K = 10.23 s) gives one every 83.
+ */
+class Ns3TcpCubicLinuxHzTestCase : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param linuxHz The LinuxHz attribute.
+     * @param expectedSsThresh The expected ssThresh, in segments.
+     * @param expectedCwnd The expected window after 71 ACKs, in segments.
+     * @param desc Test description.
+     */
+    Ns3TcpCubicLinuxHzTestCase(uint32_t linuxHz,
+                               uint32_t expectedSsThresh,
+                               uint32_t expectedCwnd,
+                               const std::string& desc)
+        : TestCase(desc),
+          m_linuxHz(linuxHz),
+          m_expectedSsThresh(expectedSsThresh),
+          m_expectedCwnd(expectedCwnd)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    uint32_t m_linuxHz;          //!< The LinuxHz attribute
+    uint32_t m_expectedSsThresh; //!< Expected ssThresh, in segments
+    uint32_t m_expectedCwnd;     //!< Expected window, in segments
+};
+
+void
+Ns3TcpCubicLinuxHzTestCase::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_cWnd = 1427 * segmentSize;
+    state->m_ssThresh = 1000 * segmentSize;
+    state->m_isCwndLimited = true;
+
+    Ptr<TcpCubic> cubic = CreateObject<TcpCubic>();
+    cubic->SetAttribute("LinuxHz", UintegerValue(m_linuxHz));
+    cubic->SetAttribute("HyStart", BooleanValue(false));
+    cubic->Init(state);
+
+    // Away from the time origin, as the jiffies of Linux
+    Simulator::Schedule(Seconds(1), [cubic, state]() {
+        cubic->PktsAcked(state, 1, MilliSeconds(95));
+        state->m_ssThresh = cubic->GetSsThresh(state, 1427 * segmentSize);
+        state->m_cWnd = state->m_ssThresh;
+        for (uint32_t i = 0; i < 71; ++i)
+        {
+            cubic->IncreaseWindow(state, 1);
+        }
+    });
+    Simulator::Run();
+    Simulator::Destroy();
+
+    NS_TEST_ASSERT_MSG_EQ(state->m_ssThresh.Get(),
+                          m_expectedSsThresh * segmentSize,
+                          "Unexpected ssThresh");
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), m_expectedCwnd * segmentSize, "Unexpected window");
 }
 
 /**
@@ -527,6 +823,25 @@ Ns3TcpCubicTestSuite::Ns3TcpCubicTestSuite()
                                         true,
                                         MilliSeconds(20),
                                         true),
+                TestCase::Duration::QUICK);
+
+    AddTestCase(new Ns3TcpCubicHystartTestCase(TcpCubic::HybridSSDetectionMode::DELAY,
+                                               "HyStart delay threshold"),
+                TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpCubicHystartTestCase(TcpCubic::HybridSSDetectionMode::PACKET_TRAIN,
+                                               "HyStart ACK train threshold"),
+                TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpCubicCwndCntResetTestCase(), TestCase::Duration::QUICK);
+    AddTestCase(
+        new Ns3TcpCubicCntUpdateIntervalTestCase(Time(0), 101, "Count computed on every ACK"),
+        TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpCubicCntUpdateIntervalTestCase(Seconds(10),
+                                                         100,
+                                                         "Count kept within CntUpdateInterval"),
+                TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpCubicLinuxHzTestCase(100, 999, 1000, "Linux arithmetic of cubic"),
+                TestCase::Duration::QUICK);
+    AddTestCase(new Ns3TcpCubicLinuxHzTestCase(0, 998, 998, "Published arithmetic of cubic"),
                 TestCase::Duration::QUICK);
 }
 

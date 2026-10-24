@@ -82,7 +82,7 @@ TcpCubic::GetTypeId()
                           MakeTimeChecker())
             .AddAttribute("HyStartDelayMax",
                           "Maximum time for hystart algorithm",
-                          TimeValue(MilliSeconds(1000)),
+                          TimeValue(MilliSeconds(16)),
                           MakeTimeAccessor(&TcpCubic::m_hystartDelayMax),
                           MakeTimeChecker())
             .AddAttribute("CubicDelta",
@@ -90,6 +90,25 @@ TcpCubic::GetTypeId()
                           TimeValue(MilliSeconds(10)),
                           MakeTimeAccessor(&TcpCubic::m_cubicDelta),
                           MakeTimeChecker())
+            .AddAttribute("CntUpdateInterval",
+                          "Minimum time between two computations of the number of ACKs per "
+                          "window increase while the window does not change, as Linux "
+                          "bictcp_update() does with HZ/32 jiffies (1/32 s); zero (the default) "
+                          "computes it on every ACK",
+                          TimeValue(Time(0)),
+                          MakeTimeAccessor(&TcpCubic::m_cntUpdateInterval),
+                          MakeTimeChecker())
+            .AddAttribute("LinuxHz",
+                          "Rate of the jiffies (CONFIG_HZ) of Linux. When nonzero, the window "
+                          "follows the integer arithmetic of the Linux tcp_cubic.c, with its "
+                          "times in jiffies at this rate (the epoch, the count update interval "
+                          "of HZ/32, the minimum delay rounded up to a jiffy and the discarded "
+                          "delay samples within HZ of an epoch start), its fixed point beta and "
+                          "C and its cube root, and grows as tcp_cong_avoid_ai(); zero (the "
+                          "default) follows the published algorithm",
+                          UintegerValue(0),
+                          MakeUintegerAccessor(&TcpCubic::m_linuxHz),
+                          MakeUintegerChecker<uint32_t>())
             .AddAttribute("CntClamp",
                           "Counter value when no losses are detected (counter is used"
                           " when incrementing cWnd in congestion avoidance, to avoid"
@@ -151,6 +170,15 @@ TcpCubic::TcpCubic(const TcpCubic& sock)
       m_endSeq(sock.m_endSeq),
       m_lastAck(sock.m_lastAck),
       m_cubicDelta(sock.m_cubicDelta),
+      m_cntUpdateInterval(sock.m_cntUpdateInterval),
+      m_lastUpdateCwnd(sock.m_lastUpdateCwnd),
+      m_lastUpdateTime(sock.m_lastUpdateTime),
+      m_cnt(sock.m_cnt),
+      m_linuxHz(sock.m_linuxHz),
+      m_jEpochStart(sock.m_jEpochStart),
+      m_jLastTime(sock.m_jLastTime),
+      m_linuxK(sock.m_linuxK),
+      m_delayMinUs(sock.m_delayMinUs),
       m_currRtt(sock.m_currRtt),
       m_sampleCnt(sock.m_sampleCnt)
 {
@@ -192,13 +220,14 @@ TcpCubic::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         return;
     }
 
+    if (m_linuxHz > 0)
+    {
+        LinuxIncreaseWindow(tcb, segmentsAcked);
+        return;
+    }
+
     if (tcb->m_cWnd < tcb->m_ssThresh)
     {
-        if (m_hystart && tcb->m_lastAckedSeq > m_endSeq)
-        {
-            HystartReset(tcb);
-        }
-
         // In Linux, the QUICKACK socket option enables the receiver to send
         // immediate acks initially (during slow start) and then transition
         // to delayed acks.  ns-3 does not implement QUICKACK, and if ack
@@ -240,6 +269,148 @@ TcpCubic::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 }
 
 uint32_t
+TcpCubic::Jiffies() const
+{
+    return static_cast<uint32_t>(Simulator::Now().GetMicroSeconds() * m_linuxHz / 1000000);
+}
+
+uint32_t
+TcpCubic::CubicRoot(uint64_t a)
+{
+    // Table lookup and one Newton-Raphson iteration, as Linux cubic_root()
+    static const uint8_t v[] = {
+        0,   54,  54,  54,  118, 118, 118, 118, 123, 129, 134, 138, 143, 147, 151, 156,
+        157, 161, 164, 168, 170, 173, 176, 179, 181, 185, 187, 190, 192, 194, 197, 199,
+        200, 202, 204, 206, 209, 211, 213, 215, 217, 219, 221, 222, 224, 225, 227, 229,
+        231, 232, 234, 236, 237, 239, 240, 242, 244, 245, 246, 248, 250, 251, 252, 254,
+    };
+    uint32_t b = 0;
+    for (uint64_t x = a; x != 0; x >>= 1)
+    {
+        ++b; // fls64()
+    }
+    if (b < 7)
+    {
+        return (static_cast<uint32_t>(v[a]) + 35) >> 6;
+    }
+    b = ((b * 84) >> 8) - 1;
+    auto shift = static_cast<uint32_t>(a >> (b * 3));
+    uint32_t x = static_cast<uint32_t>((static_cast<uint32_t>(v[shift]) + 10) << b) >> 6;
+    x = 2 * x + static_cast<uint32_t>(a / (static_cast<uint64_t>(x) * (x - 1)));
+    x = (x * 341) >> 10;
+    return x;
+}
+
+void
+TcpCubic::LinuxIncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
+{
+    NS_LOG_FUNCTION(this << tcb << segmentsAcked);
+    uint32_t cwnd = tcb->GetCwndInSegments();
+    uint32_t acked = segmentsAcked;
+    if (tcb->m_cWnd < tcb->m_ssThresh)
+    {
+        // tcp_slow_start()
+        uint32_t ssThresh = tcb->m_ssThresh / tcb->m_segmentSize;
+        uint32_t newCwnd = std::min(cwnd + acked, ssThresh);
+        acked -= newCwnd - cwnd;
+        cwnd = newCwnd;
+        tcb->m_cWnd = cwnd * tcb->m_segmentSize;
+        if (acked == 0)
+        {
+            return;
+        }
+    }
+    LinuxUpdate(cwnd, acked);
+    // tcp_cong_avoid_ai()
+    if (m_cWndCnt >= m_cnt)
+    {
+        m_cWndCnt = 0;
+        ++cwnd;
+    }
+    m_cWndCnt += acked;
+    if (m_cWndCnt >= m_cnt)
+    {
+        uint32_t delta = m_cWndCnt / m_cnt;
+        m_cWndCnt -= delta * m_cnt;
+        cwnd += delta;
+    }
+    tcb->m_cWnd = cwnd * tcb->m_segmentSize;
+    NS_LOG_INFO("In CongAvoid, cwnd " << cwnd << " cnt " << m_cnt << " count " << m_cWndCnt);
+}
+
+void
+TcpCubic::LinuxUpdate(uint32_t cwnd, uint32_t acked)
+{
+    NS_LOG_FUNCTION(this << cwnd << acked);
+    const uint32_t beta = static_cast<uint32_t>(std::lround(m_beta * 1024));
+    const uint64_t cubeRttScale = static_cast<uint64_t>(std::lround(m_c * 1024 / 10)) * 10;
+    const uint32_t now = Jiffies();
+
+    m_ackCnt += acked;
+
+    if (m_lastUpdateCwnd == cwnd &&
+        static_cast<int32_t>(now - m_jLastTime) <= static_cast<int32_t>(m_linuxHz / 32))
+    {
+        return;
+    }
+
+    // The count is computed at most once per jiffy
+    if (m_jEpochStart == 0 || now != m_jLastTime)
+    {
+        m_lastUpdateCwnd = cwnd;
+        m_jLastTime = now;
+
+        if (m_jEpochStart == 0)
+        {
+            m_jEpochStart = now;
+            m_ackCnt = acked;
+            m_tcpCwnd = cwnd;
+            if (m_lastMaxCwnd <= cwnd)
+            {
+                m_linuxK = 0;
+                m_bicOriginPoint = cwnd;
+            }
+            else
+            {
+                const uint64_t cubeFactor = (1ULL << 40) / cubeRttScale;
+                m_linuxK = CubicRoot(cubeFactor * (m_lastMaxCwnd - cwnd));
+                m_bicOriginPoint = m_lastMaxCwnd;
+            }
+        }
+
+        // usecs_to_jiffies() rounds up
+        uint64_t t = static_cast<int32_t>(now - m_jEpochStart);
+        t += (static_cast<uint64_t>(m_delayMinUs) * m_linuxHz + 999999) / 1000000;
+        t = (t << 10) / m_linuxHz;
+        uint64_t offs = t < m_linuxK ? m_linuxK - t : t - m_linuxK;
+        auto delta = static_cast<uint32_t>((cubeRttScale * offs * offs * offs) >> 40);
+        uint32_t bicTarget = t < m_linuxK ? m_bicOriginPoint - delta : m_bicOriginPoint + delta;
+        m_cnt = bicTarget > cwnd ? cwnd / (bicTarget - cwnd) : 100 * cwnd;
+        if (m_lastMaxCwnd == 0 && m_cnt > m_cntClamp)
+        {
+            m_cnt = m_cntClamp;
+        }
+    }
+
+    if (m_tcpFriendliness)
+    {
+        const uint32_t betaScale = 8 * (1024 + beta) / 3 / (1024 - beta);
+        uint32_t delta = (cwnd * betaScale) >> 3;
+        while (m_ackCnt > delta)
+        {
+            m_ackCnt -= delta;
+            m_tcpCwnd++;
+        }
+        if (m_tcpCwnd > cwnd)
+        {
+            uint32_t maxCnt = cwnd / (m_tcpCwnd - cwnd);
+            m_cnt = std::min(m_cnt, maxCnt);
+        }
+    }
+    m_cnt = std::max(m_cnt, 2U);
+}
+
+uint32_t
 TcpCubic::Update(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this);
@@ -252,6 +423,20 @@ TcpCubic::Update(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
     uint32_t segCwnd = tcb->GetCwndInSegments();
 
     m_ackCnt += segmentsAcked;
+
+    // Linux bictcp_update(): while the window does not change, the count is
+    // kept for HZ/32 jiffies; a reduction, which starts a new epoch, always
+    // recomputes it
+    if (m_cntUpdateInterval.IsStrictlyPositive())
+    {
+        if (m_epochStart != Time::Min() && m_lastUpdateCwnd == segCwnd &&
+            Simulator::Now() - m_lastUpdateTime <= m_cntUpdateInterval)
+        {
+            return m_cnt;
+        }
+        m_lastUpdateCwnd = segCwnd;
+        m_lastUpdateTime = Simulator::Now();
+    }
 
     if (m_epochStart == Time::Min())
     {
@@ -346,7 +531,8 @@ TcpCubic::Update(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 
     // The maximum rate of cwnd increase CUBIC allows is 1 packet per
     // 2 packets ACKed, meaning cwnd grows at 1.5x per RTT.
-    return std::max(cnt, 2U);
+    m_cnt = std::max(cnt, 2U);
+    return m_cnt;
 }
 
 void
@@ -360,16 +546,35 @@ TcpCubic::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time&
         return;
     }
 
-    /* Discard delay samples right after fast recovery */
-    if (m_epochStart != Time::Min() && (Simulator::Now() - m_epochStart) < m_cubicDelta)
+    if (m_linuxHz > 0)
     {
-        return;
+        // The samples within a second (HZ jiffies) of the start of an epoch
+        // are discarded, and the delay is in whole microseconds
+        if (m_jEpochStart != 0 &&
+            static_cast<int32_t>(Jiffies() - m_jEpochStart) < static_cast<int32_t>(m_linuxHz))
+        {
+            return;
+        }
+        auto delay = std::max<uint32_t>(static_cast<uint32_t>(rtt.GetMicroSeconds()), 1);
+        if (m_delayMinUs == 0 || m_delayMinUs > delay)
+        {
+            m_delayMinUs = delay;
+            m_delayMin = MicroSeconds(delay);
+        }
     }
-
-    /* first time call or link delay decreases */
-    if (m_delayMin == Time::Min() || m_delayMin > rtt)
+    else
     {
-        m_delayMin = rtt;
+        /* Discard delay samples right after fast recovery */
+        if (m_epochStart != Time::Min() && (Simulator::Now() - m_epochStart) < m_cubicDelta)
+        {
+            return;
+        }
+
+        /* first time call or link delay decreases */
+        if (m_delayMin == Time::Min() || m_delayMin > rtt)
+        {
+            m_delayMin = rtt;
+        }
     }
 
     /* hystart triggers when cwnd is larger than some threshold */
@@ -389,12 +594,22 @@ TcpCubic::HystartUpdate(Ptr<TcpSocketState> tcb, const Time& delay)
     {
         Time now = Simulator::Now();
 
+        // A new round starts once the end of the previous one is ACKed
+        if (tcb->m_lastAckedSeq > m_endSeq)
+        {
+            HystartReset(tcb);
+        }
+
         /* first detection parameter - ack-train detection */
         if ((now - m_lastAck) <= m_hystartAckDelta)
         {
             m_lastAck = now;
 
-            if ((now - m_roundStart) > m_delayMin)
+            // The train has to last the forward one way delay, i.e., half the
+            // minimum RTT (Linux hystart_update()), unless pacing spreads the
+            // segments of a round
+            Time threshold = tcb->m_pacing ? m_delayMin : m_delayMin / 2;
+            if ((now - m_roundStart) > threshold)
             {
                 if (m_hystartDetect == HybridSSDetectionMode::PACKET_TRAIN ||
                     m_hystartDetect == HybridSSDetectionMode::BOTH)
@@ -405,16 +620,15 @@ TcpCubic::HystartUpdate(Ptr<TcpSocketState> tcb, const Time& delay)
         }
 
         /* obtain the minimum delay of more than sampling packets */
+        if (m_currRtt == Time::Min() || m_currRtt > delay)
+        {
+            m_currRtt = delay;
+        }
         if (m_sampleCnt < m_hystartMinSamples)
         {
-            if (m_currRtt == Time::Min() || m_currRtt > delay)
-            {
-                m_currRtt = delay;
-            }
-
             ++m_sampleCnt;
         }
-        else if (m_currRtt > m_delayMin + HystartDelayThresh(m_delayMin))
+        else if (m_currRtt > m_delayMin + HystartDelayThresh(m_delayMin / 8))
         {
             if (m_hystartDetect == HybridSSDetectionMode::DELAY ||
                 m_hystartDetect == HybridSSDetectionMode::BOTH)
@@ -462,6 +676,22 @@ TcpCubic::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
     NS_LOG_DEBUG("Loss at cWnd=" << segCwnd
                                  << " segments in flight=" << bytesInFlight / tcb->m_segmentSize);
 
+    if (m_linuxHz > 0 && !(tcb->m_abeEnabled && tcb->m_ecnState == TcpSocketState::ECN_ECE_RCVD))
+    {
+        // cubictcp_recalc_ssthresh(), with beta in 1/1024
+        const auto beta = static_cast<uint32_t>(std::lround(m_beta * 1024));
+        m_jEpochStart = 0;
+        if (segCwnd < m_lastMaxCwnd && m_fastConvergence)
+        {
+            m_lastMaxCwnd = (segCwnd * (1024 + beta)) / (2 * 1024);
+        }
+        else
+        {
+            m_lastMaxCwnd = segCwnd;
+        }
+        return std::max((segCwnd * beta) / 1024, 2U) * tcb->m_segmentSize;
+    }
+
     /* Wmax and fast convergence */
     if (segCwnd < m_lastMaxCwnd && m_fastConvergence)
     {
@@ -495,6 +725,15 @@ TcpCubic::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpC
 {
     NS_LOG_FUNCTION(this << tcb << newState);
 
+    // The ACKs counted towards the next increase of the window are
+    // discarded when it is reduced, as tp->snd_cwnd_cnt in Linux
+    // (tcp_init_cwnd_reduction() and tcp_enter_loss())
+    if (newState == TcpSocketState::CA_RECOVERY || newState == TcpSocketState::CA_CWR ||
+        newState == TcpSocketState::CA_LOSS)
+    {
+        m_cWndCnt = 0;
+    }
+
     if (newState == TcpSocketState::CA_LOSS)
     {
         CubicReset(tcb);
@@ -513,6 +752,17 @@ TcpCubic::CubicReset(Ptr<const TcpSocketState> tcb)
     m_tcpCwnd = 0;
     m_delayMin = Time::Min();
     m_found = false;
+    if (m_linuxHz > 0)
+    {
+        // bictcp_reset() clears the whole state
+        m_cnt = 0;
+        m_lastMaxCwnd = 0;
+        m_lastUpdateCwnd = 0;
+        m_jLastTime = 0;
+        m_linuxK = 0;
+        m_delayMinUs = 0;
+        m_jEpochStart = 0;
+    }
 }
 
 Ptr<TcpCongestionOps>

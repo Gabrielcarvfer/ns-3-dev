@@ -13,6 +13,7 @@
  *
  */
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-scalable.h"
@@ -153,6 +154,113 @@ TcpScalableDecrementTest::DoRun()
 /**
  * @ingroup internet-test
  *
+ * @brief Testing the additive increase of TcpScalable over several ACKs
+ *
+ * The window grows by one segment every 100 segments ACKed (0.01 segments
+ * per segment ACKed, Linux TCP_SCALABLE_AI_CNT), or every cwnd segments
+ * ACKed for a smaller window, and the ACKed segments in excess of a step
+ * are kept for the next one, as in Linux tcp_cong_avoid_ai().
+ */
+class TcpScalableAiTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param cWnd Congestion window (segments).
+     * @param acks Segments ACKed by each ACK.
+     * @param expectedCwnd Expected final congestion window (segments).
+     * @param name Test description.
+     */
+    TcpScalableAiTest(uint32_t cWnd,
+                      std::vector<uint32_t> acks,
+                      uint32_t expectedCwnd,
+                      const std::string& name)
+        : TestCase(name),
+          m_cWnd(cWnd),
+          m_acks(acks),
+          m_expectedCwnd(expectedCwnd)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    uint32_t m_cWnd;              //!< Congestion window (segments).
+    std::vector<uint32_t> m_acks; //!< Segments ACKed by each ACK.
+    uint32_t m_expectedCwnd;      //!< Expected final congestion window (segments).
+};
+
+void
+TcpScalableAiTest::DoRun()
+{
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = 1000;
+    state->m_cWnd = m_cWnd * 1000;
+    state->m_ssThresh = 0;
+
+    Ptr<TcpScalable> cong = CreateObject<TcpScalable>();
+    for (auto acked : m_acks)
+    {
+        cong->IncreaseWindow(state, acked);
+    }
+
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), m_expectedCwnd * 1000, "Unexpected window growth");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing the Linux decrease of TcpScalable and the count cleared by
+ * a reduction
+ *
+ * With LinuxDecrease, as Linux tcp_scalable_ssthresh(), the threshold is
+ * cwnd - (cwnd >> 3) of cWnd: 359 segments of 410, where 0.875 of the bytes
+ * in flight gives 358. A window reduction clears the acknowledged segments
+ * counted towards the next increase, as Linux tp->snd_cwnd_cnt.
+ */
+class TcpScalableLinuxTest : public TestCase
+{
+  public:
+    TcpScalableLinuxTest()
+        : TestCase("Scalable Linux decrease and count cleared by a reduction")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 410 * segmentSize;
+
+        Ptr<TcpScalable> rfc = CreateObject<TcpScalable>();
+        NS_TEST_ASSERT_MSG_EQ(rfc->GetSsThresh(state, 410 * segmentSize),
+                              358 * segmentSize,
+                              "Unexpected decrease of the bytes in flight");
+        Ptr<TcpScalable> cong = CreateObject<TcpScalable>();
+        cong->SetAttribute("LinuxDecrease", BooleanValue(true));
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 300 * segmentSize),
+                              359 * segmentSize,
+                              "The decrease is not the one of Linux");
+
+        // 60 of the 100 segments needed for an increase, then a reduction
+        state->m_cWnd = 200 * segmentSize;
+        state->m_ssThresh = 200 * segmentSize;
+        cong->IncreaseWindow(state, 60);
+        cong->CongestionStateSet(state, TcpSocketState::CA_RECOVERY);
+        cong->IncreaseWindow(state, 60);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              200 * segmentSize,
+                              "The count before the reduction was kept");
+        cong->IncreaseWindow(state, 40);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 201 * segmentSize, "No increase");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TcpScalable TestSuite.
  */
 class TcpScalableTestSuite : public TestSuite
@@ -182,6 +290,17 @@ class TcpScalableTestSuite : public TestSuite
                 "Scalable increment test on cWnd = 53 segments and segmentSize = 1446 bytes"),
             TestCase::Duration::QUICK);
 
+        AddTestCase(new TcpScalableAiTest(200,
+                                          {100},
+                                          201,
+                                          "Scalable increment test: one segment per 100 ACKed"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpScalableAiTest(10,
+                                          {15, 6},
+                                          12,
+                                          "Scalable increment test: ACKed segments carried over"),
+                    TestCase::Duration::QUICK);
+
         AddTestCase(new TcpScalableDecrementTest(
                         38,
                         1,
@@ -199,6 +318,7 @@ class TcpScalableTestSuite : public TestSuite
                 1446,
                 "Scalable decrement test on cWnd = 40 segments and segmentSize = 1446 bytes"),
             TestCase::Duration::QUICK);
+        AddTestCase(new TcpScalableLinuxTest(), TestCase::Duration::QUICK);
     }
 };
 

@@ -111,22 +111,31 @@ class TcpCubic : public TcpCongestionOps
     double m_c; //!< Cubic Scaling factor
 
     // Cubic parameters
-    uint32_t m_cWndCnt;        //!<  cWnd integer-to-float counter
-    uint32_t m_lastMaxCwnd;    //!<  Last maximum cWnd
-    uint32_t m_bicOriginPoint; //!<  Origin point of bic function
-    double m_bicK;             //!<  Time to origin point from the beginning
-                               //    of the current epoch (in s)
-    Time m_delayMin;           //!<  Min delay
-    Time m_epochStart;         //!<  Beginning of an epoch
-    bool m_found;              //!<  The exit point is found?
-    Time m_roundStart;         //!<  Beginning of each round
-    SequenceNumber32 m_endSeq; //!<  End sequence of the round
-    Time m_lastAck;            //!<  Last time when the ACK spacing is close
-    Time m_cubicDelta;         //!<  Time to wait after recovery before update
-    Time m_currRtt;            //!<  Current Rtt
-    uint32_t m_sampleCnt;      //!<  Count of samples for HyStart
-    uint32_t m_ackCnt;         //!<  Count the number of ACKed packets
-    uint32_t m_tcpCwnd;        //!<  Estimated tcp cwnd (for Reno-friendliness)
+    uint32_t m_cWndCnt;           //!<  cWnd integer-to-float counter
+    uint32_t m_lastMaxCwnd;       //!<  Last maximum cWnd
+    uint32_t m_bicOriginPoint;    //!<  Origin point of bic function
+    double m_bicK;                //!<  Time to origin point from the beginning
+                                  //    of the current epoch (in s)
+    Time m_delayMin;              //!<  Min delay
+    Time m_epochStart;            //!<  Beginning of an epoch
+    bool m_found;                 //!<  The exit point is found?
+    Time m_roundStart;            //!<  Beginning of each round
+    SequenceNumber32 m_endSeq;    //!<  End sequence of the round
+    Time m_lastAck;               //!<  Last time when the ACK spacing is close
+    Time m_cubicDelta;            //!<  Time to wait after recovery before update
+    Time m_cntUpdateInterval{0};  //!< Minimum time between two count computations
+    uint32_t m_lastUpdateCwnd{0}; //!< Window at the last count computation
+    Time m_lastUpdateTime{0};     //!< Time of the last count computation
+    uint32_t m_cnt{2};            //!< Last computed count
+    uint32_t m_linuxHz{0};        //!< Rate of the Linux jiffies, zero without Linux arithmetic
+    uint32_t m_jEpochStart{0};    //!< Beginning of an epoch, in jiffies (Linux, 0 if none)
+    uint32_t m_jLastTime{0};      //!< Jiffy of the last count computation (Linux)
+    uint32_t m_linuxK{0};         //!< Time to origin point, in 1/1024 s (Linux)
+    uint32_t m_delayMinUs{0};     //!< Minimum delay in microseconds (Linux, 0 if none)
+    Time m_currRtt;               //!<  Current Rtt
+    uint32_t m_sampleCnt;         //!<  Count of samples for HyStart
+    uint32_t m_ackCnt;            //!<  Count the number of ACKed packets
+    uint32_t m_tcpCwnd;           //!<  Estimated tcp cwnd (for Reno-friendliness)
 
   private:
     /**
@@ -150,6 +159,34 @@ class TcpCubic : public TcpCongestionOps
     uint32_t Update(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
 
     /**
+     * @brief Current time in jiffies of Linux, at LinuxHz
+     * @return the jiffies
+     */
+    uint32_t Jiffies() const;
+
+    /**
+     * @brief Integer cube root of Linux cubic_root()
+     * @param a the value
+     * @return the approximate cube root of a
+     */
+    static uint32_t CubicRoot(uint64_t a);
+
+    /**
+     * @brief Window growth of Linux cubictcp_cong_avoid(), with
+     * tcp_slow_start() and tcp_cong_avoid_ai()
+     * @param tcb Transmission Control Block of the connection
+     * @param segmentsAcked Segments acked
+     */
+    void LinuxIncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
+
+    /**
+     * @brief Count update of Linux bictcp_update()
+     * @param cwnd the congestion window, in segments
+     * @param acked Segments acked
+     */
+    void LinuxUpdate(uint32_t cwnd, uint32_t acked);
+
+    /**
      * @brief Update HyStart parameters
      *
      * @param tcb Transmission Control Block of the connection
@@ -161,7 +198,10 @@ class TcpCubic : public TcpCongestionOps
      * @brief Clamp time value in a range
      *
      * The returned value is t, clamped in a range specified
-     * by attributes (HystartDelayMin < t < HystartDelayMax)
+     * by attributes (HystartDelayMin < t < HystartDelayMax).
+     * HyStart exits the slow start when the RTT grows by more than
+     * this value computed from one eighth of the minimum RTT
+     * (Linux, RFC 9406).
      *
      * @param t Time value to clamp
      * @return t itself if it is in range, otherwise the min or max

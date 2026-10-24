@@ -9,6 +9,7 @@
 
 #include "tcp-socket-state.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 
 namespace ns3
@@ -23,7 +24,15 @@ TcpHighSpeed::GetTypeId()
     static TypeId tid = TypeId("ns3::TcpHighSpeed")
                             .SetParent<TcpNewReno>()
                             .AddConstructor<TcpHighSpeed>()
-                            .SetGroupName("Internet");
+                            .SetGroupName("Internet")
+                            .AddAttribute("LinuxDecrease",
+                                          "Compute the multiplicative decrease as Linux does: "
+                                          "b(w) of the window at the last congestion avoidance "
+                                          "increase (0.5 when the loss ends slow start), applied "
+                                          "to cWnd instead of the bytes in flight",
+                                          BooleanValue(false),
+                                          MakeBooleanAccessor(&TcpHighSpeed::m_linuxDecrease),
+                                          MakeBooleanChecker());
     return tid;
 }
 
@@ -36,7 +45,9 @@ TcpHighSpeed::TcpHighSpeed()
 
 TcpHighSpeed::TcpHighSpeed(const TcpHighSpeed& sock)
     : TcpNewReno(sock),
-      m_ackCnt(sock.m_ackCnt)
+      m_ackCnt(sock.m_ackCnt),
+      m_caCwnd(sock.m_caCwnd),
+      m_linuxDecrease(sock.m_linuxDecrease)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -55,31 +66,21 @@ TcpHighSpeed::Fork()
 /**
  * @brief Congestion avoidance of TcpHighSpeed
  *
- * As implementation choice, we increment cWnd only by MSS, when the right
- * number of ACK has been received. At this point, the important question is:
- * what is the "right number of ACK" ?
- *
- * As you can recall from RFC, Highspeed works this way:
+ * RFC 3649 increases the congestion window, in response to a single
+ * acknowledgement, as follows:
  *
  *               w = w + a(w)/w
  *
- * Let's start when a(w) is 1 (so it is classical NewReno). The formula then is
- * the classical text-book version for NewReno:
+ * As implementation choice, we increment cWnd only by MSS, when the right
+ * number of ACKs has been received. Each ACK adds a(w) to a counter (m_ackCnt),
+ * and the window grows by one segment each time the counter reaches w: with
+ * a(w) equal to 1 this is the classical NewReno increase of 1/w per ACK, and
+ * with a(w) equal to 2 one ACK weighs as much as two NewReno ACKs.
  *
- *               w = w + 1 / w
- *
- * So, for each segment acked, we increase the window by the quantity 1/w. Or,
- * instead of adding the 1/w quantity for each segment acked, we can track the
- * number of segments acked (m_ackCnt) and increment by 1 MSS when m_ackCnt
- * reaches w.
- *
- * When a(w) > 1, it means that each segment acked has a different "weight".
- * For instance, when it is equal to 2, we need to increase the window by the
- * quantity 2/w. But, this means that one segment acked is equivalent (from
- * the point of view of incrementing cWnd) to two segments acked in NewReno
- * (1/w + 1/w). That a coefficient is, in other word, the weight of each segment
- * acked. More weight, less ACK are necessary to increment cWnd, which is
- * exactly the Highspeed principle.
+ * The increase is per ACK, whatever the number of segments the ACK covers,
+ * as in RFC 3649 and in Linux (tcp_highspeed.c), also with the
+ * CountAckedSegments attribute set: with delayed ACKs, the window grows by
+ * about a(w)/2 segments per round-trip time.
  *
  * @param tcb internal congestion state
  * @param segmentsAcked count of segments acked
@@ -94,8 +95,8 @@ TcpHighSpeed::CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcke
 
     if (segmentsAcked > 0)
     {
-        uint32_t coeffA = TableLookupA(segCwnd);
-        m_ackCnt += segmentsAcked * coeffA;
+        m_ackCnt += TableLookupA(segCwnd);
+        m_caCwnd = segCwnd;
     }
 
     while (m_ackCnt >= segCwnd)
@@ -109,6 +110,22 @@ TcpHighSpeed::CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcke
         tcb->m_cWnd = segCwnd * tcb->m_segmentSize;
         NS_LOG_INFO("In CongAvoid, updated to cwnd " << tcb->m_cWnd << " ssthresh "
                                                      << tcb->m_ssThresh);
+    }
+}
+
+void
+TcpHighSpeed::CongestionStateSet(Ptr<TcpSocketState> tcb,
+                                 const TcpSocketState::TcpCongState_t newState)
+{
+    NS_LOG_FUNCTION(this << tcb << newState);
+    TcpNewReno::CongestionStateSet(tcb, newState);
+    // The increments counted towards the next segment of growth are
+    // discarded when the window is reduced, as tp->snd_cwnd_cnt in Linux
+    // (tcp_init_cwnd_reduction() and tcp_enter_loss())
+    if (newState == TcpSocketState::CA_RECOVERY || newState == TcpSocketState::CA_CWR ||
+        newState == TcpSocketState::CA_LOSS)
+    {
+        m_ackCnt = 0;
     }
 }
 
@@ -132,8 +149,25 @@ TcpHighSpeed::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
 
     uint32_t segCwnd = bytesInFlight / tcb->m_segmentSize;
+    uint32_t bWindow = segCwnd;
 
-    double b = 1.0 - TableLookupB(segCwnd);
+    if (m_linuxDecrease)
+    {
+        // The window that sets b(w) is the one of the last increase in
+        // congestion avoidance (none when the loss ends slow start, so
+        // b(w) = 0.5), and the decrease applies to cWnd
+        segCwnd = tcb->GetCwndInSegments();
+        bWindow = m_caCwnd;
+    }
+
+    if (m_linuxDecrease)
+    {
+        // hstcp_ssthresh(): cwnd - ((cwnd * md) >> 8)
+        return std::max(segCwnd - ((segCwnd * TableLookupLinuxB(bWindow)) >> 8), 2U) *
+               tcb->m_segmentSize;
+    }
+
+    double b = 1.0 - TableLookupB(bWindow);
     uint32_t ssThresh = static_cast<uint32_t>(std::max(2.0, segCwnd * b));
 
     NS_LOG_DEBUG("Calculated b(w) = " << b << " resulting (in segment) ssThresh=" << ssThresh);
@@ -741,6 +775,33 @@ TcpHighSpeed::TableLookupB(uint32_t w)
         return 0.09;
     }
     // NOLINTEND(bugprone-branch-clone)
+}
+
+uint32_t
+TcpHighSpeed::TableLookupLinuxB(uint32_t w)
+{
+    // hstcp_aimd_vals[] of Linux: the upper window of each row and its b
+    static const std::pair<uint32_t, uint32_t> table[] = {
+        {38, 128},   {118, 112},  {221, 104},  {347, 98},   {495, 93},   {663, 89},   {851, 86},
+        {1058, 83},  {1284, 81},  {1529, 78},  {1793, 76},  {2076, 74},  {2378, 72},  {2699, 71},
+        {3039, 69},  {3399, 68},  {3778, 66},  {4177, 65},  {4596, 64},  {5036, 62},  {5497, 61},
+        {5979, 60},  {6483, 59},  {7009, 58},  {7558, 57},  {8130, 56},  {8726, 55},  {9346, 54},
+        {9991, 53},  {10661, 52}, {11358, 52}, {12082, 51}, {12834, 50}, {13614, 49}, {14424, 48},
+        {15265, 48}, {16137, 47}, {17042, 46}, {17981, 45}, {18955, 45}, {19965, 44}, {21013, 43},
+        {22101, 43}, {23230, 42}, {24402, 41}, {25618, 41}, {26881, 40}, {28193, 39}, {29557, 39},
+        {30975, 38}, {32450, 38}, {33986, 37}, {35586, 36}, {37253, 36}, {38992, 35}, {40808, 35},
+        {42707, 34}, {44694, 33}, {46776, 33}, {48961, 32}, {51258, 32}, {53677, 31}, {56230, 30},
+        {58932, 30}, {61799, 29}, {64851, 28}, {68113, 28}, {71617, 27}, {75401, 26}, {79517, 26},
+        {84035, 25}, {89053, 24},
+    };
+    for (const auto& [cwnd, md] : table)
+    {
+        if (w <= cwnd)
+        {
+            return md;
+        }
+    }
+    return std::rbegin(table)->second;
 }
 
 } // namespace ns3

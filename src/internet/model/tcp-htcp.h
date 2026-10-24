@@ -58,11 +58,66 @@ class TcpHtcp : public TcpNewReno
     uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
 
     void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt) override;
+    void IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
+    void CongestionStateSet(Ptr<TcpSocketState> tcb,
+                            const TcpSocketState::TcpCongState_t newState) override;
+    void Init(Ptr<TcpSocketState> tcb) override;
 
   protected:
     void CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
 
   private:
+    /**
+     * @brief State of the Linux tcp_htcp.c (struct htcp), times in jiffies
+     */
+    struct LinuxState
+    {
+        uint32_t alpha{1 << 7};   //!< Additive increase, << 7
+        uint8_t beta{1 << 6};     //!< Multiplicative decrease, << 7
+        bool modeswitch{false};   //!< Adaptive backoff enabled after a congestion event
+        uint16_t pktsAcked{1};    //!< Segments acknowledged by the last ACK in CA_OPEN
+        uint32_t packetCount{0};  //!< Segments acknowledged since lastTime
+        uint32_t minRtt{0};       //!< Minimum RTT
+        uint32_t maxRtt{0};       //!< Maximum RTT
+        uint32_t lastCong{0};     //!< Time of the end of the last congestion event
+        uint32_t undoLastCong{0}; //!< lastCong before the last congestion event
+        uint32_t undoMaxRtt{0};   //!< maxRtt before the last congestion event
+        uint32_t undoOldMaxB{0};  //!< oldMaxB before the last congestion event
+        uint32_t minB{0};         //!< Minimum throughput
+        uint32_t maxB{0};         //!< Maximum throughput
+        uint32_t oldMaxB{0};      //!< maxB at the last congestion event
+        uint32_t bi{0};           //!< Throughput estimate
+        uint32_t lastTime{0};     //!< Start of the throughput sample
+        uint32_t cwndCnt{0};      //!< Linux snd_cwnd_cnt
+        bool resetPending{false}; //!< A congestion event awaits its htcp_reset()
+        uint32_t resetJiffies{0}; //!< Time of that congestion event, in jiffies
+        Time resetTime{-1};       //!< Time of that congestion event
+        Time ssThreshTime{-1};    //!< Time of the last GetSsThresh()
+    };
+
+    /**
+     * @brief Current time in jiffies of Linux, at LinuxHz
+     * @return the jiffies
+     */
+    uint32_t Jiffies() const;
+
+    /**
+     * @brief Linux htcp_alpha_update()
+     */
+    void LinuxAlphaUpdate();
+
+    /**
+     * @brief Linux htcp_reset(), at the given time
+     * @param jiffies the time of the congestion event
+     */
+    void LinuxReset(uint32_t jiffies);
+
+    /**
+     * @brief Apply a pending htcp_reset() of a congestion event whose
+     * threshold was not computed
+     */
+    void LinuxApplyPendingReset();
+
     /**
      * @brief Updates the additive increase parameter for H-TCP
      */
@@ -80,13 +135,17 @@ class TcpHtcp : public TcpNewReno
     double m_throughputRatio; //!< ratio of two consequence throughput
     Time m_delta;             //!< Time in second that has elapsed since the
                               // last congestion event experienced by a flow
-    Time m_deltaL;         //!< Threshold for switching between standard and new increase function
-    Time m_lastCon;        //!< Time of the last congestion for the flow
-    Time m_minRtt;         //!< Minimum RTT in each congestion period
-    Time m_maxRtt;         //!< Maximum RTT in each congestion period
-    uint32_t m_throughput; //!< Current throughput since last congestion
-    uint32_t m_lastThroughput; //!< Throughput in last congestion period
-    uint32_t m_dataSent;       //!< Current amount of data sent since last congestion
+    Time m_deltaL; //!< Threshold for switching between standard and new increase function
+    bool m_rttScaling{false};      //!< Scale the increase function by the minimum RTT
+    Time m_lowestRtt{Time::Max()}; //!< Minimum RTT of the connection
+    Time m_lastCon;                //!< Time of the last congestion for the flow
+    Time m_minRtt;                 //!< Minimum RTT in each congestion period
+    Time m_maxRtt;                 //!< Maximum RTT in each congestion period
+    uint32_t m_throughput;         //!< Current throughput since last congestion
+    uint32_t m_lastThroughput;     //!< Throughput in last congestion period
+    uint32_t m_dataSent;           //!< Current amount of data sent since last congestion
+    uint32_t m_linuxHz{0};         //!< Rate of the Linux jiffies, zero without Linux arithmetic
+    LinuxState m_lx;               //!< State of the Linux arithmetic
 };
 
 } // namespace ns3

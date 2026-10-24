@@ -479,6 +479,80 @@ TcpLinuxRenoRecoveryExitTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
+ * @brief Test the window arithmetic of TcpLinuxReno against Linux
+ * tcp_reno_cong_avoid() and tcp_reno_ssthresh()
+ *
+ * Linux counts the window in whole segments: the slow start threshold is
+ * max(snd_cwnd >> 1, 2), the segments acknowledged beyond the slow start
+ * threshold go to the congestion avoidance, and the count of acknowledged
+ * segments (snd_cwnd_cnt) is cleared when a window reduction starts
+ * (tcp_init_cwnd_reduction(), tcp_enter_loss()).
+ */
+class TcpLinuxRenoArithmeticTest : public TestCase
+{
+  public:
+    TcpLinuxRenoArithmeticTest()
+        : TestCase("TcpLinuxReno window arithmetic in whole segments")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t mss = 1448;
+
+        auto state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = mss;
+        state->m_isCwndLimited = true;
+
+        // Odd window: the threshold is rounded down to whole segments
+        auto cong = CreateObject<TcpLinuxReno>();
+        state->m_cWnd = 205 * mss;
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 205 * mss),
+                              102 * mss,
+                              "ssThresh is not max(cwnd >> 1, 2) segments");
+        state->m_cWnd = 3 * mss;
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 3 * mss),
+                              2 * mss,
+                              "ssThresh is below two segments");
+
+        // The segments acknowledged beyond ssThresh go to the congestion
+        // avoidance: 1 completes the slow start, 10 grow a window of 10
+        state->m_cWnd = 9 * mss;
+        state->m_ssThresh = 10 * mss;
+        cong->IncreaseWindow(state, 11);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              11 * mss,
+                              "The segments acknowledged beyond ssThresh were lost");
+
+        // A count left from before a window reduction does not grow the
+        // reduced window
+        cong = CreateObject<TcpLinuxReno>();
+        state->m_cWnd = 100 * mss;
+        state->m_ssThresh = 50 * mss;
+        for (uint32_t i = 0; i < 99; ++i)
+        {
+            cong->IncreaseWindow(state, 1);
+        }
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 100 * mss, "Early window growth");
+        cong->CongestionStateSet(state, TcpSocketState::CA_RECOVERY);
+        state->m_cWnd = 50 * mss;
+        cong->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+        for (uint32_t i = 0; i < 49; ++i)
+        {
+            cong->IncreaseWindow(state, 1);
+        }
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              50 * mss,
+                              "The count of acknowledged segments survived the recovery");
+        cong->IncreaseWindow(state, 1);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 51 * mss, "No growth after a window");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TestSuite for the behavior of Linux Reno
  */
 class TcpLinuxRenoTestSuite : public TestSuite
@@ -667,6 +741,8 @@ class TcpLinuxRenoTestSuite : public TestSuite
                         "Congestion Avoidance MSS = 1500, socket send size = 1500, delack = 2 " +
                             cong_control_type.GetName()),
                     TestCase::Duration::QUICK);
+
+        AddTestCase(new TcpLinuxRenoArithmeticTest(), TestCase::Duration::QUICK);
 
         AddTestCase(new TcpLinuxRenoRecoveryExitTest(
                         "The ACK ending a fast recovery grows the window by the newly "

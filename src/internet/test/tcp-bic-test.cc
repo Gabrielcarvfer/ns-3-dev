@@ -5,11 +5,14 @@
  *
  */
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
+#include "ns3/simulator.h"
 #include "ns3/tcp-bic.h"
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
+#include "ns3/uinteger.h"
 
 using namespace ns3;
 
@@ -98,7 +101,7 @@ TcpBicIncrementTest::ExecuteTest()
 
     uint32_t ackCnt = Update(m_state);
 
-    if (m_segmentsAcked > ackCnt)
+    if (m_segmentsAcked >= ackCnt)
     {
         NS_TEST_ASSERT_MSG_EQ(m_state->m_cWnd.Get(),
                               segCwnd * m_segmentSize + m_segmentSize,
@@ -133,7 +136,7 @@ TcpBicIncrementTest::Update(Ptr<TcpSocketState> tcb)
 
     uint32_t ackCnt = 0;
 
-    if (segCwnd < lowWindow.Get())
+    if (segCwnd <= lowWindow.Get())
     {
         ackCnt = segCwnd;
         return ackCnt;
@@ -261,7 +264,7 @@ TcpBicDecrementTest::ExecuteTest()
 
     if (segCwnd < m_lastMaxCwnd && m_fastConvergence.Get())
     {
-        lastMaxCwnd = beta.Get() * segCwnd;
+        lastMaxCwnd = segCwnd * (1 + beta.Get()) / 2;
         NS_TEST_ASSERT_MSG_EQ(retLastMaxCwnd,
                               lastMaxCwnd,
                               "Bic has not updated lastMaxCwnd during fast convergence");
@@ -274,7 +277,7 @@ TcpBicDecrementTest::ExecuteTest()
                               "Bic has not reset lastMaxCwnd to current cwnd (in segments)");
     }
 
-    if (segCwnd < lowWindow.Get())
+    if (segCwnd <= lowWindow.Get())
     {
         ssThresh = std::max(2 * m_segmentSize, m_cWnd / 2);
         NS_TEST_ASSERT_MSG_EQ(retSsThresh,
@@ -293,6 +296,176 @@ TcpBicDecrementTest::ExecuteTest()
 /**
  * @ingroup internet-test
  *
+ * @brief Testing the slow start of TcpBic
+ *
+ * As Linux tcp_slow_start(), the window grows by every segment ACKed, up to
+ * the slow start threshold, so that a delayed ACK grows it by two segments.
+ */
+class TcpBicSlowStartTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param cWnd Congestion window.
+     * @param ssThresh Slow Start Threshold.
+     * @param segmentsAcked Segments ACKed.
+     * @param expectedCwnd Expected congestion window.
+     * @param name Test description.
+     */
+    TcpBicSlowStartTest(uint32_t cWnd,
+                        uint32_t ssThresh,
+                        uint32_t segmentsAcked,
+                        uint32_t expectedCwnd,
+                        const std::string& name)
+        : TestCase(name),
+          m_cWnd(cWnd),
+          m_ssThresh(ssThresh),
+          m_segmentsAcked(segmentsAcked),
+          m_expectedCwnd(expectedCwnd)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    uint32_t m_cWnd;          //!< Congestion window.
+    uint32_t m_ssThresh;      //!< Slow Start Threshold.
+    uint32_t m_segmentsAcked; //!< Segments ACKed.
+    uint32_t m_expectedCwnd;  //!< Expected congestion window.
+};
+
+void
+TcpBicSlowStartTest::DoRun()
+{
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = 1000;
+    state->m_cWnd = m_cWnd;
+    state->m_ssThresh = m_ssThresh;
+
+    Ptr<TcpBic> cong = CreateObject<TcpBic>();
+    cong->IncreaseWindow(state, m_segmentsAcked);
+
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), m_expectedCwnd, "Unexpected slow start growth");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing the ACK count of TcpBic: the delayed ACK ratio compensation
+ * of Linux, and the reset of the count when the window is reduced
+ *
+ * With a window of 100 segments and no previous maximum, BIC grows the
+ * window by a segment every 100 / 16 = 6 acknowledged segments. With the
+ * AckRatioCompensation attribute, this count is divided by the delayed ACK
+ * ratio (two segments per ACK before any sample), as Linux bictcp_update()
+ * does. The segments counted before a window reduction do not count towards
+ * the next increase, as tp->snd_cwnd_cnt in Linux.
+ */
+class TcpBicAckCountTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param compensation Whether the AckRatioCompensation attribute is set.
+     * @param name Test description.
+     */
+    TcpBicAckCountTest(bool compensation, const std::string& name)
+        : TestCase(name),
+          m_compensation(compensation)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    bool m_compensation; //!< Whether the AckRatioCompensation attribute is set
+};
+
+void
+TcpBicAckCountTest::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_cWnd = 100 * segmentSize;
+    state->m_ssThresh = 50 * segmentSize;
+
+    Ptr<TcpBic> cong = CreateObject<TcpBic>();
+    cong->SetAttribute("AckRatioCompensation", BooleanValue(m_compensation));
+
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        cong->IncreaseWindow(state, 1);
+    }
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                          (m_compensation ? 101 : 100) * segmentSize,
+                          "Unexpected window after three acknowledged segments");
+
+    // Two segments counted, then a window reduction
+    cong->IncreaseWindow(state, 1);
+    cong->IncreaseWindow(state, 1);
+    cong->CongestionStateSet(state, TcpSocketState::CA_RECOVERY);
+    cong->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+    uint32_t cWnd = state->m_cWnd.Get();
+    cong->IncreaseWindow(state, 1);
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                          cWnd,
+                          "The segments counted before the reduction must be discarded");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing the Linux arithmetic of TcpBic (LinuxHz attribute)
+ *
+ * A loss at 410 segments sets ssThresh to 327 segments, with beta = 819/1024
+ * (328 with 0.8). From there, 20 segments below the maximum, the linear
+ * increase needs 327 / 16 = 20 ACKed segments per segment of growth, which
+ * Linux divides by the delayed ACK ratio, initially 2: the window grows after
+ * 10 ACKs of a segment.
+ */
+class TcpBicLinuxHzTest : public TestCase
+{
+  public:
+    TcpBicLinuxHzTest()
+        : TestCase("Linux arithmetic of BIC")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 410 * segmentSize;
+        state->m_ssThresh = 400 * segmentSize;
+
+        Ptr<TcpBic> cong = CreateObject<TcpBic>();
+        cong->SetAttribute("LinuxHz", UintegerValue(100));
+
+        Simulator::Schedule(Seconds(1), [this, cong, state]() {
+            state->m_ssThresh = cong->GetSsThresh(state, 410 * segmentSize);
+            NS_TEST_ASSERT_MSG_EQ(state->m_ssThresh.Get(),
+                                  327 * segmentSize,
+                                  "Unexpected ssThresh");
+            state->m_cWnd = state->m_ssThresh;
+            for (uint32_t i = 0; i < 9; ++i)
+            {
+                cong->IncreaseWindow(state, 1);
+            }
+            NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 327 * segmentSize, "Early increase");
+            cong->IncreaseWindow(state, 1);
+            NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 328 * segmentSize, "No increase");
+        });
+        Simulator::Run();
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP Bic TestSuite
  */
 class TcpBicTestSuite : public TestSuite
@@ -301,6 +474,11 @@ class TcpBicTestSuite : public TestSuite
     TcpBicTestSuite()
         : TestSuite("tcp-bic-test", Type::UNIT)
     {
+        AddTestCase(new TcpBicLinuxHzTest(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpBicAckCountTest(false, "ACK count without ACK ratio compensation"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpBicAckCountTest(true, "ACK count with ACK ratio compensation"),
+                    TestCase::Duration::QUICK);
         AddTestCase(
             new TcpBicIncrementTest(10 * 536,
                                     536,
@@ -316,6 +494,14 @@ class TcpBicTestSuite : public TestSuite
                         8,
                         0,
                         "Bic increment test: under lowCwnd but not enough ACKs received"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpBicIncrementTest(
+                        10 * 536,
+                        536,
+                        9 * 536,
+                        10,
+                        0,
+                        "Bic increment test: under lowCwnd & exactly enough ACKs received"),
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpBicIncrementTest(
                         18 * 1446,
@@ -386,6 +572,26 @@ class TcpBicTestSuite : public TestSuite
                 10,
                 "Bic decrement test: not in fast convergence & cwnd greater than lowWindow"),
             TestCase::Duration::QUICK);
+        AddTestCase(new TcpBicDecrementTest(
+                        20 * 1446,
+                        1446,
+                        true,
+                        30,
+                        "Bic decrement test: fast convergence & cwnd greater than lowWindow"),
+                    TestCase::Duration::QUICK);
+
+        AddTestCase(new TcpBicSlowStartTest(10 * 1000,
+                                            100 * 1000,
+                                            2,
+                                            12 * 1000,
+                                            "Bic slow start test: delayed ACK of two segments"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpBicSlowStartTest(10 * 1000,
+                                            11 * 1000,
+                                            2,
+                                            11 * 1000,
+                                            "Bic slow start test: growth up to ssThresh"),
+                    TestCase::Duration::QUICK);
     }
 };
 

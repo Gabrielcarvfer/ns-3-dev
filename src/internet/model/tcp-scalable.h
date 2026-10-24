@@ -95,9 +95,9 @@ class TcpScalable : public TcpNewReno
     void CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
 
   private:
-    uint32_t m_ackCnt;   //!< Number of received ACK
-    uint32_t m_aiFactor; //!< Additive increase factor
-    double m_mdFactor;   //!< Multiplicative decrease factor
+    uint32_t m_aiFactor;         //!< Additive increase factor
+    double m_mdFactor;           //!< Multiplicative decrease factor
+    bool m_linuxDecrease{false}; //!< Compute the multiplicative decrease as Linux does
 };
 
 } // namespace ns3

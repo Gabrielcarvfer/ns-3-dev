@@ -48,6 +48,8 @@ class TcpLinuxReno : public TcpCongestionOps
 
     void IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
     uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
+    void CongestionStateSet(Ptr<TcpSocketState> tcb,
+                            const TcpSocketState::TcpCongState_t newState) override;
     Ptr<TcpCongestionOps> Fork() override;
 
   protected:
@@ -78,6 +80,15 @@ class TcpLinuxReno : public TcpCongestionOps
     void SetSuppressIncreaseIfCwndLimited(bool value);
 
   private:
+    /**
+     * Compute the window after a multiplicative decrease, in whole segments
+     * as Linux does
+     * @param state internal congestion state
+     * @param beta multiplicative decrease factor
+     * @return the reduced window in bytes, at least two segments
+     */
+    uint32_t ReducedWindow(Ptr<const TcpSocketState> state, double beta) const;
+
     uint32_t m_cWndCnt{0}; //!< Linear increase counter
     // The below flag exists for classes derived from TcpLinuxReno (such as
     // TcpDctcp) that may not want to suppress cwnd increase, unlike Linux's

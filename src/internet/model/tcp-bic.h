@@ -90,6 +90,9 @@ class TcpBic : public TcpCongestionOps
     std::string GetName() const override;
     void IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
     uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
+    void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt) override;
+    void CongestionStateSet(Ptr<TcpSocketState> tcb,
+                            const TcpSocketState::TcpCongState_t newState) override;
 
     Ptr<TcpCongestionOps> Fork() override;
 
@@ -100,6 +103,20 @@ class TcpBic : public TcpCongestionOps
      * @returns The number of segments acked since the last cwnd increment.
      */
     virtual uint32_t Update(Ptr<TcpSocketState> tcb);
+
+    /**
+     * @brief Window growth of Linux bictcp_cong_avoid(), with
+     * tcp_slow_start(), bictcp_update() and tcp_cong_avoid_ai()
+     * @param tcb the socket state.
+     * @param segmentsAcked Segments acked
+     */
+    void LinuxIncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
+
+    /**
+     * @brief Current time in jiffies of Linux, at LinuxHz
+     * @return the jiffies
+     */
+    uint32_t Jiffies() const;
 
   private:
     /**
@@ -121,11 +138,18 @@ class TcpBic : public TcpCongestionOps
     uint32_t m_smoothPart;  //!< Number of RTT needed to reach Wmax from Wmax-B
 
     // Bic parameters
-    uint32_t m_cWndCnt;     //!<  cWnd integer-to-float counter
-    uint32_t m_lastMaxCwnd; //!<  Last maximum cWnd
-    uint32_t m_lastCwnd;    //!<  Last cWnd
-    Time m_epochStart;      //!<  Beginning of an epoch
-    uint8_t m_b;            //!< Binary search coefficient
+    uint32_t m_cWndCnt;                            //!<  cWnd integer-to-float counter
+    uint32_t m_lastMaxCwnd;                        //!<  Last maximum cWnd
+    uint32_t m_lastCwnd;                           //!<  Last cWnd
+    Time m_epochStart;                             //!<  Beginning of an epoch
+    uint8_t m_b;                                   //!< Binary search coefficient
+    bool m_ackRatioCompensation{false};            //!< Divide the count by the delayed ACK ratio
+    static constexpr uint32_t ACK_RATIO_SHIFT = 4; //!< Fixed-point shift of the ACK ratio
+    uint32_t m_delayedAck{2 << ACK_RATIO_SHIFT}; //!< Segments per ACK, in 1/16 (Linux delayed_ack)
+    uint32_t m_linuxHz{0};     //!< Rate of the Linux jiffies, zero without Linux arithmetic
+    uint32_t m_cnt{0};         //!< Last computed count (Linux)
+    uint32_t m_jLastTime{0};   //!< Jiffy of the last count computation (Linux)
+    uint32_t m_jEpochStart{0}; //!< Beginning of an epoch, in jiffies (Linux, 0 if none)
 };
 
 } // namespace ns3

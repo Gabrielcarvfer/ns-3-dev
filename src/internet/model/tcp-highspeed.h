@@ -59,6 +59,8 @@ class TcpHighSpeed : public TcpNewReno
     std::string GetName() const override;
 
     uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
+    void CongestionStateSet(Ptr<TcpSocketState> tcb,
+                            const TcpSocketState::TcpCongState_t newState) override;
 
     Ptr<TcpCongestionOps> Fork() override;
 
@@ -80,11 +82,25 @@ class TcpHighSpeed : public TcpNewReno
      */
     static double TableLookupB(uint32_t w);
 
+    /**
+     * @brief Lookup table of Linux for the coefficient b, in 1/256
+     *
+     * The values of RFC 3649, Appendix B, rounded to 1/256 as Linux
+     * (tcp_highspeed.c) does.
+     *
+     * @param w Window value (in packets)
+     *
+     * @return the coefficient b, times 256
+     */
+    static uint32_t TableLookupLinuxB(uint32_t w);
+
   protected:
     void CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
 
   private:
-    uint32_t m_ackCnt; //!< Number of received ACK, corrected with the coefficient a
+    uint32_t m_ackCnt;           //!< Number of received ACK, corrected with the coefficient a
+    uint32_t m_caCwnd{0};        //!< cWnd (in segments) at the last congestion avoidance increase
+    bool m_linuxDecrease{false}; //!< Compute the multiplicative decrease as Linux does
 };
 
 } // namespace ns3
