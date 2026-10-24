@@ -104,8 +104,8 @@ TcpBbrRecorder::GetTypeId()
  *
  * @brief Check the window of TcpBbr through a fast recovery.
  *
- * A segment is lost in slow start. As Linux (bbr_set_cwnd_to_recover_or_restore()
- * and the BBR Internet Draft):
+ * One segment is lost in slow start. As in Linux (bbr_set_cwnd_to_recover_or_restore())
+ * and the BBR Internet Draft:
  * - the ACK which starts the recovery sets the window to the data in flight
  *   plus the data it delivers before the retransmission is sent, so that the
  *   retransmission is the only segment sent on that ACK;
@@ -251,8 +251,8 @@ TcpBbrRecoveryTest::FinalChecks()
         if (r.time == m_exit)
         {
             NS_TEST_ASSERT_MSG_EQ(r.bytesLoss, 0, "The end of the recovery reported a loss");
-            // The window of before the recovery may be restored, and grows
-            // by the data delivered at most
+            // The pre-recovery window may be restored, plus at most the
+            // data delivered
             NS_TEST_ASSERT_MSG_LT_OR_EQ(r.cWnd,
                                         std::max(prevCwnd, m_cWndBefore) + r.ackedSacked,
                                         "The window jumped at the end of the recovery");

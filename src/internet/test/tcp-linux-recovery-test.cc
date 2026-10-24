@@ -226,15 +226,13 @@ TcpLinuxRecoveryTransfer::Transfer(const std::set<uint32_t>& drops)
 /**
  * @ingroup internet-test
  *
- * @brief Test the ForwardRetransmit attribute
+ * @brief Check that ForwardRetransmit controls the retransmission of a segment not deemed lost
  *
- * The 5th and the 18th segments of the transfer are lost. The duplicate ACKs
- * of the 5th start a SACK recovery; the 18th has only two segments SACKed
- * above it, too few to deem it lost, and no new data can be sent. By default
- * (RFC 6675, NextSeg() rule (3)), the sender retransmits it before the ACK
- * of the retransmission of the 5th, as the duplicate ACKs inflate the
- * window of the classic recovery; as Linux, which retransmits only the
- * segments deemed lost, it does not.
+ * The 5th and 18th segments are lost. The 5th starts a SACK recovery; the 18th
+ * has only two segments SACKed above it, so it is not deemed lost, and no new
+ * data is available. With ForwardRetransmit (RFC 6675 NextSeg() rule (3)) the
+ * 18th is retransmitted before the retransmitted 5th is ACKed; without it, as
+ * in Linux, only segments deemed lost are retransmitted.
  */
 class TcpForwardRetransmitTest : public TcpLinuxRecoveryTransfer
 {
@@ -295,8 +293,8 @@ void
 TcpForwardRetransmitTest::DoRun()
 {
     Config::SetDefault("ns3::TcpSocketBase::ForwardRetransmit", BooleanValue(m_forward));
-    // The recovery inflates the window with the duplicate ACKs, so that
-    // the window allows a transmission while no new data can be sent
+    // Classic recovery inflates the window with duplicate ACKs, opening room for a send while no
+    // new data exists
     Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
                        TypeIdValue(TypeId::LookupByName("ns3::TcpClassicRecovery")));
     Transfer({4 * SEGMENT, 17 * SEGMENT});
@@ -308,12 +306,12 @@ TcpForwardRetransmitTest::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Test the RTT sample of the timestamps after a timeout (LinuxCaRtt)
+ * @brief Check that LinuxCaRtt takes a timestamp RTT sample from the ACK of an RTO retransmission
  *
- * The last segment of the transfer is lost, and retransmitted on the
- * retransmission timeout. Its ACK acknowledges retransmitted data only, which
- * gives no clean sample; as Linux (tcp_ack_update_rtt()), with LinuxCaRtt,
- * the echoed timestamp gives one, and the smoothed RTT is updated.
+ * The last segment is lost and retransmitted on RTO. Its ACK covers only
+ * retransmitted data, so Karn's rule gives no sample; with LinuxCaRtt the
+ * echoed timestamp gives one (as tcp_ack_update_rtt()) and the smoothed RTT
+ * changes.
  */
 class TcpTimeoutRttSampleTest : public TcpLinuxRecoveryTransfer
 {

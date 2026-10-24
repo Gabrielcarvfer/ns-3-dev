@@ -22,27 +22,18 @@ NS_LOG_COMPONENT_DEFINE("TcpPruneTest");
 /**
  * @ingroup internet-test
  *
- * @brief Test the pruning of the out-of-order queue of the receiver
+ * @brief Check SACK reneging by the receiver and its detection by the sender
  *
- * The receive buffer holds 20000 bytes, and the sender sends 100 segments of
- * 500 bytes at once. The 6th and the 11th segments are lost, and the first
- * retransmission of the 6th as well, so that the out-of-order data fill the
- * buffer. With the PruneOverhead attribute set to 3, the receiver accounts
- * the data at three times their size against twice the buffer, so that the
- * retransmission of the 11th segment, out of order, finds the memory full:
- * as Linux (tcp_prune_ofo_queue()), the receiver drops the out-of-order
- * segments above it and forgets its SACK blocks, so that it then
- * acknowledges, below the data it had SACKed, without SACK blocks: it
- * reneges. The sender detects it when the cumulative ACK reaches SACKed
- * data, and the transfer completes. Without the attribute the receiver never
- * reneges. By default the sender then discards all the SACK information at
- * once and retransmits from the left edge, without a timeout; with
- * SackRenegingTimeout, as Linux, its retransmission timer expires half an RTT
- * later, on the ticks of the retransmission timer if it has some, and the
- * timeout discards the SACK information. Until then, as Linux
- * (tcp_check_sack_reneging(), on which tcp_fastretrans_alert() returns), the
- * ACK that reveals the reneging retransmits nothing, and so does the
- * application that writes more data then (tcp_push() sends new data only).
+ * 100 segments of 500 bytes go into a 20000-byte receive buffer; the 6th
+ * (twice) and the 11th segments are lost. With PruneOverhead 3 the
+ * out-of-order data fill the memory, and the receiver drops them and its SACK
+ * blocks (Linux tcp_prune_ofo_queue()), i.e. it reneges; with 0 it never
+ * reneges. The sender detects the reneging and the transfer completes. By
+ * default the sender discards the SACK information at once, without a
+ * timeout. With SackRenegingTimeout (Linux tcp_check_sack_reneging()) the
+ * retransmission timer fires half an RTT later, on a timer tick if one is
+ * set, and until then neither the revealing ACK nor a new write retransmits
+ * (tcp_fastretrans_alert() returns, tcp_push() sends new data only).
  */
 class TcpPruneTest : public TcpGeneralTest
 {
@@ -115,8 +106,7 @@ class TcpPruneTest : public TcpGeneralTest
             Simulator::Now() - *m_detectTime < MicroSeconds(1) &&
             h.GetSequenceNumber() < m_detectHighTx)
         {
-            // A retransmission on the ACK that revealed the reneging, or on
-            // the write that follows
+            // Retransmission triggered by the revealing ACK or the write after it
             ++m_earlyRetransmissions;
         }
         if (who != RECEIVER || !(h.GetFlags() & TcpHeader::ACK) || (h.GetFlags() & TcpHeader::SYN))
@@ -134,7 +124,7 @@ class TcpPruneTest : public TcpGeneralTest
         }
         if (m_highSack > h.GetAckNumber() && highSack < m_highSack)
         {
-            // The ACK no longer reports data it SACKed
+            // The ACK drops data reported in earlier SACK blocks
             m_reneged = true;
         }
         m_highSack = highSack > h.GetAckNumber() ? highSack : SequenceNumber32(0);
@@ -151,8 +141,7 @@ class TcpPruneTest : public TcpGeneralTest
         }
         else if (m_renegingTimeout)
         {
-            // The timeout that follows the first detection, after half the
-            // RTT, discards the SACK information
+            // The timeout half an RTT after the detection discards the SACK information
             NS_TEST_ASSERT_MSG_EQ(events, 1, "The SACK information was not discarded at once");
             NS_TEST_ASSERT_MSG_EQ(m_detectTime.has_value() && m_rtoTime.has_value(),
                                   true,
@@ -165,8 +154,7 @@ class TcpPruneTest : public TcpGeneralTest
             }
             else
             {
-                // On the ticks of the timer, as the retransmission timer
-                // (the jiffies of Linux)
+                // Rounded to the timer tick (Linux jiffies)
                 NS_TEST_ASSERT_MSG_GT(*m_rtoTime - *m_detectTime,
                                       m_detectSrtt / 2,
                                       "The timeout after reneging is not on a tick");
@@ -180,8 +168,7 @@ class TcpPruneTest : public TcpGeneralTest
         }
         else
         {
-            // The SACK information is discarded at the first detection, so
-            // that the reneged data is repaired without a timeout
+            // Discarded at detection; the reneged data is repaired without a timeout
             NS_TEST_ASSERT_MSG_EQ(events, 1, "The SACK information was not discarded at once");
             NS_TEST_ASSERT_MSG_EQ(m_rtoTime.has_value(), false, "Timeout after reneging");
         }
@@ -200,7 +187,7 @@ class TcpPruneTest : public TcpGeneralTest
             m_detectTime = Simulator::Now();
             m_detectSrtt = tcb->m_srtt.Get();
             m_detectHighTx = tcb->m_highTxMark.Get();
-            // The application writes more data at once
+            // More data written at the detection
             Simulator::ScheduleNow(&TcpPruneTest::WriteMore, this);
         }
     }

@@ -77,8 +77,8 @@ Ns3TcpSocketTestCaseP2P::SinkRx(std::string path, Ptr<const Packet> p, const Add
 void
 Ns3TcpSocketTestCaseP2P::DoRun()
 {
-    // The expected segment boundaries are the 536 bytes of data of the
-    // default segment size, which the timestamp option comes on top of
+    // Segments carry 536 bytes of data (default segment size) plus the
+    // timestamp option
     Config::SetDefault("ns3::TcpSocket::SegmentSize",
                        UintegerValue(536 + TcpSocketBase::GetSegmentOptionsSize()));
     uint16_t sinkPort = 50000;
@@ -214,8 +214,7 @@ Ns3TcpSocketTestCaseCsma::DoRun()
     Time writerStopTimeObj = Seconds(writerStopTime);
     Time simStopTimeObj = Seconds(simStopTime);
 
-    // The expected segment boundaries are of 1000 bytes of data, which the
-    // timestamp option comes on top of
+    // Segments carry 1000 bytes of data plus the timestamp option
     Config::SetDefault("ns3::TcpSocket::SegmentSize",
                        UintegerValue(1000 + TcpSocketBase::GetSegmentOptionsSize()));
 

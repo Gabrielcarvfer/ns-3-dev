@@ -33,19 +33,13 @@ NS_LOG_COMPONENT_DEFINE("TcpLostRetransmissionTestSuite");
 /**
  * @ingroup internet-test
  *
- * @brief Test the detection of lost retransmissions (see @issueid{979})
+ * @brief Check that a lost retransmission is detected and resent without an RTO (see @issueid{979})
  *
- * When a retransmitted segment is lost again, @RFC{6675} based recovery would
- * stall until the retransmission timer expires, because retransmitted
- * segments are not selected again by NextSeg(). Like Linux, ns-3 detects a
- * lost retransmission when a segment transmitted after the retransmission is
- * SACKed, and marks it for retransmission again.
- *
- * The test drops a segment and its retransmission, and checks that the
- * transfer recovers without a retransmission timeout. With the detection
- * disabled (TcpTxBuffer::LostRetransmissionDetection), as in strict @RFC{6675}
- * recovery and Linux without RACK, it checks instead that the lost
- * retransmission is not resent before the retransmission timeout repairs it.
+ * A segment and its retransmission are dropped. As in Linux, a SACK of a
+ * segment sent after the retransmission marks it lost again, and the transfer
+ * recovers without an RTO. With TcpTxBuffer::LostRetransmissionDetection
+ * disabled (strict @RFC{6675} NextSeg(), Linux without RACK), the lost
+ * retransmission is not resent until the RTO repairs it.
  */
 class TcpLostRetransmissionTest : public TcpGeneralTest
 {
@@ -124,9 +118,7 @@ Ptr<ErrorModel>
 TcpLostRetransmissionTest::CreateReceiverErrorModel()
 {
     Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
-    // Drop a segment in the middle of the transfer and then its
-    // retransmission (segment size is 500 bytes, first byte has sequence
-    // number 1)
+    // Segments are 500 bytes and the first data byte has sequence number 1
     errorModel->AddSeqToKill(SequenceNumber32(10001));
     errorModel->AddSeqToKill(SequenceNumber32(10001));
     return errorModel;
@@ -180,8 +172,8 @@ TcpLostRetransmissionTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief A channel delaying a retransmitted data segment behind the next
- * data segment sent after it.
+ * @brief Channel that delays the first retransmission of a data segment behind the next data
+ * segment sent.
  */
 class TcpRetransmissionReorderingChannel : public SimpleChannel
 {
@@ -278,22 +270,16 @@ NS_OBJECT_ENSURE_REGISTERED(TcpRetransmissionReorderingChannel);
 /**
  * @ingroup internet-test
  *
- * @brief Document the zero reordering window of the lost retransmission
- * detection.
+ * @brief Check the lost retransmission detection with a reordered retransmission (zero reordering
+ * window)
  *
  * A segment is dropped and its fast retransmission is delayed behind the
- * next data segment sent, so that the receiver SACKs that segment before
- * receiving the retransmission. The lost retransmission detection has no
- * reordering window: a SACK of any segment sent after a retransmission
- * marks the retransmission as lost, so the delayed retransmission is resent
- * once more, spuriously, before the cumulative ACK covering it arrives.
- * @RFC{8985} (RACK) also uses a zero reordering window during loss recovery
- * as long as no reordering has been observed on the connection, but it then
- * widens the window when reordering is detected (e.g., via DSACK), which
- * ns-3 does not do. The test checks that the transfer completes without
- * retransmission timeouts and within one recovery episode, and documents
- * the spurious retransmission: should a reordering tolerance be
- * implemented, the expected number of retransmissions becomes one.
+ * next data segment, which the receiver SACKs first. With no reordering
+ * window, that SACK marks the retransmission lost and it is resent once more,
+ * spuriously. @RFC{8985} (RACK) also starts with a zero window but widens it
+ * once reordering is seen (e.g., via DSACK); this is not implemented. Expected:
+ * no RTO, one recovery episode, and two retransmissions of the segment (one
+ * if a reordering tolerance is added).
  */
 class TcpReorderedRetransmissionTest : public TcpGeneralTest
 {
@@ -409,8 +395,7 @@ TcpReorderedRetransmissionTest::FinalChecks()
     {
         retransmissions += count - 1;
     }
-    // The original transmission, the delayed retransmission and the
-    // spurious one, due to the zero reordering window
+    // Original, delayed retransmission, and spurious resend
     NS_TEST_ASSERT_MSG_EQ(m_txCount[LOST_SEQ], 3, "Unexpected transmissions of the lost segment");
     NS_TEST_ASSERT_MSG_EQ(retransmissions, 2, "Other segments retransmitted");
 }
@@ -418,14 +403,12 @@ TcpReorderedRetransmissionTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Test the Linux behaviours of TcpSocketBase which change the
- * retransmission timeout ending a recovery whose retransmission is lost.
+ * @brief Check the Linux-like TcpSocketBase attributes that affect the RTO ending a recovery with a
+ * lost retransmission
  *
- * As in TcpLostRetransmissionTest without the lost retransmission detection,
- * a segment and its fast retransmission are dropped, and the retransmission
- * timeout repairs the loss. The cumulative ACK stays on the dropped segment
- * until then, while the receiver SACKs the segments sent around the
- * retransmission. Each test case enables (or not) one attribute and checks:
+ * A segment and its fast retransmission are dropped, with lost retransmission
+ * detection disabled, so the RTO repairs the loss while later segments are
+ * SACKed. Each case toggles one attribute and checks:
  *
  * - KeepRecoverySsThresh: the slow start threshold after the timeout is the
  *   one the recovery set, instead of half of the bytes in flight.
@@ -522,8 +505,7 @@ TcpLinuxRtoRecoveryTest::ConfigureEnvironment()
     SetAppPktSize(500);
     SetAppPktCount(60);
     SetPropagationDelay(MilliSeconds(50));
-    // The segments of a burst leave one after the other, so that those
-    // sent with the fast retransmission are sent after it
+    // Serialize burst segments so those sent with the fast retransmission follow it
     Config::SetDefault("ns3::SimpleNetDevice::DataRate", DataRateValue(DataRate("10Mb/s")));
 }
 

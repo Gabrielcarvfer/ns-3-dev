@@ -375,13 +375,11 @@ TcpLinuxRenoCongAvoidTest::DoTeardown()
  *
  * @brief Check the window growth on the ACK which ends a fast recovery.
  *
- * A segment of the initial window is dropped, so that the receiver SACKs
- * every segment sent after it, and the ACK of its retransmission covers all
- * of them at once. When it ends the recovery, the congestion window is set to
- * the slow start threshold, and it may grow only by the segments newly
- * delivered by that ACK (Linux acked_sacked in tcp_cong_control()): the SACKed
- * segments were delivered earlier, during the recovery. Counting them again
- * would grow the window of Linux Reno by several segments at once.
+ * A segment of the initial window is dropped; the receiver SACKs the later
+ * segments and the ACK of the retransmission covers them all. On that ACK the
+ * congestion window is set to the slow start threshold and grows only by the
+ * newly delivered segments (Linux acked_sacked in tcp_cong_control()), not by
+ * the segments SACKed during the recovery.
  */
 class TcpLinuxRenoRecoveryExitTest : public TcpGeneralTest
 {

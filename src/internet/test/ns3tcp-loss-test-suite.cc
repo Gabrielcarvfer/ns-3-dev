@@ -394,10 +394,9 @@ Ns3TcpLossTestCase::DoRun()
     InternetStackHelper internet;
     internet.InstallAll();
 
-    // Set on the protocols rather than through the attribute default, which
-    // NS_ATTRIBUTE_DEFAULT would override: the response vectors hold the
-    // sequence numbers, so the case runs with the initial sequence numbers
-    // it was recorded with, whatever the defaults
+    // Set on the protocols, not via the attribute default (which
+    // NS_ATTRIBUTE_DEFAULT overrides): the response vectors hold sequence
+    // numbers, so the ISN mode must match the recorded one
     for (uint32_t i = 0; i < NodeList::GetNNodes(); ++i)
     {
         NodeList::GetNode(i)->GetObject<TcpL4Protocol>()->SetAttribute(
@@ -407,10 +406,9 @@ Ns3TcpLossTestCase::DoRun()
 
     if (m_clockDrivenIsn)
     {
-        // The secrets of the initial sequence numbers are drawn from streams
-        // of their own, in the first run, so that the response vectors
-        // depend neither on the run number of the simulation nor on the
-        // order the other random variables are created in
+        // ISN secrets come from dedicated streams in run 1, so the response
+        // vectors do not depend on the run number or on the creation order
+        // of other random variables
         uint32_t seed = RngSeedManager::GetSeed();
         uint64_t run = RngSeedManager::GetRun();
         RngSeedManager::SetSeed(1);
@@ -568,8 +566,7 @@ Ns3TcpLossTestSuite::Ns3TcpLossTestSuite()
     AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 3), TestCase::Duration::QUICK);
     AddTestCase(new Ns3TcpLossTestCase("WestwoodPlus", 4), TestCase::Duration::QUICK);
 
-    // The same cases with clock driven initial sequence numbers, whose
-    // response vectors are held apart
+    // Same cases with clock-driven ISNs, using separate response vectors
     for (const std::string model : {"NewReno", "WestwoodPlus"})
     {
         for (uint32_t i = 0; i < 5; ++i)

@@ -200,12 +200,11 @@ TcpPktsAckedOpenTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Check the RTT sample that PktsAcked receives on duplicate ACKs
+ * @brief Check that PktsAcked receives a zero RTT on duplicate ACKs
  *
- * A duplicate ACK gives no new RTT sample: the congestion control receives
- * zero, as Linux passes rtt_us = -1 to pkts_acked(), rather than the sample
- * of the last ACK that advanced the window. The ACKs that acknowledge new
- * data still give a positive sample.
+ * A duplicate ACK carries no new RTT sample, so the congestion control gets
+ * zero (Linux passes rtt_us = -1 to pkts_acked()) instead of the last sample.
+ * ACKs of new data give a positive sample.
  */
 class TcpPktsAckedDupAckRttTest : public TcpGeneralTest
 {
@@ -316,13 +315,12 @@ TcpPktsAckedDupAckRttTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Check that the segments of the ACKs without RTT sample count towards
- * the bandwidth estimate of TcpWestwoodPlus
+ * @brief Check that segments ACKed without an RTT sample count in the TcpWestwoodPlus bandwidth
+ * estimate
  *
- * Four segments acknowledged by duplicate ACKs, which give no RTT sample, and
- * one by an ACK with an RTT of 100 ms make a first estimate of five segments
- * of 1000 bytes in 100 ms, as Linux westwood_acked_count() counts the
- * duplicate ACKs.
+ * Four segments ACKed by duplicate ACKs (no RTT sample) and one by an ACK
+ * with a 100 ms RTT give a first estimate of five 1000-byte segments in
+ * 100 ms, as Linux westwood_acked_count() counts duplicate ACKs.
  */
 class TcpWestwoodPlusNoRttCountTest : public TestCase
 {
@@ -353,12 +351,12 @@ class TcpWestwoodPlusNoRttCountTest : public TestCase
 /**
  * @ingroup internet-test
  *
- * @brief Check the minimum RTT of the LinuxCaRtt attribute
+ * @brief Check that LinuxCaRtt makes the minimum RTT the smallest raw sample
  *
- * The path delay drops for a short while, so that a few RTT samples are far
- * below the smoothed RTT. With LinuxCaRtt, as Linux tcp_update_rtt_min(),
- * the minimum RTT is the smallest sample; without it, it is the smallest
- * smoothed RTT, which the short drop barely moves.
+ * The path delay drops briefly, giving a few samples far below the smoothed
+ * RTT. With LinuxCaRtt (as tcp_update_rtt_min()) the minimum RTT is the
+ * smallest sample; without it, it is the smallest smoothed RTT, which the
+ * short drop barely moves.
  */
 class TcpLinuxMinRttTest : public TcpGeneralTest
 {
@@ -460,14 +458,13 @@ TcpLinuxMinRttTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Check the RTT estimator samples of the LinuxCaRtt attribute
+ * @brief Check that LinuxCaRtt gives the RTT estimator microsecond samples
  *
- * With timestamps, the RTT estimator of RFC 7323 (Section 4) gets samples of
- * a granularity of the timestamp clock, one millisecond. With LinuxCaRtt, as
- * Linux (seq_rtt_us), it gets the time since the transmission of the SYN or
- * of the oldest segment newly acknowledged, never retransmitted, to the
- * microsecond. The path RTT, checked on the SYN, is not a whole number of
- * milliseconds.
+ * With timestamps, RFC 7323 (Section 4) samples have the 1 ms granularity of
+ * the timestamp clock. With LinuxCaRtt (as Linux seq_rtt_us) the sample is
+ * the time since sending the SYN or the oldest newly ACKed, never
+ * retransmitted segment, in microseconds. The path RTT, checked on the SYN,
+ * is not a whole number of milliseconds.
  */
 class TcpLinuxRttEstimatorTest : public TcpGeneralTest
 {
@@ -541,14 +538,12 @@ TcpLinuxRttEstimatorTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Check the RTT samples of the LinuxCaRtt attribute of TcpSocketBase
+ * @brief Check that LinuxCaRtt samples exclude the time SACKed segments wait for a retransmission
  *
- * With LinuxCaRtt, as Linux ca_rtt_us, a duplicate ACK which newly SACKs
- * segments gives the time since the transmission of the newest of them, and
- * the ACK which acknowledges the retransmitted segment gives no sample from
- * the transmission times (Karn), but the one of the timestamps. Every sample
- * from the loss on is then one round trip time: none counts the time the
- * SACKed segments waited for the retransmission.
+ * As Linux ca_rtt_us, a duplicate ACK that newly SACKs segments gives the
+ * time since the newest of them was sent, and the ACK of the retransmitted
+ * segment gives only the timestamp sample (Karn). Expected: every sample
+ * from the loss on is about one RTT.
  */
 class TcpLinuxCaRttTest : public TcpGeneralTest
 {
@@ -644,8 +639,7 @@ TcpLinuxCaRttTest::PktsAckedCalled(Time rtt)
     {
         ++m_dupAckSamples;
     }
-    // From the loss on: before, a delayed ACK of a lone segment includes the
-    // delayed ACK timeout
+    // Start at the loss: earlier samples of a lone segment include the delayed ACK timeout
     if (m_dupAckSamples == 0)
     {
         return;
@@ -667,14 +661,13 @@ TcpLinuxCaRttTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Check the calls of PktsAcked with the LinuxPktsAcked attribute
+ * @brief Check the PktsAcked calls with the LinuxPktsAcked attribute
  *
- * The third segment is lost. As Linux pkts_acked(), each ACK is passed
- * once, with the segments it acknowledges cumulatively: none for the
- * duplicate ACKs, the first of which is passed in CA_OPEN, before the state
- * changes to CA_DISORDER, and all the segments the retransmission covers
- * for the ACK that ends the recovery, passed in CA_RECOVERY. Without the
- * attribute, the duplicate ACKs pass a segment each.
+ * The third segment is lost. As Linux pkts_acked(), each ACK is passed once
+ * with the segments it cumulatively ACKs: zero for duplicate ACKs (the first
+ * in CA_OPEN, before the switch to CA_DISORDER), and all segments covered by
+ * the retransmission for the ACK ending recovery, in CA_RECOVERY. Without
+ * the attribute, each duplicate ACK passes one segment.
  */
 class TcpLinuxPktsAckedTest : public TcpGeneralTest
 {
@@ -794,8 +787,8 @@ TcpLinuxPktsAckedTest::FinalChecks()
         NS_TEST_ASSERT_MSG_GT(m_recoverySegments, 1, "The end of the recovery passed no hole");
         // The 40 data segments and the FIN, as a packet of Linux
         NS_TEST_ASSERT_MSG_EQ(m_segments, 41, "The segments passed are not those acknowledged");
-        // Every ACK is passed once, but the one received with nothing
-        // outstanding (the FIN of the receiver), as Linux tcp_ack()
+        // Every ACK is passed once except the one received with nothing outstanding (the receiver's
+        // FIN), as Linux tcp_ack()
         NS_TEST_ASSERT_MSG_EQ(m_calls + 1, m_acks, "An ACK is not passed once");
     }
     else

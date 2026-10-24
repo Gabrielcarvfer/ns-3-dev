@@ -56,8 +56,8 @@ class LpBottleneck
         Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
         Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(256 << 10));
         Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(4 << 20));
-        // The paper's algorithm collapses behind a delaying receiver: these
-        // tests check TCP-LP with the two safeguards against it
+        // The paper's algorithm collapses with a delayed-ACK receiver; these
+        // tests enable the two safeguards against it
         Config::SetDefault("ns3::TcpLp::AckHoldFilter", BooleanValue(true));
         Config::SetDefault("ns3::TcpLp::RestartSmoothing", BooleanValue(true));
 

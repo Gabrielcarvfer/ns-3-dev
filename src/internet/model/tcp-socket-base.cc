@@ -3627,7 +3627,7 @@ TcpSocketBase::TryUndoNonSackRecovery()
     if (m_undoSsThresh > m_tcb->m_ssThresh)
     {
         m_tcb->m_ssThresh = m_undoSsThresh;
-        // The reduction undone is no longer signaled (tcp_ecn_withdraw_cwr())
+        // The undone reduction is not signaled to the peer (tcp_ecn_withdraw_cwr())
         m_cwrPending = false;
     }
     m_undoSsThresh = 0;

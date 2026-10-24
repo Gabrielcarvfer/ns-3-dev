@@ -33,13 +33,11 @@ NS_LOG_COMPONENT_DEFINE("TcpLinuxPacingTest");
  *
  * @brief Test the pacing of whole GSO packets, as the internal pacing of Linux
  *
- * A bulk transfer with pacing at 2 Mbit/s. With
- * ForcedPush, which models the GSO packets of Linux, the sender paces as
- * Linux (tcp_pacing_check(), tcp_update_skb_after_send()): after the first
- * ten segments, which are not paced, it sends whole GSO packets of several
- * segments at once, each delaying the next one by its transmission time at
- * the pacing rate, less the delay with which it was sent, up to half of it.
- * Without ForcedPush, the sender paces segment by segment.
+ * Bulk transfer paced at 2 Mbit/s. With ForcedPush (Linux GSO packets), the
+ * sender paces as Linux tcp_pacing_check() and tcp_update_skb_after_send():
+ * the first ten segments are not paced, then each GSO packet delays the next
+ * by its transmission time at the pacing rate, minus its own send delay (at
+ * most half of it). Without ForcedPush, pacing is per segment.
  */
 class TcpLinuxPacingTestCase : public TestCase
 {

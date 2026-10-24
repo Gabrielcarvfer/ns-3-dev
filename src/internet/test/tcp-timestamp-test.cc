@@ -277,19 +277,14 @@ TimestampValueTestCase::Check()
 /**
  * @ingroup internet-test
  *
- * @brief TCP TimeStamp echo Test.
+ * @brief Check that a delayed ACK echoes the timestamp of the earliest segment it covers
  *
- * With delayed ACKs, an ACK acknowledging several segments echoes the
- * timestamp of the earliest of them (@RFC{7323}, Section 4.3): the timestamp
- * to echo is updated only by a segment which starts at or below the last
- * acknowledgment sent. The sender sends a segment every 2 ms and the
- * receiver acknowledges every other segment, so the two segments an ACK
- * covers carry different timestamps.
- *
- * Run with clock driven initial sequence numbers, the initial sequence
- * number of the sender is placed in the upper half of the sequence space, in
- * which the wrap aware comparisons with a last acknowledgment sent left at 0
- * would make the receiver echo the latest segment instead.
+ * @RFC{7323}, Section 4.3: only a segment starting at or below the last ACK
+ * sent updates the timestamp to echo. A segment goes out every 2 ms and every
+ * other one is ACKed, so the two segments an ACK covers differ in timestamp.
+ * The clock-driven ISN variant puts the sender ISN in the upper half of the
+ * sequence space, where a last ACK sent left at 0 would compare wrongly and
+ * echo the latest segment.
  */
 class TimestampEchoTestCase : public TcpGeneralTest
 {

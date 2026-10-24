@@ -133,9 +133,8 @@ TcpFastRetrTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("MinRto", TimeValue(Seconds(10)));
-    // This test tracks sequence and acknowledgment numbers which assume that
-    // the segment payload equals the configured segment size: disable the
-    // timestamp option, which would decrease the payload by its size
+    // The tracked sequence numbers assume the payload equals the segment
+    // size, which the timestamp option would reduce
     socket->SetAttribute("Timestamp", BooleanValue(false));
 
     return socket;

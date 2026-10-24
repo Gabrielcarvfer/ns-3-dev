@@ -27,15 +27,12 @@ NS_LOG_COMPONENT_DEFINE("TcpRecoveryReentryTestSuite");
  *
  * @brief Check the RecoveryReentry attribute of TcpSocketBase.
  *
- * With SACK, a segment is lost in the first window, and so is the last one
- * of that window, whose loss the duplicate ACKs reveal only one round trip
- * later, with its retransmission. A segment sent in the fast recovery is lost
- * as well, and the SACKs reveal it before the ACK of the retransmission of the
- * last segment of the first window ends the recovery. With RecoveryReentry,
- * as Linux (tcp_time_to_recover()), that ACK starts a new recovery at once,
- * since data is still deemed lost; without it, the next duplicate ACK does
- * (RFC 6675, Section 5). As Linux tcp_cong_control(), which gives that ACK
- * to the window reduction only, the window does not grow on it.
+ * With SACK, the second and the last segment of the first window are lost,
+ * and so is a segment sent in the fast recovery, which the SACKs reveal before
+ * the ACK ending the recovery. With RecoveryReentry, as Linux
+ * tcp_time_to_recover(), that ACK starts a new recovery at once because data
+ * is still deemed lost; without it the next duplicate ACK does (RFC 6675,
+ * Section 5). The window does not grow on that ACK (Linux tcp_cong_control()).
  */
 class TcpRecoveryReentryTest : public TcpGeneralTest
 {
@@ -85,8 +82,7 @@ TcpRecoveryReentryTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
     SetInitialCwnd(SENDER, 20);
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the data size
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -103,8 +99,7 @@ Ptr<ErrorModel>
 TcpRecoveryReentryTest::CreateReceiverErrorModel()
 {
     Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
-    // The second segment, the last one of the initial window, and one sent
-    // in the fast recovery
+    // The second segment, the last of the initial window, and one sent in the fast recovery
     errorModel->AddSeqToKill(SequenceNumber32(501));
     errorModel->AddSeqToKill(SequenceNumber32(9501));
     errorModel->AddSeqToKill(SequenceNumber32(13001));

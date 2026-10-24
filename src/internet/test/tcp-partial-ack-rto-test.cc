@@ -28,21 +28,14 @@ NS_LOG_COMPONENT_DEFINE("TcpPartialAckRtoTestSuite");
 /**
  * @ingroup internet-test
  *
- * @brief Test the RTO reset behavior on partial ACKs (see @issueid{78})
+ * @brief Check that every partial ACK in fast recovery restarts the RTO timer (see @issueid{78}).
  *
- * @RFC{6298} (Section 5.3) calls for restarting the retransmission timer on
- * every ACK acknowledging new data, including the partial ACKs received
- * during fast recovery: this is the Slow-but-Steady variant of NewReno
- * (@RFC{3782}, Section 4; @RFC{6582} dropped the discussion of the variants,
- * see its Appendix B), which departs from the Impatient variant of
- * @RFC{6582}, Section 3.2, step 3, resetting the timer only upon the first
- * partial acknowledgment of a fast recovery. @RFC{6298}, Section 5.3, and
- * @RFC{6675}, Section 6, permit it.
- *
- * The test drops several segments of the same window, so that (with SACK
- * disabled) the fast recovery phase spans multiple partial ACKs and lasts
- * longer than the RTO. Since every partial ACK must reset the retransmission
- * timer, the timer must not expire during the recovery.
+ * @RFC{6298}, Section 5.3, restarts the timer on every ACK of new data: the
+ * Slow-but-Steady NewReno variant (@RFC{3782}, Section 4; see @RFC{6582},
+ * Appendix B), not the Impatient one of @RFC{6582}, Section 3.2, step 3;
+ * @RFC{6675}, Section 6, permits it. Without SACK, five drops in one window
+ * make the recovery span several partial ACKs and last longer than the RTO.
+ * Expected: no RTO expiration.
  */
 class TcpPartialAckRtoTest : public TcpGeneralTest
 {
@@ -84,8 +77,7 @@ void
 TcpPartialAckRtoTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -94,10 +86,8 @@ TcpPartialAckRtoTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    // NewReno-style recovery with multiple partial ACKs
     socket->SetAttribute("Sack", BooleanValue(false));
-    // Make the RTO shorter than the duration of the fast recovery phase
-    // (5 lost segments, recovered at a rate of one per RTT of ~200 ms)
+    // Shorter than the recovery: 5 losses, one recovered per ~200 ms RTT
     socket->SetAttribute("MinRto", TimeValue(MilliSeconds(500)));
     return socket;
 }
@@ -106,10 +96,8 @@ Ptr<ErrorModel>
 TcpPartialAckRtoTest::CreateReceiverErrorModel()
 {
     Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
-    // Drop five alternating segments of a window in the middle of the
-    // transfer, when the congestion window is large enough for the drops to
-    // be detected via duplicate ACKs (segment size is 500 bytes and the first
-    // byte has sequence number 1)
+    // Every other 500 byte segment of one window, late enough for cwnd to
+    // produce duplicate ACKs (first byte at sequence number 1)
     for (uint32_t seq : {10001, 11001, 12001, 13001, 14001})
     {
         errorModel->AddSeqToKill(SequenceNumber32(seq));
@@ -152,21 +140,13 @@ TcpPartialAckRtoTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Test the RTO reset behavior on partial ACKs after a timeout
+ * @brief Check that partial ACKs in CA_LOSS restart the RTO timer after every timeout.
  *
- * @RFC{6298} (Section 5.3) restarts the retransmission timer on every ACK
- * acknowledging new data, after a retransmission timeout as much as during
- * a fast recovery, and after every timeout, not only the first one of the
- * connection.
- *
- * The test drops several segments of a window, and their retransmissions,
- * in the order they travel, so that the recovery goes through the
- * retransmission timer several times and a partial ACK is received in the
- * CA_LOSS state after the later timeouts too. Were the partial ACKs after a
- * timeout not to reset the timer, the one following the last timeout would
- * leave the exponentially backed off timer running from the retransmission
- * instead of restarting it, and the last loss would take the doubled
- * timeout, rather than a fresh one, to recover.
+ * @RFC{6298}, Section 5.3, restarts the timer on every ACK of new data,
+ * including in CA_LOSS and after any timeout. Segments and their
+ * retransmissions are dropped so that recovery takes several timeouts, each
+ * followed by a partial ACK. Expected: the last timeout fires after a fresh
+ * RTO, sooner than the backed off timeout running before that partial ACK.
  */
 class TcpLossPartialAckRtoTest : public TcpGeneralTest
 {
@@ -205,8 +185,7 @@ void
 TcpLossPartialAckRtoTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -224,10 +203,8 @@ Ptr<ErrorModel>
 TcpLossPartialAckRtoTest::CreateReceiverErrorModel()
 {
     Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
-    // Drop three segments of a window and their first retransmissions, so
-    // that the recovery of each one has to go through the retransmission
-    // timer, and the acknowledgment which follows it is a partial ACK
-    // received in the CA_LOSS state
+    // Three segments and their retransmissions: each is recovered by a
+    // timeout, followed by a partial ACK in CA_LOSS
     for (uint32_t seq : {10001, 11001, 12001, 10001, 11001, 11001, 12001})
     {
         errorModel->AddSeqToKill(SequenceNumber32(seq));
@@ -248,12 +225,11 @@ TcpLossPartialAckRtoTest::AfterRTOExpired(const Ptr<const TcpSocketState> tcb, S
 void
 TcpLossPartialAckRtoTest::FinalChecks()
 {
-    // One timeout per dropped transmission which nothing else can recover
+    // One timeout per drop that only the timer can recover
     NS_TEST_ASSERT_MSG_EQ(m_rtoTimes.size(), 4, "Unexpected number of retransmission timeouts");
 
-    // The partial ACK following the third timeout restarts the timer with a
-    // fresh RTO: the last timeout comes sooner than the doubled backed off
-    // timeout which was running when that partial ACK arrived
+    // The partial ACK after the third timeout restarts the timer with a fresh
+    // RTO, shorter than the backed off one running when it arrived
     Time backedOff = m_rtoTimes[2] - m_rtoTimes[1];
     NS_TEST_ASSERT_MSG_LT(m_rtoTimes[3] - m_rtoTimes[2],
                           backedOff,
@@ -266,21 +242,13 @@ TcpLossPartialAckRtoTest::FinalChecks()
  *
  * @brief Check that the ACK which ends the CA_LOSS state grows the window, within bounds.
  *
- * A segment and its fast retransmission are dropped, so that the segment is
- * recovered by the retransmission timer. The receiver holds every segment
- * sent after it, and the acknowledgment of the retransmission covers all of
- * them at once, landing on the recovery point. That acknowledgment is the
- * first one of the slow start which follows the timeout, and it must grow
- * the congestion window from the one segment of the loss window
- * (RFC 5681, Section 3.1): otherwise the sender keeps sending one segment
- * per round trip time until the next acknowledgment.
- *
- * The growth is bounded as in Linux: the window grows by the segments newly
- * delivered only, not by those SACKed before the timeout, and the slow start
- * stops at the slow start threshold, the rest of the segments going to the
- * congestion avoidance. A congestion control whose slow start grows the
- * window by every segment acknowledged, as TcpCubic, would otherwise burst
- * a whole window at once.
+ * A segment and its fast retransmission are dropped, so a timeout recovers
+ * it and its ACK covers everything up to the recovery point. That first
+ * slow start ACK must grow cwnd beyond the one segment loss window
+ * (RFC 5681, Section 3.1). As in Linux, growth is bounded by the newly
+ * delivered segments (not those SACKed before the timeout) and slow start
+ * stops at ssthresh, the rest going to congestion avoidance, so TcpCubic
+ * does not burst a whole window.
  */
 class TcpLossExitCwndTest : public TcpGeneralTest
 {
@@ -337,8 +305,7 @@ void
 TcpLossExitCwndTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -386,8 +353,7 @@ TcpLossExitCwndTest::CongStateTrace(const TcpSocketState::TcpCongState_t oldValu
     if (oldValue == TcpSocketState::CA_LOSS && newValue == TcpSocketState::CA_OPEN)
     {
         m_lossExits++;
-        // The congestion control runs after the state change, within the
-        // processing of the same ACK
+        // The congestion control runs after this trace, for the same ACK
         Ptr<const TcpSocketState> tcb = GetTcb(SENDER);
         m_cWndBefore = tcb->m_cWnd.Get();
         m_ssThreshBefore = tcb->m_ssThresh.Get();
@@ -410,8 +376,8 @@ TcpLossExitCwndTest::CheckCwnd()
     NS_TEST_ASSERT_MSG_LT_OR_EQ(cWnd,
                                 m_cWndBefore + deliveredSegments * segmentSize,
                                 "The window grew by more than the newly delivered segments");
-    // The slow start stops at the threshold, rounded up to a segment, and the
-    // congestion avoidance adds one segment at most
+    // Slow start stops at ssthresh (rounded up to a segment), congestion
+    // avoidance adds at most one segment
     NS_TEST_ASSERT_MSG_LT_OR_EQ(cWnd,
                                 std::max(m_ssThreshBefore, m_cWndBefore) + 2 * segmentSize,
                                 "The window grew past the slow start threshold");
@@ -429,15 +395,12 @@ TcpLossExitCwndTest::FinalChecks()
  *
  * @brief Check the transition from fast recovery to CA_LOSS on a timeout.
  *
- * Without SACK, a segment and its fast retransmission are dropped: nothing
- * reveals the loss of the retransmission, and the retransmission timer
- * expires during the fast recovery. The timeout must terminate the recovery
- * (@RFC{6675}, Section 5.1; @RFC{6582}, Section 3.2, step 4): the sender
- * moves from CA_RECOVERY to CA_LOSS, the congestion window is set to the
- * loss window of one segment (@RFC{5681}, Section 3.1), the slow start
- * threshold is kept at two segments at least, the duplicate ACK guesses are
- * dropped and only the first unacknowledged segment is retransmitted. The
- * sender then goes back to CA_OPEN, without entering fast recovery again.
+ * Without SACK, a segment and its fast retransmission are dropped, so the
+ * timer expires in fast recovery. Expected (@RFC{6675}, Section 5.1;
+ * @RFC{6582}, Section 3.2, step 4; @RFC{5681}, Section 3.1): CA_RECOVERY ->
+ * CA_LOSS, cwnd of one segment, ssthresh >= 2 segments, duplicate ACK
+ * guesses cleared, only the first unacknowledged segment retransmitted, then
+ * CA_OPEN without a new fast recovery.
  */
 class TcpRecoveryRtoTest : public TcpGeneralTest
 {
@@ -486,8 +449,7 @@ void
 TcpRecoveryRtoTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 

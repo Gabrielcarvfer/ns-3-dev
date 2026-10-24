@@ -237,9 +237,9 @@ TcpBbrLinuxArithmeticTest::DoRun()
  *
  * As Linux (bbr_reset_probe_bw_mode()), the phase is drawn among the seven
  * phases of the pacing gain cycle but the draining one (gain 3/4), all of
- * which are drawn over many draws, or are the ones ProbeBwStartPhases sets
- * in turn. The
- * phase is found from the number of phases until the gain of 5/4.
+ * each of which appears over many draws or when set in turn through
+ * ProbeBwStartPhases. The phase is derived from the number of phases until
+ * the gain of 5/4.
  */
 class TcpBbrProbeBwStartPhaseTest : public TestCase
 {

@@ -233,13 +233,11 @@ PrrRecoveryArithmeticTest::DoRun()
  *
  * @brief Check the SegmentQuota attribute of TcpPrrRecovery
  *
- * With 1000-byte segments, ssThresh 12000 and RecoverFS 26000, the third
- * duplicate ACK of the recovery (the first one counted by EnterRecovery)
- * brings prrDelivered to 3000 bytes, and the proportional quota to
- * CEIL(3000 * 12000 / 26000) = 1385 bytes, of which 1000 were sent (the fast
- * retransmission). Counted in bytes (RFC 9937), the 385 bytes left are less
- * than a segment; rounded up to whole segments, as Linux counts PRR in
- * packets, the quota is 2000 bytes and allows one more segment.
+ * 1000-byte segments, ssThresh 12000, RecoverFS 26000: at recovery entry
+ * prrDelivered is 3000 and the quota CEIL(3000 * 12000 / 26000) = 1385 bytes,
+ * 1000 of them used by the fast retransmission. In bytes (RFC 9937) the 385
+ * left allow no segment; in whole segments, as Linux counts PRR, the quota is
+ * 2000 and allows one more.
  */
 class PrrSegmentQuotaTest : public TestCase
 {
@@ -291,15 +289,13 @@ PrrSegmentQuotaTest::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Test the LinuxRenoDelivered attribute of TcpPrrRecovery
+ * @brief Check the LinuxRenoDelivered attribute of TcpPrrRecovery
  *
- * A recovery without SACK, with 1000-byte segments, a RecoverFS of 4000
- * bytes, 2000 bytes in flight and a slow start threshold of 12000 bytes, so
- * that PRR-CRB applies: the duplicate ACKs each deliver a segment. By
- * default, the delivered data stop growing at RecoverFS (RFC 9937, Section
- * 6.2), after the fourth duplicate ACK, and the quota after the sixth is
- * 3000 bytes. As Linux (tcp_add_reno_sack()), each duplicate ACK taken as a
- * SACK delivers a segment, and the quota is 5000 bytes.
+ * Non-SACK recovery in PRR-CRB (1000-byte segments, RecoverFS 4000, 2000 in
+ * flight, ssThresh 12000), each duplicate ACK delivering a segment. By
+ * default delivered data are capped at RecoverFS (RFC 9937, Section 6.2) and
+ * the quota after six duplicate ACKs is 3000 bytes; with the attribute, as
+ * Linux tcp_add_reno_sack(), it is 5000 bytes.
  */
 class PrrLinuxRenoDeliveredTest : public TestCase
 {
@@ -352,15 +348,14 @@ PrrLinuxRenoDeliveredTest::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Test the PriorCwndRecoverFs attribute of TcpPrrRecovery
+ * @brief Check the PriorCwndRecoverFs attribute of TcpPrrRecovery
  *
- * A congestion control has cut cWnd to one segment, below the 149 segments in
- * flight, when the recovery starts, with a slow start threshold of two
- * segments. On the first duplicate ACK (without SACK, one segment delivered),
- * RecoverFS is the flight size by default (RFC 9937): the proportional quota,
- * CEIL(1000 * 2000 / 149000) = 14 bytes, gives way to the fast retransmission
- * of one segment. With the attribute set, RecoverFS is the window before the
- * recovery (one segment, as prior_cwnd of Linux): the quota is 2000 bytes.
+ * Recovery starts with cWnd one segment, 149 segments in flight and ssThresh
+ * two segments; the first duplicate ACK delivers one segment. By default
+ * RecoverFS is the flight size (RFC 9937) and the quota,
+ * CEIL(1000 * 2000 / 149000) = 14 bytes, only covers the fast retransmission.
+ * With the attribute RecoverFS is the prior window (Linux prior_cwnd), one
+ * segment, and the quota is 2000 bytes.
  */
 class PrrPriorCwndTest : public TestCase
 {
@@ -408,7 +403,7 @@ PrrPriorCwndTest::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief A congestion control which cuts the window to one segment on every
+ * @brief Congestion control that cuts the window to one segment on every
  * ACK of a fast recovery, as TCP-LP may do
  */
 class TcpRecoveryCutter : public TcpNewReno
@@ -446,13 +441,12 @@ NS_OBJECT_ENSURE_REGISTERED(TcpRecoveryCutter);
 /**
  * @ingroup internet-test
  *
- * @brief The window that PRR sets on an ACK of a fast recovery is the final one
+ * @brief Check that the PRR window set on a fast recovery ACK is final
  *
- * The congestion control is told of an ACK before the recovery sets the
- * window (as Linux calls pkts_acked() before tcp_cwnd_reduction()): a window
- * that the congestion control cuts on the ACK does not override the one PRR
- * computes, cWnd = pipe + sndcnt (RFC 9937), which stays above the segments in
- * flight during the recovery.
+ * The congestion control sees the ACK before PRR sets the window (Linux calls
+ * pkts_acked() before tcp_cwnd_reduction()), so a cut by the congestion
+ * control does not override cWnd = pipe + sndcnt (RFC 9937), which stays
+ * above the bytes in flight during the recovery.
  */
 class PrrCongestionControlCutTest : public TcpGeneralTest
 {

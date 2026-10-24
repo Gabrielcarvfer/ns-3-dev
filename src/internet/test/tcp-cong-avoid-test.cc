@@ -173,10 +173,9 @@ TcpNewRenoCongAvoidNormalTest::NormalClose(SocketWho who)
  *
  * @brief Check that a forked TcpNewReno keeps its multiplicative decrease.
  *
- * The sockets accepted by a listener get their congestion control through
- * Fork(), i.e. the copy constructor. The decrease factors must survive the
- * copy, or an accepted socket would cut its slow start threshold to two
- * segments on any loss.
+ * Accepted sockets get their congestion control through Fork() (the copy
+ * constructor); the decrease factors must be copied, otherwise an accepted
+ * socket cuts ssthresh to two segments on any loss.
  */
 class TcpNewRenoForkBetaTest : public TestCase
 {

@@ -260,16 +260,13 @@ class TcpGeneralTest : public TestCase
      * @brief Select the initial sequence numbers of both sockets from the
      * clock (attribute ns3::TcpL4Protocol::ClockDrivenIsn)
      *
-     * By default the attribute is left untouched, so the initial sequence
-     * numbers are 0 unless the attribute default says otherwise. A test which
-     * expresses its sequence numbers relative to the initial ones (see
-     * GetIsn and ToRelativeSeq) can be run in both ways.
+     * If not called, the attribute default applies. Tests that use GetIsn and
+     * ToRelativeSeq can run either way.
      *
-     * With a stream, the secrets the initial sequence numbers are derived from
-     * are drawn from streams stream (sender) and stream + 1 (receiver) of the
-     * first run, so that the initial sequence numbers do not depend on the
-     * run number nor on the random variables created before: a test can then
-     * pick the stream which places them where it needs.
+     * With a stream, the ISN secrets are drawn from streams stream (sender)
+     * and stream + 1 (receiver) of run 1, making the ISNs independent of the
+     * run number and of other random variables, so a test can choose where
+     * they fall.
      *
      * @param clockDrivenIsn true to enable the clock driven initial sequence
      *                       numbers, false to start them from 0
@@ -283,10 +280,9 @@ class TcpGeneralTest : public TestCase
     }
 
     /**
-     * Stream to pass to SetClockDrivenIsn to place the initial sequence number
-     * of the sender in the upper half of the sequence space, where the wrap
-     * aware comparisons with a sequence number left at 0 do not hold. It is
-     * checked at the end of the test case.
+     * Stream for SetClockDrivenIsn that places the sender ISN in the upper half
+     * of the sequence space, where wrap aware comparisons against 0 fail.
+     * Checked at the end of the test case.
      */
     static constexpr int64_t UPPER_HALF_ISN_STREAM = 1;
 
@@ -469,10 +465,9 @@ class TcpGeneralTest : public TestCase
      * @brief Express a sequence number of the stream sent by a node relative
      * to the initial sequence number of that node
      *
-     * The result is the sequence number the stream would carry with an
-     * initial sequence number of 0: the first octet of data is numbered 1.
-     * Use it on the sequence numbers sent by the node, and on the
-     * acknowledgment numbers sent by its peer.
+     * The result is the sequence number with an ISN of 0 (first data octet
+     * is 1). Apply it to sequence numbers sent by the node and acknowledgment
+     * numbers sent by its peer.
      *
      * @param who node which sends the stream
      * @param seq absolute sequence number

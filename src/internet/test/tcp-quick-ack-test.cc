@@ -437,16 +437,14 @@ class TcpQuickAckPushTest : public TcpQuickAckTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test the SACK compression of the receiver
+ * @brief Check the SACK compression of the receiver.
  *
- * The receiver loses the 10th of a burst of segments, which arrive 100 us
- * apart, so that the 90 that follow are out of order until the
- * retransmission comes, one RTT later. Without the SackCompression attribute,
- * each of them is acknowledged at once (RFC 5681, Section 4.2). With it, the
- * first three are, and the ACKs of the following ones wait 1.1 ms
- * (SackCompressionDelay, as 5% of the RTT of 1 s is longer, plus the
- * SackCompressionSlack of 100 us, at the end of which the range timer of
- * Linux expires), so that one ACK covers about 11 segments.
+ * The 10th of a burst of segments 100 us apart is lost, so the next 90 are
+ * out of order for one RTT. Without SackCompression each is acknowledged at
+ * once (RFC 5681, Section 4.2). With it, the first three are, then ACKs wait
+ * 1.1 ms (SackCompressionDelay, shorter than 5% of the 1 s RTT, plus the
+ * 100 us SackCompressionSlack of the Linux range timer), so one ACK covers
+ * about 11 segments.
  */
 class TcpSackCompressionTest : public TcpGeneralTest
 {
@@ -698,17 +696,14 @@ class TcpSackCompressionFlushTest : public TcpGeneralTest
 /**
  * @ingroup internet-test
  *
- * @brief Test the ACKs of out-of-order data after a gap partly filled
+ * @brief Check the ACKs of out-of-order data after a gap is partly filled.
  *
- * With the SackCompression and LinuxRcvWindow attributes, the receiver loses
- * the 10th and 20th segments of a stream of 1448-byte segments, and the
- * first retransmission of the 20th. The retransmission of the 10th fills the
- * first gap only, and,
- * as the data it delivers shrinks the window, Linux acknowledges it through
- * SACK compression (__tcp_ack_snd_check()): as the first ACK of out-of-order
- * data at the new RCV.NXT, sent at once. Only two of the out-of-order
- * segments that follow are then acknowledged at once, and the ACK of the
- * next one is held back.
+ * With SackCompression and LinuxRcvWindow, the receiver loses the 10th and
+ * 20th 1448-byte segments and the first retransmission of the 20th. The
+ * retransmission of the 10th fills only the first gap; as in Linux
+ * (__tcp_ack_snd_check()) it is acknowledged at once as the first
+ * out-of-order ACK at the new RCV.NXT. Expected: the next two out-of-order
+ * segments are acknowledged at once and the ACK of the following one is held.
  */
 class TcpSackCompressionGapFillTest : public TcpGeneralTest
 {
@@ -763,8 +758,7 @@ class TcpSackCompressionGapFillTest : public TcpGeneralTest
     {
         Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
         errorModel->AddSeqToKill(SequenceNumber32(GAP1));
-        // The first retransmission of the 20th is lost as well, so that the
-        // second gap lasts
+        // Also drop the first retransmission of the 20th so the second gap persists
         errorModel->AddSeqToKill(SequenceNumber32(GAP2));
         errorModel->AddSeqToKill(SequenceNumber32(GAP2));
         return errorModel;
@@ -822,15 +816,14 @@ class TcpSackCompressionGapFillTest : public TcpGeneralTest
 /**
  * @ingroup internet-test
  *
- * @brief Test the delayed ACK timer left running with SACK compression
+ * @brief Check that the delayed ACK timer stays armed with SACK compression.
  *
- * Segments arrive 300 us apart, and the 10th is lost. The 8th, in sequence,
- * waits for the delayed ACK timer (DelAckTimeout of 20 ms), and the ACK of
- * the 9th acknowledges it. As Linux, which leaves the timer running once the
- * ACK is sent (inet_csk_clear_xmit_timer()), the timer still expires 20 ms
- * after the 8th arrived, and then sends the ACK that SACK
- * compression holds back (tcp_delack_timer_handler()), before the 50 ms of
- * the compression (5% of the RTT of 1 s) elapse.
+ * Segments arrive 300 us apart and the 10th is lost. The 8th waits for the
+ * delayed ACK timer (DelAckTimeout 20 ms) and is acknowledged by the ACK of
+ * the 9th. As Linux leaves the timer running after an ACK
+ * (inet_csk_clear_xmit_timer()), it expires 20 ms after the 8th arrived and
+ * sends the ACK held by SACK compression (tcp_delack_timer_handler()),
+ * before the 50 ms compression delay (5% of the 1 s RTT) elapses.
  */
 class TcpSackCompressionDelAckTimerTest : public TcpGeneralTest
 {
@@ -1264,14 +1257,12 @@ class TcpListenerNoShutdown : public TcpSocketMsgBase
 /**
  * @ingroup internet-test
  *
- * @brief Test the ACK of the FIN of the peer, which the application does not answer
+ * @brief Check the ACK of a peer FIN that the application does not answer.
  *
- * Without the AdaptiveDelAck attribute, the FIN is acknowledged at once.
- * With it, as Linux (tcp_fin()), the interactive mode starts and the FIN,
- * which arrives with all the data acknowledged, is acknowledged on the
- * delayed ACK timer, 40 ms after it, or, with a
- * RtoTimerGranularity of 10 ms, on the fifth tick after the one it arrived
- * in.
+ * Without AdaptiveDelAck the FIN is acknowledged at once. With it, as
+ * tcp_fin() in Linux, the interactive mode starts and the FIN (all data
+ * already acknowledged) is acknowledged by the delayed ACK timer 40 ms later,
+ * or, with a 10 ms RtoTimerGranularity, on the fifth tick after its arrival tick.
  */
 class TcpFinDelayedAckTest : public TcpGeneralTest
 {

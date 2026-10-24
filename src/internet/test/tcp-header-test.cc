@@ -466,9 +466,8 @@ class TcpHeaderMalformedOptionsTestCase : public TestCase
                               false,
                               "A well-formed header was flagged as malformed");
 
-        // The bytes after the End of Option List option are ignored by the
-        // receiver whatever their content: zeroing them is a requirement of
-        // the sender (MUST-69)
+        // Bytes after End of Option List are ignored whatever their content;
+        // zeroing them is a sender requirement (MUST-69)
         NS_TEST_ASSERT_MSG_EQ(Deserialize({0x01, 0x00, 0x00, 0x42}).IsMalformed(),
                               false,
                               "Non-zero padding after the End of Option List was rejected");

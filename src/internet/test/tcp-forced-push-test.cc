@@ -32,10 +32,9 @@ NS_LOG_COMPONENT_DEFINE("TcpForcedPushTest");
  *
  * @brief Test the PSH flags set by the ForcedPush attribute
  *
- * The application of the sender writes the given chunks at once, with a
- * segment size of 500 bytes and a receive buffer of the given size. The
- * test records the end, relative to the first data byte, of every data
- * segment carrying PSH, and compares them with the expected ones.
+ * The sender writes the given chunks at once with 500-byte segments; the
+ * test compares the end offsets of the segments carrying PSH with the
+ * expected ones.
  */
 class TcpForcedPushTestCase : public TestCase
 {
@@ -195,10 +194,10 @@ class TcpForcedPushTestSuite : public TestSuite
     TcpForcedPushTestSuite()
         : TestSuite("tcp-forced-push", Type::UNIT)
     {
-        // Three writes of 1200 bytes at once: PSH on the last segment only,
-        // or, as Linux, on the last segment of each GSO packet, two segments
-        // at this rate, and not at the end of the first two writes, whose skb
-        // the next write appends to before it is sent
+        // Three 1200-byte writes: PSH on the last segment only, or, as Linux,
+        // on the last segment of each two-segment GSO packet. The ends of the
+        // first two writes get no PSH because the next write appends to their
+        // skb before it is sent
         AddTestCase(new TcpForcedPushTestCase("PSH on the last segment of the buffer",
                                               false,
                                               65535,
@@ -211,12 +210,10 @@ class TcpForcedPushTestSuite : public TestSuite
                                               {1200, 1200, 1200},
                                               {1000, 2000, 3000, 3600}),
                     TestCase::Duration::QUICK);
-        // One write of 5000 bytes into a window of 2000 bytes: as Linux, PSH
-        // on the end of the skbs (of half the window, 1000 bytes) filled more
-        // than half the window past the last PSH (2000, and the skb ending at
-        // 4000, which takes 500 bytes of the next skb when its first segment
-        // is sent alone, tcp_grow_skb(), so 4500), besides the GSO packets
-        // (1000 and 3500)
+        // One 5000-byte write into a 2000-byte window: as Linux, PSH ends the
+        // 1000-byte skbs more than half a window past the last PSH (2000, and
+        // 4500: the skb ending at 4000 takes 500 bytes of the next one via
+        // tcp_grow_skb()), plus the GSO packet ends (1000 and 3500)
         AddTestCase(new TcpForcedPushTestCase("No PSH within a write", false, 2000, {5000}, {5000}),
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpForcedPushTestCase("PSH every half window",

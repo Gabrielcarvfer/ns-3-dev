@@ -557,11 +557,10 @@ TcpEcnTest::CreateSenderSocket(Ptr<Node> node)
 /**
  * @ingroup internet-test
  *
- * @brief The ECN test with clock driven initial sequence numbers
+ * @brief Run the ECN test with clock driven initial sequence numbers
  *
- * The sequence numbers the ECN marks and echoes are tracked with are compared
- * in the wrap aware arithmetic, and must work wherever the initial sequence
- * numbers lie in the space (@RFC{9293}, Section 3.4.1).
+ * ECN tracking compares sequence numbers with wrap aware arithmetic, so it
+ * must work for any initial sequence number (@RFC{9293}, Section 3.4.1).
  */
 class TcpEcnClockDrivenIsnTest : public TcpEcnTest
 {
@@ -594,12 +593,11 @@ class TcpEcnClockDrivenIsnTest : public TcpEcnTest
 /**
  * @ingroup internet-test
  *
- * @brief Checks that a fast retransmission is signaled with CWR
+ * @brief Check that a fast retransmission is signaled with CWR
  *
- * RFC 3168, Section 6.1.2: an ECN-capable sender which reduces its window for
- * any reason, here a fast retransmission after the loss of a segment, sets
- * CWR on the first new data segment sent after the reduction (as Linux
- * tcp_ecn_queue_cwr()). Without ECN, no segment carries CWR.
+ * RFC 3168, Section 6.1.2: an ECN-capable sender that reduces its window for
+ * any reason sets CWR on the first new data segment after the reduction (as
+ * Linux tcp_ecn_queue_cwr()). Without ECN, no segment carries CWR.
  */
 class TcpEcnCwrAfterLossTest : public TcpGeneralTest
 {

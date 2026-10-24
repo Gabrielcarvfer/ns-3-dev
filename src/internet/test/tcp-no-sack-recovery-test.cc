@@ -29,18 +29,11 @@ NS_LOG_COMPONENT_DEFINE("TcpNoSackRecoveryTestSuite");
  *
  * @brief Check the rate reduction of a fast recovery without SACK.
  *
- * A segment is dropped in a large window, with SACK disabled, so that a long
- * train of duplicate ACKs follows. With Proportional Rate Reduction
- * (@RFC{9937}), each duplicate ACK delivers one segment (Section 6.2), and the
- * sender transmits about ssThresh/RecoverFS, here one half, new segment per
- * duplicate ACK while the flight is above ssThresh: the bytes in flight on
- * which the window is sized must account for the segment that the duplicate
- * ACK reports as delivered, otherwise one segment per duplicate ACK is sent.
- *
- * The ACK which ends the recovery covers the retransmission and the segments
- * already reported by the duplicate ACKs: it delivers the retransmitted
- * segments not reported by a duplicate ACK only (@RFC{9937}, Section 6.2: the
- * change in SND.UNA minus one SMSS per preceding duplicate ACK).
+ * One segment is dropped in a large window without SACK. With PRR
+ * (@RFC{9937}, Section 6.2) each duplicate ACK delivers one segment, so the
+ * sender sends about ssThresh/RecoverFS (one half) new segment per duplicate
+ * ACK, not one. The ACK ending the recovery delivers only the change in
+ * SND.UNA minus one SMSS per preceding duplicate ACK.
  */
 class TcpNoSackPrrTest : public TcpGeneralTest
 {
@@ -91,8 +84,7 @@ TcpNoSackPrrTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
     SetInitialCwnd(SENDER, 40);
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -173,8 +165,7 @@ TcpNoSackPrrTest::FinalChecks()
     NS_TEST_ASSERT_MSG_GT(m_dupAcksInRecovery, 20, "Too few duplicate ACKs for the test");
     NS_LOG_DEBUG("New segments " << m_newSegsInRecovery << " for " << m_dupAcksInRecovery
                                  << " duplicate ACKs in fast recovery");
-    // About one new segment per two duplicate ACKs, rather than one per
-    // duplicate ACK
+    // About one new segment per two duplicate ACKs
     NS_TEST_ASSERT_MSG_LT_OR_EQ(4 * m_newSegsInRecovery,
                                 3 * m_dupAcksInRecovery,
                                 "The sender did not reduce its rate during the fast recovery");
@@ -183,8 +174,7 @@ TcpNoSackPrrTest::FinalChecks()
                                 "The sender stalled during the fast recovery");
     uint32_t segmentSize = GetTcb(SENDER)->m_segmentSize;
     NS_TEST_ASSERT_MSG_GT(m_deliveredAtExit, 0, "The ACK ending the recovery delivered nothing");
-    // The retransmission, plus the segment whose ACK, delayed at the
-    // receiver, was not a duplicate one
+    // The retransmission, plus one segment whose delayed ACK was not a duplicate
     NS_TEST_ASSERT_MSG_LT_OR_EQ(m_deliveredAtExit,
                                 2 * segmentSize,
                                 "The ACK ending the recovery credited again the segments "
@@ -196,14 +186,12 @@ TcpNoSackPrrTest::FinalChecks()
  *
  * @brief Check the NonSackUndo attribute of TcpSocketBase.
  *
- * Without SACK, a segment is dropped (once, so that a fast recovery repairs
- * it, or twice, so that the retransmission timer does). The receiver holds
- * every segment sent after the lost one, and the ACK of the retransmission
- * reaches the recovery point exactly. With NonSackUndo, as Linux, the
- * recovery is held at that ACK, and the next ACK, above the recovery point,
- * ends it and restores the window and the slow start threshold of before the
- * loss. Without NonSackUndo, the recovery ends at the ACK of the recovery
- * point with the reduced slow start threshold (@RFC{6582}, @RFC{5681}).
+ * Without SACK, a segment is dropped once (fast recovery) or twice (timeout);
+ * the ACK of the retransmission lands exactly on the recovery point. With
+ * NonSackUndo (Linux behaviour) the recovery is held there and the next ACK
+ * ends it, restoring the pre-loss cwnd and ssthresh. Without it, the
+ * recovery ends at the recovery point with the reduced ssthresh
+ * (@RFC{6582}, @RFC{5681}).
  */
 class TcpNonSackUndoTest : public TcpGeneralTest
 {
@@ -267,8 +255,7 @@ TcpNonSackUndoTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
     SetInitialCwnd(SENDER, 20);
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -374,14 +361,12 @@ TcpNonSackUndoTest::FinalChecks()
  *
  * @brief Check the PartialAckInWindow attribute of TcpSocketBase.
  *
- * Without SACK, five segments, every other one, are dropped, so that the ACKs
- * of the retransmissions are partial ones. The recovery uses PRR as
- * Linux does (SegmentQuota, PriorCwndRecoverFs), which leaves no room in the
- * window at the partial ACK. With PartialAckInWindow, as Linux, the next
- * lost segment is retransmitted only once the window allows it: no
- * retransmission of the recovery takes the bytes in flight above the
- * congestion window. Without it, the segment is retransmitted at once, at
- * the partial ACK (@RFC{6582}, Section 3.2, step 3), above the window.
+ * Without SACK, every other segment of five is dropped, so retransmissions
+ * get partial ACKs. Linux-like PRR (SegmentQuota, PriorCwndRecoverFs) leaves
+ * no window room at a partial ACK. With PartialAckInWindow (Linux behaviour)
+ * no retransmission takes the flight above cwnd; without it the next loss is
+ * retransmitted at the partial ACK (@RFC{6582}, Section 3.2, step 3), above
+ * the window.
  */
 class TcpPartialAckInWindowTest : public TcpGeneralTest
 {
@@ -429,8 +414,7 @@ TcpPartialAckInWindowTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
     SetInitialCwnd(SENDER, 20);
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -487,7 +471,7 @@ TcpPartialAckInWindowTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, Soc
         return;
     }
     m_retransmissions++;
-    // The flight, the retransmitted segment included
+    // Includes the segment being retransmitted
     uint32_t inFlight = GetSenderSocket()->GetTxBuffer()->BytesInFlight();
     NS_LOG_DEBUG("Retransmission of " << seq << " with " << inFlight << " bytes in flight, cWnd "
                                       << tcb->m_cWnd);

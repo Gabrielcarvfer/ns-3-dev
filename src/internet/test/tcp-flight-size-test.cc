@@ -22,20 +22,17 @@ NS_LOG_COMPONENT_DEFINE("TcpFlightSizeTestSuite");
 /**
  * @ingroup internet-test
  *
- * @brief Test that the slow start threshold on entering fast recovery is
- * half the FlightSize of RFC 5681, bounded by the congestion window
+ * @brief Check that ssthresh on entering fast recovery is half the RFC 5681
+ * FlightSize, bounded by cwnd, and that PRR starts from the matching pipe
  *
- * RFC 6675, Section 5, step (4.2), sets ssthresh to FlightSize / 2, the
- * FlightSize being the data sent and not cumulatively acknowledged (RFC 5681,
- * Section 2), which includes the segments SACKed or deemed lost. The pipe of
- * RFC 6675 excludes them, and gives a lower threshold. The FlightSize is
- * bounded by cwnd, which it exceeds once new segments were sent on the
- * duplicate ACKs.
+ * RFC 6675, Section 5, step (4.2): ssthresh = FlightSize / 2, where FlightSize
+ * is the data sent and not cumulatively acknowledged (RFC 5681, Section 2),
+ * SACKed and lost segments included; the RFC 6675 pipe excludes them. The
+ * FlightSize is capped at cwnd, which it exceeds once segments were sent on
+ * the duplicate ACKs.
  *
- * The recovery (PRR) then sizes the window from the data in flight (the
- * pipe), which must be the one of the ACK that starts the recovery: the
- * FlightSize less the three segments SACKed (or guessed as such from the
- * duplicate ACKs) and the head deemed lost.
+ * The pipe PRR uses on the first recovery ACK must be the FlightSize minus the
+ * three SACKed (or dupack-inferred) segments and the lost head.
  */
 class TcpFlightSizeTest : public TcpGeneralTest
 {

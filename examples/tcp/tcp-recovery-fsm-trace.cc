@@ -40,8 +40,7 @@
 
 using namespace ns3;
 
-// Deep-dive tracer: logs TCP signals (ACKs, dupacks, SACK blocks, RTO) and the
-// congestion state machine transitions they trigger, plus every (re)transmission.
+// Trace callbacks of the sender socket
 
 std::multiset<uint32_t> g_seqsToDropMulti; //!< Data sequence numbers to drop
 std::set<uint32_t> g_seqsSent;             //!< Data sequence numbers transmitted so far

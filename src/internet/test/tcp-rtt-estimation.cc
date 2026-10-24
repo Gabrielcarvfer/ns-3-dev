@@ -301,18 +301,14 @@ TcpRttSampleRecorder::Fork()
  *
  * @brief Check that the congestion control is given the RTT samples.
  *
- * The first data segment is acknowledged by the delayed ACK timer, so that
- * its RTT sample is far from the RTT measured in the handshake, and the
- * smoothed RTT differs from the samples for the rest of the connection.
- * Each call of PktsAcked() must carry the sample of the ACK being processed,
- * as the delay based congestion controls (e.g., Vegas, Veno, Illinois, YeAH,
- * and the HyStart of CUBIC) track the minimum and the variation of the RTT
- * samples.
+ * Each PktsAcked() call must carry the RTT sample of the ACK being processed,
+ * which delay-based congestion controls (Vegas, Veno, Illinois, YeAH, CUBIC
+ * HyStart) rely on. The first data segment is ACKed by the delayed ACK timer,
+ * so the smoothed RTT differs from the samples afterwards.
  *
- * The one way delay is not a whole number of milliseconds, so that a sample
- * taken from the echoed timestamp (whose clock ticks every millisecond) is
- * distinguished from one taken from the transmission time of the segment,
- * which must be used when the segment was not retransmitted, as in Linux.
+ * The one-way delay is not a whole number of milliseconds, so a sample from
+ * the echoed timestamp (1 ms clock) is told apart from one from the segment
+ * transmission time, which Linux uses for segments not retransmitted.
  */
 class TcpRttSampleToCongestionControlTest : public TcpGeneralTest
 {

@@ -284,11 +284,9 @@ Ipv4HeaderTest::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Test the serialization of the loose source route option
+ * @brief Check that the loose source route option survives a serialization round trip
  *
- * The option of @RFC{791} is carried beside the fixed header fields, so a
- * header holding one must survive a serialization round trip, and the parser
- * must withstand padding and ill-formed options.
+ * The parser must also handle padding and ill-formed options (@RFC{791}).
  */
 class Ipv4HeaderLsrrTest : public TestCase
 {
@@ -347,8 +345,7 @@ class Ipv4HeaderLsrrTest : public TestCase
                               false,
                               "A route appeared out of nowhere");
 
-        // An option with an illegal length must not be read past the header:
-        // hand craft an option space claiming more than it holds
+        // Option space claiming more than it holds: must not be read past the header
         Buffer malformed;
         malformed.AddAtStart(24);
         Buffer::Iterator it = malformed.Begin();
@@ -400,7 +397,7 @@ BuildRawIpv4Header(const std::vector<uint8_t>& options, int ihl = -1, uint16_t t
     buffer.Begin().Write(bytes.data(), bytes.size());
     uint16_t checksum =
         buffer.Begin().CalculateIpChecksum(std::min<uint32_t>(headerWords * 4, bytes.size()));
-    // The checksum is written in network order by WriteU16 of the complement
+    // WriteU16 of the complement stores the checksum in network order
     Buffer::Iterator it = buffer.Begin();
     it.Next(10);
     it.WriteU16(checksum);
@@ -449,14 +446,12 @@ WriteRawIpv4Header(const Ipv4Header& header)
 /**
  * @ingroup internet-test
  *
- * @brief Test the options the IPv4 header does not model and its robustness
+ * @brief Check that unmodelled options are preserved and inconsistent lengths are flagged
  *
- * A received header holding options other than the loose source route must
- * serialize back to the very bytes it was read from, so that a forwarded
- * datagram or the header an ICMP error quotes carries them unchanged
- * (@RFC{1812}, Section 5.3.13). A header whose length fields do not hold
- * together must be flagged as malformed, without reading beyond the bytes
- * received.
+ * Options other than the loose source route serialize back to the bytes read,
+ * so forwarded datagrams and ICMP error quotes carry them unchanged
+ * (@RFC{1812}, Section 5.3.13). Inconsistent length fields mark the header
+ * malformed without reading past the received bytes.
  */
 class Ipv4HeaderOptionsTest : public TestCase
 {
@@ -505,7 +500,7 @@ class Ipv4HeaderOptionsTest : public TestCase
                               "The options without the copied flag were not removed");
         NS_TEST_ASSERT_MSG_EQ(fragment.HasLooseSourceRoute(), true, "The route was removed");
 
-        // A header with an option only, which the class does not model at all
+        // Only an option the class does not model
         std::vector<uint8_t> timestamp = {68, 8, 5, 0, 0, 0, 0, 0};
         bytes = BuildRawIpv4Header(timestamp);
         Ipv4Header plain;
@@ -515,8 +510,7 @@ class Ipv4HeaderOptionsTest : public TestCase
                               true,
                               "The option did not serialize back unchanged");
 
-        // Bytes following an End of Option List are padding, kept as is but
-        // never parsed: no route appears from them
+        // Bytes after End of Option List are kept as padding but never parsed
         bytes = BuildRawIpv4Header({1, 0, 131, 7, 4, 10, 1, 3, 3, 0, 0, 0});
         Ipv4Header afterEnd;
         ReadRawIpv4Header(bytes, afterEnd);
@@ -548,8 +542,7 @@ class Ipv4HeaderOptionsTest : public TestCase
                               true,
                               "An option without length was accepted");
 
-        // A 20 byte datagram claiming a longer header is never read past its
-        // end, whatever IHL it claims
+        // A 20 byte datagram claiming a longer IHL is never read past its end
         for (uint8_t ihl = 6; ihl <= 15; ++ihl)
         {
             Ipv4Header truncated;
@@ -589,12 +582,11 @@ class Ipv4HeaderOptionsTest : public TestCase
 /**
  * @ingroup internet-test
  *
- * @brief Test the validity checks of the loose source route option
+ * @brief Check the validity rules of the loose source route option
  *
- * An option whose length or pointer is illegal, a second loose source route
- * and a strict source route make the header malformed (@RFC{791}, @RFC{1812}
- * Section 5.2.4.1), whereas a pointer past the option only means that the
- * route is exhausted.
+ * An illegal length or pointer, a second loose source route, or a strict
+ * source route make the header malformed (@RFC{791}, @RFC{1812} Section
+ * 5.2.4.1); a pointer past the option only means the route is exhausted.
  */
 class Ipv4HeaderSourceRouteValidityTest : public TestCase
 {

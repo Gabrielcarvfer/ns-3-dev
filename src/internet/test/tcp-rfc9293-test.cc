@@ -353,9 +353,7 @@ TcpCraftedSegmentTestCase::SetupTopology(bool listen, bool removeProberTcp)
 
     if (removeProberTcp)
     {
-        // The TCP stack of the probing node would reset the connections the
-        // raw socket drives, since it has no endpoint for the replies: take
-        // it out of the way, so that the probes alone speak for the node
+        // The prober's TCP stack would reset the connections the raw socket drives
         Ptr<Ipv4L3Protocol> proberIpv4 = m_nodes.Get(0)->GetObject<Ipv4L3Protocol>();
         proberIpv4->Remove(m_nodes.Get(0)->GetObject<TcpL4Protocol>());
     }
@@ -379,9 +377,7 @@ TcpCraftedSegmentTestCase::SendSegment(uint8_t flags,
     }
     const uint8_t dataOffset = 5 + options.size() / 4;
 
-    // The segment is built byte by byte: TcpHeader derives its data offset
-    // from the options it holds, and drops the reserved bits, so neither an
-    // illegal option nor a reserved bit can be expressed through it
+    // Built byte by byte: TcpHeader derives the data offset and drops the reserved bits
     std::vector<uint8_t> segment = {
         static_cast<uint8_t>(sport >> 8),
         static_cast<uint8_t>(sport & 0xff),
@@ -431,9 +427,7 @@ TcpCraftedSegmentTestCase::SendSegmentFull(uint8_t flags,
     Ptr<Packet> packet = Create<Packet>(payload);
     if (Node::ChecksumEnabled())
     {
-        // The header computes the checksum over the pseudo header of the
-        // connection, which a corrupted one is built from by moving the
-        // destination address one host away
+        // A corrupted checksum is computed over a pseudo header with the destination one host away
         tcp.EnableChecksums();
         Ipv4Address source = m_interfaces.GetAddress(0);
         Ipv4Address destination = m_interfaces.GetAddress(1);
@@ -665,8 +659,7 @@ TcpIcmpSourceQuenchTestCase::DoRun()
     m_socket->GetSockName(local);
     m_localPort = InetSocketAddress::ConvertFrom(local).GetPort();
 
-    // The ICMP payload holds the first 8 bytes of the offending TCP segment,
-    // i.e. the source and destination ports and the sequence number
+    // First 8 bytes of the offending segment: ports and sequence number
     uint8_t payload[8] = {static_cast<uint8_t>(m_localPort >> 8),
                           static_cast<uint8_t>(m_localPort & 0xff),
                           static_cast<uint8_t>(serverPort >> 8),
@@ -781,11 +774,7 @@ TcpMalformedOptionsResetTestCase::ReceiveRaw(Ptr<Socket> socket)
 void
 TcpMalformedOptionsResetTestCase::SendMalformedSyn(Ptr<Socket> socket, Ipv4Address dst)
 {
-    // The segment is built byte by byte: TcpHeader derives its data offset
-    // from the options it carries, so an option with an illegal length cannot
-    // be expressed through it. The header claims one word of options holding
-    // a timestamp option (kind 8) which announces a length of 10 bytes, more
-    // than the option space it lies in
+    // One word of options holding a timestamp option (kind 8) claiming 10 bytes
     Ptr<Packet> packet =
         RawTcpSegment(m_proberPort, m_targetPort, 1, 0, TcpHeader::SYN, {0x08, 0x0a, 0x00, 0x00});
     socket->SendTo(packet, 0, InetSocketAddress(dst, 0));
@@ -797,8 +786,7 @@ TcpMalformedOptionsResetTestCase::DoRun()
     NodeContainer nodes;
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
-    // The target listens, so that a well-formed SYN would be answered with a
-    // SYN+ACK rather than with a RST
+    // A listener, so that a well-formed SYN would get a SYN+ACK, not a RST
     Ptr<Socket> server = InstallTcpListener(nodes.Get(1), m_targetPort);
 
     Ptr<Socket> prober = Socket::CreateSocket(nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
@@ -829,14 +817,10 @@ TcpMalformedOptionsResetTestCase::DoRun()
  *
  * @brief Test that the initial sequence numbers are clock driven
  *
- * @RFC{9293}, Section 3.4.1 (MUST-8) requires the initial sequence number of
- * a connection to be selected from a clock, so that the sequence numbers of
- * distinct connections between the same pair of sockets do not overlap. The
- * SYN segments are injected through a raw socket, so that several connections
- * towards the same listening socket can be opened from the test.
- *
- * Clock driven initial sequence numbers are optional, so the test enables
- * them.
+ * @RFC{9293}, Section 3.4.1 (MUST-8): the ISN is selected from a clock, so
+ * that connections between the same pair of sockets do not overlap. The
+ * optional clock driven ISNs are enabled, and the SYNs are injected through a
+ * raw socket.
  */
 class TcpInitialSequenceNumberTestCase : public TestCase
 {
@@ -916,8 +900,7 @@ TcpInitialSequenceNumberTestCase::DoRun()
     prober->Bind(InetSocketAddress(interfaces.GetAddress(0), 0));
     prober->SetRecvCallback(MakeCallback(&TcpInitialSequenceNumberTestCase::ReceiveRaw, this));
 
-    // Open three connections from different source ports, spaced in time so
-    // that the clock component of the initial sequence number advances
+    // Spaced in time so that the clock component of the ISN advances
     const uint16_t ports[3] = {9201, 9202, 9203};
     for (uint32_t i = 0; i < 3; ++i)
     {
@@ -955,18 +938,11 @@ TcpInitialSequenceNumberTestCase::DoRun()
  * @brief Check that a passive opener with a large initial sequence number
  * keeps track of the acknowledgments it receives.
  *
- * The highest acknowledgment number received is compared with the ones of
- * the incoming segments in the wrap aware sequence number arithmetic. The
- * passive opener learns it from the ACK completing the handshake: if it
- * stayed at zero, an initial sequence number in the upper half of the space
- * would never update it, so that the window updates would be ignored and a
- * fast retransmission would start from sequence number zero.
- *
- * The clock driven initial sequence numbers are enabled and the run number
- * of the random number generator is changed until the target picks one in
- * the upper half; then the target sends data, the prober reports the first
- * segment lost with three duplicate ACKs, and the retransmission must carry
- * the sequence number of that segment.
+ * The highest acknowledgment received is set from the ACK completing the
+ * handshake and compared in wrap aware arithmetic. The target picks an ISN in
+ * the upper half of the space, the prober reports its first segment lost with
+ * three duplicate ACKs, and the retransmission must carry that segment's
+ * sequence number.
  */
 class TcpPassiveHighIsnTestCase : public TcpCraftedSegmentTestCase
 {
@@ -1025,8 +1001,7 @@ TcpPassiveHighIsnTestCase::DoRun()
         SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1, 0, 65535);
         Simulator::Stop(Seconds(1.5));
         Simulator::Run();
-        // The replies of every topology accumulate: the last one is the
-        // SYN+ACK of this run
+        // Replies accumulate across topologies: the last one is this run's SYN+ACK
         NS_ABORT_MSG_IF(GetReplies().empty(), "The SYN was not answered");
         isn = GetReplies().back().GetSequenceNumber();
         if (isn.GetValue() >= upperHalf)
@@ -1155,8 +1130,7 @@ void
 TcpUrgentDataTestCase::AcceptedSocket(Ptr<Socket> socket, const Address& from)
 {
     socket->SetUrgentDataCallback(MakeCallback(&TcpUrgentDataTestCase::UrgentDataPending, this));
-    // The ordinary data is read as it comes, so that the urgent data pending
-    // is the urgent data alone
+    // Ordinary data is read as it comes, so only urgent data stays pending
     socket->SetRecvCallback(Callback<void, Ptr<Socket>>([](Ptr<Socket> s) {
         while (s->Recv())
         {
@@ -1246,12 +1220,10 @@ TcpUrgentDataTestCase::DoRun()
  * still opens a connection
  *
  * Ported from the OptionSupportTest, UnknownOptionTest and ReservedFlagsTest
- * of tcpreq. @RFC{9293}, Section 3.1 requires the End of Option List and NOP
- * options to be supported (MUST-4), options not beginning on a word boundary
- * to be processed (MUST-64), the padding after the End of Option List to be
- * zeroed (MUST-69), an unknown option with a length field to be ignored
- * without error (MUST-6, MUST-68), and the reserved bits to be ignored. The
- * SYN must be answered with a SYN+ACK and never reset.
+ * of tcpreq. @RFC{9293}, Section 3.1: EOL and NOP supported (MUST-4), options
+ * off word boundaries processed (MUST-64), padding after EOL zeroed (MUST-69),
+ * unknown options ignored (MUST-6, MUST-68), reserved bits ignored. The SYN
+ * is answered with a SYN+ACK, never a reset.
  */
 class TcpSynProbeTestCase : public TcpCraftedSegmentTestCase
 {
@@ -1362,14 +1334,11 @@ class TcpResetAckTestCase : public TcpCraftedSegmentTestCase
  *
  * @brief Test that the peer honors the advertised MSS
  *
- * Ported from the MSSSupportTest of tcpreq, which opens a connection
- * advertising a small MSS and checks the size of the segments it receives.
- * The MSS option advertises the largest segment the interface receives
- * (MUST-67): the receiver opens the connection over an interface of small
- * MTU.
- * @RFC{9293}, Section 3.7.1 requires the effective send MSS to be the smaller
- * of the send MSS and the largest transmissible payload (MUST-16), and the
- * MSS option not to be sent on non-SYN segments (MUST-65).
+ * Ported from the MSSSupportTest of tcpreq. The receiver sits behind a small
+ * MTU interface and advertises the largest segment it receives (MUST-67).
+ * @RFC{9293}, Section 3.7.1: the effective send MSS is the smaller of the
+ * send MSS and the largest transmissible payload (MUST-16), and the MSS
+ * option is only sent on SYNs (MUST-65).
  */
 class TcpAdvertisedMssTestCase : public TestCase
 {
@@ -1450,8 +1419,7 @@ TcpAdvertisedMssTestCase::DoRun()
 
     const uint16_t port = 9501;
 
-    // The sender is free to use a large segment size: the MSS advertised by
-    // the receiver is what must bound the segments it sends
+    // A large sender segment size: only the receiver's MSS bounds the segments
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1400));
 
     Ptr<Socket> sender =
@@ -1536,8 +1504,7 @@ TcpSimultaneousOpenTestCase::DoRun()
     NodeContainer nodes;
     nodes.Create(2);
 
-    // The link needs a delay, so that the two SYN segments cross each other
-    // instead of the first one arriving before the second one is sent
+    // The delay makes the two SYNs cross
     SimpleNetDeviceHelper devHelper;
     devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
     NetDeviceContainer devices = devHelper.Install(nodes);
@@ -1687,12 +1654,9 @@ TcpCloseNotificationTestCase::DoRun()
  *
  * @brief Test that an abort is told apart from a normal close
  *
- * @RFC{9293}, Section 3.6 (MUST-12) requires the application to be informed
- * whether the connection was closed normally or was aborted; this is the
- * abort half, in which the remote side closes with unread received data
- * pending, which resets the connection instead of closing it with a FIN.
- * The reset reaches the accepted socket while established, and once again
- * while it waits for the acknowledgment of its own FIN.
+ * @RFC{9293}, Section 3.6 (MUST-12), abort half: the remote side closes with
+ * unread data pending, which sends a RST. The reset reaches the accepted
+ * socket in ESTABLISHED, and again while it waits for the ACK of its FIN.
  */
 class TcpAbortNotificationTestCase : public TcpCraftedSegmentTestCase
 {
@@ -1781,16 +1745,13 @@ TcpAbortNotificationTestCase::Run(bool closeFirst)
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpAbortNotificationTestCase::Accepted, this));
 
-    // The peer never reads what the target sends, so closing it resets the
-    // connection instead of closing it with a FIN
+    // The peer never reads, so closing the target sends a RST instead of a FIN
     Ptr<Socket> peer = Socket::CreateSocket(m_nodes.Get(0), TcpSocketFactory::GetTypeId());
     peer->Bind();
     peer->Connect(InetSocketAddress(m_interfaces.GetAddress(1), m_targetPort));
     if (closeFirst)
     {
-        // The accepted socket closes its side first, and awaits the
-        // acknowledgment of its FIN when the reset comes: the peer never
-        // acknowledges, so that the socket is still waiting
+        // The accepted socket closes first and the peer never acknowledges its FIN
         Ptr<RateErrorModel> error = CreateObject<RateErrorModel>();
         error->SetAttribute("ErrorRate", DoubleValue(1.0));
         error->SetAttribute("ErrorUnit", StringValue("ERROR_UNIT_PACKET"));
@@ -1969,8 +1930,7 @@ TcpLocalAddressTestCase::DoRun()
     NodeContainer nodes;
     nodes.Create(2);
 
-    // Two links, so that the local node has an address the routing protocol
-    // would not select to reach the peer over the first one
+    // A second link gives the local node an address routing would not pick
     SimpleNetDeviceHelper devHelper;
     NetDeviceContainer first = devHelper.Install(nodes);
     NetDeviceContainer second = devHelper.Install(nodes);
@@ -2213,8 +2173,7 @@ TcpNagleTestCase::CountSegments(bool noDelay)
     NodeContainer nodes;
     nodes.Create(2);
 
-    // A link delay long enough for several writes to be issued while the
-    // previous data is still unacknowledged
+    // Delay long enough for several writes while data is unacknowledged
     SimpleNetDeviceHelper devHelper;
     devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(50)));
     NetDeviceContainer devices = devHelper.Install(nodes);
@@ -2578,7 +2537,7 @@ TcpZeroWindowProbeTestCase::StateChanged(TcpSocket::TcpStates_t oldState,
 void
 TcpZeroWindowProbeTestCase::Accepted(Ptr<Socket> socket, const Address& from)
 {
-    // The application does not read, so the receive buffer fills up
+    // The application does not read, so the receive buffer fills
     m_accepted = socket;
 }
 
@@ -2661,8 +2620,7 @@ TcpZeroWindowProbeTestCase::DoRun()
 {
     const uint32_t segmentSize = 500;
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(segmentSize));
-    // Without the timestamp option the payload is a whole segment, so that
-    // the receive buffer fills up exactly and the window reaches zero
+    // Without timestamps the payload is a whole segment, so the window reaches zero exactly
     Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(segmentSize * 4));
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(50000));
@@ -2694,16 +2652,14 @@ TcpZeroWindowProbeTestCase::DoRun()
     // More data than the receive buffer holds, so the window closes
     Simulator::Schedule(Seconds(1), &TcpZeroWindowProbeTestCase::SendData, this, client, 20000);
 
-    // The receiving application frees a few bytes at a time, which the
-    // receiver must not advertise as a usable window
+    // Freeing a few bytes at a time must not advertise a usable window
     for (uint32_t i = 0; i < 20; ++i)
     {
         Simulator::Schedule(Seconds(5) + MilliSeconds(100 * i),
                             &TcpZeroWindowProbeTestCase::ReadALittle,
                             this);
     }
-    // then drains its buffer, which reopens the window by whole segments and
-    // lets the transfer complete
+    // Draining reopens the window by whole segments
     for (uint32_t i = 0; i < 40; ++i)
     {
         Simulator::Schedule(Seconds(10) + MilliSeconds(200 * i),
@@ -3019,8 +2975,7 @@ TcpBroadcastSynTestCase::SendSynFrom(Ipv4Address source)
     ipv4.SetTtl(64);
     packet->AddHeader(ipv4);
 
-    // The raw socket sends the header as built, through the device towards
-    // the target, since the spoofed source belongs to no interface
+    // The spoofed source belongs to no interface, so the raw socket sends through the device
     m_spoofer = Socket::CreateSocket(m_nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
     m_spoofer->SetAttribute("Protocol", UintegerValue(6));
     m_spoofer->SetAttribute("IpHeaderInclude", BooleanValue(true));
@@ -3068,11 +3023,9 @@ TcpBroadcastSynTestCase::DoRun()
  *
  * @brief Test that a unicast address which looks like a broadcast is served
  *
- * The directed broadcast address of a subnet has its host part all ones
- * under the mask of that subnet, but so does one address in four of any
- * other subnet, under a /30 mask: a segment from such a remote address must
- * not be mistaken for one from a broadcast address (@RFC{9293},
- * Section 3.10.7.2, MUST-63 applies to broadcast addresses only).
+ * Under a /30 mask, one address in four has its host part all ones like a
+ * directed broadcast. A segment from such a remote address is served, since
+ * @RFC{9293}, Section 3.10.7.2 (MUST-63) applies to broadcast addresses only.
  */
 class TcpBroadcastLookalikeTestCase : public TestCase
 {
@@ -3255,9 +3208,7 @@ TcpIpv6MulticastSynTestCase::DoRun()
     target->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), m_targetPort));
     target->Listen();
 
-    // A raw socket on the target counts the TCP packets the IP layer
-    // delivered, so that a SYN dropped before reaching the node cannot pass
-    // the test either
+    // Counts TCP packets delivered by IP, so a SYN dropped earlier cannot pass
     Ptr<Socket> watcher = Socket::CreateSocket(nodes.Get(1), Ipv6RawSocketFactory::GetTypeId());
     watcher->SetAttribute("Protocol", UintegerValue(6));
     watcher->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), 0));
@@ -3439,8 +3390,7 @@ class TcpChecksumTestCase : public TcpCraftedSegmentTestCase
 void
 TcpChecksumTestCase::DoTeardown()
 {
-    // Restored whatever the outcome of the test, for the suites which run
-    // after this one in the same process
+    // Restored for the suites running later in the same process
     GlobalValue::Bind("ChecksumEnabled", m_previousChecksumEnabled);
 }
 
@@ -3682,8 +3632,7 @@ TcpMalformedOptionsAbortTestCase::CompleteHandshake()
 void
 TcpMalformedOptionsAbortTestCase::SendMalformedAck()
 {
-    // An acknowledgment carrying a timestamp option (kind 8) which announces
-    // a length of 10 bytes, more than the word of option space it lies in
+    // Timestamp option (kind 8) claiming 10 bytes in one word of option space
     Ptr<Packet> packet = RawTcpSegment(m_proberPort,
                                        m_targetPort,
                                        2,
@@ -3826,8 +3775,7 @@ TcpSimultaneousOpenRefusedTestCase::SendSyn()
 void
 TcpSimultaneousOpenRefusedTestCase::SendRst()
 {
-    // A RST acceptable in SYN-RECEIVED, at the sequence number the target
-    // expects
+    // A RST at the sequence number SYN-RECEIVED expects
     SendSegmentFull(TcpHeader::RST, 2, (m_targetIsn + 1).GetValue(), 4096);
 }
 
@@ -3949,9 +3897,7 @@ TcpEmptyZeroWindowProbeTestCase::DoRun()
     Simulator::Stop(Seconds(8));
     Simulator::Run();
 
-    // The probes hold no data and repeat the last acknowledged sequence
-    // number (SND.NXT - 1, which is the ISN with nothing sent), so that the
-    // peer answers them with an acknowledgment; the connection outlives them
+    // Probes hold no data and repeat SND.NXT - 1 (the ISN), so the peer ACKs them
     uint32_t probes = 0;
     for (const auto& reply : GetReplies())
     {
@@ -3975,14 +3921,11 @@ TcpEmptyZeroWindowProbeTestCase::DoRun()
  *
  * @brief Test the urgent mechanism of a connection with a high sequence number
  *
- * The urgent points held by a socket are only comparable to the live sequence
- * numbers of the connection once they have been set from one: an urgent
- * pointer received on a connection whose sequence numbers lie in the upper
- * half of the sequence space used to be discarded by the circular comparison
- * against the initial value of zero, and the symmetric comparison used to
- * flag outgoing segments as urgent spuriously. Once the urgent data is
- * consumed, nothing is pending any longer and a later urgent pointer is
- * notified anew.
+ * Urgent points are compared with the connection's sequence numbers only once
+ * they have been set from one, so an urgent pointer on a connection whose
+ * sequence numbers lie in the upper half of the sequence space is delivered,
+ * and outgoing segments are not flagged as urgent spuriously. Once the urgent
+ * data is consumed, a later urgent pointer is notified anew.
  */
 class TcpUrgentHighIsnTestCase : public TcpCraftedSegmentTestCase
 {
@@ -4066,8 +4009,7 @@ TcpUrgentHighIsnTestCase::CompleteHandshake()
 void
 TcpUrgentHighIsnTestCase::SendUrgent(uint32_t seq)
 {
-    // A segment holding no data, whose urgent pointer reaches beyond its
-    // sequence number, tells the receiver urgent data is on the way
+    // An empty segment whose urgent pointer announces urgent data on the way
     SendSegmentFull(TcpHeader::ACK | TcpHeader::URG,
                     seq,
                     (m_targetIsn + 1).GetValue(),
@@ -4135,12 +4077,10 @@ TcpUrgentHighIsnTestCase::DoRun()
  *
  * @brief Test the keep-alives of an idle connection
  *
- * @RFC{9293}, Section 3.8.4 requires the keep-alives to be turned on or off
- * for each connection (MUST-24) and to default to off (MUST-25), to be sent
- * only when no data is outstanding and nothing was received for the
- * configured interval (MUST-26), which must be configurable (MUST-27) and
- * default to no less than two hours (MUST-28), and requires a single
- * unanswered probe not to be read as a dead connection (MUST-29).
+ * @RFC{9293}, Section 3.8.4: keep-alives are per connection (MUST-24), off by
+ * default (MUST-25), sent only when idle with nothing outstanding (MUST-26),
+ * with a configurable interval (MUST-27) of at least two hours by default
+ * (MUST-28), and one unanswered probe does not kill the connection (MUST-29).
  */
 class TcpKeepAliveTestCase : public TestCase
 {
@@ -4271,8 +4211,7 @@ TcpKeepAliveTestCase::Accepted(Ptr<Socket> socket, const Address& from)
     {
         return;
     }
-    // The accepted socket is established already, so its state is not
-    // traced from the start
+    // The accepted socket is already established, so its state is not traced from the start
     m_state = TcpSocket::ESTABLISHED;
     WatchSocket(socket);
 }
@@ -4304,8 +4243,7 @@ TcpKeepAliveTestCase::ProbeSent(Ptr<const Packet> packet,
         return;
     }
 
-    // A keep-alive holds no data and repeats the sequence number of the last
-    // octet sent, which the peer acknowledged already
+    // A keep-alive: no data, sequence number of the last octet sent
     if (header.GetFlags() == TcpHeader::ACK && m_highestSent &&
         header.GetSequenceNumber() + 1 == *m_highestSent)
     {
@@ -4340,8 +4278,7 @@ TcpKeepAliveTestCase::RunUnansweredKeepAlives(uint32_t retries)
     client->TraceConnectWithoutContext("Tx", MakeCallback(&TcpKeepAliveTestCase::ProbeSent, this));
     client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
 
-    // Some data first, which the probes repeat the last octet of; then the
-    // peer stops answering once the connection is up
+    // Some data first, then the peer stops answering
     Simulator::Schedule(MilliSeconds(500), &TcpKeepAliveTestCase::SendData, this, client);
     Simulator::Schedule(Seconds(1), &TcpKeepAliveTestCase::BreakThePath, this, devices.Get(1));
 
@@ -4376,10 +4313,7 @@ TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy, bool passive)
 
     if (passive)
     {
-        // The accepted socket inherits the keep-alives from the defaults,
-        // with an interval short enough for the test to run (MUST-24 and
-        // MUST-27), and few enough retries for a peer which never answers to
-        // be given up on well before the end of the run
+        // Short interval and few retries so the run can give up on a silent peer (MUST-24, MUST-27)
         Config::SetDefault("ns3::TcpSocket::KeepAlive", BooleanValue(keepAlive));
         Config::SetDefault("ns3::TcpSocket::KeepAliveTime", TimeValue(Seconds(2)));
         Config::SetDefault("ns3::TcpSocketBase::KeepAliveInterval", TimeValue(Seconds(1)));
@@ -4402,8 +4336,7 @@ TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy, bool passive)
     }
     client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
 
-    // The probing socket is the one sending the data, so that the probes
-    // repeat the last octet it sent
+    // The probing socket sends the data, so the probes repeat its last octet
     Ptr<Socket> sender = passive ? nullptr : client;
     Simulator::Schedule(Seconds(1), &TcpKeepAliveTestCase::SendDataFrom, this, sender);
     if (busy)
@@ -4422,8 +4355,7 @@ TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy, bool passive)
     Simulator::Run();
     Config::Reset();
 
-    // The peer answers every probe, so the connection outlives them all: a
-    // peer which did not would have been given up on after the retries
+    // The peer answers every probe, so the connection outlives them all
     NS_TEST_ASSERT_MSG_EQ_RETURNS_BOOL(
         m_closeNotifications,
         0,
@@ -4435,16 +4367,14 @@ TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy, bool passive)
 
     Simulator::Destroy();
 
-    // A probe is dropped by the peer once acknowledged, so it is counted as
-    // it leaves rather than as it arrives
+    // Counted on transmission, since the peer drops an acknowledged probe
     return m_probesSent;
 }
 
 void
 TcpKeepAliveTestCase::DoRun()
 {
-    // The defaults leave the keep-alives off (MUST-25), no less than two
-    // hours apart (MUST-28)
+    // Defaults: keep-alives off (MUST-25), at least two hours apart (MUST-28)
     TypeId::AttributeInformation info;
     NS_TEST_ASSERT_MSG_EQ(
         TypeId::LookupByName("ns3::TcpSocket").LookupAttributeByName("KeepAlive", &info),
@@ -4472,15 +4402,13 @@ TcpKeepAliveTestCase::DoRun()
     NS_TEST_ASSERT_MSG_GT(passiveIdle,
                           1,
                           "An idle connection was not kept alive by its passively opened end");
-    // The connection outlives the probes it sends, since a peer which answers
-    // none of them is only given up on after the whole series (MUST-29)
+    // A silent peer is only given up on after the whole series (MUST-29)
     NS_TEST_ASSERT_MSG_EQ(idleWithoutKeepAlive,
                           0,
                           "A connection was kept alive with the keep-alives disabled");
     NS_TEST_ASSERT_MSG_EQ(busy, 0, "A connection carrying data was probed");
 
-    // A single unanswered keep-alive cannot be configured to drop the
-    // connection (MUST-29)
+    // A single unanswered keep-alive cannot be configured to drop the connection (MUST-29)
     Ptr<TcpSocketBase> unconnected = CreateObject<TcpSocketBase>();
     NS_TEST_ASSERT_MSG_EQ(unconnected->SetAttributeFailSafe("KeepAliveRetries", UintegerValue(0)),
                           false,
@@ -4489,24 +4417,20 @@ TcpKeepAliveTestCase::DoRun()
                           false,
                           "A connection can be dropped upon a single keep-alive");
 
-    // A peer which answers nothing is given up on, but only after the whole
-    // series of keep-alives, never upon a single one (MUST-29)
+    // Given up on only after the whole series, never one probe (MUST-29)
     Time fewRetries = RunUnansweredKeepAlives(2);
     uint32_t fewProbes = m_probesSent;
     Time manyRetries = RunUnansweredKeepAlives(5);
     uint32_t manyProbes = m_probesSent;
 
-    // The KeepAliveRetries attribute sets exactly how many unanswered probes
-    // are sent before the connection is dropped
+    // KeepAliveRetries sets the exact number of unanswered probes
     NS_TEST_ASSERT_MSG_EQ(fewProbes, 2, "Unexpected number of keep-alive probes");
     NS_TEST_ASSERT_MSG_EQ(manyProbes, 5, "Unexpected number of keep-alive probes");
 
     NS_TEST_ASSERT_MSG_GT(fewRetries, Seconds(0), "The connection outlived every keep-alive");
     NS_TEST_ASSERT_MSG_GT(manyRetries, Seconds(0), "The connection outlived every keep-alive");
 
-    // The first keep-alive leaves after the two idle seconds, and the next
-    // ones follow it every second: a connection dropped upon the first one
-    // would be gone by then
+    // First keep-alive after 2 s idle, then one per second
     NS_TEST_ASSERT_MSG_GT(fewRetries,
                           Seconds(4),
                           "A single unanswered keep-alive was read as a dead peer");
@@ -4522,20 +4446,15 @@ TcpKeepAliveTestCase::DoRun()
  *
  * @brief Test the source route of a connection
  *
- * @RFC{9293}, Section 3.9.2.1 requires an application to be able to specify a
- * source route when it opens a connection (MUST-51), that route to take
- * precedence over the one a received datagram carries (MUST-52), and a
- * connection opened passively to answer along the route recorded by the
+ * @RFC{9293}, Section 3.9.2.1: an application can specify a source route on
+ * open (MUST-51), which takes precedence over a received one (MUST-52), and a
+ * passively opened connection answers along the route recorded by the
  * datagram which opened it (MUST-53).
  *
- * The client and the server are joined by two distinct nodes in the middle,
- * so that the way back a datagram records and the route the server
- * application prefers can be told apart. The full sized segments leave room
- * for the option, so that they fill the MTU of the links without being
- * fragmented (@RFC{9293}, Section 3.7.1), the checksums are enabled, so that
- * the option survives the checksum, and the client node has more than one
- * interface, so that the datagram must be routed towards its first hop rather
- * than its destination.
+ * Two distinct middle nodes make the recorded return route and the preferred
+ * route distinguishable. Checksums are enabled so the option is covered, full
+ * sized segments leave room for the option (Section 3.7.1), and the client
+ * has several interfaces so the datagram is routed towards its first hop.
  */
 class TcpSourceRouteTestCase : public TestCase
 {
@@ -4652,14 +4571,12 @@ TcpSourceRouteTestCase::ReceiveAnswer(Ptr<Socket> socket)
     packet->RemoveHeader(tcp);
     if ((tcp.GetFlags() & TcpHeader::SYN) && m_synAckRoute.empty())
     {
-        // The SYN+ACK leaves the server before its application is told of
-        // the connection, along the recorded way back
+        // The SYN+ACK leaves along the recorded way back, before the application is told
         m_synAckRoute = ipv4.GetLooseSourceRoute();
     }
     if (packet->GetSize() > 0 && m_answerRoute.empty())
     {
-        // The first answer carrying data left the server after its
-        // application specified a route of its own
+        // The first data answer, sent after the application set its own route
         m_answerRoute = ipv4.GetLooseSourceRoute();
     }
 }
@@ -4670,8 +4587,7 @@ TcpSourceRouteTestCase::Accepted(Ptr<Socket> socket, const Address& from)
     m_accepted = socket;
     socket->SetRecvCallback(MakeCallback(&TcpSourceRouteTestCase::Received, this));
 
-    // The route the server application prefers takes precedence over the
-    // recorded way back (MUST-52), which the data sent from here shows
+    // The application's route takes precedence over the recorded one (MUST-52)
     DynamicCast<TcpSocketBase>(socket)->SetIpv4SourceRoute(m_ownRoute);
     socket->Send(Create<Packet>(100), 0);
 }
@@ -4720,9 +4636,8 @@ TcpSourceRouteTestCase::DoRun()
     GlobalValue::GetValueByName("ChecksumEnabled", m_previousChecksumEnabled);
     GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
 
-    // Client (0) and server (2), joined through two nodes in the middle: the
-    // upper one (1) the client routes through, the lower one (3) the server
-    // application prefers
+    // Client (0) and server (2), joined via node 1 (client's route) and node 3 (server's preferred
+    // route)
     NodeContainer nodes;
     nodes.Create(4);
 
@@ -4768,8 +4683,7 @@ TcpSourceRouteTestCase::DoRun()
     const uint16_t port = 9911;
 
     Ptr<Socket> server = Socket::CreateSocket(nodes.Get(2), TcpSocketFactory::GetTypeId());
-    // Full sized segments on both ends, which would exceed the MTU if the
-    // option took no room from the data
+    // Full sized segments would exceed the MTU if the option took no room
     server->SetAttribute("SegmentSize", UintegerValue(1460));
     server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
     server->Listen();
@@ -4790,12 +4704,10 @@ TcpSourceRouteTestCase::DoRun()
     answerSniffer->Bind();
     answerSniffer->SetRecvCallback(MakeCallback(&TcpSourceRouteTestCase::ReceiveAnswer, this));
 
-    // The route the application asks for: through the upper node in the
-    // middle, then on to the peer
+    // Through the upper middle node, then to the peer
     std::vector<Ipv4Address> route = {leftIfs.GetAddress(1), rightIfs.GetAddress(1)};
 
-    // The route the server application prefers for its answers: through the
-    // lower node in the middle
+    // Through the lower middle node
     m_ownRoute = {lowerRightIfs.GetAddress(0), lowerLeftIfs.GetAddress(0)};
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
@@ -4819,27 +4731,21 @@ TcpSourceRouteTestCase::DoRun()
                           m_segments,
                           "A segment of the connection carried no source route");
 
-    // The first hop travels in the destination field, so the option holds one
-    // slot less than the route, and every hop writes the address it forwards
-    // the datagram from in the slot it took the next hop from (RFC 791): the
-    // option holds the way back when it arrives
+    // The first hop travels in the destination field, and each hop records the address it forwards
+    // from (RFC 791), so the option arrives holding the way back
     NS_TEST_ASSERT_MSG_EQ(m_seenRoute.size(), route.size() - 1, "The route was not carried whole");
     NS_TEST_ASSERT_MSG_EQ(m_seenRoute.empty() ? Ipv4Address() : m_seenRoute.front(),
                           rightIfs.GetAddress(0),
                           "The hop in the middle did not record the address it forwarded from");
 
-    // The connection opened passively answers along the way back (MUST-53):
-    // the SYN+ACK reaches the client through the upper node in the middle,
-    // whose address on the way back is the one facing the client
+    // The passive connection answers along the way back (MUST-53), via the upper middle node
     NS_TEST_ASSERT_MSG_NE(m_accepted, nullptr, "The connection was not established");
     NS_TEST_ASSERT_MSG_EQ(m_synAckRoute.empty(), false, "The SYN+ACK carried no source route");
     NS_TEST_ASSERT_MSG_EQ(m_synAckRoute.empty() ? Ipv4Address() : m_synAckRoute.front(),
                           leftIfs.GetAddress(1),
                           "The SYN+ACK did not follow the recorded way back");
 
-    // and the route its application specified took precedence over the
-    // recorded one (MUST-52): the data went through the lower node in the
-    // middle, which recorded the address it forwarded from
+    // The application's route took precedence (MUST-52): data went via the lower middle node
     NS_TEST_ASSERT_MSG_EQ(m_answerRoute.empty(), false, "No answer carried the preferred route");
     NS_TEST_ASSERT_MSG_EQ(m_answerRoute.empty() ? Ipv4Address() : m_answerRoute.front(),
                           lowerLeftIfs.GetAddress(1),
@@ -4916,8 +4822,7 @@ void
 TcpSendAfterShutdownTestCase::SendAndShutdown(Ptr<Socket> socket)
 {
     socket->Send(Create<Packet>(m_queued), 0);
-    // The data is still queued, so the FIN waits for it and the connection
-    // stays established
+    // Data still queued, so the FIN waits and the connection stays established
     socket->ShutdownSend();
     m_txAvailableBefore = socket->GetTxAvailable();
     m_sendResult = socket->Send(Create<Packet>(100), Socket::MSG_FLAG_OOB);
@@ -5561,8 +5466,7 @@ void
 TcpZeroWindowProbeUrgentTestCase::Run(uint32_t beyond)
 {
     m_probes.clear();
-    // The receive buffer holds a whole number of segments, so that the window
-    // closes rather than leaving a fraction of a segment open
+    // A whole number of segments, so the window closes fully
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(m_buffer));
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(m_buffer / 2));
     Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
@@ -5634,12 +5538,10 @@ TcpZeroWindowProbeUrgentTestCase::DoRun()
  *
  * @brief Test urgent data reaching more than 65535 octets ahead
  *
- * @RFC{9293}, Section 3.8.5 supports a sequence of urgent data of any length
- * (MUST-31), while the urgent pointer is a 16 bit offset. Each segment
- * before the urgent point has to carry the URG flag, with its pointer
- * saturated while the urgent point lies further ahead, so that the urgent
- * point seen by the receiver only moves forward and ends at the true one;
- * the segments past the urgent point are not flagged.
+ * @RFC{9293}, Section 3.8.5 supports urgent data of any length (MUST-31) with
+ * a 16 bit pointer. Every segment before the urgent point carries URG with a
+ * saturated pointer, so the receiver's urgent point only moves forward and
+ * ends at the true one; segments past it are not flagged.
  */
 class TcpLongUrgentDataTestCase : public TestCase
 {
@@ -5696,8 +5598,7 @@ TcpLongUrgentDataTestCase::SegmentSent(Ptr<const Packet> packet,
     if (header.GetFlags() & TcpHeader::SYN)
     {
         m_isn = header.GetSequenceNumber();
-        // The urgent points are compared in the wrap aware arithmetic, from
-        // the initial sequence number
+        // Urgent points compare in wrap aware arithmetic from the ISN
         m_lastUrgentPoint = m_isn;
         m_isnKnown = true;
         return;
@@ -5880,8 +5781,7 @@ TcpKeepAliveBaseTestCase::Setup(bool ipv6, Time keepAliveTime)
 
     if (ipv6)
     {
-        // The addresses are usable at once, without waiting for the
-        // duplicate address detection
+        // No duplicate address detection, so the addresses are usable at once
         Config::SetDefault("ns3::Icmpv6L4Protocol::DAD", BooleanValue(false));
     }
 
@@ -6184,14 +6084,12 @@ TcpKeepAliveDelayedAckTestCase::DoRun()
  *
  * @brief Test the keep-alives over the life of a connection
  *
- * Covers the keep-alives of @RFC{9293}, Section 3.8.4 beyond an idle
- * connection: a peer gone silent is given up on after the configured number
- * of keep-alives with a RST and a single error notification, over IPv4 as
- * over IPv6; a peer which answers keeps the connection up through any number
- * of keep-alives; no keep-alive is sent while data is outstanding (MUST-26),
- * nor while the persist timer probes a zero window; the keep-alives follow
- * SetKeepAlive() on an established connection; and a socket released with a
- * keep-alive pending is torn down cleanly.
+ * @RFC{9293}, Section 3.8.4: a silent peer is given up on after the configured
+ * number of keep-alives with a RST and one error notification (IPv4 and
+ * IPv6); an answering peer keeps the connection up; no keep-alive is sent with
+ * data outstanding (MUST-26) or while probing a zero window; SetKeepAlive()
+ * applies to an established connection; a socket released with a keep-alive
+ * pending is torn down cleanly.
  */
 class TcpKeepAliveScenariosTestCase : public TcpKeepAliveBaseTestCase
 {
@@ -6259,8 +6157,7 @@ TcpKeepAliveScenariosTestCase::RunSilentPeer(bool ipv6)
     Simulator::Stop(Seconds(30));
     Simulator::Run();
 
-    // Each answer starts the count anew, so the answered keep-alives outnumber
-    // the retries without the connection being dropped
+    // Each answer restarts the count, so answered keep-alives outnumber the retries
     NS_TEST_ASSERT_MSG_GT(answered, 3, "Too few answered keep-alives" << family);
     NS_TEST_ASSERT_MSG_EQ(m_probes.size() - answered,
                           3,
@@ -6361,8 +6258,7 @@ void
 TcpKeepAliveScenariosTestCase::RunRelease()
 {
     Setup(false, Seconds(1));
-    // The keep-alive timer is pending when the simulation ends and the
-    // test lets go of the socket
+    // The keep-alive timer is pending when the simulation ends and the socket is released
     Simulator::Stop(Seconds(1.5));
     Simulator::Run();
     NS_TEST_ASSERT_MSG_EQ(m_state, TcpSocket::ESTABLISHED, "The connection did not open");
@@ -6625,12 +6521,9 @@ class TcpCountingScheduler : public MapScheduler
  *
  * @brief Test that the keep-alive timer is not scheduled anew for every segment
  *
- * Every segment received starts the idle period anew, but an event cancelled
- * in the scheduler stays there until its time comes, two hours later by
- * default: a timer scheduled anew for every segment would leave one dead
- * event per segment behind. The events held by the scheduler during a bulk
- * transfer are the same with the keep-alives on as with them off, but for
- * the timer of each end.
+ * A cancelled event stays in the scheduler until its time, two hours later by
+ * default. During a bulk transfer the scheduler holds the same far events
+ * with keep-alives on as off, apart from one timer per end.
  */
 class TcpKeepAliveTimerEventsTestCase : public TestCase
 {
@@ -6718,8 +6611,7 @@ TcpKeepAliveTimerEventsTestCase::DoRun()
 {
     uint64_t without = Run(false);
     uint64_t with = Run(true);
-    // The timer of each end is armed as the connection is established, and
-    // goes on expiring no sooner than two hours later
+    // Each end's timer is armed at establishment and expires no sooner than two hours later
     NS_TEST_ASSERT_MSG_LT_OR_EQ(with,
                                 without + 2,
                                 "The keep-alive timer was scheduled anew for the segments");
@@ -7087,13 +6979,10 @@ TcpReceiverSwsTestCase::DoRun()
  *
  * @brief Test that the right edge holds with the window scale option
  *
- * @RFC{1122}, Section 4.2.2.16 asks a receiver not to move the right edge of
- * the window left, which @RFC{7323}, Section 2.4 extends to the window scaled
- * down to its unit: rounding the window down at each segment would move the
- * edge left by up to 2^shift - 1 octets whenever RCV.NXT moves by an amount
- * which is not a multiple of the unit. The edge seen by the sender, the
- * acknowledgment number plus the window scaled back, must only move forward,
- * however odd the sizes of the segments and of the reads.
+ * @RFC{1122}, Section 4.2.2.16 and @RFC{7323}, Section 2.4: the right edge
+ * does not move left, even with the window rounded to the scale unit. The edge
+ * seen by the sender (ACK plus scaled window) only moves forward, whatever the
+ * segment and read sizes.
  */
 class TcpScaledRightEdgeTestCase : public TcpRightEdgeBaseTestCase
 {
@@ -7180,7 +7069,7 @@ TcpWindowUpdateAfterReadTestCase::DoRun()
     Time completed;
     Simulator::Schedule(Seconds(2), [&]() {
         freeBefore = buffer - accepted->GetRxAvailable();
-        // Everything is read from now on, as it comes
+        // From here on everything is read as it comes
         auto drain = [&](Ptr<Socket> s) {
             while (Ptr<Packet> p = s->Recv())
             {
@@ -7236,8 +7125,7 @@ void
 TcpDelayedAckHeldWindowTestCase::DoRun()
 {
     const uint32_t segmentSize = 500;
-    // A single small segment at a time, acknowledged when the delayed
-    // acknowledgment timer expires, after a few small reads
+    // One small segment at a time, ACKed on delayed ACK expiry after a few small reads
     Run(10000, segmentSize, false, 20, 50, MilliSeconds(300), 20, MilliSeconds(30));
 
     NS_TEST_ASSERT_MSG_EQ(m_bytesRead, 1000, "The transfer did not complete");
@@ -7385,8 +7273,7 @@ TcpPushScenariosTestCase::DoRun()
         return (std::get<2>(s) & TcpHeader::PSH) != 0;
     };
 
-    // A second write while the first is in flight: the last segment of each
-    // write empties the buffer when it leaves
+    // A second write while the first is in flight
     Run({{Seconds(1), 1200}, {Seconds(1) + MilliSeconds(5), 700}}, false, true);
     uint32_t pushes = 0;
     for (const auto& s : m_segments)
@@ -8211,8 +8098,7 @@ TcpRawSegmentTestCase::Setup(bool listen)
     }
     else
     {
-        // No duplicate address detection, so that the addresses are usable
-        // from the start
+        // No duplicate address detection, so the addresses are usable at once
         Config::SetDefault("ns3::Icmpv6L4Protocol::DAD", BooleanValue(false));
         m_nodes = NodeContainer();
         m_nodes.Create(2);
@@ -8408,9 +8294,8 @@ TcpRawSegmentTestCase::CompleteHandshake()
 void
 TcpRawSegmentTestCase::HandshakeAtIsn(uint32_t wantedIsn)
 {
-    // A segment towards a closed port, which the target resets, refreshes
-    // the address resolution in both directions first, so that the SYN
-    // reaches the target when it is sent, and the SYN+ACK the prober
+    // A segment to a closed port first resolves addresses both ways, so the SYN and SYN+ACK cross
+    // without delay
     Segment refresh = Make(TcpHeader::ACK, 0, 0);
     refresh.dport = m_targetPort + 1;
     SendAt(Seconds(0.5), refresh);
@@ -8420,9 +8305,7 @@ TcpRawSegmentTestCase::HandshakeAtIsn(uint32_t wantedIsn)
     NS_ABORT_MSG_IF(m_headers.empty() || !(m_headers.back().GetFlags() & TcpHeader::SYN),
                     "The first SYN was not answered");
     uint32_t firstIsn = m_headers.back().GetSequenceNumber().GetValue();
-    // The SYN+ACK leaves the target when the SYN reaches it, over a link
-    // without delay: the clock ticks every 4 microseconds (RFC 9293,
-    // Section 3.4.1)
+    // Zero delay link; the ISN clock ticks every 4 microseconds (RFC 9293, Section 3.4.1)
     int64_t firstTick = m_times.back().GetMicroSeconds() / 4;
     Send(Make(TcpHeader::RST, m_proberIsn + 1, 0));
 
@@ -8583,8 +8466,7 @@ class TcpDataOffsetTestCase : public TcpRawSegmentTestCase
     void DoRun() override
     {
         Setup();
-        // The segments are spaced, so that the address resolution queue does
-        // not drop any while the first one waits for the resolution
+        // Spaced so the address resolution queue drops none
         Time at = Seconds(1);
         uint16_t sport = 20000;
         for (uint8_t offset : {0, 1, 2, 3, 4, 6, 10, 15})
@@ -8597,8 +8479,7 @@ class TcpDataOffsetTestCase : public TcpRawSegmentTestCase
             SendAt(at, syn);
             at += MilliSeconds(20);
         }
-        // Fifteen words of header, but only four bytes of options and two of
-        // data follow the fixed header
+        // Fifteen words of header, but only 4 option bytes and 2 data bytes follow
         Segment truncated;
         truncated.flags = TcpHeader::SYN;
         truncated.seq = 1;
@@ -8940,8 +8821,7 @@ class TcpClosingStatesAckTestCase : public TcpRawSegmentTestCase
         }
         Simulator::Destroy();
 
-        // TIME-WAIT: the application closes first, then the peer, whose FIN
-        // is retransmitted
+        // TIME-WAIT: the application closes first, then the peer's FIN is retransmitted
         Config::SetDefault("ns3::TcpSocketBase::MaxSegLifetime", DoubleValue(1));
         Setup();
         Handshake(Seconds(1));
@@ -8992,15 +8872,10 @@ class TcpClosingStatesAckTestCase : public TcpRawSegmentTestCase
  *
  * @brief Test that an empty segment acknowledging new data is not lost
  *
- * The acknowledgment of new data carried by a segment without data is
- * processed even when the segment lies out of the window:
- *
- * - below RCV.NXT, as the pure ACKs of a peer which rewound its sequence
- *   numbers for a retransmission;
- * - at the sequence number following a FIN which arrived out of order, while
- *   the data before the FIN is missing: the window then ends at the FIN.
- *
- * Dropping them stalls a connection carrying data in both directions.
+ * The ACK of new data in an empty segment is processed even out of the
+ * window: below RCV.NXT (pure ACKs of a peer which rewound for a
+ * retransmission), and just after an out of order FIN while the data before
+ * it is missing. Dropping them stalls a bidirectional transfer.
  */
 class TcpOldSequenceAckTestCase : public TcpRawSegmentTestCase
 {
@@ -9129,12 +9004,10 @@ class TcpPureAckSequenceTestCase : public TcpRawSegmentTestCase
  *
  * @brief Test that a Close() from the error close callback is harmless
  *
- * An application may close its socket from the error close callback, as
- * ThreeGppHttpServer does. With data left unread in the receive buffer, a
- * Close() sends a RST and notifies an error close: it must not recurse
- * through the callback once the connection is aborted, whether by a RST of
- * the peer or by the Close() of the application itself. The connection is
- * CLOSED, the application is notified once, and no further RST is sent.
+ * With unread data, Close() sends a RST and notifies an error close; a Close()
+ * from that callback (as ThreeGppHttpServer does) must not recurse, whether
+ * the abort came from a peer RST or from the Close() itself. The connection
+ * ends CLOSED, notified once, with no further RST.
  */
 class TcpCloseFromErrorCallbackTestCase : public TcpRawSegmentTestCase
 {
@@ -9725,16 +9598,13 @@ class TcpMalformedSynSentTestCase : public TcpRawSegmentTestCase
  *
  * @brief Test the handling of malformed options on an established connection
  *
- * Every illegal option layout resets an established connection when it
- * reaches it at RCV.NXT (@RFC{9293}, Section 3.1, MUST-7 and MUST-68): an
- * option length of 1, a length running past the 40 bytes of option space, a
- * kind needing a length as the last byte of the option space, an option
- * appearing twice, and an option of a known kind whose length does not match
- * its kind: MSS of 4 bytes, window scale of 3, SACK permitted of 2, SACK of 2
- * plus 8 per block for 1 to 4 blocks, timestamps of 10. An option filling the
- * whole option space exactly is legal. A SYN with a malformed MSS option
- * towards a closed port is reset, the simulation going on, and a window scale
- * above 14 opens the connection.
+ * Each illegal layout at RCV.NXT resets the connection (@RFC{9293},
+ * Section 3.1, MUST-7, MUST-68): length 1, length past the 40 byte option
+ * space, a length-needing kind as the last byte, a duplicated option, and
+ * wrong lengths for MSS (4), WS (3), SACK-permitted (2), SACK (2 + 8n, n = 1
+ * to 4) and timestamps (10). An option filling the space exactly is legal; a
+ * malformed MSS SYN to a closed port is reset; a window scale above 14 opens
+ * the connection.
  */
 class TcpMalformedOptionMatrixTestCase : public TcpRawSegmentTestCase
 {
@@ -9804,8 +9674,7 @@ class TcpMalformedOptionMatrixTestCase : public TcpRawSegmentTestCase
                               "The data of a segment with a legal option was not received");
         Simulator::Destroy();
 
-        // Towards a closed port, the segment is reset without its options
-        // being looked at further
+        // Towards a closed port, the segment is reset without parsing its options
         Setup(false);
         Segment syn = Make(TcpHeader::SYN, m_proberIsn, 0, {0x02, 0x03, 0x05, 0x01});
         SendAt(Seconds(1), syn);
@@ -9816,8 +9685,7 @@ class TcpMalformedOptionMatrixTestCase : public TcpRawSegmentTestCase
                               "A SYN with a malformed MSS option to a closed port was not reset");
         Simulator::Destroy();
 
-        // A window scale above 14 is well formed, and taken as 14 (RFC 7323,
-        // Section 2.3)
+        // A window scale above 14 is well formed and taken as 14 (RFC 7323, Section 2.3)
         Setup();
         Handshake(Seconds(1), {0x03, 0x03, 0x0f, 0x01});
         Simulator::Stop(Seconds(2));
@@ -10127,8 +9995,7 @@ class TcpSimultaneousOpenRetriesTestCase : public TcpRawSegmentTestCase
                             &Socket::Connect,
                             m_target,
                             InetSocketAddress(m_interfaces.GetAddress(0), m_proberPort));
-        // A SYN crossing the one of the target, after which the prober is
-        // silent
+        // A SYN crossing the target's, then the prober goes silent
         SendAt(Seconds(1.5), Make(TcpHeader::SYN, 1000, 0));
         Simulator::Stop(Seconds(100));
         Simulator::Run();
@@ -10184,12 +10051,9 @@ class TcpSimultaneousOpenRetriesTestCase : public TcpRawSegmentTestCase
  *
  * @brief Test a simultaneous open whose SYN+ACK carries other options than its SYN
  *
- * The options of a connection are negotiated by the SYN segments: in a
- * simultaneous open, the SYN+ACK completing the handshake repeats the SYN of
- * the peer, which was processed already, so that options it would drop do
- * not renegotiate the connection. The peer offers the timestamp and window
- * scale options on its SYN, not on its SYN+ACK, and the connection keeps the
- * timestamps.
+ * Options are negotiated by the SYNs; the SYN+ACK completing a simultaneous
+ * open does not renegotiate them. The peer offers timestamps and window scale
+ * on its SYN only, and the connection keeps the timestamps.
  */
 class TcpSimultaneousOpenAsymmetricOptionsTestCase : public TcpRawSegmentTestCase
 {
@@ -10301,8 +10165,7 @@ class TcpOwnIsnWrapTestCase : public TcpRawSegmentTestCase
 
         const uint32_t bytes = 10000;
         m_accepted->Send(Create<Packet>(bytes));
-        // The first segment alone, which does not wrap yet, then everything
-        // received
+        // The first segment alone (no wrap yet), then everything received
         Simulator::Schedule(Seconds(0.1), [this]() {
             Send(Make(TcpHeader::ACK, m_proberIsn + 1, (m_targetIsn + 1 + 536).GetValue()));
         });
@@ -10384,8 +10247,7 @@ class TcpIsnClockTestCase : public TcpRawSegmentTestCase
     {
         Config::SetDefault("ns3::TcpL4Protocol::ClockDrivenIsn", BooleanValue(true));
         Setup();
-        // Resolve the addresses first, so that the segments cross the link
-        // without delay (see HandshakeAtIsn)
+        // Resolve the addresses first so segments cross without delay (see HandshakeAtIsn)
         Segment refresh = Make(TcpHeader::ACK, 0, 0);
         refresh.dport = m_targetPort + 1;
         SendAt(Seconds(0.5), refresh);
@@ -10517,11 +10379,9 @@ class TcpEcnCeHighIsnTestCase : public TcpRawSegmentTestCase
  *
  * @brief Test the ECN echoes reaching a sender whose initial sequence number is high
  *
- * The acknowledgment number of the last ECN echo, and the sequence number of
- * the last segment sent with CWR, are compared in the wrap aware arithmetic,
- * so they have to start from the initial sequence number of the sender: an
- * echo in the upper half of the space must still reduce the congestion
- * window, which the next new segment tells the peer with CWR (@RFC{3168},
+ * The last ECE acknowledgment and the last CWR sequence number start from the
+ * sender's ISN, so an echo in the upper half of the space still reduces the
+ * congestion window and the next new segment carries CWR (@RFC{3168},
  * Section 6.1.2).
  */
 class TcpEcnEchoHighIsnTestCase : public TcpRawSegmentTestCase
@@ -10754,8 +10614,7 @@ class TcpInvalidRemoteAddressExtraTestCase : public TestCase
                                   "Connect to an invalid remote address did not set ERROR_INVAL");
         }
 
-        // A unicast address whose host part is all ones, in a subnet the node
-        // is not attached to, is a valid peer
+        // An all-ones host part in a subnet the node is not on is a valid peer
         Ptr<Socket> socket = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
         Ptr<Ipv4StaticRouting> routing =
             Ipv4StaticRoutingHelper().GetStaticRouting(nodes.Get(0)->GetObject<Ipv4>());
@@ -10872,8 +10731,7 @@ class TcpIcmpSourceQuenchEndToEndTestCase : public TestCase
             "IcmpCallback",
             CallbackValue(MakeCallback(&TcpIcmpSourceQuenchEndToEndTestCase::UdpIcmp, this)));
 
-        // The remote node quenches a TCP segment and a UDP datagram of the
-        // local node, quoting their headers
+        // The remote node quenches a TCP segment and a UDP datagram, quoting their headers
         Ptr<Socket> icmp = Socket::CreateSocket(nodes.Get(1), Ipv4RawSocketFactory::GetTypeId());
         icmp->SetAttribute("Protocol", UintegerValue(1));
         Simulator::Schedule(Seconds(1),
@@ -11019,8 +10877,7 @@ class TcpListenerZeroWindowSynTestCase : public TcpRawSegmentTestCase
         Segment syn = Make(TcpHeader::SYN, m_proberIsn, 0);
         syn.window = 0;
         SendAt(Seconds(1), syn);
-        // Another client opens its window right away, which a listener in
-        // the persist state would take for the end of it
+        // Another client opens its window at once, which a persisting listener would misread
         Segment other = Make(TcpHeader::SYN, m_proberIsn, 0);
         other.sport = m_proberPort + 1;
         SendAt(Seconds(1.5), other);
@@ -11057,14 +10914,12 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpInitialSequenceNumberTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPassiveHighIsnTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpUrgentDataTestCase(), TestCase::Duration::QUICK);
-        // NOP, NOP, End of Option List and a zeroed padding byte, so that
-        // the option list does not begin on a word boundary
+        // NOP, NOP, EOL and a zero padding byte: the option list is off a word boundary
         AddTestCase(new TcpSynProbeTestCase("Legacy options are supported (MUST-4, MUST-64)",
                                             "legacy options",
                                             {0x01, 0x01, 0x00, 0x00}),
                     TestCase::Duration::QUICK);
-        // Kind 158, reserved by IANA, as tcpreq probes: kind, length, three
-        // bytes of data, two NOPs and an End of Option List
+        // Kind 158 (IANA reserved), as tcpreq probes: kind, length, 3 data bytes, 2 NOPs, EOL
         AddTestCase(new TcpSynProbeTestCase("Unknown options are ignored without error (MUST-6)",
                                             "an unknown option",
                                             {158, 0x05, 0x58, 0xfa, 0x89, 0x01, 0x01, 0x00}),

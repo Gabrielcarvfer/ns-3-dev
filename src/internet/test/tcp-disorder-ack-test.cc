@@ -28,15 +28,12 @@ NS_LOG_COMPONENT_DEFINE("TcpDisorderAckTestSuite");
 /**
  * @ingroup internet-test
  *
- * @brief A channel which reorders, drops and hides segments so that the
- * sender receives, in CA_DISORDER, an ACK which advances SND.UNA and SACKs
- * new data at once.
+ * @brief Channel that makes the sender receive, in CA_DISORDER, an ACK that
+ * advances SND.UNA and SACKs new data.
  *
- * With the data segments numbered from the first one (X = first + 4), the
- * channel holds X until X + 3 has been sent, drops X + 2, and drops the
- * duplicate ACK which first SACKs X + 3. The receiver gets X + 1, X + 3 and
- * X: the ACK of X advances SND.UNA to X + 2 and SACKs X + 3, which the
- * sender had not seen.
+ * X is the fifth data segment. The channel holds X until X + 3 is sent, drops
+ * X + 2, and drops the duplicate ACK that first SACKs X + 3. The ACK of X then
+ * advances SND.UNA to X + 2 and SACKs X + 3.
  */
 class TcpDisorderAckChannel : public SimpleChannel
 {
@@ -142,14 +139,13 @@ NS_OBJECT_ENSURE_REGISTERED(TcpDisorderAckChannel);
 /**
  * @ingroup internet-test
  *
- * @brief Test an ACK which advances SND.UNA and SACKs new data in
- * CA_DISORDER.
+ * @brief Check that an ACK advancing SND.UNA and SACKing new data in
+ * CA_DISORDER grows the window.
  *
- * Such an ACK is a duplicate ACK for the loss detection of @RFC{6675}, and
- * the sender stays in CA_DISORDER, but it acknowledges new data: the window
- * grows (@RFC{5681}, Section 3.1). During slow start, it grows by one
- * segment, or, with TcpNewReno::CountAckedSegments, by the two segments
- * delivered (the one acknowledged and the one newly SACKed, as Linux
+ * The ACK is a duplicate ACK for @RFC{6675} loss detection, so the sender
+ * stays in CA_DISORDER, but it acknowledges new data (@RFC{5681}, Section
+ * 3.1). In slow start cwnd grows by one segment, or by two with
+ * TcpNewReno::CountAckedSegments (acked plus newly SACKed, as Linux
  * acked_sacked).
  */
 class TcpDisorderAckTest : public TcpGeneralTest

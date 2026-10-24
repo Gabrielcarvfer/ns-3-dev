@@ -642,13 +642,11 @@ TcpDctcpToLinuxReno::ExecuteTest()
 /**
  * @ingroup internet-test
  *
- * @brief Check the DCTCP reduction of the slow start threshold
+ * @brief Check the ssthresh DCTCP computes for each congestion and ECN state
  *
- * With no ECN marking on the path, alpha decays to zero, and only the ECN
- * Echo which makes the socket enter CA_CWR may use the DCTCP reduction
- * (1 - alpha / 2). A loss, detected by a fast retransmission (CA_RECOVERY)
- * or by a retransmission timeout (no ECN Echo held), halves the flight
- * size (RFC 8257, Section 3.5).
+ * Only an ECN Echo (CA_CWR) uses the DCTCP reduction (1 - alpha / 2); with no
+ * marking alpha decays to zero. A loss (CA_RECOVERY, or an RTO with no ECN
+ * Echo held) halves the flight size (RFC 8257, Section 3.5).
  */
 class TcpDctcpSsThreshTest : public TestCase
 {
@@ -700,13 +698,13 @@ TcpDctcpSsThreshTest::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Check the Linux arithmetic of TcpDctcp
+ * @brief Check the LinuxArithmetic attribute of TcpDctcp
  *
- * With the LinuxArithmetic attribute, as Linux tcp_dctcp.c, a loss halves the
- * window in whole segments (dctcp_react_to_loss()), the ECN Echo reduction
- * rounds the decrease down in whole segments (dctcp_ssthresh()), and alpha,
- * in 1/1024, decays to zero once smaller than the shift of the gain
- * (dctcp_update_alpha()), so that an ECN Echo no longer reduces the window.
+ * As Linux tcp_dctcp.c: a loss halves the window in whole segments
+ * (dctcp_react_to_loss()), the ECN Echo decrease is rounded down to whole
+ * segments (dctcp_ssthresh()), and alpha (in 1/1024) decays to zero once below
+ * the gain shift (dctcp_update_alpha()), after which an ECN Echo does not
+ * reduce the window.
  */
 class TcpDctcpLinuxArithmeticTest : public TestCase
 {

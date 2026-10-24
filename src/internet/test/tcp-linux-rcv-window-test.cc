@@ -34,23 +34,19 @@ NS_LOG_COMPONENT_DEFINE("TcpLinuxRcvWindowTestSuite");
  *
  * @brief Check the windows advertised with the LinuxRcvWindow attribute.
  *
- * The receiver has RcvBufSize 65536, hence a buffer of 131072 bytes as Linux
- * doubles the size given to SO_RCVBUF, and receives segments of 1448 bytes.
- * As Linux (tcp_select_initial_window()), the SYN+ACK offers half the buffer
- * rounded down to whole segments, 65160 bytes, with a window scale of 2
- * (from net.core.rmem_max, 212992). Once established, the window is bound to
- * half the buffer minus one segment, 64088 bytes (tcp_init_buffer_space()).
- * The first segment, of 1448 bytes in an skb of 2784 bytes, sets the data to
- * memory ratio to 133/256 and the bound of the window to 131072 * 133 / 256 =
- * 68096 bytes; the window then grows to what the memory left with the
- * segment held allows, (131072 - 2784) * 133 / 256 = 66649 bytes, rounded up
- * to the scale unit: 66652 bytes (tcp_grow_window(), __tcp_select_window()).
- *
- * A segment is then lost. The ACK of its retransmission, which delivers the
- * segments held out of order, advertises what the memory still taken by them
- * allows, since Linux acknowledges before the application reads: less than
- * the window of before the loss, but not less than what the right edge
- * already advertised allows (tcp_select_window() never shrinks the window).
+ * RcvBufSize 65536 gives a 131072-byte buffer (Linux doubles SO_RCVBUF);
+ * segments are 1448 bytes. Expected, as Linux:
+ * - SYN+ACK: half the buffer rounded down to whole segments, 65160 bytes,
+ *   window scale 2 from net.core.rmem_max 212992 (tcp_select_initial_window()).
+ * - Established bound: half the buffer minus one segment, 64088 bytes
+ *   (tcp_init_buffer_space()).
+ * - After the first segment (1448 bytes in a 2784-byte skb): data/memory
+ *   ratio 133/256, bound 131072 * 133 / 256 = 68096; window
+ *   (131072 - 2784) * 133 / 256 = 66649, rounded up to the scale unit: 66652
+ *   (tcp_grow_window(), __tcp_select_window()).
+ * - After a loss, the ACK of the retransmission (sent before the application
+ *   reads the delivered out-of-order data) advertises less than before the
+ *   loss, but never shrinks the right edge (tcp_select_window()).
  * Without the attribute, the window is RcvBufSize.
  */
 class TcpLinuxRcvWindowTest : public TcpGeneralTest
@@ -184,16 +180,13 @@ TcpLinuxRcvWindowTest::FinalChecks()
  *
  * @brief Check the quick ACKs left once the window stops growing.
  *
- * With the QuickAck and LinuxRcvWindow attributes and a buffer of 1 MiB, the
- * receiver of pairs of segments, the second one pushed, starts with 16 quick
- * ACKs (tcp_incr_quickack(), the window over two segments being more than
- * 16), and its window grows on each segment for a while. As Linux
- * (tcp_grow_window()), each segment that grows the window or-es the count
- * with one, so that the ACK it triggers does not consume the even count
- * left: once the window stops growing, the 16 quick ACKs remain, and the
- * segments are acknowledged one by one 16 more times, and once more as the
- * last quick ACK falls on the first segment of a pair, whose pushed second
- * segment is acknowledged at once, before the ACKs cover the pairs.
+ * With QuickAck, LinuxRcvWindow and a 1 MiB buffer, the receiver gets pairs
+ * of segments (the second pushed) and starts with 16 quick ACKs
+ * (tcp_incr_quickack()). As tcp_grow_window(), each segment that grows the
+ * window ORs the count with one, so its ACK does not consume the even count.
+ * Expected: once the window stops growing all 16 quick ACKs remain, giving 16
+ * per-segment ACKs plus one more because the last quick ACK falls on the
+ * first segment of a pair, whose pushed second segment is ACKed at once.
  */
 class TcpLinuxRcvWindowQuickAckTest : public TcpGeneralTest
 {
@@ -307,12 +300,12 @@ TcpLinuxRcvWindowQuickAckTest::FinalChecks()
  *
  * @brief Check the window of the duplicate ACKs with the LinuxRcvWindow attribute.
  *
- * A segment of a burst is lost while the window of the receiver still grows.
- * As tcp_data_queue_ofo() of Linux, the out-of-order segments that follow
- * grow the window (tcp_grow_window()) only with SACK: without it, the
- * duplicate ACKs must carry the same window, or the sender would not count
- * them as duplicate ACKs (RFC 5681, Section 2), and would not retransmit
- * fast. With SACK, the window keeps growing.
+ * A segment is lost while the receive window still grows. As
+ * tcp_data_queue_ofo(), out-of-order segments grow the window
+ * (tcp_grow_window()) only with SACK. Without SACK the duplicate ACKs must
+ * keep the same window, or the sender would not count them as duplicates
+ * (RFC 5681, Section 2) and would not fast retransmit; with SACK the window
+ * keeps growing.
  */
 class TcpLinuxRcvWindowDupAckTest : public TcpGeneralTest
 {
@@ -401,21 +394,20 @@ class TcpLinuxRcvWindowDupAckTest : public TcpGeneralTest
 /**
  * @ingroup internet-test
  *
- * @brief Check the windows that the memory of the skbs of Linux gives.
+ * @brief Check the windows given by the Linux skb memory accounting.
  *
- * The receiver has RcvBufSize 131072 (a buffer of 262144 bytes, a window
- * scale of 3), and receives segments of 1448 bytes, 1 ms apart, each
- * acknowledged at once (quick ACKs), before the application reads it. Its
- * window is bound to half the buffer less the 1460-byte advmss of the route
- * that its listener used (tcp_init_buffer_space()), 129612 bytes, to which
- * the first segment adds two segments: 132508 bytes, rounded up to the unit
- * of the window scale, 132512 (as Linux 6.12 under DCE). With an skb of
- * 2784 bytes held (an skb head of 1248 bytes and a receive buffer of 1536
- * of virtio-net), the window then reaches 134752 bytes, but the receive
- * buffer of the segment that takes the end of a 32 KiB page, 21 buffers
- * apart, is 2048 bytes: with RcvBufferOffset 1 (a frame before the SYN, as
- * the router solicitation that DCE delivers), that of the 18th segment,
- * whose ACK advertises 134480 bytes.
+ * RcvBufSize 131072 (262144-byte buffer, window scale 3); 1448-byte segments
+ * 1 ms apart, each quick-ACKed before the application reads. Expected values
+ * match Linux 6.12 under DCE:
+ * - Bound: half the buffer minus the listener's route advmss of 1460, 129612
+ *   bytes (tcp_init_buffer_space()); the first segment adds two segments:
+ *   132508, rounded up to the scale unit: 132512.
+ * - With a 2784-byte skb held (1248-byte head + 1536-byte virtio-net receive
+ *   buffer) the window reaches 134752.
+ * - Every 21 buffers one takes the end of a 32 KiB page and is 2048 bytes;
+ *   with RcvBufferOffset 1 (one frame before the SYN, like the router
+ *   solicitation DCE delivers) this is the 18th segment, whose ACK
+ *   advertises 134480.
  */
 class TcpLinuxRcvWindowSkbTest : public TcpGeneralTest
 {
@@ -504,17 +496,15 @@ class TcpLinuxRcvWindowSkbTest : public TcpGeneralTest
  *
  * @brief Check the out-of-order data dropped under TCP memory pressure.
  *
- * The 100th segment of a burst of 1500 is lost, and the receiver, with SACK
- * and a buffer of 4 MiB, holds the others out of order, 17 to an skb of
- * 27360 bytes or so. The pages that the socket reserves reach the memory of
- * the protocol by the MiB (the per-CPU reserve of Linux): with LinuxTcpMem
- * "100 200 300" (pages of 4096 bytes), the first MiB puts the protocol in
- * memory pressure, in which a socket may not use more than the hard limit
- * shared by the two sockets of the node (the listener and the connection).
- * As tcp_try_rmem_schedule() of Linux, the out-of-order queue is pruned
- * down to the incoming segment, which, the last one, is dropped: the SACK
- * blocks stop growing at some 1 MiB of data. Without a limit, they cover
- * all the data that the window lets in.
+ * Segment 100 of a 1500-segment burst is lost; the receiver (SACK, 4 MiB
+ * buffer) holds the rest out of order, about 17 per 27360-byte skb. Reserved
+ * pages are charged to the protocol per MiB (Linux per-CPU reserve), so with
+ * LinuxTcpMem "100 200 300" (4096-byte pages) the first MiB causes memory
+ * pressure, where a socket may not exceed the hard limit shared by the
+ * node's two sockets (listener and connection). As tcp_try_rmem_schedule(),
+ * the out-of-order queue is pruned down to the incoming segment, which is
+ * dropped. Expected: SACK blocks stop growing at about 1 MiB; without a
+ * limit they cover all data the window admits.
  */
 class TcpLinuxRcvWindowMemTest : public TcpGeneralTest
 {
@@ -611,11 +601,10 @@ class TcpLinuxRcvWindowMemTest : public TcpGeneralTest
  *
  * @brief Check the layout of the SACK option (AlignSackOption attribute).
  *
- * A segment is lost, and the receiver reports the segments that follow it
- * with SACK, with the timestamps. By default, the 10 bytes of the timestamps
- * option and the SACK option make 12 + 8 n bytes of options, n being the
- * number of SACK blocks. With AlignSackOption, as Linux, two NOP options
- * precede the SACK option, which makes 16 + 8 n bytes.
+ * A segment is lost and the receiver SACKs the following ones, with
+ * timestamps. Expected options length for n SACK blocks: 12 + 8 n bytes by
+ * default; 16 + 8 n with AlignSackOption, as Linux puts two NOPs before the
+ * SACK option.
  */
 class TcpAlignSackOptionTest : public TcpGeneralTest
 {

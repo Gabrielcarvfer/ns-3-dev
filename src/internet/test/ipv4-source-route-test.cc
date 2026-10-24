@@ -299,11 +299,10 @@ class Ipv4OptionsTestBase : public TestCase
 /**
  * @ingroup internet-test
  *
- * @brief Test that a received header which does not hold together is dropped
+ * @brief Check that a received header with inconsistent lengths is dropped
  *
- * A datagram shorter than its header says, or whose header length is below
- * the 20 bytes of the fixed fields, must be dropped by the IP layer, without
- * the header being read beyond the bytes received.
+ * A datagram shorter than its header claims, or with a header length below
+ * 20 bytes, is dropped without reading past the received bytes.
  */
 class Ipv4MalformedHeaderTest : public Ipv4OptionsTestBase
 {
@@ -383,12 +382,11 @@ class Ipv4MalformedHeaderTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that a malformed source route option is discarded
+ * @brief Check that a datagram with a malformed source route option is discarded
  *
- * A loose source route option whose pointer is below 4 or not on an address
- * boundary, a second loose source route and a strict source route make the
- * datagram be discarded (@RFC{791}, @RFC{1812} Section 5.2.4.1), whereas a
- * pointer past the option means that the route is exhausted.
+ * A pointer below 4 or off an address boundary, a second loose source route,
+ * or a strict source route cause a discard (@RFC{791}, @RFC{1812} Section
+ * 5.2.4.1); a pointer past the option means the route is exhausted.
  */
 class Ipv4MalformedSourceRouteTest : public Ipv4OptionsTestBase
 {
@@ -433,8 +431,7 @@ class Ipv4MalformedSourceRouteTest : public Ipv4OptionsTestBase
         {
             Inject(MakeRawDatagram(Addr(0, 1), options));
         }
-        // A pointer past the option: the route is exhausted, and the datagram
-        // has reached its final destination
+        // Pointer past the option: route exhausted, datagram at its destination
         Simulator::Schedule(Seconds(1), [this, lsrr, next]() {
             Inject(MakeRawDatagram(Addr(0, 1), lsrr(12, next)));
         });
@@ -455,12 +452,11 @@ class Ipv4MalformedSourceRouteTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that a hop passes over its own addresses in the route
+ * @brief Check that a hop skips its own addresses in the route
  *
- * When the next address of the route is one of the addresses of the node
- * the datagram reached, the node passes over it rather than sending the
- * datagram to itself again (@RFC{1812}, Section 5.2.3), and a route which
- * this leaves exhausted ends at the node, which delivers the datagram.
+ * A next route address owned by the current node is skipped rather than
+ * sending to itself (@RFC{1812}, Section 5.2.3); if that exhausts the route,
+ * the node delivers the datagram.
  */
 class Ipv4SourceRouteOwnAddressTest : public Ipv4OptionsTestBase
 {
@@ -523,13 +519,12 @@ class Ipv4SourceRouteOwnAddressTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test the switch of the source route forwarding
+ * @brief Check the source route forwarding switch
  *
- * A node acts as a hop of a source route only when configured to, whether
- * or not it forwards the other datagrams (@RFC{1122}, Section 3.3.5); it
- * otherwise discards the datagram and returns an ICMP Destination
- * Unreachable, Source Route Failed, unless the datagram is itself an ICMP
- * error message.
+ * A node relays source routed datagrams only when configured to, independent
+ * of IP forwarding (@RFC{1122}, Section 3.3.5); otherwise it discards them and
+ * sends ICMP Destination Unreachable, Source Route Failed, except for ICMP
+ * error messages.
  */
 class Ipv4SourceRouteForwardingSwitchTest : public Ipv4OptionsTestBase
 {
@@ -595,14 +590,12 @@ class Ipv4SourceRouteForwardingSwitchTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test the limits of the relaying of a source routed datagram
+ * @brief Check when a source routed datagram is not relayed
  *
- * A datagram which reached a hop as a broadcast is never relayed, nor is one
- * sent towards a next hop which is a broadcast address, which a hop answers
- * like one it has no route to, with an ICMP Destination Unreachable, Source
- * Route Failed (@RFC{1812}, Section 4.3.3.1). A datagram whose TTL runs out
- * at a hop is answered with an ICMP Time Exceeded. A datagram sent to a
- * broadcast address does not follow the route its application asked for.
+ * Datagrams received as broadcast are not relayed; a broadcast or unroutable
+ * next hop yields ICMP Destination Unreachable, Source Route Failed
+ * (@RFC{1812}, Section 4.3.3.1); TTL expiry yields ICMP Time Exceeded; and
+ * an application broadcast ignores the requested route.
  */
 class Ipv4SourceRouteRelayLimitsTest : public Ipv4OptionsTestBase
 {
@@ -679,13 +672,12 @@ class Ipv4SourceRouteRelayLimitsTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test the number of hops of a source route
+ * @brief Check the maximum number of hops of a source route
  *
- * The option holds 9 addresses beside the first hop, which travels in the
- * destination field: a route of 10 hops ending at the destination fills the
- * 60 bytes of the largest header and is followed, whereas a route which
- * does not fit is dropped by the IP layer rather than aborting the
- * simulation, and refused by a TCP socket whenever it can tell.
+ * The option holds 9 addresses plus the first hop in the destination field,
+ * so a 10 hop route fills a 60 byte header and is followed. A longer route
+ * is dropped by the IP layer (no abort) and refused by a TCP socket when
+ * detectable.
  */
 class Ipv4SourceRouteHopLimitTest : public Ipv4OptionsTestBase
 {
@@ -724,8 +716,7 @@ class Ipv4SourceRouteHopLimitTest : public Ipv4OptionsTestBase
                                                                          BooleanValue(true));
         }
 
-        // Back and forth between the two nodes in the middle, then on to the
-        // end of the line
+        // Bounce between the two middle nodes, then to the end of the line
         std::vector<Ipv4Address> longest = {Addr(0, 1)};
         while (longest.size() < Ipv4SourceRouteTag::MAX_HOPS - 1)
         {
@@ -739,8 +730,7 @@ class Ipv4SourceRouteHopLimitTest : public Ipv4OptionsTestBase
         // The destination appended to a route of 10 hops makes 11
         Simulator::Schedule(Seconds(1), [this, tooLong]() { SendAlong(tooLong); });
 
-        // A TCP socket refuses a route which cannot fit, or holding a hop
-        // which is not a unicast address
+        // TCP refuses a route that cannot fit or has a non-unicast hop
         Ptr<TcpSocketBase> unbound = DynamicCast<TcpSocketBase>(
             Socket::CreateSocket(m_nodes.Get(0), TcpSocketFactory::GetTypeId()));
         std::vector<Ipv4Address> eleven = tooLong;
@@ -765,8 +755,7 @@ class Ipv4SourceRouteHopLimitTest : public Ipv4OptionsTestBase
                               true,
                               "A route of 10 hops ending at the peer was refused");
 
-        // Before the peer is known, such a route cannot be told apart: the
-        // IP layer drops its segments instead
+        // With the peer unknown the route cannot be checked; IP drops the segments
         Ptr<TcpSocketBase> early = DynamicCast<TcpSocketBase>(
             Socket::CreateSocket(m_nodes.Get(0), TcpSocketFactory::GetTypeId()));
         early->Bind();
@@ -802,11 +791,10 @@ class Ipv4SourceRouteHopLimitTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that a relayed datagram does not take the way back along
+ * @brief Check that a datagram resent to a third party does not carry the way back
  *
- * The UDP and raw sockets deliver a source routed datagram with the way back
- * to its sender, which the IP layer does not send a datagram along: an
- * application which sends it on to a third party sends it along no route.
+ * UDP and raw sockets deliver the return route with the datagram, but the IP
+ * layer does not apply it when the application sends the datagram onward.
  */
 class Ipv4SourceRouteUdpRelayTest : public Ipv4OptionsTestBase
 {
@@ -909,11 +897,10 @@ class Ipv4SourceRouteUdpRelayTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that an application sees the way back of a received datagram
+ * @brief Check that an application receives the return route and can reply along it
  *
- * The UDP and raw sockets hand the way back of a source routed datagram to
- * the application (@RFC{1122}, Section 4.1.3.2), which may answer along it by
- * attaching it to the answer as the route to follow.
+ * UDP and raw sockets pass the return route to the application (@RFC{1122},
+ * Section 4.1.3.2), which may attach it to its reply.
  */
 class Ipv4SourceRouteUdpReturnRouteTest : public Ipv4OptionsTestBase
 {
@@ -1020,10 +1007,8 @@ class Ipv4SourceRouteUdpReturnRouteTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that an ICMP Echo Reply follows the way back
- *
- * The reply to an echo request which followed a source route must follow the
- * reversed route (@RFC{1122}, Section 3.2.2.6).
+ * @brief Check that an ICMP Echo Reply follows the reversed source route (@RFC{1122},
+ * Section 3.2.2.6)
  */
 class Ipv4SourceRouteEchoTest : public Ipv4OptionsTestBase
 {
@@ -1095,10 +1080,9 @@ class Ipv4SourceRouteEchoTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that a RST follows the way back of the segment it answers
+ * @brief Check that a RST follows the return route of the segment it answers
  *
- * The RST sent for a segment which reached no socket, or a socket in the
- * CLOSED state, follows the way back the segment recorded (@RFC{9293},
+ * Applies to segments reaching no socket or a CLOSED one (@RFC{9293},
  * Section 3.9.2.1, MUST-53).
  */
 class Ipv4SourceRouteRstTest : public Ipv4OptionsTestBase
@@ -1151,8 +1135,7 @@ class Ipv4SourceRouteRstTest : public Ipv4OptionsTestBase
                                   Addr(1, 0),
                                   "The RST did not go through the hop the segment did");
         }
-        // The RST of the CLOSED socket carries no ACK, so the SYN it answers
-        // may be sent again
+        // The RST of the CLOSED socket has no ACK, so the SYN may be retransmitted
         NS_TEST_ASSERT_MSG_GT_OR_EQ(resets, 2, "A segment was not answered with a RST");
     }
 };
@@ -1160,10 +1143,9 @@ class Ipv4SourceRouteRstTest : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that an IPv4 source route leaves an IPv6 connection alone
+ * @brief Check that an IPv4 source route does not affect an IPv6 TCP connection
  *
- * The route set on a TCP socket which connects over IPv6 neither reduces its
- * segment size nor prevents the data from flowing.
+ * The segment size is not reduced and data flows.
  */
 class Ipv4SourceRouteIpv6SocketTest : public Ipv4OptionsTestBase
 {
@@ -1290,13 +1272,11 @@ class Ipv4SourceRouteTcpTestBase : public Ipv4OptionsTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test which segments update the way back of a connection
+ * @brief Check which segments update the saved return route of a connection
  *
- * A later segment recording a different route overrides the way back the
- * connection saved (@RFC{1122}, Section 4.2.3.8), but only if it passes the
- * acceptability checks: a segment out of the window, a SYN, an ACK of data
- * never sent or older than the last one, or a segment without an ACK on a
- * synchronized connection leave it alone.
+ * Only acceptable segments with a different route replace it (@RFC{1122},
+ * Section 4.2.3.8): out-of-window segments, SYNs, ACKs of unsent or old data,
+ * and segments without ACK on a synchronized connection do not.
  */
 class Ipv4SourceRouteTcpUpdateTest : public Ipv4SourceRouteTcpTestBase
 {
@@ -1318,8 +1298,7 @@ class Ipv4SourceRouteTcpUpdateTest : public Ipv4SourceRouteTcpTestBase
 
         Ptr<TcpSocketBase> accepted;
         Ptr<Socket> server = Socket::CreateSocket(m_nodes.Get(3), TcpSocketFactory::GetTypeId());
-        // Without timestamps, which would have the injected segments discarded
-        // for lack of them
+        // No timestamps: the injected segments carry none and would be discarded
         server->SetAttribute("Timestamp", BooleanValue(false));
         server->Bind(InetSocketAddress(Ipv4Address::GetAny(), 80));
         server->Listen();
@@ -1381,7 +1360,7 @@ class Ipv4SourceRouteTcpUpdateTest : public Ipv4SourceRouteTcpTestBase
             tcp.SetSequenceNumber(rcvNxt);
             tcp.SetAckNumber(SequenceNumber32(0));
             InjectSegment(Addr(0, 0), tcp);
-            // Data received already, which ends at the left edge of the window
+            // Already received data ending at the left window edge
             tcp.SetFlags(TcpHeader::ACK);
             tcp.SetSequenceNumber(rcvNxt - 100);
             tcp.SetAckNumber(sndNxt);
@@ -1414,12 +1393,11 @@ class Ipv4SourceRouteTcpUpdateTest : public Ipv4SourceRouteTcpTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test the route of the connections a listener accepts
+ * @brief Check the route used by connections a listener accepts
  *
- * A route the application set on a listening socket is inherited by the
- * connections it accepts, whose SYN+ACK follows it in place of the way back
- * (@RFC{9293}, Section 3.9.2.1, MUST-52), and a SYN+ACK sent again follows
- * the way back the SYN recorded, like the first.
+ * Accepted connections inherit the route of the listener and their SYN+ACK
+ * uses it instead of the return route (@RFC{9293}, Section 3.9.2.1, MUST-52);
+ * without one, retransmitted SYN+ACKs follow the return route of the SYN.
  */
 class Ipv4SourceRouteTcpListenerTest : public Ipv4SourceRouteTcpTestBase
 {
@@ -1458,8 +1436,7 @@ class Ipv4SourceRouteTcpListenerTest : public Ipv4SourceRouteTcpTestBase
         client->SetIpv4SourceRoute({Addr(0, 1)});
         client->Connect(InetSocketAddress(Addr(2, 1), 80));
 
-        // A listener without a route of its own, which a SYN reaches from a
-        // source which never answers
+        // A listener without a route, reached by a SYN from a silent source
         Ptr<Socket> other = InstallTcpListener(m_nodes.Get(3), 81);
         Simulator::Schedule(Seconds(1), [this]() {
             TcpHeader syn;
@@ -1508,11 +1485,9 @@ class Ipv4SourceRouteTcpListenerTest : public Ipv4SourceRouteTcpTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that the zero window probes follow the route of the connection
+ * @brief Check that zero window probes follow the source route of the connection
  *
- * The probes of a closed window are segments of the connection like any
- * other, and follow its source route (@RFC{9293}, Section 3.9.2.1, MUST-51),
- * whether or not the connection uses ECN.
+ * With and without ECN (@RFC{9293}, Section 3.9.2.1, MUST-51).
  */
 class Ipv4SourceRouteTcpWindowProbeTest : public Ipv4SourceRouteTcpTestBase
 {
@@ -1532,8 +1507,8 @@ class Ipv4SourceRouteTcpWindowProbeTest : public Ipv4SourceRouteTcpTestBase
         BuildLine();
         EnableHops();
 
-        // A server which reads nothing, so that its window closes once two
-        // segments of the client, 8 bytes of route short of the 508 set, fill it
+        // The server reads nothing; two client segments (508 minus 8 bytes of
+        // route) close its window
         Ptr<Socket> server = Socket::CreateSocket(m_nodes.Get(3), TcpSocketFactory::GetTypeId());
         server->SetAttribute("RcvBufSize", UintegerValue(1000));
         server->SetAttribute("Timestamp", BooleanValue(false));
@@ -1579,12 +1554,10 @@ class Ipv4SourceRouteTcpWindowProbeTest : public Ipv4SourceRouteTcpTestBase
 /**
  * @ingroup internet-test
  *
- * @brief Test that a segment refused while opening leaves the way back alone
+ * @brief Check that a segment dropped in SYN-SENT does not set the return route
  *
- * A connection opening actively learns the way back from the SYN of its
- * peer: a segment without a SYN, which the connection drops in SYN-SENT
- * (@RFC{9293}, Section 3.10.7.3), must not send the SYN retransmissions
- * along the route it recorded.
+ * A non-SYN segment dropped in SYN-SENT (@RFC{9293}, Section 3.10.7.3) must
+ * not make SYN retransmissions follow its recorded route.
  */
 class Ipv4SourceRouteTcpSynSentTest : public Ipv4SourceRouteTcpTestBase
 {
@@ -1609,8 +1582,7 @@ class Ipv4SourceRouteTcpSynSentTest : public Ipv4SourceRouteTcpTestBase
         const Ipv4Address peer("10.0.1.9");
         Ptr<TcpSocketBase> client = DynamicCast<TcpSocketBase>(
             Socket::CreateSocket(m_nodes.Get(3), TcpSocketFactory::GetTypeId()));
-        // Without timestamps, which would have the injected segment discarded
-        // for lack of them
+        // No timestamps: the injected segment carries none and would be discarded
         client->SetAttribute("Timestamp", BooleanValue(false));
         client->Bind();
         client->Connect(InetSocketAddress(peer, 80));

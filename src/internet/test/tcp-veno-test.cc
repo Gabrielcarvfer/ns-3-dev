@@ -182,7 +182,7 @@ TcpVenoTest::DoRun()
                                   "multiplicative decrease algo.");
         }
 
-        // Our calculation of cwnd. Veno counts the RTT samples since the start
+        // Expected cwnd. Veno counts the RTT samples since the start
         // of the connection: the one setting baseRtt, and one per ACK
         if (cntRtt + 2 <= 2)
         {

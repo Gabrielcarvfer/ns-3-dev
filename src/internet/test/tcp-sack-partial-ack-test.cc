@@ -25,30 +25,16 @@ NS_LOG_COMPONENT_DEFINE("TcpSackPartialAckTestSuite");
 /**
  * @ingroup internet-test
  *
- * @brief Test that no spurious retransmission occurs on SACK partial ACKs
- * (see @issueid{988})
+ * @brief Check that SACK partial ACKs cause no spurious retransmission (see @issueid{988}).
  *
- * With SACK enabled, the retransmissions during loss recovery are governed by
- * the scoreboard and the pipe (@RFC{6675}, Section 5): upon receipt of a
- * partial ACK, only the segments reported lost by the scoreboard are to be
- * retransmitted (via NextSeg()). The NewReno-style forced retransmission of
- * the first unacknowledged segment on every partial ACK (@RFC{6582}) must not
- * be performed, otherwise segments are retransmitted more times than needed.
- *
- * The test drops segments with SACK enabled and checks that the number of
- * retransmitted data segments is equal to the number of dropped segments,
- * without retransmission timeouts. Two cases are covered:
- *
- * - two consecutive segments of the same window;
- * - a segment in the middle of the transfer and the last segment of an
- *   application limited transfer. Once the first loss is repaired, the
- *   partial ACK leaves only the last segment outstanding, with no SACKed
- *   data above it: it is not deemed lost (rule 1 of NextSeg()), and there
- *   is no new data to send (rule 2). NextSeg() returns it under rule 3,
- *   which ns-3 relaxes when no SACK block is held in the scoreboard,
- *   standing in for the "rescue" retransmission of rule 4 of @RFC{6675},
- *   Section 4, which is not implemented. Without it, the recovery would
- *   stall until the retransmission timer expires.
+ * With SACK, a partial ACK retransmits only what the scoreboard marks lost
+ * (NextSeg(), @RFC{6675}, Section 5), not the first unacknowledged segment
+ * as in NewReno (@RFC{6582}). Expected: retransmissions == drops, no RTO.
+ * Cases: two consecutive segments; a middle segment plus the last segment of
+ * an application limited transfer. In the second case the last segment has
+ * no SACKed data above it, so NextSeg() returns it under rule 3, which ns-3
+ * relaxes when the scoreboard holds no SACK block, in place of the
+ * unimplemented rescue retransmission (rule 4, @RFC{6675}, Section 4).
  */
 class TcpSackPartialAckTest : public TcpGeneralTest
 {
@@ -101,8 +87,7 @@ void
 TcpSackPartialAckTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
@@ -121,7 +106,7 @@ Ptr<ErrorModel>
 TcpSackPartialAckTest::CreateReceiverErrorModel()
 {
     Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
-    // The segment size is 500 bytes and the first byte has sequence number 1
+    // 500 byte segments, first byte at sequence number 1
     for (uint32_t seq : m_drops)
     {
         errorModel->AddSeqToKill(SequenceNumber32(seq));
@@ -175,15 +160,12 @@ TcpSackPartialAckTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Test a SACK loss recovery limited by the receive window.
+ * @brief Check a SACK recovery limited by the receive window.
  *
- * The receive buffer is smaller than the congestion window reached in slow
- * start, so that the whole receive window is outstanding when a segment is
- * lost: during the recovery, no new data can be sent (rule 2 of NextSeg()
- * fails, @RFC{6675}, Section 4) even when the pipe falls below the
- * congestion window, until the cumulative ACK moves the window. The
- * recovery must complete without retransmission timeouts and with a single
- * retransmission of the lost segments.
+ * The receive buffer is smaller than the slow start cwnd, so no new data can
+ * be sent during recovery (NextSeg() rule 2 fails, @RFC{6675}, Section 4)
+ * until the cumulative ACK moves the window. Expected: no RTO and one
+ * retransmission per lost segment.
  */
 class TcpRwndLimitedRecoveryTest : public TcpGeneralTest
 {
@@ -235,8 +217,7 @@ TcpRwndLimitedRecoveryTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
     SetRcvBufSize(RECEIVER, RCV_BUFFER);
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the expected payload
     SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 

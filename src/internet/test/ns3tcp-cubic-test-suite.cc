@@ -254,9 +254,8 @@ Ns3TcpCubicTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(1000000));
     Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(10));
     Config::SetDefault("ns3::TcpSocket::DelAckCount", UintegerValue(2));
-    // Configure a MSS of 1460 bytes: since every segment carries a 12-byte
-    // timestamp option, the segment payload is 1448 bytes, as on a Linux host
-    // with a 1500 bytes MTU (the cwnd is counted in units of 1448 bytes)
+    // 1460 byte MSS minus the 12 byte timestamp option: 1448 byte payload, as
+    // Linux with a 1500 byte MTU (cwnd counted in 1448 byte units)
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1460));
     Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
     Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(true));
@@ -306,10 +305,9 @@ Ns3TcpCubicTestCase::DoRun()
 
     if (m_clockDrivenIsn)
     {
-        // The secret of the sender is drawn from a stream of its own, in the
-        // first run, which places its initial sequence number in the upper
-        // half of the sequence space: there, the wrap aware comparisons with
-        // a mark left at 0 (e.g., the end of the HyStart round) never hold
+        // Seed 1, run 1 and stream 0 put the sender ISN in the upper half of
+        // the sequence space, where wrap aware comparisons with a mark left at
+        // 0 (e.g., the end of the HyStart round) never hold
         uint32_t seed = RngSeedManager::GetSeed();
         uint64_t run = RngSeedManager::GetRun();
         RngSeedManager::SetSeed(1);
@@ -435,8 +433,7 @@ Ns3TcpCubicTestCase::DoRun()
         NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(1), Seconds(19), 60, 110),
                               true,
                               "cwnd outside range");
-        // The plateau around the maximum reduced by fast convergence does not
-        // have much variation
+        // Flat plateau around the maximum reduced by fast convergence
         NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(4), Seconds(7), 73, 79),
                               true,
                               "cwnd outside range");
@@ -566,9 +563,9 @@ Ns3TcpCubicHystartTestCase::DoRun()
  * @brief Check that the ACKs counted towards the next window increase are
  * discarded when the window is reduced.
  *
- * As tp->snd_cwnd_cnt in Linux, which tcp_init_cwnd_reduction() and
- * tcp_enter_loss() clear, the ACKs counted at the window of before a loss
- * must not hasten the first increase of the reduced window.
+ * Linux clears tp->snd_cwnd_cnt in tcp_init_cwnd_reduction() and
+ * tcp_enter_loss(): ACKs counted at the pre-loss window must not hasten the
+ * first increase of the reduced window.
  */
 class Ns3TcpCubicCwndCntResetTestCase : public TestCase
 {
@@ -595,15 +592,14 @@ Ns3TcpCubicCwndCntResetTestCase::DoRun()
     Ptr<TcpCubic> cubic = CreateObject<TcpCubic>();
     cubic->Init(state);
 
-    // With a minimum delay of 4.2 s, the cubic function of the first epoch
-    // grows the window by a segment every 3 ACKs: two ACKs are counted
+    // Minimum delay 4.2 s: one segment every 3 ACKs; count two ACKs
     cubic->PktsAcked(state, 1, Seconds(4.2));
     cubic->IncreaseWindow(state, 1);
     cubic->IncreaseWindow(state, 1);
     NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 100 * segmentSize, "Unexpected window increase");
 
-    // A loss reduces the window to 70 segments; the new epoch, 4.2 s from
-    // its origin of 100 segments, grows it by a segment every 2 ACKs
+    // Loss: cwnd 70 segments; the new epoch (origin 100 segments, 4.2 s
+    // away) grows one segment every 2 ACKs
     cubic->CongestionStateSet(state, TcpSocketState::CA_RECOVERY);
     state->m_ssThresh = cubic->GetSsThresh(state, 100 * segmentSize);
     NS_TEST_ASSERT_MSG_EQ(state->m_ssThresh.Get(), 70 * segmentSize, "Unexpected ssThresh");
@@ -623,11 +619,10 @@ Ns3TcpCubicCwndCntResetTestCase::DoRun()
  *
  * @brief Check the CntUpdateInterval attribute of TcpCubic.
  *
- * With a window of 100 segments and no previous maximum, the first ACK
- * finds the cubic target at the window, and the count is clamped to 20
- * ACKs per increase. Three seconds later the target is 110 segments, so
- * that the count becomes 10, unless, as in Linux bictcp_update(), it is
- * kept because the window did not change within CntUpdateInterval.
+ * cwnd 100 segments, no previous maximum: the first ACK finds the target at
+ * cwnd and the count is clamped to 20 ACKs per increase. 3 s later the target
+ * is 110 segments and the count becomes 10, unless kept because cwnd did not
+ * change within CntUpdateInterval (Linux bictcp_update()).
  */
 class Ns3TcpCubicCntUpdateIntervalTestCase : public TestCase
 {
@@ -687,12 +682,11 @@ Ns3TcpCubicCntUpdateIntervalTestCase::DoRun()
  *
  * @brief Check the Linux arithmetic of TcpCubic (LinuxHz attribute).
  *
- * A loss at 1427 segments sets ssThresh to 999 segments, with beta = 717/1024
- * (998 with 0.7). The new epoch starts from a window of 999 segments, below
- * the maximum of 1427, with a minimum delay of 95 ms, which Linux rounds up
- * to 10 jiffies (HZ = 100): its cube root and fixed point cubic function give
- * a target of 1013 segments, hence a segment of growth every 71 ACKs, where
- * the published function (a delay of 95 ms, K = 10.23 s) gives one every 83.
+ * A loss at 1427 segments gives ssThresh 999 with beta = 717/1024 (998 with
+ * 0.7). From 999 segments with a 95 ms minimum delay (10 jiffies at HZ = 100),
+ * the Linux fixed point cube root and cubic function give a target of 1013
+ * segments, one segment per 71 ACKs; the published function (K = 10.23 s)
+ * gives one per 83.
  */
 class Ns3TcpCubicLinuxHzTestCase : public TestCase
 {
@@ -738,7 +732,7 @@ Ns3TcpCubicLinuxHzTestCase::DoRun()
     cubic->SetAttribute("HyStart", BooleanValue(false));
     cubic->Init(state);
 
-    // Away from the time origin, as the jiffies of Linux
+    // Start away from time 0, as Linux jiffies do
     Simulator::Schedule(Seconds(1), [cubic, state]() {
         cubic->PktsAcked(state, 1, MilliSeconds(95));
         state->m_ssThresh = cubic->GetSsThresh(state, 1427 * segmentSize);
@@ -781,8 +775,7 @@ Ns3TcpCubicTestSuite::Ns3TcpCubicTestSuite()
                                         false),
                 TestCase::Duration::QUICK);
 
-    // The same with clock driven initial sequence numbers: HyStart leaves
-    // slow start as it does with an initial sequence number of 0
+    // Clock driven ISN: HyStart must exit slow start as with an ISN of 0
     AddTestCase(new Ns3TcpCubicTestCase("no heuristic, clock driven ISN",
                                         "ns3-tcp-cubic-no-heuristic",
                                         false,

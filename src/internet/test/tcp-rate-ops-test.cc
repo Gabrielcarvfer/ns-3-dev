@@ -582,10 +582,9 @@ TcpRateLinuxWithBufferTest::DoTeardown()
  * @brief Check that each ACK builds its rate sample from scratch
  *
  * Two packets sent together carry the same delivery information. The ACK of
- * the second one, after the ACK of the first, must sample the time elapsed
- * since then up to its own arrival, as Linux, which builds the rate sample of
- * every ACK afresh (tcp_ack()), rather than keep the interval of the previous
- * ACK, which would overestimate the delivery rate.
+ * the second must sample the interval since the first ACK, as Linux tcp_ack()
+ * builds every rate sample afresh; reusing the previous interval would
+ * overestimate the delivery rate.
  */
 class TcpRateLinuxFreshSampleTest : public TestCase
 {

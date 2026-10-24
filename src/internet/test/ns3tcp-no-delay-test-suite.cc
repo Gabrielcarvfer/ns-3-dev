@@ -82,8 +82,8 @@ Ns3TcpNoDelayTestCase::SinkRx(std::string, Ptr<const Packet> p, const Address&)
 void
 Ns3TcpNoDelayTestCase::DoRun()
 {
-    // The expected segment boundaries are the 536 bytes of data of the
-    // default segment size, which the timestamp option comes on top of
+    // Segments carry 536 bytes of data (default segment size) plus the
+    // timestamp option
     Config::SetDefault("ns3::TcpSocket::SegmentSize",
                        UintegerValue(536 + TcpSocketBase::GetSegmentOptionsSize()));
     uint16_t sinkPort = 50000;

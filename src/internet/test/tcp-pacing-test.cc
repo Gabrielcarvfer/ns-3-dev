@@ -200,8 +200,7 @@ void
 TcpPacingTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    // The segments carry the timestamp option on top of the data size the
-    // test expects
+    // Room for the timestamp option on top of the data size
     SetSegmentSize(SENDER, m_segmentSize + TcpSocketBase::GetSegmentOptionsSize());
     SetSegmentSize(RECEIVER, m_segmentSize);
     SetInitialSsThresh(SENDER, m_ssThresh);
@@ -391,8 +390,7 @@ class TcpPacingTestSuite : public TestSuite
                                       description),
                     TestCase::Duration::QUICK);
 
-        // Whether the initial window is paced does not depend on the initial
-        // sequence number
+        // Pacing of the initial window is independent of the ISN
         auto clockDrivenIsn = new TcpPacingTest(segmentSize,
                                                 packetSize,
                                                 numPackets,

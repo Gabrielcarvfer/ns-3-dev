@@ -37,15 +37,13 @@ NS_LOG_COMPONENT_DEFINE("TcpMssTestSuite");
 /**
  * @ingroup internet-test
  *
- * @brief TCP MSS option test (see @issueid{946})
+ * @brief Check the MSS option sent in SYNs and the segment size it yields (see @issueid{946})
  *
- * Checks that the MSS option is sent in every SYN segment (@RFC{9293},
- * Section 3.7.1, SHLD-5 and MAY-3), that it advertises the largest segment
- * the interface receives, whatever the configured segment size (MUST-67,
- * and @RFC{6691}, Section 2), and that the segment size used by the sender
- * is the smaller of its configured one and the value advertised by the peer
- * (MUST-16): a receiver configured with a small segment size does not shrink
- * the segments of its peer.
+ * Every SYN carries the MSS option (@RFC{9293}, Section 3.7.1, SHLD-5, MAY-3)
+ * advertising the largest segment the interface receives, regardless of the
+ * configured segment size (MUST-67, @RFC{6691}, Section 2). The sender uses
+ * the smaller of its configured size and the peer's MSS (MUST-16), so a small
+ * receiver segment size does not shrink the peer's segments.
  */
 class TcpMssOptionTestCase : public TcpGeneralTest
 {
@@ -117,10 +115,8 @@ TcpMssOptionTestCase::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
                               "MSS option present in non-SYN segment");
         if (who == SENDER && p->GetSize() > 0)
         {
-            // The segment size in use is the minimum of the configured and the
-            // advertised MSS, decreased by the size of the timestamp option
-            // carried by every segment (RFC 9293, Section 3.7.1), which is
-            // enabled by default
+            // min(configured, advertised MSS) minus the timestamp option,
+            // enabled by default (RFC 9293, Section 3.7.1)
             constexpr uint32_t TS_OPTION_SIZE = 12;
             NS_TEST_ASSERT_MSG_EQ(GetSegSize(SENDER),
                                   std::min(m_senderSegSize, m_mtu - IPV4_TCP_HEADERS_SIZE) -
@@ -133,14 +129,12 @@ TcpMssOptionTestCase::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
 /**
  * @ingroup internet-test
  *
- * @brief Test that a listener negotiates each connection independently
+ * @brief Check that a listener negotiates the MSS of each connection independently
  *
- * The options of a SYN are negotiated by the socket forked for its
- * connection, not by the listening socket, so that neither the listener nor
- * the connections accepted later are affected by the MSS a previous client
- * advertised (@RFC{9293}, Section 3.9.1.1, MUST-41): two clients whose
- * interfaces have different MTUs connect in turn, and the segments of each
- * accepted connection are sized by the MSS its own peer advertised.
+ * SYN options are negotiated by the forked socket, not the listener
+ * (@RFC{9293}, Section 3.9.1.1, MUST-41). Two clients with different MTUs
+ * connect in turn; each accepted connection uses its own peer's MSS and the
+ * listener keeps its configured segment size.
  */
 class TcpListenerMssTestCase : public TestCase
 {
@@ -248,8 +242,7 @@ TcpListenerMssTestCase::DoRun()
     server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                               MakeCallback(&TcpListenerMssTestCase::Accepted, this));
 
-    // The client with the small MSS connects first, then the one with the
-    // large MSS: the second must not be clamped by the first
+    // Small-MSS client first; the large-MSS one must not be clamped by it
     Ptr<Socket> smallClient = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     smallClient->SetAttribute("SegmentSize", UintegerValue(smallMss));
     smallClient->SetAttribute("Timestamp", BooleanValue(false));
@@ -297,11 +290,10 @@ TcpListenerMssTestCase::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief The MSS option test with clock driven initial sequence numbers
+ * @brief Check MSS negotiation and data transfer with clock driven initial sequence numbers
  *
- * The connection is opened with initial sequence numbers which may lie
- * anywhere in the space (@RFC{9293}, Section 3.4.1), and has to negotiate the
- * MSS and transfer its data as with the ones starting from zero.
+ * The ISNs may lie anywhere in the sequence space (@RFC{9293}, Section 3.4.1);
+ * the outcome must match the zero-ISN case.
  */
 class TcpMssOptionClockDrivenIsnTestCase : public TcpMssOptionTestCase
 {
@@ -336,16 +328,12 @@ class TcpMssOptionClockDrivenIsnTestCase : public TcpMssOptionTestCase
 /**
  * @ingroup internet-test
  *
- * @brief Test that writes sized from the segment size fill one segment each
+ * @brief Check that writes sized from the segment size leave as one segment each
  *
- * The SegmentSize attribute counts the data of a segment only, and the
- * timestamp option every segment carries comes out of it (@RFC{6691},
- * Section 2). An application whose writes should each fill one segment
- * configures SegmentSize as the size of its writes plus
- * TcpSocketBase::GetSegmentOptionsSize(); once connected, the SegmentSize
- * attribute of the socket gives the data of a full segment. Each write of an
- * application limited connection then leaves as a single segment, without a
- * runt segment after it.
+ * SegmentSize includes the timestamp option carried by every segment
+ * (@RFC{6691}, Section 2). With SegmentSize set to the write size plus
+ * TcpSocketBase::GetSegmentOptionsSize(), each write of an application
+ * limited connection leaves as a single segment with no runt after it.
  */
 class TcpSegmentDataSizeTestCase : public TestCase
 {

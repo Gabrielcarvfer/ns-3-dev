@@ -42,12 +42,10 @@ NS_LOG_COMPONENT_DEFINE("Ns3TcpRecoveryFsmTest");
 /**
  * @ingroup internet-test
  *
- * Error model dropping the data segments with the given sequence numbers
- * (each listed occurrence once, so a repeated sequence number drops the
- * original transmission and the retransmission).
- *
- * The sequence numbers are relative to the initial sequence number of the
- * sender, taken from the SYN it sent, so the first data byte is numbered 1.
+ * Error model dropping data segments by sequence number, once per listed
+ * occurrence (a repeated number also drops the retransmission). Sequence
+ * numbers are relative to the sender ISN seen in its SYN: the first data
+ * byte is 1.
  */
 class TcpSeqMultiDropErrorModel : public ErrorModel
 {
@@ -161,42 +159,13 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
  *
  * @brief Check the congestion state machine transitions during loss recovery.
  *
- * The test transfers data over a point-to-point link, drops the configured
- * data segments (dropping a sequence number twice drops the original
- * transmission and the retransmission), optionally delays one segment behind
- * later ones, and records the congestion state machine transitions and the
- * retransmitted segments. It then compares them with the expected ones. In
- * every case, a new recovery is never entered before the cumulative ACK
- * reaches the recovery point of the previous recovery or timeout
- * (@RFC{6582}, Section 3.2, step 4, and @RFC{6675}, Section 5.1).
- *
- * The cases, by default going through CA_OPEN -> CA_DISORDER (first
- * duplicate ACK), CA_DISORDER -> CA_RECOVERY (loss inferred) and
- * CA_RECOVERY -> CA_OPEN (full ACK), without retransmission timeouts:
- *
- * - Two separated losses with SACK (@RFC{6675}): each lost segment is
- *   retransmitted exactly once (no NewReno-style forced retransmission on
- *   partial ACKs).
- * - Five alternating losses without SACK (@RFC{6582}): one retransmission per
- *   partial ACK per RTT, with the recovery lasting longer than the minimum
- *   RTO, so the recovery completes without timeouts only if the
- *   retransmission timer is reset on every partial ACK (@RFC{6298},
- *   Section 5.3).
- * - A lost retransmission with SACK: the retransmission is deemed lost when
- *   a segment sent after it is SACKed, and it is retransmitted again during
- *   the same recovery.
- * - A lost retransmission without SACK: nothing reveals the loss of the
- *   retransmission, which is recovered by the retransmission timer
- *   (CA_RECOVERY -> CA_LOSS -> CA_OPEN).
- * - A tail loss: the last segment is lost, no duplicate ACK follows, and the
- *   retransmission timer recovers it (CA_OPEN -> CA_LOSS -> CA_OPEN).
- * - The loss of the first new segment sent during the recovery of another
- *   loss: it belongs to the next window of data, and it is repaired by a
- *   second recovery, started once the first one has ended.
- * - A segment reordered behind two later segments, without loss: the two
- *   duplicate ACKs move the sender to CA_DISORDER, but no loss is inferred
- *   (CA_DISORDER -> CA_OPEN on the cumulative ACK), and nothing is
- *   retransmitted.
+ * Drops (a repeated sequence number also drops the retransmission) or
+ * reorders data segments on a point-to-point link and compares the observed
+ * state transitions and retransmissions with the expected ones. A new
+ * recovery must never start before the cumulative ACK reaches the previous
+ * recovery point (@RFC{6582}, Section 3.2, step 4; @RFC{6675}, Section 5.1).
+ * The default expected sequence is CA_OPEN -> CA_DISORDER -> CA_RECOVERY ->
+ * CA_OPEN without timeouts; the cases are listed in the test suite.
  */
 class Ns3TcpRecoveryFsmTestCase : public TestCase
 {
@@ -461,12 +430,11 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
     Ns3TcpRecoveryFsmTestSuite()
         : TestSuite("ns3-tcp-recovery-fsm", Type::SYSTEM)
     {
-        // The segment payload is 500 bytes (512 bytes MSS minus 12 bytes of
-        // timestamp option) and the first data byte has sequence number 1
+        // 500 byte payload (512 byte MSS minus 12 byte timestamp option),
+        // first data byte at sequence number 1
 
-        // RFC 6675: two separated losses, each retransmitted exactly once (no
-        // NewReno-style forced retransmission on the partial ACK), recovery
-        // completes without timeouts
+        // RFC 6675: each loss retransmitted once, no forced retransmission on
+        // the partial ACK
         AddTestCase(new Ns3TcpRecoveryFsmTestCase("SACK recovery with two separated losses",
                                                   true,
                                                   {20001, 22001},
@@ -474,15 +442,12 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                                                   Seconds(1)),
                     TestCase::Duration::QUICK);
 
-        // RFC 6582: five alternating losses, one retransmission per partial
-        // ACK per RTT. The last ACK before the losses restarts the timer
-        // about 200 ms before the first partial ACK, the partial ACKs are
-        // about 100 ms apart, and the full ACK arrives about 400 ms after the
-        // first partial ACK. With an RTO of 300 ms (the minimum), resetting
-        // the timer on every partial ACK (RFC 6298, Section 5.3) leaves at
-        // least 100 ms of margin to the timeout, while resetting it on the
-        // first partial ACK only (the Impatient variant of RFC 6582,
-        // Section 3.2) times out about 100 ms before the full ACK
+        // RFC 6582: one retransmission per partial ACK. The first partial ACK
+        // comes ~200 ms after the last timer restart, partial ACKs ~100 ms
+        // apart, the full ACK ~400 ms after the first. With a 300 ms RTO,
+        // restarting on every partial ACK (RFC 6298, Section 5.3) keeps
+        // >= 100 ms of margin; restarting on the first only (Impatient
+        // variant, RFC 6582, Section 3.2) times out ~100 ms before the full ACK
         AddTestCase(new Ns3TcpRecoveryFsmTestCase(
                         "NewReno recovery with five losses and multiple partial ACKs",
                         false,
@@ -491,9 +456,8 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                         MilliSeconds(300)),
                     TestCase::Duration::QUICK);
 
-        // Lost retransmission: the retransmission is deemed lost when a
-        // segment sent after it is SACKed, and retransmitted again during the
-        // same recovery, without timeouts
+        // The retransmission is deemed lost once a later segment is SACKed and
+        // is retransmitted again in the same recovery
         AddTestCase(new Ns3TcpRecoveryFsmTestCase("SACK recovery with a lost retransmission",
                                                   true,
                                                   {5001, 5001},
@@ -501,10 +465,9 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                                                   Seconds(1)),
                     TestCase::Duration::QUICK);
 
-        // Lost retransmission without SACK: only the retransmission timer
-        // recovers it, and the duplicate ACKs which follow the timeout do not
-        // start a new recovery before the cumulative ACK reaches the recovery
-        // point (RFC 6582, Section 3.2, step 4; RFC 6675, Section 5.1)
+        // Without SACK only the timer recovers a lost retransmission; later
+        // duplicate ACKs start no recovery below the recovery point
+        // (RFC 6582, Section 3.2, step 4; RFC 6675, Section 5.1)
         AddTestCase(new Ns3TcpRecoveryFsmTestCase("NewReno recovery with a lost retransmission",
                                                   false,
                                                   {5001, 5001},
@@ -516,8 +479,7 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                                                    "CA_LOSS->CA_OPEN"}),
                     TestCase::Duration::QUICK);
 
-        // Tail loss: the last segment (bytes 39501 to 40000) is lost, no
-        // duplicate ACK follows, and the retransmission timer recovers it
+        // Last segment (bytes 39501-40000): no duplicate ACK, timer recovers it
         AddTestCase(new Ns3TcpRecoveryFsmTestCase("Tail loss recovered by a timeout",
                                                   true,
                                                   {39501},
@@ -526,12 +488,9 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                                                   {"CA_OPEN->CA_LOSS", "CA_LOSS->CA_OPEN"}),
                     TestCase::Duration::QUICK);
 
-        // Loss of the first new segment sent during the recovery (16001,
-        // the recovery point): the ACK of the retransmission of 5001 reaches
-        // the recovery point and ends the recovery, and the loss of 16001,
-        // which belongs to the next window of data, starts a new recovery,
-        // which RFC 6675, Section 5.1 (and RFC 6582, Section 3.2, step 2)
-        // allows once the cumulative ACK has reached the recovery point
+        // 16001 (the recovery point) is the first new segment sent in the
+        // recovery of 5001; its loss starts a second recovery once the first
+        // ends (RFC 6675, Section 5.1; RFC 6582, Section 3.2, step 2)
         AddTestCase(new Ns3TcpRecoveryFsmTestCase("Loss of a segment sent during the recovery",
                                                   true,
                                                   {5001, 16001},
@@ -545,8 +504,8 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                                                    "CA_RECOVERY->CA_OPEN"}),
                     TestCase::Duration::QUICK);
 
-        // Reordering without loss: a segment delayed behind two later
-        // segments causes two duplicate ACKs only, below the threshold
+        // A segment held behind two later ones: two duplicate ACKs, below the
+        // threshold, nothing retransmitted
         auto reordering =
             new Ns3TcpRecoveryFsmTestCase("Reordering without loss",
                                           true,

@@ -36,16 +36,14 @@ NS_LOG_COMPONENT_DEFINE("TcpTsoDeferTest");
 /**
  * @ingroup internet-test
  *
- * @brief Test the deferral of partial bursts, as Linux TSO (TsoDefer)
+ * @brief Check that TsoDefer defers partial bursts, as Linux TSO.
  *
- * A bulk transfer in congestion avoidance, with a receiver acknowledging
- * every segment over a 10 Mbit/s link, so that each ACK lets the sender send
- * a single segment, less than the two segments of a Linux GSO packet at this
- * rate. Without TsoDefer the sender sends each one at once; with it, as Linux
- * (tcp_tso_should_defer()), it waits for the next ACK and sends two segments
- * together, unless its last transmission is more than 1 ms old: more than
- * 90% of the transmissions are then single segments without it, less than
- * half with it. The transfer completes in both cases.
+ * Bulk transfer in congestion avoidance over 10 Mbit/s, every segment
+ * acknowledged, so each ACK opens one segment, less than the two-segment
+ * Linux GSO packet at this rate. With TsoDefer, as tcp_tso_should_defer(),
+ * the sender waits for the next ACK and sends two segments together unless
+ * its last transmission is over 1 ms old. Expected: over 90% single-segment
+ * transmissions without TsoDefer, under half with it; the transfer completes.
  */
 class TcpTsoDeferTestCase : public TestCase
 {
@@ -164,18 +162,14 @@ TcpTsoDeferTestCase::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Test that TsoDefer does not hold the segment filling the window
+ * @brief Check that TsoDefer does not hold the short segment filling the window.
  *
- * A bulk transfer into the receive window of 4.9 segments that a Linux
- * receiver advertises for a buffer of 8 KiB, over a 10 Mbit/s link with an
- * RTT of 100 ms, with FillReceiveWindow. As Linux (tcp_mss_split_point()),
- * the short segment that fills the window up to its right edge belongs to the
- * same GSO packet as the full segment before it, so TsoDefer does not defer it
- * on its own: with a receiver acknowledging every segment, each short segment
- * is sent together with a full one. A GSO packet does not start with it,
- * though, as its first segment would not fit the window (tcp_snd_wnd_test()):
- * with a receiver acknowledging every second segment, a short segment is
- * sent only along full ones, never alone.
+ * Bulk transfer with FillReceiveWindow into the 4.9-segment window a Linux
+ * receiver advertises for an 8 KiB buffer (10 Mbit/s, 100 ms RTT). As
+ * tcp_mss_split_point(), the short segment reaching the right edge joins the
+ * GSO packet of the full segment before it, and as tcp_snd_wnd_test() a GSO
+ * packet never starts with it. Expected: with either 1 or 2 segments per ACK,
+ * every short segment is sent together with a full one, never alone.
  */
 class TcpTsoDeferFillTestCase : public TestCase
 {
@@ -257,8 +251,7 @@ TcpTsoDeferFillTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(SEGMENT_SIZE));
     Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(8192));
-    // The receiver advertises the window of Linux, 7068 bytes, not a
-    // multiple of the segment size
+    // Linux receive window, 7068 bytes, not a multiple of the segment size
     Config::SetDefault("ns3::TcpSocketBase::LinuxRcvWindow", BooleanValue(true));
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(BYTES));
     Config::SetDefault("ns3::TcpSocketBase::FillReceiveWindow", BooleanValue(true));
@@ -294,17 +287,14 @@ TcpTsoDeferFillTestCase::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Test the GSO packets that the right edge of the receive window cuts
+ * @brief Check the GSO packets cut by the right edge of the receive window.
  *
- * A transfer of 50000 bytes into the window of 7068 bytes that a Linux
- * receiver advertises for a buffer of 8 KiB, over a 10 Mbit/s link with an
- * RTT of 100 ms, as the R22 scenario compared with Linux 6.12. As
- * tcp_mss_split_point(), a GSO packet takes the segments the congestion window
- * allows, cut by the end of its skb and by the right edge of the receive
- * window, the short segment filling the window included: the short segment
- * goes with the full one before it whenever the window leaves room for less
- * than the GSO packet, and Linux sends its first short segments at 8688 and
- * 15756 bytes from the first byte.
+ * 50000 bytes into the 7068-byte window a Linux receiver advertises for an
+ * 8 KiB buffer (10 Mbit/s, 100 ms RTT; scenario R22, compared with Linux 6.12).
+ * As tcp_mss_split_point(), a GSO packet is cut by the congestion window, the
+ * end of its skb and the right edge of the receive window, the short segment
+ * filling the window included. Expected: the first short segments start at
+ * 8688 and 15756 bytes from the first byte, as in Linux.
  */
 class TcpTsoDeferSplitTestCase : public TestCase
 {
@@ -372,7 +362,7 @@ TcpTsoDeferSplitTestCase::Write(Ptr<Socket> socket)
 void
 TcpTsoDeferSplitTestCase::DoRun()
 {
-    // An MSS of 1460 bytes, of which the timestamps take 12
+    // MSS 1460 bytes, 12 of them taken by the timestamp option
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1460));
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(8192));
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(BYTES));
@@ -415,14 +405,14 @@ TcpTsoDeferSplitTestCase::DoRun()
 /**
  * @ingroup internet-test
  *
- * @brief Test Nagle's algorithm as Linux (TsoDefer with TcpNoDelay false)
+ * @brief Check Nagle's algorithm with TsoDefer (TcpNoDelay false) against Linux.
  *
- * The application writes 2500 bytes, with segments of 1000 bytes and Nagle's
- * algorithm, then 300 bytes 1 ms later. Without TsoDefer, Nagle holds the
- * short segment of 500 bytes while data is not acknowledged; with it, as
- * Linux (tcp_nagle_check(), Minshall's variant), it holds a short segment
- * only while a short segment sent is not acknowledged: the 500 bytes go with
- * the full segments, and the 300 bytes wait for their ACK.
+ * The application writes 2500 bytes (1000-byte segments), then 300 bytes
+ * 1 ms later. Without TsoDefer, Nagle holds the 500-byte short segment while
+ * any data is unacknowledged. With it, as tcp_nagle_check() (Minshall's
+ * variant), a short segment is held only while another short segment is
+ * unacknowledged: the 500 bytes go with the full segments and the 300 bytes
+ * wait for their ACK.
  */
 class TcpTsoDeferNagleTestCase : public TestCase
 {
@@ -561,15 +551,13 @@ class TcpTsoSegmentsProbe : public TcpSocketBase
 /**
  * @ingroup internet-test
  *
- * @brief Test the pacing rate behind the GSO size of Linux
+ * @brief Check the pacing rate behind the Linux GSO size.
  *
  * As tcp_update_pacing_rate(), the rate is 200% of cwnd * mss / srtt while
- * the window is below half the slow start threshold, both counted in
- * segments, and 120% above: with 120 segments and a threshold of 241, the
- * window is not below 241 / 2 = 120 segments, so that the rate of 120%, with
- * an SRTT of 69.7 ms, is 2.99 MB/s, and a GSO packet of 1 ms holds 2
- * segments; compared in bytes, the window would be below half the threshold,
- * and the packet would hold 3.
+ * cwnd < ssthresh / 2 (in segments) and 120% otherwise. With cwnd 120,
+ * ssthresh 241 (241 / 2 = 120) and SRTT 69.7 ms the rate is 120%, 2.99 MB/s,
+ * so a 1 ms GSO packet holds 2 segments; comparing in bytes would give 200%
+ * and 3 segments.
  */
 class TcpTsoSegmentsTestCase : public TestCase
 {
@@ -647,16 +635,14 @@ class TcpOffsetErrorModel : public ErrorModel
 /**
  * @ingroup internet-test
  *
- * @brief Test Nagle's algorithm of Linux on the segment filling the window
+ * @brief Check Linux Nagle behaviour on the short segment filling the window.
  *
- * Into the window of 7240 bytes that a Linux receiver advertises in its SYN
- * for a buffer of 8 KiB, the application writes 1948 bytes, a full segment
- * and a short one of 500 bytes, then the rest of the data. The GSO packets of
- * two segments leave room for a full segment and a short one of 948 bytes up
- * to the right edge of the window. As Linux (tcp_mss_split_point() and
- * tcp_nagle_check()), with Nagle's algorithm, the GSO packet that the window
- * cuts does not take the short segment while the short segment sent before
- * is not acknowledged; without Nagle's algorithm it does.
+ * Window of 7240 bytes (Linux SYN, 8 KiB buffer). The application writes
+ * 1948 bytes (a full segment and a 500-byte short one), then the rest; the
+ * two-segment GSO packets leave room for a full segment and a 948-byte short
+ * one up to the right edge. As tcp_mss_split_point() and tcp_nagle_check(),
+ * with Nagle the window-cut GSO packet omits the short segment while the
+ * earlier short segment is unacknowledged; without Nagle it includes it.
  */
 class TcpTsoDeferFillNagleTestCase : public TestCase
 {
