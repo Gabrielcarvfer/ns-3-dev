@@ -20,6 +20,7 @@
 #include "ns3/point-to-point-helper.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/test.h"
 #include "ns3/uinteger.h"
@@ -81,10 +82,10 @@ Ns3TcpNoDelayTestCase::SinkRx(std::string, Ptr<const Packet> p, const Address&)
 void
 Ns3TcpNoDelayTestCase::DoRun()
 {
-    // The expected segment boundaries assume that the segment payload equals
-    // the configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
+    // The expected segment boundaries are the 536 bytes of data of the
+    // default segment size, which the timestamp option comes on top of
+    Config::SetDefault("ns3::TcpSocket::SegmentSize",
+                       UintegerValue(536 + TcpSocketBase::GetSegmentOptionsSize()));
     uint16_t sinkPort = 50000;
     double sinkStopTime = 8;   // sec; will trigger Socket::Close
     double writerStopTime = 5; // sec; will trigger Socket::Close

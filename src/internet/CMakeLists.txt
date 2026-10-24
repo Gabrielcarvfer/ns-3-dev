@@ -375,6 +375,7 @@ set(test_sources
     test/tcp-partial-ack-rto-test.cc
     test/tcp-sack-partial-ack-test.cc
     test/tcp-pkts-acked-test.cc
+    test/tcp-quick-ack-test.cc
     test/tcp-prr-recovery-test.cc
     test/tcp-rate-ops-test.cc
     test/tcp-rfc9293-test.cc
@@ -383,6 +384,7 @@ set(test_sources
     test/tcp-rx-buffer-test.cc
     test/tcp-sack-permitted-test.cc
     test/tcp-scalable-test.cc
+    test/tcp-sender-sws-test.cc
     test/tcp-slow-start-test.cc
     test/tcp-syn-connection-failed-test.cc
     test/tcp-test.cc

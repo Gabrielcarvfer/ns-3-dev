@@ -12,6 +12,7 @@
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/tcp-header.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
 
 #include <set>
@@ -68,6 +69,7 @@ class TcpSackPartialAckTest : public TcpGeneralTest
     }
 
   protected:
+    void ConfigureProperties() override;
     void ConfigureEnvironment() override;
     Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
     Ptr<ErrorModel> CreateReceiverErrorModel() override;
@@ -95,15 +97,20 @@ TcpSackPartialAckTest::ConfigureEnvironment()
     SetPropagationDelay(MilliSeconds(50));
 }
 
+void
+TcpSackPartialAckTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
 Ptr<TcpSocketMsgBase>
 TcpSackPartialAckTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    // The dropped sequence numbers assume that the segment payload equals the
-    // configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    socket->SetAttribute("Timestamp", BooleanValue(false));
     socket->SetAttribute("Sack", BooleanValue(true));
     // Avoid retransmission timeouts during the test
     socket->SetAttribute("MinRto", TimeValue(Seconds(10)));
@@ -228,6 +235,9 @@ TcpRwndLimitedRecoveryTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
     SetRcvBufSize(RECEIVER, RCV_BUFFER);
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
 Ptr<TcpSocketMsgBase>
@@ -235,7 +245,6 @@ TcpRwndLimitedRecoveryTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    socket->SetAttribute("Timestamp", BooleanValue(false));
     socket->SetAttribute("Sack", BooleanValue(true));
     // Any stall of the recovery shows up as a retransmission timeout
     socket->SetAttribute("MinRto", TimeValue(Seconds(10)));

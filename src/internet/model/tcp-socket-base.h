@@ -246,6 +246,22 @@ class TcpSocketBase : public TcpSocket
     static TypeId GetTypeId();
 
     /**
+     * @brief Get the size of the TCP options every data segment carries
+     *
+     * The MSS, and the SegmentSize attribute, count the data of a segment
+     * only: the options every segment carries come out of it (@RFC{6691},
+     * Section 2), so that a full segment carries SegmentSize minus this size
+     * of data. An application whose writes should each fill one segment
+     * configures SegmentSize as the size of its writes plus this size. Once
+     * a connection is established, the SegmentSize attribute of its socket
+     * gives the size of the data of a full segment.
+     *
+     * @param timestamp Whether the timestamp option is in use.
+     * @return The size of the options, padded to a multiple of four bytes.
+     */
+    static uint32_t GetSegmentOptionsSize(bool timestamp = true);
+
+    /**
      * @brief TcpGeneralTest friend class (for tests).
      * @relates TcpGeneralTest
      */
@@ -869,14 +885,15 @@ class TcpSocketBase : public TcpSocket
      * (@RFC{5961}, Sections 3.2 and 4.2). A FIN retransmitted to a
      * connection in TIME-WAIT restarts its timeout.
      *
-     * @param seq the sequence number of packet's TCP header
-     * @param flags the flags of packet's TCP header
+     * A segment without data lying before RCV.NXT is still processed when it
+     * acknowledges new data, so that the acknowledgment is not lost.
+     *
+     * @param tcpHeader the TCP header of the packet
      * @param tcpHeaderSize the size of packet's TCP header
      * @param tcpPayloadSize the size of TCP payload
      * @return true if the TCP segment is valid
      */
-    bool IsValidTcpSegment(const SequenceNumber32 seq,
-                           const uint8_t flags,
+    bool IsValidTcpSegment(const TcpHeader& tcpHeader,
                            const uint32_t tcpHeaderSize,
                            const uint32_t tcpPayloadSize);
 
@@ -986,17 +1003,42 @@ class TcpSocketBase : public TcpSocket
     void SendRST();
 
     /**
+     * @brief Set the sequence number of the first byte of the tx buffer
+     *
+     * The data queued while the connection opens is numbered once the
+     * handshake gives its first sequence number: the urgent pointer of the
+     * urgent data among it moves along with it.
+     *
+     * @param seq the sequence number of the first byte of the tx buffer
+     */
+    void SetTxHeadSequence(SequenceNumber32 seq);
+
+    /**
      * @brief Check if the sequence number of a segment without data is within
      *        the rx window
      *
      * Only the synchronized states, and SYN-RECEIVED, have a window to check
      * against; once the FIN of the peer is in, RCV.NXT is the only
-     * acceptable sequence number.
+     * acceptable sequence number. While a FIN received out of order waits
+     * for the data before it, the window extends to the sequence number
+     * following the FIN, which the later segments of the peer carry.
      *
      * @param seq the sequence number of the segment
      * @return true if the sequence number is out of range
      */
     bool ZeroLengthOutOfRange(SequenceNumber32 seq) const;
+
+    /**
+     * @brief Check if an acknowledgment number acknowledges new data
+     *
+     * The acknowledgment number must lie in (SND.UNA, SND.NXT], where SND.NXT
+     * counts the FIN once it is sent. Only the states which may have
+     * unacknowledged data or FIN are considered.
+     *
+     * @param ack the acknowledgment number
+     * @return true if the acknowledgment number acknowledges new data
+     */
+    bool AcksNewData(SequenceNumber32 ack) const;
 
     /**
      * @brief Check if a sequence number range is within the rx window
@@ -1169,6 +1211,15 @@ class TcpSocketBase : public TcpSocket
     virtual uint32_t AvailableWindow() const;
 
     /**
+     * @brief Check if a segment shorter than the MSS may be sent while more
+     * data is queued (sender silly window syndrome avoidance)
+     * @param availableWindow the usable window, smaller than the MSS
+     * @param nPacketsSent the number of segments already sent in this burst
+     * @return true if a segment of availableWindow bytes may be sent
+     */
+    bool CanSendPartialSegment(uint32_t availableWindow, uint32_t nPacketsSent) const;
+
+    /**
      * @brief The amount of Rx window announced to the peer
      * @param scale indicate if the window should be scaled. True for
      * almost all cases, except when we are sending a SYN
@@ -1307,6 +1358,87 @@ class TcpSocketBase : public TcpSocket
      * @brief Action upon delay ACK timeout, i.e. send an ACK
      */
     virtual void DelAckTimeout();
+
+    /**
+     * @brief Enter the quick ACK mode, or extend it
+     *
+     * With the QuickAck attribute set, the receiver acknowledges every
+     * in-sequence data segment, as long as quick ACKs remain, instead of
+     * every DelAckCount-th one. As tcp_incr_quickack() of Linux, the number
+     * of quick ACKs is raised to half the window last advertised in
+     * segments, at least 2 and at most maxQuickAcks, if it is below it.
+     * As tcp_enter_quickack_mode(), the delayed ACK timeout of the
+     * AdaptiveDelAck attribute also returns to its minimum.
+     *
+     * Unlike Linux, the segment size of the connection stands for the
+     * receive MSS that Linux estimates from the segments received, and
+     * neither the interactive (pingpong) mode, which suspends the quick ACKs,
+     * nor the quick ACK sent when the receive buffer autotuning grows the
+     * window (tcp_grow_window()) is modelled.
+     *
+     * @param maxQuickAcks Bound on the number of quick ACKs
+     */
+    void EnterQuickAckMode(uint32_t maxQuickAcks);
+
+    /**
+     * @brief Raise the number of quick ACKs, as tcp_incr_quickack() of Linux
+     *
+     * Unlike EnterQuickAckMode(), the delayed ACK timeout of the
+     * AdaptiveDelAck attribute is left as it is.
+     *
+     * @param maxQuickAcks Bound on the number of quick ACKs
+     */
+    void IncrQuickAck(uint32_t maxQuickAcks);
+
+    /**
+     * @brief Account for an ACK sent in the quick ACK mode
+     *
+     * As tcp_dec_quickack_mode() of Linux, an ACK that acknowledges data
+     * received since the previous ACK consumes a quick ACK.
+     */
+    void QuickAckSent();
+
+    /**
+     * @brief Tell if the ACK of out-of-order data is to be compressed
+     *
+     * With the SackCompression attribute set, as __tcp_ack_snd_check() of
+     * Linux, the first three ACKs of out-of-order data at a given RCV.NXT are
+     * sent at once, so that the sender can retransmit fast, and the following
+     * ones wait, up to the SackCompressionDelay or 5% of the RTT, whichever
+     * is shorter, for more data that the same ACK can cover. Up to 44 ACKs
+     * are merged so (tcp_comp_sack_nr). The ACK is not compressed in the
+     * quick ACK mode, nor upon a new CE mark.
+     *
+     * @return true if the ACK waits, false if it is to be sent at once
+     */
+    bool CompressSackAck();
+
+    /**
+     * @brief Send the ACK that SACK compression held back
+     */
+    void SackCompressionTimeout();
+
+    /**
+     * @brief Adapt the delayed ACK timeout to the arrival of in-sequence data
+     *
+     * With the AdaptiveDelAck attribute set, as tcp_event_data_recv() of
+     * Linux, the timeout (icsk_ack.ato) starts at 40 ms on the first data,
+     * moves towards 40 ms while segments arrive less than 20 ms apart, and
+     * otherwise towards twice their interval, bounded by the RTO.
+     */
+    void UpdateDelAckTimeout();
+
+    /**
+     * @brief Get the delay of the delayed ACK timer to start
+     *
+     * Without the AdaptiveDelAck attribute, it is DelAckTimeout. With it, as
+     * tcp_send_delayed_ack() of Linux, it is the adaptive timeout, bounded by
+     * the smoothed RTT (but not below 40 ms) and 500 ms when above 40 ms, and
+     * by DelAckTimeout in any case.
+     *
+     * @return the delay of the delayed ACK timer
+     */
+    Time GetDelAckDelay() const;
 
     /**
      * @brief Timeout at LAST_ACK, close the connection
@@ -1528,9 +1660,12 @@ class TcpSocketBase : public TcpSocket
      * @brief Get the largest segment the interface of the connection carries
      *
      * @return The MTU of the interface minus the base IP and TCP headers, or
-     *         the largest MSS when the socket is not bound to an interface.
+     *         MAX_INTERFACE_MSS when the socket is not bound to an interface.
      */
     uint32_t GetInterfaceMss() const;
+
+    /// The interface MSS of a socket which is not bound to an interface
+    static constexpr uint32_t MAX_INTERFACE_MSS = 65535;
 
     /**
      * @brief Check whether a segment may update the way back of the connection
@@ -1574,9 +1709,12 @@ class TcpSocketBase : public TcpSocket
      * The MSS option should be sent in every SYN segment when the receive
      * MSS differs from the default, and may be sent always (@RFC{9293},
      * Section 3.7.1, SHLD-5 and MAY-3): it is always sent. The advertised
-     * value is the configured segment size, regardless of the one the peer
-     * advertised or of the options in use, bounded by the MTU of the
-     * interface (MUST-67).
+     * value is the largest segment this end can receive, the MTU of the
+     * interface minus the base IP and TCP headers (MUST-67, and @RFC{6691},
+     * Section 2), regardless of the configured segment size, which bounds
+     * only the segments sent, of the one the peer advertised, and of the
+     * options in use. The configured segment size is advertised when the
+     * MTU of the interface is unknown.
      *
      * @param header TcpHeader where the method should add the option
      */
@@ -1697,12 +1835,34 @@ class TcpSocketBase : public TcpSocket
     uint32_t m_delAckCount{0};    //!< Delayed ACK counter
     uint32_t m_delAckMaxCount{0}; //!< Number of packet to fire an ACK before delay timeout
 
+    // Quick ACK mode of Linux (icsk_ack.quick)
+    bool m_quickAck{false};                 //!< Acknowledge every segment in quick ACK mode
+    uint32_t m_quickAckCount{0};            //!< Quick ACKs left
+    bool m_quickAckScheduled{false};        //!< Received data awaits an ACK
+    std::optional<Time> m_lastDataRxTime{}; //!< Time of the last in-sequence data received
+
+    // SACK compression of Linux (tcp_comp_sack_*)
+    bool m_sackCompression{false};        ///< Delay the ACKs of out-of-order data as Linux
+    Time m_sackCompressionDelay;          ///< Bound on the delay of a compressed ACK
+    uint32_t m_compressedAcks{0};         ///< ACKs held back since the last ACK sent
+    uint32_t m_compressDupAcks{0};        ///< ACKs of out-of-order data sent at the current RCV.NXT
+    SequenceNumber32 m_compressRcvNxt{0}; ///< RCV.NXT that m_compressDupAcks refers to
+    EventId m_sackCompressionEvent{};     ///< Timer of the compressed ACK
+
+    // Adaptive delayed ACK timeout of Linux (icsk_ack.ato)
+    bool m_adaptiveDelAck{false}; ///< Adapt the delayed ACK timeout as Linux
+    Time m_ato{0};                ///< Adaptive delayed ACK timeout, zero before the first data
+
     // Window updates (RFC 5681, Section 2, duplicate ACK condition (e))
     std::optional<uint32_t> m_lastAckWindow; //!< Advertised window of the last incoming ACK
     bool m_ackWindowUpdate{false};           //!< True if the ACK being processed changes the window
 
     // Nagle algorithm
     bool m_noDelay{false}; //!< Set to true to disable Nagle's algorithm
+
+    // Sender silly window syndrome avoidance
+    bool m_fillRcvWindow{false}; //!< Fill the receive window with a short segment, as Linux
+    uint32_t m_maxSndWnd{0};     //!< Largest send window offered by the peer, Max(SND.WND)
 
     // Retries
     uint32_t m_synCount{0};      //!< Count of remaining connection retries
@@ -1812,7 +1972,8 @@ class TcpSocketBase : public TcpSocket
                                           //!< urgent points are only comparable to the live
                                           //!< sequence numbers after being set from one
     bool m_rcvUrgentArmed{false};         //!< True once an urgent pointer has been received
-    uint32_t m_advertisedMss{0}; //!< MSS advertised in the MSS option (our configured segment size)
+    uint32_t m_advertisedMss{0}; //!< Configured segment size, advertised in the MSS option when
+                                 //!< the MTU of the interface is unknown
     bool m_segmentSizeAdjusted{
         false}; //!< True if the segment size has been reduced by the size of the TCP options
 

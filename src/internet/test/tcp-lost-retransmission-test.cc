@@ -16,6 +16,8 @@
 #include "ns3/simple-net-device.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-l4-protocol.h"
+#include "ns3/tcp-socket-base.h"
+#include "ns3/tcp-tx-buffer.h"
 #include "ns3/test.h"
 
 #include <map>
@@ -37,7 +39,10 @@ NS_LOG_COMPONENT_DEFINE("TcpLostRetransmissionTestSuite");
  * SACKed, and marks it for retransmission again.
  *
  * The test drops a segment and its retransmission, and checks that the
- * transfer recovers without a retransmission timeout.
+ * transfer recovers without a retransmission timeout. With the detection
+ * disabled (TcpTxBuffer::LostRetransmissionDetection), as in strict @RFC{6675}
+ * recovery and Linux without RACK, it checks instead that the lost
+ * retransmission is not resent before the retransmission timeout repairs it.
  */
 class TcpLostRetransmissionTest : public TcpGeneralTest
 {
@@ -45,24 +50,33 @@ class TcpLostRetransmissionTest : public TcpGeneralTest
     /**
      * @brief Constructor.
      * @param name Test description.
+     * @param detect Whether the lost retransmission detection is enabled.
      */
-    TcpLostRetransmissionTest(const std::string& name)
-        : TcpGeneralTest(name)
+    TcpLostRetransmissionTest(const std::string& name, bool detect)
+        : TcpGeneralTest(name),
+          m_detect(detect)
     {
     }
 
   protected:
+    void ConfigureProperties() override;
     void ConfigureEnvironment() override;
     Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
     Ptr<ErrorModel> CreateReceiverErrorModel() override;
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
     void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
                         const TcpSocketState::TcpCongState_t newValue) override;
-    void AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
+    void BeforeRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
     void FinalChecks() override;
 
   private:
+    static constexpr uint32_t LOST_SEQ = 10001; //!< Sequence number of the dropped segment
+
+    bool m_detect;                 //!< Whether the lost retransmission detection is enabled.
     bool m_recoveryEntered{false}; //!< True if fast recovery was entered.
     uint32_t m_rtoCount{0};        //!< Number of RTO expirations at the sender.
+    uint32_t m_lostTx{0};          //!< Transmissions of the dropped segment.
+    uint32_t m_lostTxBeforeRto{0}; //!< Transmissions of the dropped segment before the RTO.
 };
 
 void
@@ -74,17 +88,33 @@ TcpLostRetransmissionTest::ConfigureEnvironment()
     SetPropagationDelay(MilliSeconds(50));
 }
 
+void
+TcpLostRetransmissionTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
 Ptr<TcpSocketMsgBase>
 TcpLostRetransmissionTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    // The dropped sequence numbers assume that the segment payload equals the
-    // configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    socket->SetAttribute("Timestamp", BooleanValue(false));
     socket->SetAttribute("Sack", BooleanValue(true));
+    socket->GetTxBuffer()->SetAttribute("LostRetransmissionDetection", BooleanValue(m_detect));
     return socket;
+}
+
+void
+TcpLostRetransmissionTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who == SENDER && p->GetSize() > 0 &&
+        ToRelativeSeq(SENDER, h.GetSequenceNumber()).GetValue() == LOST_SEQ)
+    {
+        m_lostTx++;
+    }
 }
 
 Ptr<ErrorModel>
@@ -110,10 +140,14 @@ TcpLostRetransmissionTest::CongStateTrace(const TcpSocketState::TcpCongState_t o
 }
 
 void
-TcpLostRetransmissionTest::AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who)
+TcpLostRetransmissionTest::BeforeRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who)
 {
     if (who == SENDER)
     {
+        if (m_rtoCount == 0)
+        {
+            m_lostTxBeforeRto = m_lostTx;
+        }
         m_rtoCount++;
     }
 }
@@ -122,10 +156,22 @@ void
 TcpLostRetransmissionTest::FinalChecks()
 {
     NS_TEST_ASSERT_MSG_EQ(m_recoveryEntered, true, "Fast recovery was not entered");
-    NS_TEST_ASSERT_MSG_EQ(m_rtoCount,
-                          0,
-                          "RTO expired: the lost retransmission was not detected and "
-                          "retransmitted again during fast recovery");
+    if (m_detect)
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_rtoCount,
+                              0,
+                              "RTO expired: the lost retransmission was not detected and "
+                              "retransmitted again during fast recovery");
+        NS_TEST_ASSERT_MSG_EQ(m_lostTx, 3, "Unexpected transmissions of the dropped segment");
+    }
+    else
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_rtoCount, 1, "The RTO did not repair the lost retransmission");
+        NS_TEST_ASSERT_MSG_EQ(m_lostTxBeforeRto,
+                              2,
+                              "The lost retransmission was resent before the RTO");
+        NS_TEST_ASSERT_MSG_EQ(m_lostTx, 3, "Unexpected transmissions of the dropped segment");
+    }
 }
 
 /**
@@ -259,6 +305,7 @@ class TcpReorderedRetransmissionTest : public TcpGeneralTest
     }
 
   protected:
+    void ConfigureProperties() override;
     void ConfigureEnvironment() override;
     Ptr<SimpleChannel> CreateChannel() override;
     Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
@@ -295,12 +342,20 @@ TcpReorderedRetransmissionTest::CreateChannel()
     return ch;
 }
 
+void
+TcpReorderedRetransmissionTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
 Ptr<TcpSocketMsgBase>
 TcpReorderedRetransmissionTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    socket->SetAttribute("Timestamp", BooleanValue(false));
     socket->SetAttribute("Sack", BooleanValue(true));
     return socket;
 }
@@ -368,7 +423,12 @@ class TcpLostRetransmissionTestSuite : public TestSuite
     TcpLostRetransmissionTestSuite()
         : TestSuite("tcp-lost-retransmission", Type::UNIT)
     {
-        AddTestCase(new TcpLostRetransmissionTest("Lost retransmission detected and recovered"),
+        AddTestCase(
+            new TcpLostRetransmissionTest("Lost retransmission detected and recovered", true),
+            TestCase::Duration::QUICK);
+        AddTestCase(new TcpLostRetransmissionTest(
+                        "Lost retransmission repaired by the RTO without the detection",
+                        false),
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpReorderedRetransmissionTest(
                         "Reordered retransmission resent with no reordering window"),

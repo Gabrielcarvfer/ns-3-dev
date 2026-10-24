@@ -84,6 +84,25 @@ const std::map<std::pair<ns3::TcpSocketBase::TcpPacketType_t, ns3::TcpSocketStat
         {{ns3::TcpSocketBase::RE_XMT, ns3::TcpSocketState::DctcpEcn}, true},
         {{ns3::TcpSocketBase::DATA, ns3::TcpSocketState::DctcpEcn}, true},
     };
+
+/// Bound on the number of quick ACKs, as TCP_MAX_QUICKACKS of Linux
+constexpr uint32_t MAX_QUICK_ACKS = 16;
+
+/// Bound on the number of quick ACKs upon a CE mark, as in __tcp_ecn_check_ce() of Linux
+constexpr uint32_t CE_QUICK_ACKS = 2;
+
+/// ACKs of out-of-order data sent at once at a given RCV.NXT, as TCP_FASTRETRANS_THRESH of Linux
+constexpr uint32_t SACK_COMPRESS_DUPACKS = 3;
+
+/// Bound on the number of ACKs merged by SACK compression, as tcp_comp_sack_nr of Linux
+constexpr uint32_t SACK_COMPRESS_MAX = 44;
+
+/// Minimum of the adaptive delayed ACK timeout in ms, as TCP_ATO_MIN and TCP_DELACK_MIN of Linux
+constexpr int64_t ATO_MIN_MS = 40;
+
+/// Bound on the adaptive delayed ACK timeout above the minimum in ms, as HZ / 2 in
+/// tcp_send_delayed_ack() of Linux
+constexpr int64_t ATO_MAX_MS = 500;
 } // namespace
 
 namespace ns3
@@ -203,6 +222,42 @@ TcpSocketBase::GetTypeId()
                 UintegerValue(3),
                 MakeUintegerAccessor(&TcpSocketBase::SetRetxThresh, &TcpSocketBase::GetRetxThresh),
                 MakeUintegerChecker<uint32_t>())
+            .AddAttribute("QuickAck",
+                          "Acknowledge every data segment in the quick ACK mode of Linux: at "
+                          "the start of the connection, after an idle period longer than the "
+                          "RTO, after duplicate data and after a CE mark; and acknowledge at "
+                          "once a pushed segment once the application has read it",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpSocketBase::m_quickAck),
+                          MakeBooleanChecker())
+            .AddAttribute("SackCompression",
+                          "Delay the ACKs of out-of-order data as Linux (SACK compression): "
+                          "after three immediate ACKs at a given RCV.NXT, the ACKs wait for "
+                          "SackCompressionDelay or 5% of the RTT, whichever is shorter. This "
+                          "departs from the immediate ACK of RFC 5681, Section 4.2",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpSocketBase::m_sackCompression),
+                          MakeBooleanChecker())
+            .AddAttribute("SackCompressionDelay",
+                          "Bound on the delay of an ACK held back by SACK compression, as "
+                          "tcp_comp_sack_delay_ns of Linux",
+                          TimeValue(MilliSeconds(1)),
+                          MakeTimeAccessor(&TcpSocketBase::m_sackCompressionDelay),
+                          MakeTimeChecker(Time(0)))
+            .AddAttribute("AdaptiveDelAck",
+                          "Adapt the delayed ACK timeout to the arrival interval of the data "
+                          "as Linux (ato), from 40 ms up to DelAckTimeout",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpSocketBase::m_adaptiveDelAck),
+                          MakeBooleanChecker())
+            .AddAttribute("FillReceiveWindow",
+                          "Fill the receive window of the peer as Linux: a burst that the "
+                          "right edge of the window cuts ends with a segment shorter than "
+                          "the MSS. This departs from the sender silly window syndrome "
+                          "avoidance of RFC 9293, Section 3.8.6.2.1",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpSocketBase::m_fillRcvWindow),
+                          MakeBooleanChecker())
             .AddAttribute("LimitedTransmit",
                           "Enable limited transmit",
                           BooleanValue(true),
@@ -408,7 +463,13 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_dupAckCount(sock.m_dupAckCount),
       m_delAckCount(0),
       m_delAckMaxCount(sock.m_delAckMaxCount),
+      m_quickAck(sock.m_quickAck),
+      m_sackCompression(sock.m_sackCompression),
+      m_sackCompressionDelay(sock.m_sackCompressionDelay),
+      m_adaptiveDelAck(sock.m_adaptiveDelAck),
       m_noDelay(sock.m_noDelay),
+      m_fillRcvWindow(sock.m_fillRcvWindow),
+      m_maxSndWnd(sock.m_maxSndWnd),
       m_synCount(sock.m_synCount),
       m_synRetries(sock.m_synRetries),
       m_dataRetrCount(sock.m_dataRetrCount),
@@ -910,6 +971,11 @@ int
 TcpSocketBase::Close()
 {
     NS_LOG_FUNCTION(this);
+    if (m_state == CLOSED && m_closeNotified)
+    {
+        // Already reset or closed, and the application was told
+        return 0;
+    }
     /// @internal
     /// First we check to see if there is any unread rx data.
     /// \bugid{426} claims we should send reset in this case.
@@ -1376,10 +1442,7 @@ TcpSocketBase::ForwardUp(Ptr<Packet> packet,
     TcpHeader tcpHeader;
     uint32_t bytesRemoved = packet->PeekHeader(tcpHeader);
 
-    if (!IsValidTcpSegment(tcpHeader.GetSequenceNumber(),
-                           tcpHeader.GetFlags(),
-                           bytesRemoved,
-                           packet->GetSize() - bytesRemoved))
+    if (!IsValidTcpSegment(tcpHeader, bytesRemoved, packet->GetSize() - bytesRemoved))
     {
         ProcessUrgentOfDroppedSegment(tcpHeader, packet->GetSize() - bytesRemoved);
         return;
@@ -1399,6 +1462,14 @@ TcpSocketBase::ForwardUp(Ptr<Packet> packet,
     if (header.GetEcn() == Ipv4Header::ECN_CE && m_ecnCESeq < tcpHeader.GetSequenceNumber())
     {
         NS_LOG_INFO("Received CE flag is valid");
+        if (m_tcb->m_ecnState != TcpSocketState::ECN_DISABLED &&
+            m_tcb->m_ecnState != TcpSocketState::ECN_CE_RCVD &&
+            m_tcb->m_ecnState != TcpSocketState::ECN_SENDING_ECE)
+        {
+            // The sender may have a very small window: as Linux, do not delay
+            // the ACKs until it reduces it
+            EnterQuickAckMode(CE_QUICK_ACKS);
+        }
         NS_LOG_DEBUG(TcpSocketState::EcnStateName[m_tcb->m_ecnState] << " -> ECN_CE_RCVD");
         m_ecnCESeq = tcpHeader.GetSequenceNumber();
         m_tcb->m_ecnState = TcpSocketState::ECN_CE_RCVD;
@@ -1429,10 +1500,7 @@ TcpSocketBase::ForwardUp6(Ptr<Packet> packet,
     TcpHeader tcpHeader;
     uint32_t bytesRemoved = packet->PeekHeader(tcpHeader);
 
-    if (!IsValidTcpSegment(tcpHeader.GetSequenceNumber(),
-                           tcpHeader.GetFlags(),
-                           bytesRemoved,
-                           packet->GetSize() - bytesRemoved))
+    if (!IsValidTcpSegment(tcpHeader, bytesRemoved, packet->GetSize() - bytesRemoved))
     {
         ProcessUrgentOfDroppedSegment(tcpHeader, packet->GetSize() - bytesRemoved);
         return;
@@ -1452,6 +1520,14 @@ TcpSocketBase::ForwardUp6(Ptr<Packet> packet,
     if (header.GetEcn() == Ipv6Header::ECN_CE && m_ecnCESeq < tcpHeader.GetSequenceNumber())
     {
         NS_LOG_INFO("Received CE flag is valid");
+        if (m_tcb->m_ecnState != TcpSocketState::ECN_DISABLED &&
+            m_tcb->m_ecnState != TcpSocketState::ECN_CE_RCVD &&
+            m_tcb->m_ecnState != TcpSocketState::ECN_SENDING_ECE)
+        {
+            // The sender may have a very small window: as Linux, do not delay
+            // the ACKs until it reduces it
+            EnterQuickAckMode(CE_QUICK_ACKS);
+        }
         NS_LOG_DEBUG(TcpSocketState::EcnStateName[m_tcb->m_ecnState] << " -> ECN_CE_RCVD");
         m_ecnCESeq = tcpHeader.GetSequenceNumber();
         m_tcb->m_ecnState = TcpSocketState::ECN_CE_RCVD;
@@ -1507,10 +1583,14 @@ TcpSocketBase::NotifyReset()
         return;
     }
     // A connection closed by a RST was aborted, and the application is told
-    // apart from a normal close (RFC 9293, Section 3.6, MUST-12)
+    // apart from a normal close (RFC 9293, Section 3.6, MUST-12). The
+    // connection is CLOSED before the application hears of it, so that a
+    // Close() from the callback neither resets nor notifies again.
     m_errno = ERROR_NOTCONN;
-    NotifyErrorClose();
     m_closeNotified = true;
+    NS_LOG_DEBUG(TcpStateName[m_state] << " -> CLOSED");
+    m_state = CLOSED;
+    NotifyErrorClose();
 }
 
 void
@@ -1592,12 +1672,36 @@ TcpSocketBase::AbortOnMalformedSegment(const TcpHeader& tcpHeader,
     CloseAndNotify();
 }
 
+void
+TcpSocketBase::SetTxHeadSequence(SequenceNumber32 seq)
+{
+    NS_LOG_FUNCTION(this << seq);
+    if (m_sndUrgentArmed)
+    {
+        // The urgent data queued before the handshake moves with the data
+        m_sndUrgentPoint = seq + (m_sndUrgentPoint - m_txBuffer->HeadSequence());
+    }
+    m_txBuffer->SetHeadSequence(seq);
+}
+
+uint32_t
+TcpSocketBase::GetSegmentOptionsSize(bool timestamp)
+{
+    if (!timestamp)
+    {
+        return 0;
+    }
+    // 10 bytes of option, padded to a 4 byte boundary
+    return ((CreateObject<TcpOptionTS>()->GetSerializedSize() + 3) / 4) * 4;
+}
+
 bool
-TcpSocketBase::IsValidTcpSegment(const SequenceNumber32 seq,
-                                 const uint8_t flags,
+TcpSocketBase::IsValidTcpSegment(const TcpHeader& tcpHeader,
                                  const uint32_t tcpHeaderSize,
                                  const uint32_t tcpPayloadSize)
 {
+    SequenceNumber32 seq = tcpHeader.GetSequenceNumber();
+    uint8_t flags = tcpHeader.GetFlags();
     if (tcpHeaderSize == 0 || tcpHeaderSize > 60)
     {
         NS_LOG_ERROR("Bytes removed: " << tcpHeaderSize << " invalid");
@@ -1650,6 +1754,12 @@ TcpSocketBase::IsValidTcpSegment(const SequenceNumber32 seq,
                                 << ":" << seq + tcpPayloadSize << ") out of range ["
                                 << m_tcb->m_rxBuffer->NextRxSequence() << ":"
                                 << m_tcb->m_rxBuffer->MaxRxSequence() << ")");
+        if (seq + tcpPayloadSize <= m_tcb->m_rxBuffer->NextRxSequence())
+        {
+            // The ACK of the data was lost, or the data was retransmitted
+            // spuriously: as Linux, stop delaying the ACKs
+            EnterQuickAckMode(MAX_QUICK_ACKS);
+        }
         // Acknowledgement should be sent for all unacceptable packets (RFC793, p.69)
         SendEmptyPacket(TcpHeader::ACK);
         return false;
@@ -1657,6 +1767,16 @@ TcpSocketBase::IsValidTcpSegment(const SequenceNumber32 seq,
 
     if (tcpPayloadSize == 0 && !(flags & TcpHeader::SYN) && ZeroLengthOutOfRange(seq))
     {
+        if ((flags & TcpHeader::ACK) && !(flags & TcpHeader::FIN) &&
+            seq < m_tcb->m_rxBuffer->NextRxSequence() && AcksNewData(tcpHeader.GetAckNumber()))
+        {
+            // An old sequence number does not invalidate the acknowledgment
+            // of new data: dropping it would stall a peer whose pure ACKs
+            // still carry the sequence number its retransmissions rewound
+            // to. Linux accepts these from its own window edge, RCV.WUP.
+            NS_LOG_LOGIC("Processing the ACK of an empty segment of old seq " << seq);
+            return true;
+        }
         // A segment without data lying outside the window, such as a
         // keep-alive probe repeating an acknowledged sequence number, or a
         // retransmitted FIN, is answered with an acknowledgment and dropped
@@ -1677,6 +1797,25 @@ TcpSocketBase::IsValidTcpSegment(const SequenceNumber32 seq,
         return false;
     }
     return true;
+}
+
+bool
+TcpSocketBase::AcksNewData(SequenceNumber32 ack) const
+{
+    switch (m_state)
+    {
+    case SYN_RCVD:
+    case ESTABLISHED:
+    case CLOSE_WAIT:
+        return m_txBuffer->HeadSequence() < ack && ack <= m_tcb->m_highTxMark;
+    case FIN_WAIT_1:
+    case CLOSING:
+    case LAST_ACK:
+        // The FIN takes the sequence number following the data
+        return m_txBuffer->HeadSequence() < ack && ack <= m_tcb->m_highTxMark + SequenceNumber32(1);
+    default:
+        return false;
+    }
 }
 
 bool
@@ -1705,6 +1844,13 @@ TcpSocketBase::ZeroLengthOutOfRange(SequenceNumber32 seq) const
     }
 
     SequenceNumber32 max = m_tcb->m_rxBuffer->MaxRxSequence();
+    if (m_tcb->m_rxBuffer->GotFin())
+    {
+        // The FIN of the peer arrived out of order, and MaxRxSequence() is
+        // its sequence number: the segments the peer sends after its FIN,
+        // such as its ACKs, carry the next one
+        return seq < next || max + SequenceNumber32(1) < seq;
+    }
     if (next == max)
     {
         // The window is closed: only a segment at RCV.NXT is acceptable
@@ -1749,10 +1895,9 @@ TcpSocketBase::ProcessSynOptions(const TcpHeader& tcpHeader)
 
     if (m_advertisedMss == 0)
     {
-        // Save the value to advertise in the MSS option before it is
-        // reduced below: the advertised MSS reflects our configured
-        // segment size regardless of the peer MSS and of the size of the
-        // TCP options (RFC 6691, Section 2)
+        // Save the configured segment size before it is reduced below: the
+        // MSS option falls back to it when the MTU of the interface is
+        // unknown
         m_advertisedMss = m_tcb->m_segmentSize;
     }
 
@@ -1805,9 +1950,7 @@ TcpSocketBase::ProcessSynOptions(const TcpHeader& tcpHeader)
         // option (and its padding to a word), which is carried by every
         // segment. The segment size may have been clamped by the MSS the
         // peer advertised, so a tiny value cannot bring it to zero.
-        // 10 bytes of option, padded to a 4 byte boundary
-        const uint32_t tsOptionSize =
-            ((CreateObject<TcpOptionTS>()->GetSerializedSize() + 3) / 4) * 4;
+        const uint32_t tsOptionSize = GetSegmentOptionsSize(true);
         if (m_tcb->m_segmentSize > tsOptionSize)
         {
             m_tcb->m_segmentSize -= tsOptionSize;
@@ -2816,19 +2959,36 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             }
             else if (m_tcb->m_congState == TcpSocketState::CA_LOSS)
             {
-                // Every segment this ACK covers is new to the congestion
-                // control: the partial ACKs only passed their own segments.
-                // Counting from the recovery point left the window at one
-                // segment when the ACK of the retransmission landed on it,
-                // which is the common case of a receiver holding the data
-                // sent after the lost segment (RFC 5681, Section 3.1)
-                segsAcked =
-                    static_cast<uint32_t>(ackNumber - oldHeadSequence) / m_tcb->m_segmentSize;
-
-                m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_lastRtt);
+                // As on the exit from CA_RECOVERY, PktsAcked() is told of
+                // every segment this ACK covers, while the window grows only
+                // by the segments newly delivered (Linux acked_sacked in
+                // tcp_cong_control()): the segments SACKed before the
+                // timeout were already counted as delivered
+                m_congestionControl->PktsAcked(m_tcb,
+                                               static_cast<uint32_t>(ackNumber - oldHeadSequence) /
+                                                   m_tcb->m_segmentSize,
+                                               m_tcb->m_lastRtt);
 
                 m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_OPEN);
                 m_tcb->m_congState = TcpSocketState::CA_OPEN;
+
+                // Without SACK, the ACK of the retransmission may cover a
+                // whole window held by the receiver: as Linux
+                // tcp_slow_start() does, the slow start stops at ssThresh,
+                // and the remaining segments go to the congestion
+                // avoidance, so that the window does not burst past
+                // ssThresh at once (RFC 5681, Section 3.1)
+                if (m_tcb->m_cWnd < m_tcb->m_ssThresh)
+                {
+                    uint32_t toSsThresh =
+                        (m_tcb->m_ssThresh - m_tcb->m_cWnd + m_tcb->m_segmentSize - 1) /
+                        m_tcb->m_segmentSize;
+                    if (segsAcked > toSsThresh)
+                    {
+                        m_congestionControl->IncreaseWindow(m_tcb, toSsThresh);
+                        segsAcked = m_tcb->m_cWnd >= m_tcb->m_ssThresh ? segsAcked - toSsThresh : 0;
+                    }
+                }
                 NS_LOG_DEBUG(segsAcked << " segments acked in CA_LOSS, ack of" << ackNumber
                                        << ", exiting CA_LOSS -> CA_OPEN");
             }
@@ -3019,7 +3179,7 @@ TcpSocketBase::ProcessSynSent(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         m_highRxMark = tcpHeader.GetSequenceNumber();
         m_highTxAck = tcpHeader.GetSequenceNumber();
         m_tcb->m_highTxMark = ++m_tcb->m_nextTxSequence;
-        m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+        SetTxHeadSequence(m_tcb->m_nextTxSequence);
         // Before sending packets, update the pacing rate based on RTT measurement so far
         UpdatePacingRate();
         SendEmptyPacket(TcpHeader::ACK);
@@ -3091,7 +3251,7 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
         m_connected = true;
         m_retxEvent.Cancel();
         m_tcb->m_highTxMark = ++m_tcb->m_nextTxSequence;
-        m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+        SetTxHeadSequence(m_tcb->m_nextTxSequence);
         if (m_endPoint)
         {
             m_endPoint->SetPeer(InetSocketAddress::ConvertFrom(fromAddress).GetIpv4(),
@@ -3115,6 +3275,13 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
         else
         {
             NotifyNewConnectionCreated(this, fromAddress);
+        }
+        // Once ESTABLISHED, the urgent field of the segment completing the
+        // handshake is processed before its data (RFC 9293, Section
+        // 3.10.7.4, MUST-32): DoForwardUp skipped it in SYN-RECEIVED
+        if (tcpHeader.GetFlags() & TcpHeader::URG)
+        {
+            ProcessUrgentPointer(tcpHeader);
         }
         ReceivedAck(packet, tcpHeader);
         // Update the pacing rate based on RTT measurement so far
@@ -3153,7 +3320,7 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
             m_connected = true;
             m_retxEvent.Cancel();
             m_tcb->m_highTxMark = ++m_tcb->m_nextTxSequence;
-            m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+            SetTxHeadSequence(m_tcb->m_nextTxSequence);
             if (m_endPoint)
             {
                 m_endPoint->SetPeer(InetSocketAddress::ConvertFrom(fromAddress).GetIpv4(),
@@ -3173,6 +3340,10 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
             else
             {
                 NotifyNewConnectionCreated(this, fromAddress);
+            }
+            if (tcpHeader.GetFlags() & TcpHeader::URG)
+            {
+                ProcessUrgentPointer(tcpHeader);
             }
             PeerClose(packet, tcpHeader);
         }
@@ -3492,9 +3663,18 @@ TcpSocketBase::SendEmptyPacket(uint8_t flags)
         packetType = TcpPacketType_t::FIN;
         flags |= TcpHeader::ACK;
     }
-    else if (m_state == FIN_WAIT_1 || m_state == LAST_ACK || m_state == CLOSING)
+    else if (!(flags & TcpHeader::SYN))
     {
-        ++s;
+        // A segment without data carries SND.NXT, the highest sequence number
+        // sent so far: a retransmission rewinds m_nextTxSequence below the
+        // RCV.NXT of the peer, which would find the segment out of its window
+        // and drop it with the acknowledgment it carries (RFC 9293, Section
+        // 3.10.7.4)
+        s = std::max(s, m_tcb->m_highTxMark.Get());
+        if (m_state == FIN_WAIT_1 || m_state == LAST_ACK || m_state == CLOSING)
+        {
+            ++s;
+        }
     }
 
     if (flags & TcpHeader::SYN)
@@ -3591,6 +3771,9 @@ TcpSocketBase::SendEmptyPacket(uint8_t flags)
     { // If sending an ACK, cancel the delay ACK as well
         m_delAckEvent.Cancel();
         m_delAckCount = 0;
+        QuickAckSent();
+        m_sackCompressionEvent.Cancel();
+        m_compressedAcks = 0;
         if (m_highTxAck < header.GetAckNumber())
         {
             m_highTxAck = header.GetAckNumber();
@@ -3636,7 +3819,15 @@ TcpSocketBase::SendRST()
 {
     NS_LOG_FUNCTION(this);
     SendEmptyPacket(TcpHeader::RST);
-    NotifyErrorClose();
+    if (m_state != CLOSED)
+    {
+        // The application may call Close() from the callback: the connection
+        // is CLOSED first, so that it is neither reset nor notified again
+        NS_LOG_DEBUG(TcpStateName[m_state] << " -> CLOSED");
+        m_state = CLOSED;
+        m_closeNotified = true;
+        NotifyErrorClose();
+    }
     DeallocateEndPoint();
 }
 
@@ -3962,6 +4153,9 @@ TcpSocketBase::SendDataPacket(SequenceNumber32 seq, uint32_t maxSize, bool withA
     {
         m_delAckEvent.Cancel();
         m_delAckCount = 0;
+        QuickAckSent();
+        m_sackCompressionEvent.Cancel();
+        m_compressedAcks = 0;
     }
 
     if (m_tcb->m_ecnState == TcpSocketState::ECN_ECE_RCVD &&
@@ -4163,6 +4357,7 @@ TcpSocketBase::SendPendingData(bool withAck)
 
     uint32_t nPacketsSent = 0;
     uint32_t availableWindow = AvailableWindow();
+    m_maxSndWnd = std::max(m_maxSndWnd, m_rWnd.Get());
 
     // RFC 6675, Section (C)
     // If cwnd - pipe >= 1 SMSS, the sender SHOULD transmit one or more
@@ -4214,7 +4409,8 @@ TcpSocketBase::SendPendingData(bool withAck)
 
             // Stop sending if we need to wait for a larger Tx window (prevent silly window
             // syndrome) but continue if we don't have data
-            if (availableWindow < m_tcb->m_segmentSize && availableData > availableWindow)
+            if (availableWindow < m_tcb->m_segmentSize && availableData > availableWindow &&
+                !CanSendPartialSegment(availableWindow, nPacketsSent))
             {
                 NS_LOG_LOGIC("Preventing Silly Window Syndrome. Wait to send.");
                 break; // No more
@@ -4329,6 +4525,31 @@ uint32_t
 TcpSocketBase::Window() const
 {
     return std::min(m_rWnd.Get(), m_tcb->m_cWnd.Get());
+}
+
+bool
+TcpSocketBase::CanSendPartialSegment(uint32_t availableWindow, uint32_t nPacketsSent) const
+{
+    NS_LOG_FUNCTION(this << availableWindow << nPacketsSent);
+    // Sender SWS avoidance (RFC 9293, Section 3.8.6.2.1): a segment shorter
+    // than the MSS is sent when it carries at least a fraction Fs = 1/2 of
+    // the largest window the peer has offered, so that a peer whose window
+    // never reaches one MSS still receives data
+    if (availableWindow >= m_maxSndWnd / 2)
+    {
+        NS_LOG_LOGIC("Sending " << availableWindow << " bytes, at least half of the maximum window "
+                                << m_maxSndWnd);
+        return true;
+    }
+    // As tcp_mss_split_point() of Linux, the last segment of a burst that
+    // the right edge of the receive window cuts is sent short, filling the
+    // window
+    if (m_fillRcvWindow && nPacketsSent > 0 && m_rWnd.Get() <= m_tcb->m_cWnd.Get())
+    {
+        NS_LOG_LOGIC("Filling the receive window with " << availableWindow << " bytes");
+        return true;
+    }
+    return false;
 }
 
 uint32_t
@@ -4466,10 +4687,25 @@ TcpSocketBase::ReceivedData(Ptr<Packet> p, const TcpHeader& tcpHeader)
     NS_LOG_DEBUG("Data segment, seq=" << tcpHeader.GetSequenceNumber()
                                       << " pkt size=" << p->GetSize());
 
+    if (p->GetSize() > 0)
+    {
+        m_quickAckScheduled = true;
+    }
+    // As tcp_measure_rcv_mss() of Linux, a full-sized segment with PSH, or a
+    // segment shorter than the MSS, likely ends a write of the peer, which
+    // may then wait for the ACK
+    bool pushed = p->GetSize() > 0 &&
+                  (p->GetSize() < m_tcb->m_segmentSize || (tcpHeader.GetFlags() & TcpHeader::PSH));
+
     // Put into Rx buffer
     SequenceNumber32 expectedSeq = m_tcb->m_rxBuffer->NextRxSequence();
     if (!m_tcb->m_rxBuffer->Add(p, tcpHeader))
     { // Insert failed: No data or RX buffer full
+        if (p->GetSize() > 0 && tcpHeader.GetSequenceNumber() + p->GetSize() <= expectedSeq)
+        {
+            // Duplicate data: as Linux, stop delaying the ACKs
+            EnterQuickAckMode(MAX_QUICK_ACKS);
+        }
         if (m_tcb->m_ecnState == TcpSocketState::ECN_CE_RCVD ||
             m_tcb->m_ecnState == TcpSocketState::ECN_SENDING_ECE)
         {
@@ -4486,6 +4722,15 @@ TcpSocketBase::ReceivedData(Ptr<Packet> p, const TcpHeader& tcpHeader)
     // Notify app to receive if necessary
     if (expectedSeq < m_tcb->m_rxBuffer->NextRxSequence())
     { // NextRxSeq advanced, we have something to send to the app
+        UpdateDelAckTimeout();
+        // As tcp_event_data_recv() of Linux, the first data, and the first
+        // data after an idle period longer than the RTO, are acknowledged
+        // quickly, so that the peer opens its window fast
+        if (!m_lastDataRxTime || Simulator::Now() - *m_lastDataRxTime > m_rto.Get())
+        {
+            IncrQuickAck(MAX_QUICK_ACKS);
+        }
+        m_lastDataRxTime = Simulator::Now();
         if (!m_shutdownRecv)
         {
             NotifyDataRecv();
@@ -4507,6 +4752,11 @@ TcpSocketBase::ReceivedData(Ptr<Packet> p, const TcpHeader& tcpHeader)
     if (m_tcb->m_rxBuffer->Size() > m_tcb->m_rxBuffer->Available() ||
         m_tcb->m_rxBuffer->NextRxSequence() > expectedSeq + p->GetSize())
     { // A gap exists in the buffer, or we filled a gap: Always ACK
+        if (m_tcb->m_rxBuffer->NextRxSequence() == expectedSeq && CompressSackAck())
+        {
+            m_congestionControl->CwndEvent(m_tcb, TcpSocketState::CA_EVENT_DELAYED_ACK);
+            return;
+        }
         m_congestionControl->CwndEvent(m_tcb, TcpSocketState::CA_EVENT_NON_DELAYED_ACK);
         if (m_tcb->m_ecnState == TcpSocketState::ECN_CE_RCVD ||
             m_tcb->m_ecnState == TcpSocketState::ECN_SENDING_ECE)
@@ -4521,8 +4771,11 @@ TcpSocketBase::ReceivedData(Ptr<Packet> p, const TcpHeader& tcpHeader)
         }
     }
     else
-    { // In-sequence packet: ACK if delayed ack count allows
-        if (++m_delAckCount >= m_delAckMaxCount)
+    { // In-sequence packet: ACK if delayed ack count allows, or in quick ACK mode
+        // As tcp_cleanup_rbuf() of Linux, a pushed segment is acknowledged at
+        // once if the application has read all the data received
+        bool pushedAck = m_quickAck && pushed && m_tcb->m_rxBuffer->Available() == 0;
+        if (++m_delAckCount >= m_delAckMaxCount || m_quickAckCount > 0 || pushedAck)
         {
             m_delAckEvent.Cancel();
             m_delAckCount = 0;
@@ -4549,7 +4802,7 @@ TcpSocketBase::ReceivedData(Ptr<Packet> p, const TcpHeader& tcpHeader)
         {
             m_congestionControl->CwndEvent(m_tcb, TcpSocketState::CA_EVENT_DELAYED_ACK);
             m_delAckEvent =
-                Simulator::Schedule(m_delAckTimeout, &TcpSocketBase::DelAckTimeout, this);
+                Simulator::Schedule(GetDelAckDelay(), &TcpSocketBase::DelAckTimeout, this);
             NS_LOG_LOGIC(
                 this << " scheduled delayed ACK at "
                      << (Simulator::Now() + Simulator::GetDelayLeft(m_delAckEvent)).GetSeconds());
@@ -4853,6 +5106,11 @@ TcpSocketBase::ReTxTimeout()
 void
 TcpSocketBase::DelAckTimeout()
 {
+    if (m_adaptiveDelAck && !m_ato.IsZero())
+    {
+        // As tcp_delack_timer_handler() of Linux: the timeout was too short
+        m_ato = std::min(2 * m_ato, m_rto.Get());
+    }
     m_delAckCount = 0;
     m_congestionControl->CwndEvent(m_tcb, TcpSocketState::CA_EVENT_DELAYED_ACK);
     if (m_tcb->m_ecnState == TcpSocketState::ECN_CE_RCVD ||
@@ -4865,6 +5123,163 @@ TcpSocketBase::DelAckTimeout()
     {
         SendEmptyPacket(TcpHeader::ACK);
     }
+}
+
+void
+TcpSocketBase::EnterQuickAckMode(uint32_t maxQuickAcks)
+{
+    NS_LOG_FUNCTION(this << maxQuickAcks);
+    IncrQuickAck(maxQuickAcks);
+    if (m_ato > MilliSeconds(ATO_MIN_MS))
+    {
+        m_ato = MilliSeconds(ATO_MIN_MS);
+    }
+}
+
+void
+TcpSocketBase::IncrQuickAck(uint32_t maxQuickAcks)
+{
+    NS_LOG_FUNCTION(this << maxQuickAcks);
+    if (!m_quickAck)
+    {
+        return;
+    }
+    // The window last advertised, as rcv_wnd of Linux, and the segment size
+    // of the connection standing for the receive MSS that Linux estimates
+    uint32_t rcvWnd =
+        std::min(m_advWnd.Get(), static_cast<uint32_t>(m_maxWinSize) << m_rcvWindShift);
+    uint32_t quickAcks = rcvWnd / (2 * m_tcb->m_segmentSize);
+    if (quickAcks == 0)
+    {
+        quickAcks = 2;
+    }
+    quickAcks = std::min(quickAcks, maxQuickAcks);
+    if (quickAcks > m_quickAckCount)
+    {
+        NS_LOG_DEBUG("Quick ACKs left: " << m_quickAckCount << " -> " << quickAcks);
+        m_quickAckCount = quickAcks;
+    }
+}
+
+void
+TcpSocketBase::QuickAckSent()
+{
+    NS_LOG_FUNCTION(this);
+    if (!m_quickAckScheduled)
+    {
+        return;
+    }
+    m_quickAckScheduled = false;
+    if (m_quickAckCount > 0)
+    {
+        --m_quickAckCount;
+        NS_LOG_LOGIC("Quick ACKs left: " << m_quickAckCount);
+        if (m_quickAckCount == 0 && m_ato > MilliSeconds(ATO_MIN_MS))
+        {
+            // As tcp_dec_quickack_mode() of Linux
+            m_ato = MilliSeconds(ATO_MIN_MS);
+        }
+    }
+}
+
+bool
+TcpSocketBase::CompressSackAck()
+{
+    NS_LOG_FUNCTION(this);
+    if (!m_sackCompression || !m_sackEnabled || m_quickAckCount > 0 ||
+        m_tcb->m_ecnState == TcpSocketState::ECN_CE_RCVD || m_compressedAcks >= SACK_COMPRESS_MAX)
+    {
+        return false;
+    }
+    SequenceNumber32 rcvNxt = m_tcb->m_rxBuffer->NextRxSequence();
+    if (m_compressRcvNxt != rcvNxt)
+    {
+        m_compressRcvNxt = rcvNxt;
+        m_compressDupAcks = 0;
+    }
+    if (m_compressDupAcks < SACK_COMPRESS_DUPACKS)
+    {
+        ++m_compressDupAcks;
+        return false;
+    }
+    ++m_compressedAcks;
+    if (m_sackCompressionEvent.IsPending())
+    {
+        NS_LOG_LOGIC("ACK of out-of-order data merged, " << m_compressedAcks << " held back");
+        return true;
+    }
+    Time delay = m_sackCompressionDelay;
+    if (m_tcb->m_srtt.Get().IsStrictlyPositive())
+    {
+        delay = std::min(delay, m_tcb->m_srtt.Get() / 20);
+    }
+    NS_LOG_LOGIC("ACK of out-of-order data held back for " << delay.As(Time::US));
+    m_sackCompressionEvent =
+        Simulator::Schedule(delay, &TcpSocketBase::SackCompressionTimeout, this);
+    return true;
+}
+
+void
+TcpSocketBase::SackCompressionTimeout()
+{
+    NS_LOG_FUNCTION(this);
+    if (m_tcb->m_ecnState == TcpSocketState::ECN_CE_RCVD ||
+        m_tcb->m_ecnState == TcpSocketState::ECN_SENDING_ECE)
+    {
+        SendEmptyPacket(TcpHeader::ACK | TcpHeader::ECE);
+        m_tcb->m_ecnState = TcpSocketState::ECN_SENDING_ECE;
+    }
+    else
+    {
+        SendEmptyPacket(TcpHeader::ACK);
+    }
+}
+
+void
+TcpSocketBase::UpdateDelAckTimeout()
+{
+    NS_LOG_FUNCTION(this);
+    if (!m_adaptiveDelAck)
+    {
+        return;
+    }
+    if (!m_lastDataRxTime || m_ato.IsZero())
+    {
+        m_ato = MilliSeconds(ATO_MIN_MS);
+    }
+    else
+    {
+        Time interval = Simulator::Now() - *m_lastDataRxTime;
+        if (interval <= MilliSeconds(ATO_MIN_MS / 2))
+        {
+            m_ato = m_ato / 2 + MilliSeconds(ATO_MIN_MS / 2);
+        }
+        else if (interval < m_ato)
+        {
+            m_ato = std::min(m_ato / 2 + interval, m_rto.Get());
+        }
+    }
+    NS_LOG_LOGIC("Delayed ACK timeout " << m_ato.As(Time::MS));
+}
+
+Time
+TcpSocketBase::GetDelAckDelay() const
+{
+    if (!m_adaptiveDelAck || m_ato.IsZero())
+    {
+        return m_delAckTimeout;
+    }
+    Time ato = m_ato;
+    if (ato > MilliSeconds(ATO_MIN_MS))
+    {
+        Time maxAto = MilliSeconds(ATO_MAX_MS);
+        if (m_tcb->m_srtt.Get().IsStrictlyPositive())
+        {
+            maxAto = std::min(maxAto, std::max(m_tcb->m_srtt.Get(), MilliSeconds(ATO_MIN_MS)));
+        }
+        ato = std::min(ato, maxAto);
+    }
+    return std::min(ato, m_delAckTimeout);
 }
 
 void
@@ -5008,6 +5423,7 @@ TcpSocketBase::CancelAllTimers()
     m_retxEvent.Cancel();
     m_persistEvent.Cancel();
     m_delAckEvent.Cancel();
+    m_sackCompressionEvent.Cancel();
     m_lastAckEvent.Cancel();
     m_timewaitEvent.Cancel();
     m_sendPendingDataEvent.Cancel();
@@ -5822,7 +6238,7 @@ TcpSocketBase::GetInterfaceMss() const
     // read the MTU from.
     constexpr uint32_t IPV4_TCP_HEADERS_SIZE = 20 + 20;
     constexpr uint32_t IPV6_TCP_HEADERS_SIZE = 40 + 20;
-    uint32_t mss = 65535;
+    uint32_t mss = MAX_INTERFACE_MSS;
     if (m_endPoint)
     {
         Ptr<Ipv4> ipv4 = m_node->GetObject<Ipv4>();
@@ -5854,10 +6270,17 @@ TcpSocketBase::AddOptionMss(TcpHeader& header)
         m_advertisedMss = m_tcb->m_segmentSize;
     }
 
-    // The advertised MSS is bounded by the largest message which can be
-    // received and reassembled, which the MTU of the interface gives
-    // (RFC 9293, Section 3.7.1, MUST-67)
-    uint32_t mss = std::min(m_advertisedMss, GetInterfaceMss());
+    // The MSS option tells the largest segment this end can receive, which
+    // the MTU of the interface gives, whatever the size this end sends
+    // (RFC 9293, Section 3.7.1, MUST-67, and RFC 6691, Section 2): the
+    // peer sends the smaller of it and its own segment size. Without an
+    // interface to read the MTU from, the configured segment size stands
+    // in for it.
+    uint32_t mss = GetInterfaceMss();
+    if (mss == MAX_INTERFACE_MSS)
+    {
+        mss = m_advertisedMss;
+    }
 
     option->SetMSS(static_cast<uint16_t>(mss));
     header.AppendOption(option);

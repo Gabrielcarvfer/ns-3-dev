@@ -57,6 +57,10 @@ class TcpOptionWinScale : public TcpOption
 
     /**
      * @brief Get the scale value (uint8_t)
+     *
+     * A received option may carry a value above 14, which the receiver
+     * treats as 14 (@RFC{7323}, Section 2.3).
+     *
      * @return The scale value
      */
     uint8_t GetScale() const;

@@ -499,7 +499,8 @@ Ns3TcpStateTestCase::DoRun()
         caseDescription = "Immediate FIN upon SYN_RCVD";
         m_needToClose = false;
         dropListN0.push_back(1); // Hide the ACK in 3WHS
-        Simulator::Schedule(Seconds(0.002), &Socket::Close, localSocket);
+        // After the SYN+ACK, which carries the MSS option, reaches n0 at 2 ms
+        Simulator::Schedule(MicroSeconds(2100), &Socket::Close, localSocket);
         break;
     case 6:
         m_totalTxBytes = 5000;

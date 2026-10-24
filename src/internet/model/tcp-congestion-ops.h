@@ -235,9 +235,29 @@ class TcpNewReno : public TcpCongestionOps
     virtual uint32_t SlowStart(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
     virtual void CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
 
+    /**
+     * @brief Tell whether the window grows per acknowledged segment
+     *
+     * When false (the default), slow start and congestion avoidance grow the
+     * window once per ACK that acknowledges new data, as RFC 5681 equations
+     * 2 and 3 state, whatever the number of segments it acknowledges. When
+     * true, every acknowledged segment counts, as the byte counting of
+     * RFC 3465 and the tcp_slow_start() and tcp_cong_avoid_ai() functions
+     * of Linux do: with delayed ACKs, the window then grows as it would with
+     * an ACK per segment. Derived models with their own per-ACK increase
+     * rules honour this flag as well.
+     *
+     * @return true if the window grows per acknowledged segment
+     */
+    bool CountsAckedSegments() const
+    {
+        return m_countAckedSegments;
+    }
+
   private:
-    double m_betaLoss{0}; //!< Beta for New-Reno multiplicative decrease
-    double m_betaEcn{0};  //!< Beta for New-Reno multiplicative decrease with ABE
+    bool m_countAckedSegments{false}; //!< Grow the window per acknowledged segment
+    double m_betaLoss{0};             //!< Beta for New-Reno multiplicative decrease
+    double m_betaEcn{0};              //!< Beta for New-Reno multiplicative decrease with ABE
 };
 
 } // namespace ns3

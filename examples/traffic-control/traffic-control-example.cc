@@ -153,7 +153,9 @@ main(int argc, char* argv[])
     sinkApp.Stop(Seconds(simulationTime + 0.1));
 
     uint32_t payloadSize = 1448;
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(payloadSize));
+    // Each write fills one segment, whose options come out of the segment size
+    Config::SetDefault("ns3::TcpSocket::SegmentSize",
+                       UintegerValue(payloadSize + TcpSocketBase::GetSegmentOptionsSize()));
 
     OnOffHelper onoff(socketType, Ipv4Address::GetAny());
     onoff.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));

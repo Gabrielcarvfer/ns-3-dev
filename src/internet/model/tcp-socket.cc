@@ -60,7 +60,9 @@ TcpSocket::GetTypeId()
                 MakeUintegerChecker<uint32_t>())
             .AddAttribute(
                 "SegmentSize",
-                "TCP maximum segment size in bytes (may be adjusted based on MTU discovery)",
+                "TCP maximum segment size in bytes, counting the data only: the options every "
+                "segment carries come out of it. Once connected, it is the data a full segment "
+                "carries, after the MSS of the peer, the MTU and the options are accounted for.",
                 UintegerValue(536),
                 MakeUintegerAccessor(&TcpSocket::GetSegSize, &TcpSocket::SetSegSize),
                 MakeUintegerChecker<uint32_t>())

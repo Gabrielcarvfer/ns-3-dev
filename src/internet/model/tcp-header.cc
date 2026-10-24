@@ -321,6 +321,33 @@ TcpHeader::Serialize(Buffer::Iterator start) const
     }
 }
 
+bool
+TcpHeader::IsOptionLengthValid(uint8_t kind, uint8_t length)
+{
+    // The options of known kind have a fixed length, or a length of a fixed
+    // form for SACK, which their deserialization relies upon (RFC 9293,
+    // Section 3.2; RFC 7323, Sections 2.2 and 3.2; RFC 2018, Sections 2 and 3)
+    switch (kind)
+    {
+    case TcpOption::MSS:
+        return length == 4;
+    case TcpOption::WINSCALE:
+        return length == 3;
+    case TcpOption::SACKPERMITTED:
+        return length == 2;
+    case TcpOption::SACK: {
+        constexpr uint8_t SACK_BLOCK_SIZE = 8;
+        constexpr uint8_t MAX_SACK_BLOCKS = 4;
+        uint8_t blocks = (length - 2) / SACK_BLOCK_SIZE;
+        return (length - 2) % SACK_BLOCK_SIZE == 0 && blocks >= 1 && blocks <= MAX_SACK_BLOCKS;
+    }
+    case TcpOption::TS:
+        return length == 10;
+    default:
+        return true;
+    }
+}
+
 uint32_t
 TcpHeader::Deserialize(Buffer::Iterator start)
 {
@@ -366,7 +393,8 @@ TcpHeader::Deserialize(Buffer::Iterator start)
             Buffer::Iterator lengthIterator = i;
             lengthIterator.Next(1);
             uint8_t declaredLen = lengthIterator.PeekU8();
-            if (declaredLen < 2 || declaredLen > optionLen)
+            if (declaredLen < 2 || declaredLen > optionLen ||
+                !IsOptionLengthValid(kind, declaredLen))
             {
                 NS_LOG_ERROR("Illegal TCP option length " << static_cast<int>(declaredLen)
                                                           << "; options discarded");

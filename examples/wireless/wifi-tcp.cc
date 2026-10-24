@@ -33,6 +33,7 @@
 #include "ns3/packet-sink.h"
 #include "ns3/ssid.h"
 #include "ns3/string.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-westwood-plus.h"
 #include "ns3/yans-wifi-channel.h"
 #include "ns3/yans-wifi-helper.h"
@@ -92,9 +93,10 @@ main(int argc, char* argv[])
 
     /* Configure TCP Options */
     // Configure a segment size such that each application packet of payloadSize
-    // bytes fits in a single segment, accounting for the 12 bytes of the
-    // timestamp option carried by every segment
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(payloadSize + 12));
+    // bytes fits in a single segment, accounting for the timestamp option
+    // carried by every segment
+    Config::SetDefault("ns3::TcpSocket::SegmentSize",
+                       UintegerValue(payloadSize + TcpSocketBase::GetSegmentOptionsSize()));
 
     WifiMacHelper wifiMac;
     WifiHelper wifiHelper;

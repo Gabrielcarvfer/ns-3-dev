@@ -438,7 +438,8 @@ class TcpTxBuffer : public Object
      * RACK. Clearing the retransmitted flag makes the segment eligible
      * again for retransmission via NextSeg(); without this detection, a
      * lost retransmission stalls the connection until the retransmission
-     * timeout fires.
+     * timeout fires, as with strict @RFC{6675} recovery. The detection can be
+     * disabled with the LostRetransmissionDetection attribute.
      *
      * @param sackedSentTime Latest transmission time among the newly SACKed
      *        segments
@@ -632,6 +633,8 @@ class TcpTxBuffer : public Object
     uint32_t m_segmentSize{0};  //!< Segment size from TcpSocketBase
     bool m_sackEnabled{true};   //!< Indicates if SACK is enabled on this connection
     bool m_sackSeen{false};     //!< Indicates if a SACK was received
+
+    bool m_lostRetransDetection{true}; //!< Detect lost retransmissions from the SACKs
 
     INTERNET_EXPORT static inline Callback<void, TcpTxItem*> m_nullCb =
         MakeNullCallback<void, TcpTxItem*>(); //!< Null callback for an item

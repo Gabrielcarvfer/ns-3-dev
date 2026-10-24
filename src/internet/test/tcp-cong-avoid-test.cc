@@ -7,6 +7,7 @@
 #include "tcp-general-test.h"
 
 #include "ns3/config.h"
+#include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/simple-channel.h"
 #include "ns3/test.h"
@@ -170,6 +171,55 @@ TcpNewRenoCongAvoidNormalTest::NormalClose(SocketWho who)
 /**
  * @ingroup internet-test
  *
+ * @brief Check that a forked TcpNewReno keeps its multiplicative decrease.
+ *
+ * The sockets accepted by a listener get their congestion control through
+ * Fork(), i.e. the copy constructor. The decrease factors must survive the
+ * copy, or an accepted socket would cut its slow start threshold to two
+ * segments on any loss.
+ */
+class TcpNewRenoForkBetaTest : public TestCase
+{
+  public:
+    TcpNewRenoForkBetaTest()
+        : TestCase("A forked TcpNewReno keeps its BetaLoss and BetaEcn")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+TcpNewRenoForkBetaTest::DoRun()
+{
+    Ptr<TcpNewReno> original = CreateObject<TcpNewReno>();
+    original->SetAttribute("BetaLoss", DoubleValue(0.7));
+    original->SetAttribute("BetaEcn", DoubleValue(0.8));
+    Ptr<TcpCongestionOps> forked = original->Fork();
+
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = 1000;
+    state->m_cWnd = 100000;
+    const uint32_t bytesInFlight = 100000;
+
+    NS_TEST_ASSERT_MSG_EQ(forked->GetSsThresh(state, bytesInFlight),
+                          original->GetSsThresh(state, bytesInFlight),
+                          "The forked congestion control lost its BetaLoss");
+    NS_TEST_ASSERT_MSG_EQ(forked->GetSsThresh(state, bytesInFlight),
+                          70000,
+                          "BetaLoss of 0.7 not applied to the forked congestion control");
+
+    state->m_abeEnabled = true;
+    state->m_ecnState = TcpSocketState::ECN_ECE_RCVD;
+    NS_TEST_ASSERT_MSG_EQ(forked->GetSsThresh(state, bytesInFlight),
+                          80000,
+                          "BetaEcn of 0.8 not applied to the forked congestion control");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TestSuite for the behavior of RFC congestion avoidance
  */
 class TcpRenoCongAvoidTestSuite : public TestSuite
@@ -178,6 +228,8 @@ class TcpRenoCongAvoidTestSuite : public TestSuite
     TcpRenoCongAvoidTestSuite()
         : TestSuite("tcp-cong-avoid-test", Type::UNIT)
     {
+        AddTestCase(new TcpNewRenoForkBetaTest(), TestCase::Duration::QUICK);
+
         std::list<TypeId> types = {
             TcpNewReno::GetTypeId(),
         };

@@ -200,13 +200,6 @@ TgaxVideoTraffic::DoStartApplication()
 {
     NS_LOG_FUNCTION(this);
 
-    if (m_protocolTid == TcpSocketFactory::GetTypeId())
-    {
-        UintegerValue uintegerValue;
-        m_socket->GetAttribute("SegmentSize", uintegerValue);
-        m_maxSize = uintegerValue.Get();
-    }
-
     m_socket->SetDataSentCallback(MakeCallback(&TgaxVideoTraffic::TxDone, this));
     m_socket->SetSendCallback(MakeCallback(&TgaxVideoTraffic::TxAvailable, this));
     m_socket->SetAllowBroadcast(true);
@@ -352,6 +345,16 @@ void
 TgaxVideoTraffic::DoConnectionSucceeded(Ptr<Socket> socket)
 {
     NS_LOG_FUNCTION(this << socket);
+    if (m_protocolTid == TcpSocketFactory::GetTypeId())
+    {
+        // Once the connection is established, the segment size is the data a
+        // full segment carries, after the MSS of the peer and the TCP options
+        // are accounted for: a frame is cut in pieces of that size, so that
+        // each piece fills one segment
+        UintegerValue uintegerValue;
+        m_socket->GetAttribute("SegmentSize", uintegerValue);
+        m_maxSize = uintegerValue.Get();
+    }
     ScheduleNextFrame();
 }
 

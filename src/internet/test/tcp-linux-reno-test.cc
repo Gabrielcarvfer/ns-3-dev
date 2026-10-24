@@ -13,6 +13,7 @@
 #include "ns3/simple-channel.h"
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-linux-reno.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
 
 using namespace ns3;
@@ -104,17 +105,13 @@ void
 TcpLinuxRenoSSTest::ConfigureEnvironment()
 {
     TcpGeneralTest::ConfigureEnvironment();
-    // The congestion window checks assume that the segment payload equals the
-    // configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
-
     SetPropagationDelay(MilliSeconds(5));
     SetAppPktCount(m_packets);
     SetAppPktSize(m_packetSize);
     // The MSS advertised by a peer is bounded by what its interface can
-    // receive, so the MTU has to hold a segment and the IP and TCP headers
-    SetMTU(m_segmentSize + 40);
+    // receive, so the MTU has to hold a segment, its timestamp option and the
+    // IP and TCP headers
+    SetMTU(m_segmentSize + TcpSocketBase::GetSegmentOptionsSize() + 40);
 }
 
 void
@@ -123,7 +120,9 @@ TcpLinuxRenoSSTest::ConfigureProperties()
     TcpGeneralTest::ConfigureProperties();
     SetInitialCwnd(SENDER, m_initialCwnd);
     SetDelAckMaxCount(RECEIVER, m_delayedAck);
-    SetSegmentSize(SENDER, m_segmentSize);
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, m_segmentSize + TcpSocketBase::GetSegmentOptionsSize());
     SetSegmentSize(RECEIVER, m_segmentSize);
 }
 
@@ -285,23 +284,21 @@ void
 TcpLinuxRenoCongAvoidTest::ConfigureEnvironment()
 {
     TcpGeneralTest::ConfigureEnvironment();
-    // The congestion window checks assume that the segment payload equals the
-    // configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
-
     SetAppPktSize(m_packetSize);
     SetAppPktCount(m_packets);
     // The MSS advertised by a peer is bounded by what its interface can
-    // receive, so the MTU has to hold a segment and the IP and TCP headers
-    SetMTU(m_segmentSize + 40);
+    // receive, so the MTU has to hold a segment, its timestamp option and the
+    // IP and TCP headers
+    SetMTU(m_segmentSize + TcpSocketBase::GetSegmentOptionsSize() + 40);
 }
 
 void
 TcpLinuxRenoCongAvoidTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    SetSegmentSize(SENDER, m_segmentSize);
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, m_segmentSize + TcpSocketBase::GetSegmentOptionsSize());
     SetSegmentSize(RECEIVER, m_segmentSize);
     SetInitialCwnd(SENDER, m_initialCwnd);
     SetDelAckMaxCount(RECEIVER, m_delayedAck);

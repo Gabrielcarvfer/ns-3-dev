@@ -10,6 +10,7 @@
 #include "tcp-tx-buffer.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
@@ -30,6 +31,17 @@ TcpTxBuffer::GetTypeId()
                             .SetParent<Object>()
                             .SetGroupName("Internet")
                             .AddConstructor<TcpTxBuffer>()
+                            .AddAttribute("LostRetransmissionDetection",
+                                          "Detect, from the SACKs of the segments sent after "
+                                          "it, that a retransmission was lost, and retransmit "
+                                          "it again during the same recovery. When disabled, "
+                                          "as in strict RFC 6675 recovery (and Linux without "
+                                          "RACK, net.ipv4.tcp_recovery=0), a lost "
+                                          "retransmission is repaired by the retransmission "
+                                          "timeout",
+                                          BooleanValue(true),
+                                          MakeBooleanAccessor(&TcpTxBuffer::m_lostRetransDetection),
+                                          MakeBooleanChecker())
                             .AddTraceSource("UnackSequence",
                                             "First unacknowledged sequence number (SND.UNA)",
                                             MakeTraceSourceAccessor(&TcpTxBuffer::m_firstByteSeq),
@@ -869,7 +881,10 @@ TcpTxBuffer::Update(const TcpOptionSack::SackList& list, const Callback<void, Tc
     if (bytesSacked > 0)
     {
         NS_ASSERT_MSG(m_highestSack.first != m_sentList.end(), "Buffer status: " << *this);
-        MarkRetransmittedSegmentsLost(newestSackedSentTime);
+        if (m_lostRetransDetection)
+        {
+            MarkRetransmittedSegmentsLost(newestSackedSentTime);
+        }
         UpdateLostCount();
     }
 

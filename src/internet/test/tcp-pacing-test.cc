@@ -11,6 +11,7 @@
 #include "ns3/config.h"
 #include "ns3/log.h"
 #include "ns3/simple-channel.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
 
 using namespace ns3;
@@ -187,11 +188,6 @@ void
 TcpPacingTest::ConfigureEnvironment()
 {
     TcpGeneralTest::ConfigureEnvironment();
-    // The pacing interval computations assume that the segment payload equals the
-    // configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    Config::SetDefault("ns3::TcpSocketBase::Timestamp", BooleanValue(false));
-
     SetAppPktSize(m_packetSize);
     SetAppPktCount(m_packets);
     SetAppPktInterval(NanoSeconds(10));
@@ -204,7 +200,9 @@ void
 TcpPacingTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
-    SetSegmentSize(SENDER, m_segmentSize);
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, m_segmentSize + TcpSocketBase::GetSegmentOptionsSize());
     SetSegmentSize(RECEIVER, m_segmentSize);
     SetInitialSsThresh(SENDER, m_ssThresh);
     SetInitialCwnd(SENDER, m_initialCwnd);

@@ -275,7 +275,9 @@ main(int argc, char* argv[])
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(flowsPacketsSize));
+    // Each write fills one segment, whose options come out of the segment size
+    Config::SetDefault("ns3::TcpSocket::SegmentSize",
+                       UintegerValue(flowsPacketsSize + TcpSocketBase::GetSegmentOptionsSize()));
 
     // Flows configuration
     // Bidirectional TCP streams with ping like flent tcp_bidirectional test.

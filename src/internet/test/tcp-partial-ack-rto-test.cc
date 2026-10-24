@@ -11,7 +11,9 @@
 
 #include "ns3/log.h"
 #include "ns3/node.h"
+#include "ns3/tcp-cubic.h"
 #include "ns3/tcp-header.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-tx-buffer.h"
 #include "ns3/test.h"
 
@@ -55,6 +57,7 @@ class TcpPartialAckRtoTest : public TcpGeneralTest
     }
 
   protected:
+    void ConfigureProperties() override;
     void ConfigureEnvironment() override;
     Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
     Ptr<ErrorModel> CreateReceiverErrorModel() override;
@@ -77,15 +80,20 @@ TcpPartialAckRtoTest::ConfigureEnvironment()
     SetPropagationDelay(MilliSeconds(100));
 }
 
+void
+TcpPartialAckRtoTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
 Ptr<TcpSocketMsgBase>
 TcpPartialAckRtoTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    // The dropped sequence numbers assume that the segment payload equals the
-    // configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    socket->SetAttribute("Timestamp", BooleanValue(false));
     // NewReno-style recovery with multiple partial ACKs
     socket->SetAttribute("Sack", BooleanValue(false));
     // Make the RTO shorter than the duration of the fast recovery phase
@@ -173,6 +181,7 @@ class TcpLossPartialAckRtoTest : public TcpGeneralTest
     }
 
   protected:
+    void ConfigureProperties() override;
     void ConfigureEnvironment() override;
     Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
     Ptr<ErrorModel> CreateReceiverErrorModel() override;
@@ -192,15 +201,20 @@ TcpLossPartialAckRtoTest::ConfigureEnvironment()
     SetPropagationDelay(MilliSeconds(100));
 }
 
+void
+TcpLossPartialAckRtoTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
 Ptr<TcpSocketMsgBase>
 TcpLossPartialAckRtoTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    // The dropped sequence numbers assume that the segment payload equals the
-    // configured segment size: disable the timestamp option, which would
-    // decrease the payload by its size
-    socket->SetAttribute("Timestamp", BooleanValue(false));
     socket->SetAttribute("Sack", BooleanValue(false));
     socket->SetAttribute("MinRto", TimeValue(MilliSeconds(500)));
     return socket;
@@ -250,7 +264,7 @@ TcpLossPartialAckRtoTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
- * @brief Check that the ACK which ends the CA_LOSS state grows the window.
+ * @brief Check that the ACK which ends the CA_LOSS state grows the window, within bounds.
  *
  * A segment and its fast retransmission are dropped, so that the segment is
  * recovered by the retransmission timer. The receiver holds every segment
@@ -260,6 +274,13 @@ TcpLossPartialAckRtoTest::FinalChecks()
  * the congestion window from the one segment of the loss window
  * (RFC 5681, Section 3.1): otherwise the sender keeps sending one segment
  * per round trip time until the next acknowledgment.
+ *
+ * The growth is bounded as in Linux: the window grows by the segments newly
+ * delivered only, not by those SACKed before the timeout, and the slow start
+ * stops at the slow start threshold, the rest of the segments going to the
+ * congestion avoidance. A congestion control whose slow start grows the
+ * window by every segment acknowledged, as TcpCubic, would otherwise burst
+ * a whole window at once.
  */
 class TcpLossExitCwndTest : public TcpGeneralTest
 {
@@ -267,15 +288,21 @@ class TcpLossExitCwndTest : public TcpGeneralTest
     /**
      * @brief Constructor.
      * @param name Test description.
+     * @param congControl Congestion control of the sender.
+     * @param sack Whether SACK is enabled.
      */
-    TcpLossExitCwndTest(const std::string& name)
-        : TcpGeneralTest(name)
+    TcpLossExitCwndTest(const std::string& name, TypeId congControl, bool sack)
+        : TcpGeneralTest(name),
+          m_congControl(congControl),
+          m_sack(sack)
     {
     }
 
   protected:
+    void ConfigureProperties() override;
     void ConfigureEnvironment() override;
     Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
+    Ptr<TcpSocketMsgBase> CreateReceiverSocket(Ptr<Node> node) override;
     Ptr<ErrorModel> CreateReceiverErrorModel() override;
     void AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
     void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
@@ -288,27 +315,48 @@ class TcpLossExitCwndTest : public TcpGeneralTest
      */
     void CheckCwnd();
 
-    uint32_t m_rtos{0};      //!< Retransmission timeouts at the sender
-    uint32_t m_lossExits{0}; //!< Transitions out of CA_LOSS
+    TypeId m_congControl;         //!< Congestion control of the sender
+    bool m_sack;                  //!< Whether SACK is enabled
+    uint32_t m_rtos{0};           //!< Retransmission timeouts at the sender
+    uint32_t m_lossExits{0};      //!< Transitions out of CA_LOSS
+    uint32_t m_cWndBefore{0};     //!< Congestion window before the ACK ending CA_LOSS
+    uint32_t m_ssThreshBefore{0}; //!< Slow start threshold before the ACK ending CA_LOSS
 };
 
 void
 TcpLossExitCwndTest::ConfigureEnvironment()
 {
     TcpGeneralTest::ConfigureEnvironment();
+    SetCongestionControl(m_congControl);
     SetAppPktSize(500);
-    SetAppPktCount(30);
+    SetAppPktCount(60);
     SetPropagationDelay(MilliSeconds(100));
+}
+
+void
+TcpLossExitCwndTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
 }
 
 Ptr<TcpSocketMsgBase>
 TcpLossExitCwndTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
-    socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    socket->SetAttribute("Timestamp", BooleanValue(false));
-    socket->SetAttribute("Sack", BooleanValue(false));
+    socket->SetAttribute("InitialCwnd", UintegerValue(40));
+    socket->SetAttribute("Sack", BooleanValue(m_sack));
     socket->SetAttribute("MinRto", TimeValue(MilliSeconds(500)));
+    return socket;
+}
+
+Ptr<TcpSocketMsgBase>
+TcpLossExitCwndTest::CreateReceiverSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateReceiverSocket(node);
+    socket->SetAttribute("Sack", BooleanValue(m_sack));
     return socket;
 }
 
@@ -317,8 +365,8 @@ TcpLossExitCwndTest::CreateReceiverErrorModel()
 {
     Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
     // The segment and its fast retransmission
-    errorModel->AddSeqToKill(SequenceNumber32(10001));
-    errorModel->AddSeqToKill(SequenceNumber32(10001));
+    errorModel->AddSeqToKill(SequenceNumber32(1001));
+    errorModel->AddSeqToKill(SequenceNumber32(1001));
     return errorModel;
 }
 
@@ -340,6 +388,9 @@ TcpLossExitCwndTest::CongStateTrace(const TcpSocketState::TcpCongState_t oldValu
         m_lossExits++;
         // The congestion control runs after the state change, within the
         // processing of the same ACK
+        Ptr<const TcpSocketState> tcb = GetTcb(SENDER);
+        m_cWndBefore = tcb->m_cWnd.Get();
+        m_ssThreshBefore = tcb->m_ssThresh.Get();
         Simulator::ScheduleNow(&TcpLossExitCwndTest::CheckCwnd, this);
     }
 }
@@ -348,9 +399,22 @@ void
 TcpLossExitCwndTest::CheckCwnd()
 {
     Ptr<const TcpSocketState> tcb = GetTcb(SENDER);
-    NS_TEST_ASSERT_MSG_GT_OR_EQ(tcb->m_cWnd.Get(),
-                                2 * tcb->m_segmentSize,
+    uint32_t segmentSize = tcb->m_segmentSize;
+    uint32_t cWnd = tcb->m_cWnd.Get();
+    NS_TEST_ASSERT_MSG_GT_OR_EQ(cWnd,
+                                2 * segmentSize,
                                 "The ACK ending the CA_LOSS state did not grow the window");
+    // The segments SACKed before the timeout are not credited again
+    uint32_t delivered = tcb->m_lastAckedSackedBytes;
+    uint32_t deliveredSegments = (delivered + segmentSize - 1) / segmentSize;
+    NS_TEST_ASSERT_MSG_LT_OR_EQ(cWnd,
+                                m_cWndBefore + deliveredSegments * segmentSize,
+                                "The window grew by more than the newly delivered segments");
+    // The slow start stops at the threshold, rounded up to a segment, and the
+    // congestion avoidance adds one segment at most
+    NS_TEST_ASSERT_MSG_LT_OR_EQ(cWnd,
+                                std::max(m_ssThreshBefore, m_cWndBefore) + 2 * segmentSize,
+                                "The window grew past the slow start threshold");
 }
 
 void
@@ -388,6 +452,7 @@ class TcpRecoveryRtoTest : public TcpGeneralTest
     }
 
   protected:
+    void ConfigureProperties() override;
     void ConfigureEnvironment() override;
     Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
     Ptr<ErrorModel> CreateReceiverErrorModel() override;
@@ -417,12 +482,20 @@ TcpRecoveryRtoTest::ConfigureEnvironment()
     SetPropagationDelay(MilliSeconds(100));
 }
 
+void
+TcpRecoveryRtoTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
 Ptr<TcpSocketMsgBase>
 TcpRecoveryRtoTest::CreateSenderSocket(Ptr<Node> node)
 {
     Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
     socket->SetAttribute("InitialCwnd", UintegerValue(10));
-    socket->SetAttribute("Timestamp", BooleanValue(false));
     socket->SetAttribute("Sack", BooleanValue(false));
     socket->SetAttribute("MinRto", TimeValue(MilliSeconds(500)));
     return socket;
@@ -525,8 +598,20 @@ class TcpPartialAckRtoTestSuite : public TestSuite
         AddTestCase(new TcpLossPartialAckRtoTest(
                         "Partial ACKs after a timeout reset the retransmission timer"),
                     TestCase::Duration::QUICK);
-        AddTestCase(new TcpLossExitCwndTest("The ACK ending CA_LOSS grows the window"),
-                    TestCase::Duration::QUICK);
+        for (bool sack : {false, true})
+        {
+            std::string sackName = sack ? ", SACK" : ", no SACK";
+            AddTestCase(new TcpLossExitCwndTest("The ACK ending CA_LOSS grows the window, NewReno" +
+                                                    sackName,
+                                                TcpNewReno::GetTypeId(),
+                                                sack),
+                        TestCase::Duration::QUICK);
+            AddTestCase(
+                new TcpLossExitCwndTest("The ACK ending CA_LOSS grows the window, Cubic" + sackName,
+                                        TcpCubic::GetTypeId(),
+                                        sack),
+                TestCase::Duration::QUICK);
+        }
         AddTestCase(new TcpRecoveryRtoTest("A timeout during fast recovery enters CA_LOSS"),
                     TestCase::Duration::QUICK);
     }

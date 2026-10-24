@@ -41,6 +41,7 @@
 #include "ns3/tcp-option.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-socket-factory.h"
+#include "ns3/tcp-tx-buffer.h"
 #include "ns3/test.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/uinteger.h"
@@ -1449,6 +1450,9 @@ class TcpResetAckTestCase : public TcpCraftedSegmentTestCase
  *
  * Ported from the MSSSupportTest of tcpreq, which opens a connection
  * advertising a small MSS and checks the size of the segments it receives.
+ * The MSS option advertises the largest segment the interface receives
+ * (MUST-67): the receiver opens the connection over an interface of small
+ * MTU.
  * @RFC{9293}, Section 3.7.1 requires the effective send MSS to be the smaller
  * of the send MSS and the largest transmissible payload (MUST-16), and the
  * MSS option not to be sent on non-SYN segments (MUST-65).
@@ -1520,6 +1524,8 @@ TcpAdvertisedMssTestCase::DoRun()
 
     SimpleNetDeviceHelper devHelper;
     NetDeviceContainer devices = devHelper.Install(nodes);
+    constexpr uint32_t IPV4_TCP_HEADERS_SIZE = 40;
+    DynamicCast<SimpleNetDevice>(devices.Get(0))->SetMtu(m_advertisedMss + IPV4_TCP_HEADERS_SIZE);
 
     InternetStackHelper stack;
     stack.Install(nodes);
@@ -1539,8 +1545,6 @@ TcpAdvertisedMssTestCase::DoRun()
     sender->Listen();
     sender->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                               MakeCallback(&TcpAdvertisedMssTestCase::Accepted, this));
-
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(m_advertisedMss));
 
     Ptr<Socket> receiver = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     receiver->Bind();
@@ -9470,6 +9474,452 @@ class TcpClosingStatesAckTestCase : public TcpRawSegmentTestCase
  * @ingroup internet-test
  * @ingroup tests
  *
+ * @brief Test that an empty segment acknowledging new data is not lost
+ *
+ * The acknowledgment of new data carried by a segment without data is
+ * processed even when the segment lies out of the window:
+ *
+ * - below RCV.NXT, as the pure ACKs of a peer which rewound its sequence
+ *   numbers for a retransmission;
+ * - at the sequence number following a FIN which arrived out of order, while
+ *   the data before the FIN is missing: the window then ends at the FIN.
+ *
+ * Dropping them stalls a connection carrying data in both directions.
+ */
+class TcpOldSequenceAckTestCase : public TcpRawSegmentTestCase
+{
+  public:
+    TcpOldSequenceAckTestCase()
+        : TcpRawSegmentTestCase("An empty segment acknowledging new data is processed")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        // Below RCV.NXT
+        Run(false);
+        Simulator::Destroy();
+        // After an out of order FIN
+        Run(true);
+    }
+
+    /**
+     * Run a scenario.
+     * @param outOfOrderFin Whether the peer sends an out of order FIN
+     *                      rather than data before the ACK.
+     */
+    void Run(bool outOfOrderFin)
+    {
+        Setup();
+        Handshake(Seconds(1));
+        Simulator::Stop(Seconds(2));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ((m_accepted != nullptr), true, "The connection was not accepted");
+        if (!m_accepted)
+        {
+            return;
+        }
+        m_accepted->Send(Create<Packet>(1000));
+
+        uint32_t ackSeq;
+        if (outOfOrderFin)
+        {
+            // The 500 bytes before the FIN are missing
+            SendRelativeAt(MilliSeconds(100), TcpHeader::FIN | TcpHeader::ACK, 502, 1);
+            ackSeq = 503;
+        }
+        else
+        {
+            SendRelativeAt(MilliSeconds(100), TcpHeader::ACK, 2, 1, {}, 500);
+            ackSeq = 2;
+        }
+        SendRelativeAt(MilliSeconds(200), TcpHeader::ACK, ackSeq, 1001);
+        Simulator::Stop(MilliSeconds(300));
+        Simulator::Run();
+
+        Ptr<TcpSocketBase> target = DynamicCast<TcpSocketBase>(m_accepted);
+        NS_TEST_ASSERT_MSG_EQ(target->GetTxBuffer()->HeadSequence(),
+                              m_targetIsn + 1001,
+                              "The acknowledgment of the data was dropped"
+                                  << (outOfOrderFin ? " after an out of order FIN" : ""));
+    }
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that a pure ACK carries the highest sequence number sent
+ *
+ * A retransmission timeout rewinds the next sequence number to send down
+ * to the first unacknowledged byte, below the RCV.NXT of a peer which got
+ * the data but whose acknowledgments were lost. A pure ACK sent then carries
+ * SND.NXT, the highest sequence number sent, so that the peer finds it in
+ * its window (@RFC{9293}, Section 3.10.7.4).
+ */
+class TcpPureAckSequenceTestCase : public TcpRawSegmentTestCase
+{
+  public:
+    TcpPureAckSequenceTestCase()
+        : TcpRawSegmentTestCase("A pure ACK carries the highest sequence number sent")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        Setup();
+        Handshake(Seconds(1));
+        Simulator::Stop(Seconds(2));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ((m_accepted != nullptr), true, "The connection was not accepted");
+        if (!m_accepted)
+        {
+            return;
+        }
+        // Never acknowledged: the retransmission timer expires after 1 s
+        m_accepted->Send(Create<Packet>(3000));
+        Simulator::Stop(Seconds(1.5));
+        Simulator::Run();
+        std::size_t before = m_headers.size();
+
+        // The data of the prober is acknowledged by a pure ACK
+        SendRelativeAt(Seconds(0), TcpHeader::ACK, 2, 1, {}, 100);
+        Simulator::Stop(Seconds(0.5));
+        Simulator::Run();
+
+        uint32_t pureAcks = 0;
+        for (std::size_t i = before; i < m_headers.size(); ++i)
+        {
+            if (m_payloads[i] == 0 && m_headers[i].GetFlags() == TcpHeader::ACK)
+            {
+                ++pureAcks;
+                NS_TEST_ASSERT_MSG_EQ(m_headers[i].GetSequenceNumber(),
+                                      m_targetIsn + 3001,
+                                      "The pure ACK does not carry SND.NXT");
+                NS_TEST_ASSERT_MSG_EQ(m_headers[i].GetAckNumber(),
+                                      SequenceNumber32(102),
+                                      "The pure ACK does not acknowledge the data");
+            }
+        }
+        NS_TEST_ASSERT_MSG_EQ(pureAcks, 1, "The data was not acknowledged by a pure ACK");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that a Close() from the error close callback is harmless
+ *
+ * An application may close its socket from the error close callback, as
+ * ThreeGppHttpServer does. With data left unread in the receive buffer, a
+ * Close() sends a RST and notifies an error close: it must not recurse
+ * through the callback once the connection is aborted, whether by a RST of
+ * the peer or by the Close() of the application itself. The connection is
+ * CLOSED, the application is notified once, and no further RST is sent.
+ */
+class TcpCloseFromErrorCallbackTestCase : public TcpRawSegmentTestCase
+{
+  public:
+    TcpCloseFromErrorCallbackTestCase()
+        : TcpRawSegmentTestCase("A Close() from the error close callback is harmless")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        // A RST of the peer, with out of order data held
+        Run(true);
+        Simulator::Destroy();
+        // A Close() of the application, with data unread
+        Run(false);
+    }
+
+    /**
+     * Run a scenario.
+     * @param peerReset Whether the peer resets the connection, rather than
+     *                  the application closing it.
+     */
+    void Run(bool peerReset)
+    {
+        m_callbacks = 0;
+        Setup();
+        Handshake(Seconds(1));
+        Simulator::Stop(Seconds(2));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ((m_accepted != nullptr), true, "The connection was not accepted");
+        if (!m_accepted)
+        {
+            return;
+        }
+        m_accepted->SetCloseCallbacks(
+            MakeNullCallback<void, Ptr<Socket>>(),
+            MakeCallback(&TcpCloseFromErrorCallbackTestCase::CloseOnError, this));
+        std::size_t before = m_headers.size();
+
+        if (peerReset)
+        {
+            // Data after a hole is held, then the peer resets
+            SendRelativeAt(MilliSeconds(100), TcpHeader::ACK, 102, 1, {}, 50);
+            SendRelativeAt(MilliSeconds(200), TcpHeader::RST, 2, 1);
+        }
+        else
+        {
+            // Data in order, never read
+            SendRelativeAt(MilliSeconds(100), TcpHeader::ACK, 2, 1, {}, 50);
+            Simulator::Schedule(MilliSeconds(200), &Socket::Close, m_accepted);
+        }
+        Simulator::Stop(Seconds(1));
+        Simulator::Run();
+
+        std::string scenario = peerReset ? " (reset by the peer)" : " (closed with unread data)";
+        NS_TEST_ASSERT_MSG_EQ(m_callbacks, 1, "The error close was not notified once" << scenario);
+        NS_TEST_ASSERT_MSG_EQ(m_acceptedState,
+                              TcpSocket::CLOSED,
+                              "The connection is not CLOSED" << scenario);
+        NS_TEST_ASSERT_MSG_EQ(Count(TcpHeader::RST, before),
+                              (peerReset ? 0 : 1),
+                              "Wrong number of RSTs sent" << scenario);
+    }
+
+    /**
+     * Error close callback closing the socket, as ThreeGppHttpServer does.
+     * The recursion is bounded, so that a failure does not overflow the
+     * stack.
+     * @param socket The socket.
+     */
+    void CloseOnError(Ptr<Socket> socket)
+    {
+        if (++m_callbacks < 5)
+        {
+            socket->Close();
+        }
+    }
+
+    uint32_t m_callbacks{0}; //!< Error close notifications
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test the urgent data sent before the connection is established
+ *
+ * Urgent data sent in SYN-SENT is queued until the handshake gives the
+ * sequence number of its first byte: the urgent pointer must still point
+ * after the last urgent byte (@RFC{9293}, Section 3.8.5, MUST-62), so that the
+ * peer is told of all of them, even of a single urgent byte.
+ */
+class TcpUrgentSynSentTestCase : public TestCase
+{
+  public:
+    TcpUrgentSynSentTestCase()
+        : TestCase("Urgent data sent in SYN-SENT is pointed at whole")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        for (uint32_t size : {1, 10})
+        {
+            Run(size);
+        }
+    }
+
+    /**
+     * Run the scenario.
+     * @param size The number of urgent bytes.
+     */
+    void Run(uint32_t size)
+    {
+        m_urgentSizes.clear();
+        m_urgentPointers.clear();
+
+        NodeContainer nodes;
+        nodes.Create(2);
+        SimpleNetDeviceHelper devHelper;
+        devHelper.SetChannelAttribute("Delay", TimeValue(MilliSeconds(10)));
+        NetDeviceContainer devices = devHelper.Install(nodes);
+        InternetStackHelper stack;
+        stack.Install(nodes);
+        Ipv4AddressHelper address;
+        address.SetBase("10.1.1.0", "255.255.255.0");
+        Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+        const uint16_t port = 9700;
+        Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+        server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+        server->Listen();
+        server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                                  MakeCallback(&TcpUrgentSynSentTestCase::Accepted, this));
+
+        Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+        client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+        client->Send(Create<Packet>(size), Socket::MSG_FLAG_OOB);
+
+        Simulator::Stop(Seconds(5));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(m_urgentPointers.empty(),
+                              false,
+                              "No urgent pointer for " << size << " urgent bytes");
+        for (uint16_t pointer : m_urgentPointers)
+        {
+            NS_TEST_ASSERT_MSG_EQ(pointer,
+                                  size,
+                                  "The urgent pointer misses urgent bytes of " << size);
+        }
+        NS_TEST_ASSERT_MSG_EQ(m_urgentSizes.size(),
+                              1,
+                              "The urgent data of " << size << " bytes was not notified once");
+        if (!m_urgentSizes.empty())
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_urgentSizes.front(),
+                                  size,
+                                  "Wrong amount of urgent data notified");
+        }
+        Simulator::Destroy();
+    }
+
+    /**
+     * Accept callback, watching the accepted socket.
+     * @param socket The accepted socket.
+     * @param from The peer address.
+     */
+    void Accepted(Ptr<Socket> socket, const Address& from)
+    {
+        socket->SetUrgentDataCallback(MakeCallback(&TcpUrgentSynSentTestCase::Urgent, this));
+        socket->TraceConnectWithoutContext(
+            "Rx",
+            MakeCallback(&TcpUrgentSynSentTestCase::SegmentReceived, this));
+    }
+
+    /**
+     * Urgent data callback.
+     * @param socket The socket.
+     */
+    void Urgent(Ptr<Socket> socket)
+    {
+        m_urgentSizes.push_back(socket->GetUrgentDataSize());
+    }
+
+    /**
+     * Rx trace of the accepted socket, recording the urgent pointers.
+     * @param packet The payload.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void SegmentReceived(Ptr<const Packet> packet,
+                         const TcpHeader& header,
+                         Ptr<const TcpSocketBase> socket)
+    {
+        if (header.GetFlags() & TcpHeader::URG)
+        {
+            m_urgentPointers.push_back(header.GetUrgentPointer());
+        }
+    }
+
+    std::vector<uint32_t> m_urgentSizes;    //!< Urgent data sizes notified
+    std::vector<uint16_t> m_urgentPointers; //!< Urgent pointers received
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test the urgent field of the segment completing a passive open
+ *
+ * A segment which completes the handshake moves the connection from
+ * SYN-RECEIVED to ESTABLISHED, and its urgent field is processed then, before
+ * its data (@RFC{9293}, Section 3.10.7.4, MUST-32): the application is told of
+ * the urgent data the segment carries.
+ */
+class TcpUrgentHandshakeAckTestCase : public TcpRawSegmentTestCase
+{
+  public:
+    TcpUrgentHandshakeAckTestCase()
+        : TcpRawSegmentTestCase("The urgent field of the segment completing the handshake")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        Setup();
+        m_target->SetAcceptCallback(
+            MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+            MakeCallback(&TcpUrgentHandshakeAckTestCase::AcceptedUrgent, this));
+        Segment syn;
+        syn.flags = TcpHeader::SYN;
+        syn.seq = m_proberIsn;
+        syn.window = 65535;
+        SendAt(Seconds(1), syn);
+        Simulator::Stop(Seconds(1.5));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ(Count(TcpHeader::SYN | TcpHeader::ACK),
+                              1,
+                              "The SYN was not answered");
+        if (m_headers.empty())
+        {
+            return;
+        }
+        m_targetIsn = m_headers.back().GetSequenceNumber();
+
+        // The handshake is completed by a segment carrying urgent data
+        const uint16_t urgentBytes = 10;
+        SendSegmentFull(TcpHeader::ACK | TcpHeader::URG,
+                        m_proberIsn + 1,
+                        (m_targetIsn + 1).GetValue(),
+                        65535,
+                        false,
+                        urgentBytes,
+                        urgentBytes);
+        Simulator::Stop(Seconds(0.5));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(m_acceptedState,
+                              TcpSocket::ESTABLISHED,
+                              "The connection was not established");
+        NS_TEST_ASSERT_MSG_EQ(m_urgentSizes.size(), 1, "The urgent data was not notified once");
+        if (!m_urgentSizes.empty())
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_urgentSizes.front(),
+                                  urgentBytes,
+                                  "Wrong amount of urgent data notified");
+        }
+    }
+
+    /**
+     * Accept callback, watching the urgent data of the accepted socket.
+     * @param socket The accepted socket.
+     * @param from The address of the peer.
+     */
+    void AcceptedUrgent(Ptr<Socket> socket, const Address& from)
+    {
+        Accepted(socket, from);
+        socket->SetUrgentDataCallback(MakeCallback(&TcpUrgentHandshakeAckTestCase::Urgent, this));
+    }
+
+    /**
+     * Urgent data callback.
+     * @param socket The socket.
+     */
+    void Urgent(Ptr<Socket> socket)
+    {
+        m_urgentSizes.push_back(socket->GetUrgentDataSize());
+    }
+
+    std::vector<uint32_t> m_urgentSizes; //!< Urgent data sizes notified
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
  * @brief Test that a SYN reaching a synchronized connection gets a challenge ACK
  *
  * @RFC{9293}, Section 3.10.7.4 answers a SYN reaching a synchronized
@@ -9779,8 +10229,13 @@ class TcpMalformedSynSentTestCase : public TcpRawSegmentTestCase
  * Every illegal option layout resets an established connection when it
  * reaches it at RCV.NXT (@RFC{9293}, Section 3.1, MUST-7 and MUST-68): an
  * option length of 1, a length running past the 40 bytes of option space, a
- * kind needing a length as the last byte of the option space, and an option
- * appearing twice. An option filling the whole option space exactly is legal.
+ * kind needing a length as the last byte of the option space, an option
+ * appearing twice, and an option of a known kind whose length does not match
+ * its kind: MSS of 4 bytes, window scale of 3, SACK permitted of 2, SACK of 2
+ * plus 8 per block for 1 to 4 blocks, timestamps of 10. An option filling the
+ * whole option space exactly is legal. A SYN with a malformed MSS option
+ * towards a closed port is reset, the simulation going on, and a window scale
+ * above 14 opens the connection.
  */
 class TcpMalformedOptionMatrixTestCase : public TcpRawSegmentTestCase
 {
@@ -9811,6 +10266,14 @@ class TcpMalformedOptionMatrixTestCase : public TcpRawSegmentTestCase
             {"a kind without length as the last byte", {0x01, 0x01, 0x01, UNKNOWN_KIND}},
             {"a duplicate option",
              {0x02, 0x04, 0x05, 0xb4, 0x01, 0x01, 0x01, 0x01, 0x02, 0x04, 0x05, 0xb4}},
+            {"an MSS option of length 2", {0x02, 0x02, 0x01, 0x00}},
+            {"an MSS option of length 3", {0x02, 0x03, 0x05, 0x01}},
+            {"an MSS option of length 5", {0x02, 0x05, 0x05, 0xb4, 0x00, 0x00, 0x00, 0x00}},
+            {"a window scale option of length 4", {0x03, 0x04, 0x07, 0x00}},
+            {"a SACK permitted option of length 3", {0x04, 0x03, 0x00, 0x00}},
+            {"a SACK option of length 3", {0x05, 0x03, 0x01, 0x00}},
+            {"a SACK option of length 11", {0x05, 0x0b, 0, 0, 0, 1, 0, 0, 0, 2, 0x01, 0x00}},
+            {"a timestamp option of length 9", {0x08, 0x09, 0, 0, 0, 1, 0, 0, 0, 0x00, 0x00, 0x00}},
         };
         for (const auto& [description, options] : malformed)
         {
@@ -9840,6 +10303,29 @@ class TcpMalformedOptionMatrixTestCase : public TcpRawSegmentTestCase
         NS_TEST_ASSERT_MSG_EQ(m_accepted->GetRxAvailable(),
                               100,
                               "The data of a segment with a legal option was not received");
+        Simulator::Destroy();
+
+        // Towards a closed port, the segment is reset without its options
+        // being looked at further
+        Setup(false);
+        Segment syn = Make(TcpHeader::SYN, m_proberIsn, 0, {0x02, 0x03, 0x05, 0x01});
+        SendAt(Seconds(1), syn);
+        Simulator::Stop(Seconds(2));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ(Count(TcpHeader::RST),
+                              1,
+                              "A SYN with a malformed MSS option to a closed port was not reset");
+        Simulator::Destroy();
+
+        // A window scale above 14 is well formed, and taken as 14 (RFC 7323,
+        // Section 2.3)
+        Setup();
+        Handshake(Seconds(1), {0x03, 0x03, 0x0f, 0x01});
+        Simulator::Stop(Seconds(2));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ(m_acceptedState,
+                              TcpSocket::ESTABLISHED,
+                              "A window scale above 14 did not open the connection");
     }
 };
 
@@ -11173,6 +11659,11 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpSynSentResetTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpOutOfWindowFinTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpClosingStatesAckTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpPureAckSequenceTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpOldSequenceAckTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpCloseFromErrorCallbackTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpUrgentSynSentTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpUrgentHandshakeAckTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpSynInSynchronizedStateTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpMalformedOutOfWindowTestCase(false), TestCase::Duration::QUICK);
         AddTestCase(new TcpMalformedOutOfWindowTestCase(true), TestCase::Duration::QUICK);

@@ -26,6 +26,7 @@
 #include "ns3/spectrum-wifi-helper.h"
 #include "ns3/ssid.h"
 #include "ns3/string.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/udp-client-server-helper.h"
 #include "ns3/udp-server.h"
 #include "ns3/uinteger.h"
@@ -486,7 +487,12 @@ main(int argc, char* argv[])
                                            StringValue("ns3::ConstantRandomVariable[Constant=1]"));
                         onoff.SetAttribute("OffTime",
                                            StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-                        onoff.SetAttribute("PacketSize", UintegerValue(payloadSize));
+                        // The segments must fit in the maximum TX duration: the
+                        // options come out of payloadSize, and each write fills
+                        // one segment
+                        onoff.SetAttribute(
+                            "PacketSize",
+                            UintegerValue(payloadSize - TcpSocketBase::GetSegmentOptionsSize()));
                         onoff.SetAttribute("DataRate", DataRateValue(maxLoad));
                         AddressValue remoteAddress(
                             InetSocketAddress(serverInterfaces.GetAddress(i), port));

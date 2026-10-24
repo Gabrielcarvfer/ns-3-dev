@@ -282,6 +282,126 @@ Figure :ref:`fig-tcp-state-machine`.
 
 -------------------
 
+**Delayed and quick acknowledgments**
+
+The receiver acknowledges in-sequence data every ``TcpSocket::DelAckCount``
+segments (2 by default), or when the ``TcpSocket::DelAckTimeout`` timer
+expires, as :rfc:`5681` (Section 4.2) and :rfc:`1122` allow. It acknowledges
+at once the first data segment of the connection, out-of-order data, data
+filling a gap, and segments that are not acceptable.
+
+Linux instead acknowledges every segment while it is in its *quick ACK
+mode*, which the ``TcpSocketBase::QuickAck`` attribute (false by default)
+reproduces. The mode holds a number of quick ACKs; an ACK that acknowledges
+data received since the previous one uses one of them (``tcp_dec_quickack_mode()``).
+The number is raised, if below it, to half the window last advertised in
+segments, at least 2 and at most a bound (``tcp_incr_quickack()``):
+
+* on the first data received, and on data received after an idle period
+  longer than the RTO, with a bound of 16 (``TCP_MAX_QUICKACKS``), as
+  ``tcp_event_data_recv()`` does: a connection thus starts with up to 16
+  ACKs of one segment, which speeds up slow start at the sender;
+* on duplicate data, entirely below RCV.NXT, which shows that an ACK was
+  lost or that the sender retransmitted spuriously, with a bound of 16;
+* on the first segment marked CE since the peer last reduced its window
+  (ECN-Echo not yet answered by CWR), with a bound of 2, as
+  ``__tcp_ecn_check_ce()`` does, since the sender may then have a small window.
+
+With the attribute set, the receiver also acknowledges at once, whatever
+the delayed ACK count, an in-sequence segment that is *pushed*, as
+``tcp_measure_rcv_mss()`` and ``tcp_cleanup_rbuf()`` of Linux do: a
+segment carrying PSH, or a segment shorter than the MSS, likely ends a write
+of the peer, which may wait for its ACK, and the ACK is sent if the
+application has read all the data received. A Linux sender sets PSH at the
+end of each write and at least every half of the largest window of the
+peer (``forced_push()``), about every third segment in a bulk transfer,
+so that this accounts for a few percent of the ACKs of a Linux receiver.
+
+As in Linux, out-of-order data does not enter the mode by itself: it is
+acknowledged at once anyway. The model simplifies Linux in a few ways. The
+segment size of the connection stands for the receive MSS that Linux
+estimates from the segments received. The interactive (*pingpong*) mode of
+Linux, which suspends the quick ACKs when the application answers each
+segment, is not modelled, nor is the quick ACK that Linux sends each time it raises
+``rcv_ssthresh``, the bound of its advertised window, by two segments
+(``tcp_grow_window()``), since |ns3| advertises its free buffer space
+without such a bound. Even with ``tcp_moderate_rcvbuf`` disabled, Linux
+raises it at the start of a connection, from half of the receive buffer
+towards the share of it that its accounting of the buffer overhead
+(``scaling_ratio``) allows, which makes it acknowledge alone more segments
+of slow start than the model does (some 70 against 16 in a 20 Mbit/s
+transfer with a 4 MiB buffer).
+Linux also enters the mode on a segment starting at the right edge of the
+window, such as a zero window probe, which the model does not.
+
+Linux also merges the ACKs of out-of-order data (*SACK compression*,
+``__tcp_ack_snd_check()``), which the ``TcpSocketBase::SackCompression``
+attribute (false by default) reproduces. With SACK, the first three ACKs of
+out-of-order data at a given RCV.NXT are still sent at once, so that the
+sender can retransmit fast, but the following ones wait for
+``TcpSocketBase::SackCompressionDelay`` (1 ms by default, as
+``tcp_comp_sack_delay_ns``) or 5% of the smoothed RTT, whichever is shorter,
+and one ACK then covers all the data received meanwhile, up to 44 segments
+(``tcp_comp_sack_nr``). Any ACK sent, such as the immediate ACK of data
+filling a gap, ends the wait. The ACKs are not held back in the quick ACK
+mode, nor upon a segment marked CE that starts an ECN-Echo, and the held
+ACKs carry ECN-Echo as the other ones. This departs from :rfc:`5681`
+(Section 4.2), whose receiver SHOULD send an immediate duplicate ACK for each
+out-of-order segment, and from the ACK of at least every second full-sized
+segment of :rfc:`9293` (Section 3.8.6.3), hence the option is off by
+default. With a Linux sender, or a link faster than one segment per
+``SackCompressionDelay``, it about halves the ACKs sent during loss recovery,
+as Linux does: in a 20 Mbit/s transfer with periodic losses, the ns-3
+receiver sends 0.51 ACK per data segment with it, as Linux, against 0.64
+without it.
+
+The timeout of the delayed ACKs is ``TcpSocket::DelAckTimeout`` (200 ms by
+default). Linux adapts it instead (``icsk_ack.ato``), which the
+``TcpSocketBase::AdaptiveDelAck`` attribute (false by default) reproduces,
+with ``DelAckTimeout`` as its upper bound, as ``TCP_DELACK_MAX`` in Linux:
+
+* it starts at 40 ms (``TCP_ATO_MIN``) on the first data, and returns to it
+  when the quick ACK mode is entered on duplicate data or a CE mark, or when
+  its quick ACKs are used up;
+* on each in-sequence data segment, as ``tcp_event_data_recv()`` does, it
+  becomes half its value plus 20 ms if the segment arrives within 20 ms of the
+  previous one, so that a bulk transfer keeps it at 40 ms, or half its value
+  plus the interval if the interval is shorter than it, bounded by the RTO;
+* each time it expires, it doubles, bounded by the RTO
+  (``tcp_delack_timer_handler()``);
+* above 40 ms, the timer is bounded by the smoothed RTT (but not below
+  40 ms) and by 500 ms (``tcp_send_delayed_ack()``).
+
+The timeout thus stays within the 500 ms that :rfc:`9293` (Section 3.8.6.3)
+and :rfc:`1122` allow. The interactive (*pingpong*) mode of Linux, which
+bounds the timer by 200 ms and resets it to 40 ms on expiry, is not modelled.
+
+-------------------
+
+**Sender silly window syndrome avoidance**
+
+The sender avoids the silly window syndrome as :rfc:`9293` (Section
+3.8.6.2.1) describes: while more data is queued than the usable window
+holds, it sends a segment shorter than the MSS only if that segment carries
+at least half (Fs = 1/2) of the largest window the receiver has offered.
+A receiver whose window never reaches one MSS thus still receives data, in
+segments of at least half its window.
+
+Linux fills the window of the receiver instead: when the right edge of the
+window cuts the last segment of a burst, it sends that segment short, up to
+the edge (``tcp_mss_split_point()``), provided the burst started with at
+least one full segment. The ``TcpSocketBase::FillReceiveWindow`` attribute
+(false by default) reproduces it when the receive window, not the congestion
+window, limits the sender. With a receive window which is not a multiple of
+the MSS, such as the 7068 bytes a Linux receiver advertises for an 8 KiB
+buffer, the |ns3| sender then uses the whole window as Linux does, rather
+than its whole segments only. This departs from the sender algorithm of
+:rfc:`9293`, hence the option is off by default. The variant of Minshall of
+the Nagle algorithm, with which Linux holds such a short segment while
+another short one is unacknowledged, is not modelled.
+
+-------------------
+
 **Public interface for senders (e.g. clients uploading data)**
 
 *Connect()*
@@ -337,8 +457,7 @@ callback as well.
   multiple times, and the socket gives up.
 
 *NotifyNormalClose*: *SetCloseCallbacks*, 1st argument
-  A normal close is invoked. A rare case is when we receive an RST segment (or a
-  segment with bad flags) in normal states. All other cases are:
+  A normal close is invoked. The cases are:
   - The application tries to *Connect()* over an already connected socket
   - Received an ACK for the FIN sent, with or without the FIN bit set (we are in LAST_ACK)
   - The socket reaches the maximum amount of retries in retransmitting the SYN (*)
@@ -346,8 +465,10 @@ callback as well.
   - Upon entering the TIME_WAIT state, before waiting the 2*Maximum Segment Lifetime seconds to finally deallocate the socket.
 
 *NotifyErrorClose*: *SetCloseCallbacks*, 2nd argument
-  Invoked when we send an RST segment (for whatever reason) or we reached the
-  maximum amount of data retries.
+  Invoked when we send an RST segment (for whatever reason), when we receive
+  one in a synchronized state, or when we reached the maximum amount of data
+  retries. The connection is CLOSED before the callback runs, and it is
+  invoked once: a *Close()* called from it does nothing.
 
 *NotifyConnectionRequest*: *SetAcceptCallback*, 1st argument
   Invoked in the LISTEN state, when we receive a SYN. The return value indicates
@@ -376,6 +497,33 @@ callback as well.
   Called when in the receiver buffer there are in-order bytes, and when in
   FIN_WAIT_1 or FIN_WAIT_2 the socket receive a in-sequence FIN (that can carry
   data).
+
+-----------------------------------------
+
+**Maximum segment size**
+
+The ``ns3::TcpSocket::SegmentSize`` attribute is the largest segment the
+socket sends, counting its data only (:rfc:`9293`, Section 3.7.1). The MSS
+option of a SYN tells instead the largest segment the socket can receive, the
+MTU of its interface minus the base IP and TCP headers (MUST-67, and
+:rfc:`6691`, Section 2), whatever ``SegmentSize`` is; the configured
+``SegmentSize`` is advertised only when the interface is not known. The size
+of the segments sent is the smallest of ``SegmentSize``, the MSS advertised by
+the peer (536 bytes over IPv4, or 1220 over IPv6, when the peer sends no MSS
+option) and the MTU of the interface minus the headers (MUST-16). A receiver
+configured with a small ``SegmentSize`` therefore does not shrink the segments
+its peer sends.
+
+The options every segment carries, such as the 12 bytes of the timestamp
+option, come out of the segment size (:rfc:`6691`, Section 2), as Linux does:
+with the timestamps, a ``SegmentSize`` of 1460 bytes gives segments of 1448
+bytes of data. An application whose writes should each fill one segment, such
+as an ``OnOffApplication`` whose ``PacketSize`` is the segment size, configures
+``SegmentSize`` as the size of its writes plus
+``TcpSocketBase::GetSegmentOptionsSize ()``; otherwise, with Nagle's algorithm
+disabled, each write leaves as a full segment followed by a small one. Once a
+connection is established, reading the ``SegmentSize`` attribute of its socket
+gives the data a full segment carries.
 
 -----------------------------------------
 
@@ -460,6 +608,24 @@ During congestion avoidance, cwnd is incremented by roughly 1 full-sized
 segment per round-trip time (RTT), and for each congestion event, the slow
 start threshold is halved.
 
+Both increases apply once per ACK that acknowledges new data, whatever the
+number of segments it acknowledges, so that a receiver delaying its ACKs to
+every second segment halves the growth of the window. Setting the attribute
+``TcpNewReno::CountAckedSegments`` to true makes every acknowledged segment
+count instead, as the byte counting of RFC 3465 and the ``tcp_slow_start()``
+and ``tcp_cong_avoid_ai()`` functions of Linux do: slow start grows cwnd by one
+segment per acknowledged segment, up to ssthresh, the segments left over going
+to congestion avoidance, and congestion avoidance applies its increment of
+SMSS*SMSS/cwnd once per acknowledged segment. The attribute is false by
+default. The models derived from :cpp:class:`TcpNewReno` honour it wherever
+they use its slow start or congestion avoidance (Westwood+, Scalable,
+HighSpeed, Vegas, Veno, YeAH, Illinois, H-TCP, Hybla, LEDBAT and TCP-LP, which
+all use the slow start of NewReno or the same per-ACK rule), and the per-ACK
+increases of their own that follow the same rule: the congestion avoidance of
+H-TCP and the slow start of Hybla. The increases of Scalable, HighSpeed,
+Illinois, Hybla (in congestion avoidance) and LEDBAT already count the
+acknowledged segments. :cpp:class:`TcpLinuxReno` always counts them.
+
 CUBIC
 ^^^^^
 CUBIC (class :cpp:class:`TcpCubic`) is the default TCP congestion control
@@ -486,8 +652,9 @@ flow is paced). Linux also adds to the ACK train threshold an allowance for
 TSO/GRO aggregation, which is not modelled. Since the ACK train detection
 depends on where the round starts within a train of ACKs, and the Linux
 receiver acknowledges every segment at the start of a connection (quick ACK
-mode) while the |ns3| receiver delays its ACKs from the first segment, the two
-stacks may leave slow start at different windows on the same path.
+mode) while the |ns3| receiver delays its ACKs from the first segment, unless
+``TcpSocketBase::QuickAck`` is set, the two stacks may leave slow start at
+different windows on the same path.
 
 Linux Reno
 ^^^^^^^^^^
@@ -1960,7 +2127,30 @@ reordering window: a retransmission merely delayed in the network behind a
 segment sent after it is resent spuriously. RACK (RFC 8985) also uses a zero
 reordering window during loss recovery as long as no reordering has been
 observed, but it widens the window once reordering is detected (e.g., via
-DSACK); ns-3 neither detects reordering nor adapts the window.
+DSACK); ns-3 neither detects reordering nor adapts the window. The detection
+is disabled by setting the ``TcpTxBuffer::LostRetransmissionDetection``
+attribute (true by default) to false: as in strict :rfc:`6675` recovery,
+whose NextSeg() does not select a retransmitted segment again, and as in Linux
+without RACK (``net.ipv4.tcp_recovery=0``), a lost retransmission is then
+repaired by the retransmission timeout. Linux then still differs in two ways:
+it restarts the retransmission timer on the SACKs of the segments sent
+before the retransmission of the first unacknowledged segment
+(``tcp_clean_rtx_queue()``), and a timeout during a fast recovery keeps the
+slow start threshold that the recovery set (``tcp_enter_loss()``), whereas
+|ns3| computes it again from the bytes in flight.
+
+The retransmission timeout follows :rfc:`6298`: RTO = SRTT + max(G, 4 *
+RTTVAR), bounded below by ``TcpSocketBase::MinRto``, where G is
+``TcpSocketBase::ClockGranularity`` (1 ms by default). Linux computes it as
+SRTT + max(4 * mdev, ``rto_min``) (``__tcp_set_rto()`` and
+``tcp_rtt_estimator()``, with ``rto_min`` 200 ms by default): its minimum is
+added to the smoothed RTT instead of bounding their sum. When a queue builds
+up, the RTT grows faster than SRTT follows it while RTTVAR stays small, and
+the |ns3| timeout can then expire before the ACK of a retransmission arrives,
+in a recovery Linux completes without a timeout. Setting both
+``ClockGranularity`` and ``MinRto`` to the ``rto_min`` of Linux reproduces
+its timeout, except that Linux also holds 4 * mdev at its maximum over the
+last round trip (``mdev_max_us``).
 
 Duplicate acknowledgments follow the definition of RFC 5681, Section 2:
 without SACK, an acknowledgment which carries data or changes the advertised

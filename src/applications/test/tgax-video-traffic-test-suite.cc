@@ -27,6 +27,7 @@
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/string.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
 #include "ns3/tgax-video-traffic.h"
 #include "ns3/traced-callback.h"
@@ -123,6 +124,9 @@ IsMulticast(TgaxVideoTraffic::TrafficModelClassIdentifier model)
 
 const auto simulationTime{Seconds(20)}; //!< The simulation time
 
+/// The TCP segment size configured
+constexpr uint32_t TCP_SEGMENT_SIZE = 1500;
+
 } // namespace
 
 /**
@@ -187,6 +191,7 @@ class TgaxVideoTrafficTestCase : public TestCase
     double m_expectedBitRate; //!< Expected video bit rate
 
     uint64_t m_sent{0};                  //!< number of bytes sent
+    uint32_t m_largestPacket{0};         //!< largest packet sent
     std::vector<uint64_t> m_received;    //!< number of bytes received per receiver
     std::vector<Time> m_generatedFrames; //!< Store time at which each frame has been generated
     std::vector<Time> m_latencies;       //!< Store latency applied to each transmitted packet
@@ -214,6 +219,7 @@ TgaxVideoTrafficTestCase::PacketSent(Ptr<const Packet> packet, Time latency)
 {
     NS_LOG_FUNCTION(this << packet << packet->GetSize() << latency);
     m_sent += packet->GetSize();
+    m_largestPacket = std::max(m_largestPacket, packet->GetSize());
     m_latencies.push_back(latency);
 }
 
@@ -244,7 +250,7 @@ TgaxVideoTrafficTestCase::DoSetup()
     RngSeedManager::SetSeed(6);
     RngSeedManager::SetRun(8);
 
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1500));
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(TCP_SEGMENT_SIZE));
     Config::SetDefault("ns3::TcpSocket::DelAckCount", UintegerValue(1));
     if (m_txBufferSizeLimit)
     {
@@ -335,6 +341,16 @@ TgaxVideoTrafficTestCase::DoRun()
 
     Simulator::Run();
     Simulator::Destroy();
+
+    if (m_protocol == "Tcp")
+    {
+        // A frame is cut in pieces of the data a full segment carries: the
+        // SegmentSize minus the timestamp option, over a link whose MTU does
+        // not bound it. A larger piece would leave a runt segment behind it.
+        NS_TEST_ASSERT_MSG_LT_OR_EQ(m_largestPacket,
+                                    TCP_SEGMENT_SIZE - TcpSocketBase::GetSegmentOptionsSize(),
+                                    "A packet does not fit in a single segment");
+    }
 
     for (std::size_t i = 0; i < m_received.size(); ++i)
     {

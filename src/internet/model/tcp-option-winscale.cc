@@ -89,8 +89,6 @@ TcpOptionWinScale::GetKind() const
 uint8_t
 TcpOptionWinScale::GetScale() const
 {
-    NS_ASSERT(m_scale <= 14);
-
     return m_scale;
 }
 

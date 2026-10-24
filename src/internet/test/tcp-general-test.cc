@@ -178,7 +178,7 @@ TcpGeneralTest::DoRun()
     senderDev->GetQueue()->TraceConnect("Drop",
                                         "SENDER",
                                         MakeCallback(&TcpGeneralTest::QueueDropCb, this));
-    senderDev->TraceConnect("PhyRxDrop", "sender", MakeCallback(&TcpGeneralTest::PhyDropCb, this));
+    senderDev->TraceConnect("PhyRxDrop", "SENDER", MakeCallback(&TcpGeneralTest::PhyDropCb, this));
 
     receiverDev->SetMtu(m_mtu);
     receiverDev->GetQueue()->TraceConnect("Drop",

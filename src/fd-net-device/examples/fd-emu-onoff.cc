@@ -159,7 +159,9 @@ main(int argc, char* argv[])
     Ipv4Address localIp;
     Mac48AddressValue localMac;
 
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(packetSize));
+    // Each write fills one segment, whose options come out of the segment size
+    Config::SetDefault("ns3::TcpSocket::SegmentSize",
+                       UintegerValue(packetSize + TcpSocketBase::GetSegmentOptionsSize()));
 
     if (serverMode)
     {

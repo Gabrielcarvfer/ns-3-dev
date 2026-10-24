@@ -6,6 +6,7 @@
  */
 #include "tcp-congestion-ops.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 
 namespace ns3
@@ -96,7 +97,14 @@ TcpNewReno::GetTypeId()
                                           "Beta for multiplicative decrease for ABE",
                                           DoubleValue(0.7), // According to RFC 8511 (ABE)
                                           MakeDoubleAccessor(&TcpNewReno::m_betaEcn),
-                                          MakeDoubleChecker<double>(0.0, 1.0));
+                                          MakeDoubleChecker<double>(0.0, 1.0))
+                            .AddAttribute("CountAckedSegments",
+                                          "Grow the window in slow start and congestion avoidance "
+                                          "per acknowledged segment (RFC 3465, as Linux does) "
+                                          "instead of per ACK (RFC 5681)",
+                                          BooleanValue(false),
+                                          MakeBooleanAccessor(&TcpNewReno::m_countAckedSegments),
+                                          MakeBooleanChecker());
     return tid;
 }
 
@@ -107,7 +115,10 @@ TcpNewReno::TcpNewReno()
 }
 
 TcpNewReno::TcpNewReno(const TcpNewReno& sock)
-    : TcpCongestionOps(sock)
+    : TcpCongestionOps(sock),
+      m_countAckedSegments(sock.m_countAckedSegments),
+      m_betaLoss(sock.m_betaLoss),
+      m_betaEcn(sock.m_betaEcn)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -154,6 +165,10 @@ TcpNewReno::~TcpNewReno()
  * than a segment size, but we keep count of how many segments we have ignored,
  * and return them.
  *
+ * With the CountAckedSegments attribute set, the Linux function is followed
+ * instead: cWnd grows by a segment per acknowledged segment, up to ssThresh,
+ * and the segments left over are returned for congestion avoidance.
+ *
  * @param tcb internal congestion state
  * @param segmentsAcked count of segments acked
  * @return the number of segments not considered for increasing the cWnd
@@ -162,6 +177,19 @@ uint32_t
 TcpNewReno::SlowStart(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
+
+    if (segmentsAcked >= 1 && CountsAckedSegments())
+    {
+        uint32_t oldCwnd = tcb->m_cWnd;
+        tcb->m_cWnd = std::min(oldCwnd + segmentsAcked * tcb->m_segmentSize,
+                               std::max(tcb->m_ssThresh.Get(), oldCwnd));
+        NS_LOG_INFO("In SlowStart, updated to cwnd " << tcb->m_cWnd << " ssthresh "
+                                                     << tcb->m_ssThresh);
+        // A partial segment of growth, when ssThresh is not a multiple of
+        // the segment size, consumes a whole acknowledged segment
+        uint32_t used = (tcb->m_cWnd - oldCwnd + tcb->m_segmentSize - 1) / tcb->m_segmentSize;
+        return segmentsAcked - used;
+    }
 
     if (segmentsAcked >= 1)
     {
@@ -178,7 +206,9 @@ TcpNewReno::SlowStart(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
  * @brief NewReno congestion avoidance
  *
  * During congestion avoidance, cwnd is incremented by roughly 1 full-sized
- * segment per round-trip time (RTT).
+ * segment per round-trip time (RTT): by SMSS*SMSS/cwnd for each ACK, as
+ * RFC 5681 equation 3 states, or for each acknowledged segment with the
+ * CountAckedSegments attribute set.
  *
  * @param tcb internal congestion state
  * @param segmentsAcked count of segments acked
@@ -188,12 +218,16 @@ TcpNewReno::CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
 
-    if (segmentsAcked > 0)
+    uint32_t increments = CountsAckedSegments() ? segmentsAcked : std::min(segmentsAcked, 1U);
+    for (uint32_t i = 0; i < increments; ++i)
     {
         double adder =
             static_cast<double>(tcb->m_segmentSize * tcb->m_segmentSize) / tcb->m_cWnd.Get();
         adder = std::max(1.0, adder);
         tcb->m_cWnd += static_cast<uint32_t>(adder);
+    }
+    if (increments > 0)
+    {
         NS_LOG_INFO("In CongAvoid, updated to cwnd " << tcb->m_cWnd << " ssthresh "
                                                      << tcb->m_ssThresh);
     }

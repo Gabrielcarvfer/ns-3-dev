@@ -625,7 +625,10 @@ main(int argc, char* argv[])
                        StringValue("ns3::ConstantRandomVariable[Constant=1.0]"));
     Config::SetDefault("ns3::OnOffApplication::OffTime",
                        StringValue("ns3::ConstantRandomVariable[Constant=0.0]"));
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(512));
+    // The timestamp option comes out of the segment size: each 512 bytes write
+    // of the OnOff applications fills one segment
+    Config::SetDefault("ns3::TcpSocket::SegmentSize",
+                       UintegerValue(512 + TcpSocketBase::GetSegmentOptionsSize()));
 
     Ptr<UniformRandomVariable> urng = CreateObject<UniformRandomVariable>();
     int r1;

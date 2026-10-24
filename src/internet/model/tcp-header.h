@@ -296,7 +296,8 @@ class TcpHeader : public Header
      * @brief Check if the header was malformed
      *
      * A header is malformed when its options cannot be parsed: an illegal
-     * option length, an option exceeding the option space, or a duplicate
+     * option length, including a length which does not match the kind of a
+     * known option, an option exceeding the option space, or a duplicate
      * option. @RFC{9293}, Section 3.1 (MUST-7) prescribes resetting the
      * connection in that case. The bytes following the End of Option List
      * option are padding, which is ignored whatever its content: MUST-69
@@ -315,6 +316,19 @@ class TcpHeader : public Header
     friend bool operator==(const TcpHeader& lhs, const TcpHeader& rhs);
 
   private:
+    /**
+     * @brief Check the length field of an option of a known kind
+     *
+     * An option whose length does not match the one of its kind is malformed
+     * (@RFC{9293}, Section 3.1, MUST-7): it is never handed to the
+     * deserialization of its kind, which would read it wrongly or abort.
+     *
+     * @param kind the option kind
+     * @param length the length field of the option
+     * @return true if the length is valid for the kind, or the kind is unknown
+     */
+    static bool IsOptionLengthValid(uint8_t kind, uint8_t length);
+
     /**
      * @brief Calculate the header checksum
      * @param size packet size

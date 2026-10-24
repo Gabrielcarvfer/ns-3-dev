@@ -25,6 +25,7 @@
 #include "ns3/packet-sink.h"
 #include "ns3/ssid.h"
 #include "ns3/string.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/tuple.h"
 #include "ns3/udp-client-server-helper.h"
 #include "ns3/udp-server.h"
@@ -177,7 +178,10 @@ main(int argc, char* argv[])
                 else
                 {
                     payloadSize = 1448; // bytes
-                    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(payloadSize));
+                    // Each write fills one segment, whose options come out of the segment size
+                    Config::SetDefault(
+                        "ns3::TcpSocket::SegmentSize",
+                        UintegerValue(payloadSize + TcpSocketBase::GetSegmentOptionsSize()));
                 }
 
                 NodeContainer wifiStaNode;
