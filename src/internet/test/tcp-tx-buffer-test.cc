@@ -39,6 +39,8 @@ class TcpTxBufferTestCase : public TestCase
     void TestTransmittedBlock();
     /** @brief Test that a guessed (Reno) SACK on the new head is not a loss (see @issueid{1107}) */
     void TestRenoSackDiscard();
+    /** @brief Test that AddRenoSack copes with a single sent segment (see @issueid{248}) */
+    void TestRenoSackSingleSegment();
     /** @brief Test the generation of the "next" block */
     void TestNextSeg();
     /** @brief Test the logic of merging items in GetTransmittedSegment()
@@ -83,6 +85,7 @@ TcpTxBufferTestCase::DoRun()
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestTransmittedBlock, this);
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestNextSeg, this);
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestRenoSackDiscard, this);
+    Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestRenoSackSingleSegment, this);
 
     /*
      * Case for transmitted block:
@@ -369,6 +372,30 @@ TcpTxBufferTestCase::TestRenoSackDiscard()
         txBuf->ResetRenoSack();
         NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), 0, "Guessed SACKs not reset");
     }
+}
+
+void
+TcpTxBufferTestCase::TestRenoSackSingleSegment()
+{
+    // A peer with a different TCP implementation (e.g., a real stack reached
+    // through emulation) may acknowledge data in patterns which lead to
+    // guessing a SACK when a single segment is outstanding. Nothing can be
+    // guessed in that case (the head can never be SACKed), and the buffer
+    // must not assert on it (see @issueid{248})
+    Ptr<TcpTxBuffer> txBuf = CreateObject<TcpTxBuffer>();
+    const uint32_t segmentSize = 100;
+    txBuf->SetRWndCallback(MakeCallback(&TcpTxBufferTestCase::GetRWnd, this));
+    txBuf->SetHeadSequence(SequenceNumber32(1));
+    txBuf->SetSegmentSize(segmentSize);
+    txBuf->SetSackEnabled(true);
+    txBuf->SetDupAckThresh(3);
+
+    txBuf->Add(Create<Packet>(segmentSize));
+    txBuf->CopyFromSequence(segmentSize, SequenceNumber32(1));
+
+    txBuf->AddRenoSack();
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), 0, "SACKed data with a single outstanding segment");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->GetLost(), 0, "Lost data with a single outstanding segment");
 }
 
 void

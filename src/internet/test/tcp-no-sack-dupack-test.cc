@@ -11,6 +11,9 @@
 #include "ns3/simulator.h"
 #include "ns3/tcp-tx-buffer.h"
 
+#include <algorithm>
+#include <set>
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TcpNoSackDupAckTestSuite");
@@ -48,8 +51,19 @@ class TcpSocketDupAcker : public TcpSocketMsgBase
      */
     void SendDupAck();
 
+    /**
+     * @brief Send a pure ACK that repeats the current acknowledgment number,
+     * advertising a window larger than the current one.
+     * @param offset Amount added to the advertised window (header units).
+     */
+    void SendWindowUpdate(uint16_t offset);
+
   protected:
     Ptr<TcpSocketBase> Fork() override;
+    uint16_t AdvertisedWindowSize(bool scale = true) const override;
+
+  private:
+    uint16_t m_windowOffset{0}; //!< Amount added to the advertised window
 };
 
 NS_OBJECT_ENSURE_REGISTERED(TcpSocketDupAcker);
@@ -68,6 +82,21 @@ void
 TcpSocketDupAcker::SendDupAck()
 {
     SendEmptyPacket(TcpHeader::ACK);
+}
+
+void
+TcpSocketDupAcker::SendWindowUpdate(uint16_t offset)
+{
+    m_windowOffset = offset;
+    SendEmptyPacket(TcpHeader::ACK);
+    m_windowOffset = 0;
+}
+
+uint16_t
+TcpSocketDupAcker::AdvertisedWindowSize(bool scale) const
+{
+    uint16_t window = TcpSocketMsgBase::AdvertisedWindowSize(scale);
+    return static_cast<uint16_t>(std::min<uint32_t>(window + m_windowOffset, UINT16_MAX));
 }
 
 Ptr<TcpSocketBase>
@@ -158,6 +187,11 @@ void
 TcpNoSackDupAckTest::ConfigureProperties()
 {
     TcpGeneralTest::ConfigureProperties();
+    // The MSS counts the TCP options: with the timestamps (12 bytes), a
+    // segment of 512 carries 500 bytes, one application packet, so that the
+    // segments and their ACKs keep the spacing of the application packets
+    SetSegmentSize(SENDER, 512);
+    SetSegmentSize(RECEIVER, 512);
     SetInitialCwnd(SENDER, 10);
     // Every data segment is acknowledged by its own ACK
     SetDelAckMaxCount(RECEIVER, 1);
@@ -309,6 +343,184 @@ TcpNoSackDupAckTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
+ * @brief Check the duplicate ACKs received with a single segment in flight.
+ *
+ * The sender transmits one segment at a time, with a congestion window of
+ * one segment for the first one and, while the first one is in flight, the
+ * receiver sends three additional pure ACKs repeating the acknowledgment
+ * number.
+ *
+ * When each of them advertises a different window, they are window updates
+ * and not duplicate ACKs (@RFC{5681}, Section 2, condition (e)): the sender
+ * must neither enter fast recovery nor retransmit.
+ *
+ * When they advertise the same window, they are genuine duplicate ACKs, and
+ * the sender performs a fast retransmit of the only outstanding segment,
+ * with a slow start threshold of at least two segments (@RFC{5681},
+ * Section 3.2, equation (4)). Nothing can be guessed as SACKed in that case
+ * (see @issueid{248}): the sender must not crash, and the bytes in flight
+ * must never exceed the two transmissions of the segment.
+ */
+class TcpSingleSegmentDupAckTest : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param desc Description.
+     * @param windowUpdate True to send window updates, false to send duplicate ACKs.
+     */
+    TcpSingleSegmentDupAckTest(const std::string& desc, bool windowUpdate)
+        : TcpGeneralTest(desc),
+          m_windowUpdate(windowUpdate)
+    {
+    }
+
+  protected:
+    void ConfigureEnvironment() override;
+    void ConfigureProperties() override;
+    Ptr<TcpSocketMsgBase> CreateReceiverSocket(Ptr<Node> node) override;
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                        const TcpSocketState::TcpCongState_t newValue) override;
+    void BytesInFlightTrace(uint32_t oldValue, uint32_t newValue) override;
+    void FinalChecks() override;
+
+  private:
+    /**
+     * @brief Make the receiver send the three additional ACKs.
+     */
+    void InjectAcks();
+
+    static constexpr uint32_t PKT_SIZE = 500; //!< Application packet (and segment payload) size
+
+    bool m_windowUpdate;              //!< True to send window updates
+    bool m_injected{false};           //!< True once the additional ACKs have been sent
+    std::set<SequenceNumber32> m_seq; //!< Sequence numbers sent by the sender
+    uint32_t m_retransmissions{0};    //!< Data segments retransmitted by the sender
+    uint32_t m_recoveryEntries{0};    //!< Number of times the sender entered CA_RECOVERY
+    uint32_t m_maxBytesInFlight{0};   //!< Highest bytes in flight at the sender
+};
+
+void
+TcpSingleSegmentDupAckTest::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    // One segment at a time: each packet is acknowledged before the next one
+    SetAppPktSize(PKT_SIZE);
+    SetAppPktCount(3);
+    SetAppPktInterval(Seconds(1));
+    SetPropagationDelay(MilliSeconds(50));
+    SetTransmitStart(Seconds(2));
+
+    Config::SetDefault("ns3::TcpSocketBase::Sack", BooleanValue(false));
+}
+
+void
+TcpSingleSegmentDupAckTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    SetSegmentSize(SENDER, PKT_SIZE + 12);
+    SetSegmentSize(RECEIVER, PKT_SIZE + 12);
+    SetInitialCwnd(SENDER, 1);
+}
+
+Ptr<TcpSocketMsgBase>
+TcpSingleSegmentDupAckTest::CreateReceiverSocket(Ptr<Node> node)
+{
+    return CreateSocket(node, TcpSocketDupAcker::GetTypeId(), m_congControlTypeId);
+}
+
+void
+TcpSingleSegmentDupAckTest::InjectAcks()
+{
+    Ptr<TcpSocketDupAcker> receiver = DynamicCast<TcpSocketDupAcker>(GetReceiverSocket());
+    NS_TEST_ASSERT_MSG_NE(receiver, nullptr, "The receiver is not a TcpSocketDupAcker");
+    for (uint16_t i = 1; i <= 3; ++i)
+    {
+        if (m_windowUpdate)
+        {
+            receiver->SendWindowUpdate(i);
+        }
+        else
+        {
+            receiver->SendDupAck();
+        }
+    }
+}
+
+void
+TcpSingleSegmentDupAckTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who != SENDER || p->GetSize() == 0)
+    {
+        return;
+    }
+    if (!m_seq.insert(h.GetSequenceNumber()).second)
+    {
+        NS_LOG_DEBUG("Retransmission of seq=" << h.GetSequenceNumber());
+        ++m_retransmissions;
+    }
+    if (!m_injected)
+    {
+        m_injected = true;
+        // The ACKs reach the sender while the first segment is in flight
+        Simulator::ScheduleNow(&TcpSingleSegmentDupAckTest::InjectAcks, this);
+    }
+}
+
+void
+TcpSingleSegmentDupAckTest::CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                                           const TcpSocketState::TcpCongState_t newValue)
+{
+    NS_LOG_DEBUG(TcpSocketState::TcpCongStateName[oldValue]
+                 << " -> " << TcpSocketState::TcpCongStateName[newValue]);
+    Ptr<const TcpSocketState> tcb = GetTcb(SENDER);
+    if (newValue == TcpSocketState::CA_DISORDER)
+    {
+        NS_TEST_ASSERT_MSG_EQ(tcb->m_cWnd.Get(),
+                              tcb->m_segmentSize,
+                              "The congestion window is not one segment");
+    }
+    if (newValue == TcpSocketState::CA_RECOVERY)
+    {
+        ++m_recoveryEntries;
+        NS_TEST_ASSERT_MSG_GT_OR_EQ(tcb->m_ssThresh.Get(),
+                                    2 * tcb->m_segmentSize,
+                                    "Slow start threshold below two segments");
+    }
+}
+
+void
+TcpSingleSegmentDupAckTest::BytesInFlightTrace(uint32_t oldValue, uint32_t newValue)
+{
+    m_maxBytesInFlight = std::max(m_maxBytesInFlight, newValue);
+}
+
+void
+TcpSingleSegmentDupAckTest::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_EQ(m_injected, true, "Additional ACKs not sent");
+    NS_TEST_ASSERT_MSG_EQ(m_seq.size(), 3, "Not all the segments were sent");
+    if (m_windowUpdate)
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_recoveryEntries, 0, "Window updates counted as dupacks");
+        NS_TEST_ASSERT_MSG_EQ(m_retransmissions, 0, "Window updates caused a retransmission");
+        NS_TEST_ASSERT_MSG_LT_OR_EQ(m_maxBytesInFlight, PKT_SIZE, "Bytes in flight corrupted");
+    }
+    else
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_recoveryEntries, 1, "Duplicate ACKs did not trigger recovery");
+        NS_TEST_ASSERT_MSG_EQ(m_retransmissions, 1, "Not exactly one fast retransmission");
+        NS_TEST_ASSERT_MSG_LT_OR_EQ(m_maxBytesInFlight, 2 * PKT_SIZE, "Bytes in flight corrupted");
+    }
+    NS_TEST_ASSERT_MSG_EQ(GetTxBuffer(SENDER)->BytesInFlight(), 0, "Data left in flight");
+    NS_TEST_ASSERT_MSG_EQ(GetTxBuffer(SENDER)->GetSacked(), 0, "Guessed SACK left");
+    NS_TEST_ASSERT_MSG_EQ(GetTxBuffer(SENDER)->GetLost(), 0, "Lost segment left");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TestSuite: duplicate ACK handling when SACK is disabled
  */
 class TcpNoSackDupAckTestSuite : public TestSuite
@@ -321,6 +533,11 @@ class TcpNoSackDupAckTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpNoSackDupAckTest("Dupacks below the threshold, no drop", 0),
                     TestCase::Duration::QUICK);
+        AddTestCase(new TcpSingleSegmentDupAckTest("Window updates are not dupacks", true),
+                    TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpSingleSegmentDupAckTest("Dupacks with a single segment in flight", false),
+            TestCase::Duration::QUICK);
     }
 };
 

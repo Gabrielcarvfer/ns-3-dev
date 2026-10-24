@@ -27,6 +27,7 @@
 #include "tcp-congestion-ops.h"
 #include "tcp-header.h"
 #include "tcp-l4-protocol.h"
+#include "tcp-option-rfc793.h"
 #include "tcp-option-sack-permitted.h"
 #include "tcp-option-sack.h"
 #include "tcp-option-ts.h"
@@ -428,7 +429,8 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_recoverActive(sock.m_recoverActive),
       m_retxThresh(sock.m_retxThresh),
       m_limitedTx(sock.m_limitedTx),
-      m_isFirstPartialAck(sock.m_isFirstPartialAck),
+      m_advertisedMss(sock.m_advertisedMss),
+      m_segmentSizeAdjusted(sock.m_segmentSizeAdjusted),
       m_txTrace(sock.m_txTrace),
       m_rxTrace(sock.m_rxTrace),
       m_pacingTimer(Timer::CANCEL_ON_DESTROY),
@@ -1463,6 +1465,28 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         // DeliveredData accounting.
         m_tcb->m_sackEnabled = m_sackEnabled;
 
+        if (m_advertisedMss == 0)
+        {
+            // Save the value to advertise in the MSS option before it is
+            // reduced below: the advertised MSS reflects our configured
+            // segment size regardless of the peer MSS and of the size of the
+            // TCP options (RFC 6691, Section 2)
+            m_advertisedMss = m_tcb->m_segmentSize;
+        }
+
+        if (tcpHeader.HasOption(TcpOption::MSS))
+        {
+            ProcessOptionMss(tcpHeader.GetOption(TcpOption::MSS));
+        }
+        else
+        {
+            // No MSS option received: assume the default maximum segment size
+            // of 536 bytes for IPv4 and 1220 bytes for IPv6 (RFC 9293,
+            // Section 3.7.1)
+            uint32_t defaultMss = (m_endPoint != nullptr) ? 536 : 1220;
+            m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, defaultMss);
+        }
+
         // When receiving a <SYN> or <SYN-ACK> we should adapt TS to the other end
         if (tcpHeader.HasOption(TcpOption::TS) && m_timestampEnabled)
         {
@@ -1472,6 +1496,31 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         else
         {
             m_timestampEnabled = false;
+        }
+
+        if (m_timestampEnabled && !m_segmentSizeAdjusted)
+        {
+            // The MSS counts only data octets, it does not count the TCP
+            // header or the TCP options, so the sender must reduce the TCP data
+            // length to account for the options it includes (RFC 6691, Section
+            // 2): decrease the segment size by the size of the timestamp
+            // option (and its padding to a word), which is carried by every
+            // segment. The segment size may have been clamped by the MSS the
+            // peer advertised, so a tiny value cannot bring it to zero.
+            // 10 bytes of option, padded to a 4 byte boundary
+            const uint32_t tsOptionSize =
+                ((CreateObject<TcpOptionTS>()->GetSerializedSize() + 3) / 4) * 4;
+            if (m_tcb->m_segmentSize > tsOptionSize)
+            {
+                m_tcb->m_segmentSize -= tsOptionSize;
+            }
+            else
+            {
+                m_tcb->m_segmentSize = 1;
+            }
+            m_segmentSizeAdjusted = true;
+            NS_LOG_INFO("Decreased the segment size to " << m_tcb->m_segmentSize
+                                                         << " to accommodate the TCP options");
         }
 
         // Initialize cWnd and ssThresh
@@ -1964,6 +2013,13 @@ TcpSocketBase::ReceivedAck(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         }
         return;
     }
+
+    // RFC 5681, Section 2, condition (e): an ACK which changes the advertised
+    // window is a window update, and it is not counted as a duplicate ACK
+    uint32_t ackWindow = static_cast<uint32_t>(tcpHeader.GetWindowSize()) << m_sndWindShift;
+    m_ackWindowUpdate = m_lastAckWindow.has_value() && *m_lastAckWindow != ackWindow;
+    m_lastAckWindow = ackWindow;
+
     if ((ackNumber > oldHeadSequence) && (ackNumber < m_recover) &&
         (m_tcb->m_congState == TcpSocketState::CA_RECOVERY))
     {
@@ -2106,8 +2162,9 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
      *     unacknowledged and un-SACKed octets between HighACK (TCP.UNA) and
      *     HighData (m_highTxMark)
      *
-     * The check below implements conditions a), b), and d), and c) is prevented by virtue of not
-     * reaching this code if SYN or FIN is set, and e) is not supported.
+     * Without SACK, the check below implements conditions a), b), d) and e), and c) is
+     * prevented by virtue of not reaching this code if SYN or FIN is set. With SACK, an ACK
+     * carrying new SACK information is a duplicate ACK even if it updates the window.
      */
 
     if (m_fackEnabled && ackNumber == m_txBuffer->HeadSequence() &&
@@ -2123,9 +2180,10 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
         }
     }
 
-    bool isDupack = m_sackEnabled ? scoreboardUpdated
-                                  : (ackNumber == oldHeadSequence &&
-                                     ackNumber < m_tcb->m_highTxMark && !receivedData);
+    bool isDupack = m_sackEnabled
+                        ? scoreboardUpdated
+                        : (ackNumber == oldHeadSequence && ackNumber < m_tcb->m_highTxMark &&
+                           !receivedData && !m_ackWindowUpdate);
 
     NS_LOG_DEBUG("ACK of " << ackNumber << " SND.UNA=" << oldHeadSequence
                            << " SND.NXT=" << m_tcb->m_nextTxSequence
@@ -2211,8 +2269,14 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                 m_recoveryOps->DoRecovery(m_tcb, currentDelivered, false);
             }
 
-            // If the packet is already retransmitted do not retransmit it
-            if (!m_txBuffer->IsRetransmittedDataAcked(ackNumber + m_tcb->m_segmentSize))
+            // In NewReno-style recovery (RFC 6582, Section 3.2), a partial ACK
+            // implies that the first unacknowledged segment was also lost:
+            // retransmit it, unless it has been already retransmitted. With
+            // SACK, retransmissions are governed by the scoreboard and the
+            // pipe (RFC 6675, Section 5), and are performed by
+            // SendPendingData(), so no forced retransmission must occur here
+            if (!m_sackEnabled &&
+                !m_txBuffer->IsRetransmittedDataAcked(ackNumber + m_tcb->m_segmentSize))
             {
                 DoRetransmit(); // Assume the next seq is lost. Retransmit lost packet
                 m_tcb->m_cWndInfl = SafeSubtraction(m_tcb->m_cWndInfl, bytesAcked);
@@ -2222,26 +2286,18 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             // previously lost and now successfully received. All others have
             // been processed when they come under the form of dupACKs
             m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_srtt);
-            NewAck(ackNumber, m_isFirstPartialAck);
-
-            if (m_isFirstPartialAck)
-            {
-                NS_LOG_DEBUG("Partial ACK of " << ackNumber
-                                               << " and this is the first (RTO will be reset);"
-                                                  " cwnd set to "
-                                               << m_tcb->m_cWnd << " recover seq: " << m_recover
-                                               << " dupAck count: " << m_dupAckCount);
-                m_isFirstPartialAck = false;
-            }
-            else
-            {
-                NS_LOG_DEBUG("Partial ACK of "
-                             << ackNumber
-                             << " and this is NOT the first (RTO will not be reset)"
-                                " cwnd set to "
-                             << m_tcb->m_cWnd << " recover seq: " << m_recover
-                             << " dupAck count: " << m_dupAckCount);
-            }
+            // RFC 6298, Section 5.3: restart the retransmission timer on every
+            // ACK acknowledging new data. This is the Slow-but-Steady variant
+            // of NewReno (RFC 6582, Section 6), which departs from RFC 6582,
+            // Section 3.2, step 3, where only the first partial ACK of a fast
+            // recovery resets the timer: a recovery spanning several partial
+            // ACKs would otherwise be cut short by a spurious timeout
+            NewAck(ackNumber, true);
+            NS_LOG_DEBUG("Partial ACK of " << ackNumber
+                                           << " in fast recovery (RTO reset);"
+                                              " cwnd set to "
+                                           << m_tcb->m_cWnd << " recover seq: " << m_recover
+                                           << " dupAck count: " << m_dupAckCount);
         }
         // From RFC 6675 section 5.1
         // In addition, a new recovery phase (as described in Section 5) MUST NOT
@@ -2260,7 +2316,11 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                     m_txBuffer->GetSacked() == 0,
                     "Some segment got dup-acked in CA_LOSS state: " << m_txBuffer->GetSacked());
             }
+            // RFC 6298, Section 5.3: restart the retransmission timer on every
+            // ACK acknowledging new data, after a timeout as during a fast
+            // recovery
             NewAck(ackNumber, true);
+            NS_LOG_DEBUG("Partial ACK of " << ackNumber << " in CA_LOSS (RTO reset)");
         }
         else if (m_tcb->m_congState == TcpSocketState::CA_CWR)
         {
@@ -2314,8 +2374,6 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             // phase.
             else if (m_tcb->m_congState == TcpSocketState::CA_RECOVERY)
             {
-                m_isFirstPartialAck = true;
-
                 // Recalculate the segs acked, that are from m_recover to ackNumber
                 // (which are the ones we have not passed to PktsAcked and that
                 // can increase cWnd)
@@ -2334,8 +2392,6 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             }
             else if (m_tcb->m_congState == TcpSocketState::CA_LOSS)
             {
-                m_isFirstPartialAck = true;
-
                 // Recalculate the segs acked, that are from m_recover to ackNumber
                 // (which are the ones we have not passed to PktsAcked and that
                 // can increase cWnd)
@@ -2967,6 +3023,11 @@ TcpSocketBase::SendEmptyPacket(uint8_t flags)
     bool isAck = flags == TcpHeader::ACK;
     if (hasSyn)
     {
+        // The MSS option should be sent in every SYN segment when the receive
+        // MSS differs from the default, and may be sent always (RFC 9293,
+        // Section 3.7.1, SHLD-5 and MAY-3): always send it
+        AddOptionMss(header);
+
         if (m_winScalingEnabled)
         { // The window scaling option is set only on SYN packets
             AddOptionWScale(header);
@@ -4599,6 +4660,30 @@ TcpSocketBase::ProcessOptionSack(const Ptr<const TcpOption> option)
     }
 
     return m_txBuffer->Update(s->GetSackList(), MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
+}
+
+void
+TcpSocketBase::ProcessOptionMss(const Ptr<const TcpOption> option)
+{
+    NS_LOG_FUNCTION(this << option);
+
+    Ptr<const TcpOptionMSS> mss = DynamicCast<const TcpOptionMSS>(option);
+    NS_LOG_INFO(m_node->GetId() << " Received a MSS option with value " << mss->GetMSS());
+    m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, static_cast<uint32_t>(mss->GetMSS()));
+}
+
+void
+TcpSocketBase::AddOptionMss(TcpHeader& header)
+{
+    NS_LOG_FUNCTION(this << header);
+    Ptr<TcpOptionMSS> option = CreateObject<TcpOptionMSS>();
+    if (m_advertisedMss == 0)
+    {
+        m_advertisedMss = m_tcb->m_segmentSize;
+    }
+    option->SetMSS(static_cast<uint16_t>(std::min(m_advertisedMss, 65535U)));
+    header.AppendOption(option);
+    NS_LOG_INFO(m_node->GetId() << " Add option MSS " << option->GetMSS());
 }
 
 void

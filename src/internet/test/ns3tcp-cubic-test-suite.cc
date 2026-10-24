@@ -212,7 +212,10 @@ Ns3TcpCubicTestCase::DoRun()
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(1000000));
     Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(10));
     Config::SetDefault("ns3::TcpSocket::DelAckCount", UintegerValue(2));
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
+    // Configure a MSS of 1460 bytes: since every segment carries a 12-byte
+    // timestamp option, the segment payload is 1448 bytes, as on a Linux host
+    // with a 1500 bytes MTU (the cwnd is counted in units of 1448 bytes)
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1460));
     Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
     Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(true));
     Config::SetDefault("ns3::TcpCubic::FastConvergence", BooleanValue(m_fastConvergence));

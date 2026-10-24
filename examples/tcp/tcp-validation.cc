@@ -627,7 +627,10 @@ main(int argc, char* argv[])
     ////////////////////////////////////////////////////////////
     // Override ns-3 defaults                                 //
     ////////////////////////////////////////////////////////////
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
+    // Configure a MSS of 1460 bytes: since every segment carries a 12-byte
+    // timestamp option, the segment payload is 1448 bytes, as on a Linux host
+    // with a 1500 bytes MTU (the validated traces assume 1448 bytes segments)
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1460));
     // Increase default buffer sizes to improve throughput over long delay paths
     // Config::SetDefault ("ns3::TcpSocket::SndBufSize",UintegerValue (8192000));
     // Config::SetDefault ("ns3::TcpSocket::RcvBufSize",UintegerValue (8192000));

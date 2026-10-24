@@ -362,10 +362,14 @@ set(test_sources
     test/tcp-ledbat-test.cc
     test/tcp-linux-reno-test.cc
     test/tcp-loss-test.cc
+    test/tcp-lost-retransmission-test.cc
     test/tcp-lp-test.cc
     test/tcp-no-sack-dupack-test.cc
     test/tcp-option-test.cc
+    test/tcp-mss-test.cc
     test/tcp-pacing-test.cc
+    test/tcp-partial-ack-rto-test.cc
+    test/tcp-sack-partial-ack-test.cc
     test/tcp-pkts-acked-test.cc
     test/tcp-prr-recovery-test.cc
     test/tcp-rate-ops-test.cc

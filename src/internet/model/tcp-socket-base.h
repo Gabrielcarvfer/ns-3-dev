@@ -20,6 +20,7 @@
 #include "ns3/timer.h"
 #include "ns3/traced-value.h"
 
+#include <optional>
 #include <queue>
 #include <stdint.h>
 
@@ -1279,6 +1280,29 @@ class TcpSocketBase : public TcpSocket
     uint8_t CalculateWScale() const;
 
     /**
+     * @brief Read the MSS option from other side
+     *
+     * The maximum segment size to use when sending data is set to the
+     * minimum of our configured segment size and the value advertised by
+     * the peer (@RFC{9293}, Section 3.7.1).
+     *
+     * @param option MSS option from the header
+     */
+    void ProcessOptionMss(const Ptr<const TcpOption> option);
+
+    /**
+     * @brief Add the MSS option to the header
+     *
+     * The MSS option should be sent in every SYN segment when the receive
+     * MSS differs from the default, and may be sent always (@RFC{9293},
+     * Section 3.7.1, SHLD-5 and MAY-3): it is always sent. The advertised
+     * value is our current segment size.
+     *
+     * @param header TcpHeader where the method should add the option
+     */
+    void AddOptionMss(TcpHeader& header);
+
+    /**
      * @brief Read the SACK PERMITTED option
      *
      * Currently this is a placeholder, since no operations should be done
@@ -1393,6 +1417,10 @@ class TcpSocketBase : public TcpSocket
     uint32_t m_delAckCount{0};    //!< Delayed ACK counter
     uint32_t m_delAckMaxCount{0}; //!< Number of packet to fire an ACK before delay timeout
 
+    // Window updates (RFC 5681, Section 2, duplicate ACK condition (e))
+    std::optional<uint32_t> m_lastAckWindow; //!< Advertised window of the last incoming ACK
+    bool m_ackWindowUpdate{false};           //!< True if the ACK being processed changes the window
+
     // Nagle algorithm
     bool m_noDelay{false}; //!< Set to true to disable Nagle's algorithm
 
@@ -1481,7 +1509,9 @@ class TcpSocketBase : public TcpSocket
     Ptr<TcpRateOps> m_rateOps;                 //!< Rate operations
 
     // Guesses over the other connection end
-    bool m_isFirstPartialAck{true}; //!< First partial ACK during RECOVERY
+    uint32_t m_advertisedMss{0}; //!< MSS advertised in the MSS option (our configured segment size)
+    bool m_segmentSizeAdjusted{
+        false}; //!< True if the segment size has been reduced by the size of the TCP options
 
     // The following three traces pass a packet with a TCP header
     TracedCallback<Ptr<const Packet>,

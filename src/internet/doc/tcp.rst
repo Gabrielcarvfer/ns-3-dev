@@ -1833,6 +1833,13 @@ While in the recovery phase, the congestion window is inflated by segmentSize
 on arrival of every ACK when NewReno is used. The congestion window is kept
 same when SACK based loss recovery is used.
 
+Duplicate acknowledgments follow the definition of RFC 5681, Section 2:
+without SACK, an acknowledgment which carries data or changes the advertised
+window (a window update) is not a duplicate acknowledgment. With SACK, an
+acknowledgment carrying new SACK information is counted as a duplicate
+acknowledgment as RFC 6675, Section 2 prescribes, whatever window it
+advertises.
+
 Proportional Rate Reduction
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Proportional Rate Reduction (PRR) is a loss recovery algorithm described in
