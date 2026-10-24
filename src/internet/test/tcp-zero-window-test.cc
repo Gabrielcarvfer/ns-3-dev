@@ -119,7 +119,7 @@ TcpZeroWindowTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho w
             if (!m_zeroWindowProbe)
             {
                 NS_TEST_ASSERT_MSG_EQ(p->GetSize(), 1, "Data packet sent instead of window probe");
-                NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber(),
+                NS_TEST_ASSERT_MSG_EQ(ToRelativeSeq(SENDER, h.GetSequenceNumber()),
                                       SequenceNumber32(1),
                                       "Data packet sent instead of window probe");
                 m_zeroWindowProbe = true;
@@ -143,7 +143,7 @@ TcpZeroWindowTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho w
 
         if (Simulator::Now().GetSeconds() > 6.0 && Simulator::Now().GetSeconds() <= 7.0)
         {
-            NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber(),
+            NS_TEST_ASSERT_MSG_EQ(ToRelativeSeq(RECEIVER, h.GetSequenceNumber()),
                                   SequenceNumber32(1),
                                   "Data packet sent instead of window probe");
             NS_TEST_ASSERT_MSG_EQ(h.GetWindowSize(), 0, "No zero window advertised by RECEIVER");
@@ -327,7 +327,7 @@ TcpPersistEmptyTxBufferTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, S
     if (who == SENDER && Simulator::Now() > Seconds(3))
     {
         NS_TEST_ASSERT_MSG_EQ(p->GetSize(), 0, "Window probe should carry no data");
-        NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber(),
+        NS_TEST_ASSERT_MSG_EQ(ToRelativeSeq(SENDER, h.GetSequenceNumber()),
                               SequenceNumber32(100),
                               "Window probe should use an already acknowledged sequence number");
         ++m_windowProbeCount;
@@ -370,6 +370,15 @@ class TcpZeroWindowTestSuite : public TestSuite
         AddTestCase(new TcpPersistEmptyTxBufferTest(
                         "zero window probe does not crash on drained tx buffer"),
                     TestCase::Duration::QUICK);
+
+        // With the initial sequence numbers driven by the clock
+        auto zeroWindow = new TcpZeroWindowTest("zero window test, clock driven ISN");
+        zeroWindow->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+        AddTestCase(zeroWindow, TestCase::Duration::QUICK);
+        auto drained = new TcpPersistEmptyTxBufferTest(
+            "zero window probe does not crash on drained tx buffer, clock driven ISN");
+        drained->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+        AddTestCase(drained, TestCase::Duration::QUICK);
     }
 };
 

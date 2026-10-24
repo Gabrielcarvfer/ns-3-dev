@@ -13,7 +13,6 @@
 #include "ipv4-packet-info-tag.h"
 #include "ipv4-route.h"
 #include "ipv4-routing-protocol.h"
-#include "ipv4-source-route-tag.h"
 #include "ipv4.h"
 #include "ipv6-end-point.h"
 #include "ipv6-l3-protocol.h"
@@ -1053,12 +1052,6 @@ UdpSocketImpl::ForwardUp(Ptr<Packet> packet,
     // in case the packet still has a priority tag attached, remove it
     SocketPriorityTag priorityTag;
     packet->RemovePacketTag(priorityTag);
-
-    // The way back of a source routed datagram is for the transport protocols
-    // which keep it, not for a datagram the application may send on to
-    // another destination (see Ipv4SourceRouteTag)
-    Ipv4SourceRouteTag returnRoute;
-    packet->RemovePacketTag(returnRoute);
 
     if ((m_rxAvailable + packet->GetSize()) <= m_rcvBufSize)
     {

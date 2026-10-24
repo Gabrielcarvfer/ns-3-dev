@@ -238,10 +238,12 @@ Icmpv4L4Protocol::HandleEcho(Ptr<Packet> p,
     reply->ReplacePacketTag(ipTosTag);
     // The reply follows the way back of a source routed request (RFC 1122,
     // Section 3.2.2.6)
-    Ipv4SourceRouteTag returnRoute;
+    Ipv4ReturnRouteTag returnRoute;
     if (p->PeekPacketTag(returnRoute))
     {
-        reply->AddPacketTag(returnRoute);
+        Ipv4SourceRouteTag route;
+        route.SetRoute(returnRoute.GetRoute());
+        reply->AddPacketTag(route);
     }
     SendMessage(reply, destination, source, Icmpv4Header::ICMPV4_ECHO_REPLY, 0, nullptr);
 }

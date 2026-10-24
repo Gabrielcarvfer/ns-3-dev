@@ -1185,6 +1185,10 @@ Ipv4L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv4Header& ip, uin
     NS_LOG_FUNCTION(this << packet << &ip << iif);
     Ptr<Packet> p = packet->Copy(); // need to pass a non-const packet up
     Ipv4Header ipHeader = ip;
+    // The way back of an earlier datagram, left on the packet by an
+    // application which sent it on as received
+    Ipv4ReturnRouteTag staleRoute;
+    p->RemovePacketTag(staleRoute);
 
     if (ipHeader.HasLooseSourceRoute())
     {
@@ -1293,7 +1297,7 @@ Ipv4L3Protocol::LocalDeliver(Ptr<const Packet> packet, const Ipv4Header& ip, uin
         reversed.push_back(ipHeader.GetSource());
         if (reversed.size() <= Ipv4SourceRouteTag::MAX_HOPS)
         {
-            Ipv4SourceRouteTag returnRoute;
+            Ipv4ReturnRouteTag returnRoute;
             returnRoute.SetRoute(reversed);
             p->AddPacketTag(returnRoute);
         }

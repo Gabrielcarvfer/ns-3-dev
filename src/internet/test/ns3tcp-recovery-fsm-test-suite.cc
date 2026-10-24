@@ -45,6 +45,9 @@ NS_LOG_COMPONENT_DEFINE("Ns3TcpRecoveryFsmTest");
  * Error model dropping the data segments with the given sequence numbers
  * (each listed occurrence once, so a repeated sequence number drops the
  * original transmission and the retransmission).
+ *
+ * The sequence numbers are relative to the initial sequence number of the
+ * sender, taken from the SYN it sent, so the first data byte is numbered 1.
  */
 class TcpSeqMultiDropErrorModel : public ErrorModel
 {
@@ -85,6 +88,15 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
         m_device = device;
     }
 
+    /**
+     * Get the initial sequence number of the sender.
+     * @return The sequence number of the SYN received, 0 if none was.
+     */
+    SequenceNumber32 GetIsn() const
+    {
+        return m_isn;
+    }
+
   private:
     bool DoCorrupt(Ptr<Packet> p) override
     {
@@ -99,11 +111,15 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
         }
         TcpHeader tcp;
         copy->RemoveHeader(tcp);
+        if (tcp.GetFlags() & TcpHeader::SYN)
+        {
+            m_isn = tcp.GetSequenceNumber();
+        }
         if (copy->GetSize() == 0)
         {
             return false;
         }
-        uint32_t seq = tcp.GetSequenceNumber().GetValue();
+        uint32_t seq = tcp.GetSequenceNumber().GetValue() - m_isn.GetValue();
         auto it = m_seqsToDrop.find(seq);
         if (it != m_seqsToDrop.end())
         {
@@ -137,6 +153,7 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
     uint32_t m_holdSegments{0};           //!< Later segments to deliver before the held one.
     Ptr<Packet> m_held;                   //!< The delayed segment, while held.
     Ptr<PointToPointNetDevice> m_device;  //!< Device on which the held segment is delivered.
+    SequenceNumber32 m_isn{0};            //!< Initial sequence number of the sender.
 };
 
 /**
@@ -268,7 +285,7 @@ class Ns3TcpRecoveryFsmTestCase : public TestCase
         {
             return;
         }
-        uint32_t seq = header.GetSequenceNumber().GetValue();
+        uint32_t seq = ToRelative(header.GetSequenceNumber()).GetValue();
         if (!m_seqsSent.insert(seq).second)
         {
             m_retx[seq]++;
@@ -283,9 +300,10 @@ class Ns3TcpRecoveryFsmTestCase : public TestCase
      */
     void RxTrace(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
     {
-        if ((header.GetFlags() & TcpHeader::ACK) && header.GetAckNumber() > m_highestAck)
+        if ((header.GetFlags() & TcpHeader::ACK) &&
+            ToRelative(header.GetAckNumber()) > m_highestAck)
         {
-            m_highestAck = header.GetAckNumber();
+            m_highestAck = ToRelative(header.GetAckNumber());
         }
     }
 
@@ -296,7 +314,17 @@ class Ns3TcpRecoveryFsmTestCase : public TestCase
      */
     void HighestTxTrace(SequenceNumber32 oldValue, SequenceNumber32 newValue)
     {
-        m_highestTx = newValue;
+        m_highestTx = ToRelative(newValue);
+    }
+
+    /**
+     * Express a sequence number of the sender relative to its initial one.
+     * @param seq The absolute sequence number.
+     * @return The sequence number, the first data byte being numbered 1.
+     */
+    SequenceNumber32 ToRelative(SequenceNumber32 seq) const
+    {
+        return SequenceNumber32(seq.GetValue() - m_errorModel->GetIsn().GetValue());
     }
 
     /// Connect the traces to the sender socket (created at application start).
@@ -328,6 +356,7 @@ class Ns3TcpRecoveryFsmTestCase : public TestCase
     SequenceNumber32 m_highestAck{0};               //!< Highest cumulative ACK received.
     SequenceNumber32 m_highestTx{0};                //!< Highest sequence number sent.
     SequenceNumber32 m_recoveryPoint{0};            //!< HighData at the last recovery or timeout.
+    Ptr<TcpSeqMultiDropErrorModel> m_errorModel;    //!< Error model, which knows the ISN.
 };
 
 void
@@ -355,6 +384,7 @@ Ns3TcpRecoveryFsmTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = address.Assign(devices);
 
     Ptr<TcpSeqMultiDropErrorModel> errorModel = CreateObject<TcpSeqMultiDropErrorModel>();
+    m_errorModel = errorModel;
     for (auto seq : m_drops)
     {
         errorModel->AddSeqToDrop(seq);
@@ -385,6 +415,7 @@ Ns3TcpRecoveryFsmTestCase::DoRun()
 
     uint64_t rxBytes = DynamicCast<PacketSink>(sinkApp.Get(0))->GetTotalRx();
     Simulator::Destroy();
+    m_errorModel = nullptr;
 
     NS_TEST_ASSERT_MSG_EQ(rxBytes, 40000, "Not all data was delivered");
 

@@ -154,7 +154,7 @@ TcpFastRetrTest::Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who
         NS_LOG_INFO("\tRECEIVER Rx " << h);
 
         // Receiver has received the missing segment
-        if (h.GetSequenceNumber().GetValue() == m_seqToKill)
+        if (ToRelativeSeq(SENDER, h.GetSequenceNumber()).GetValue() == m_seqToKill)
         {
             m_pktDropped = false;
             if (m_bytesRcvButNotAcked > 0)
@@ -178,8 +178,9 @@ TcpFastRetrTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who
     if (who == SENDER)
     {
         NS_LOG_INFO("\tSENDER Tx " << h << " size=" << p->GetSize());
+        SequenceNumber32 seq = ToRelativeSeq(SENDER, h.GetSequenceNumber());
 
-        if (h.GetSequenceNumber().GetValue() == m_seqToKill && m_pktDropped)
+        if (seq.GetValue() == m_seqToKill && m_pktDropped)
         {
             // Spotted the retransmission!
             m_countRetr++;
@@ -188,16 +189,14 @@ TcpFastRetrTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who
         else
         {
             // No delayed ACK involved here.
-            while (h.GetSequenceNumber() < m_sndNextExpSeq)
+            while (seq < m_sndNextExpSeq)
             {
                 m_sndNextExpSeq -= GetSegSize(SENDER);
             }
 
-            if (h.GetSequenceNumber().GetValue() != 50002)
+            if (seq.GetValue() != 50002)
             {
-                NS_TEST_ASSERT_MSG_EQ(m_sndNextExpSeq,
-                                      h.GetSequenceNumber(),
-                                      "Sequence number expected differs");
+                NS_TEST_ASSERT_MSG_EQ(m_sndNextExpSeq, seq, "Sequence number expected differs");
             }
         }
 
@@ -216,26 +215,23 @@ TcpFastRetrTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who
     else if (who == RECEIVER)
     {
         NS_LOG_INFO("\tRECEIVER Tx, " << h << " size=" << p->GetSize());
+        SequenceNumber32 ack = ToRelativeSeq(SENDER, h.GetAckNumber());
 
         if (h.GetFlags() == (TcpHeader::SYN | TcpHeader::ACK))
         {
-            NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber().GetValue(),
+            NS_TEST_ASSERT_MSG_EQ(ToRelativeSeq(RECEIVER, h.GetSequenceNumber()).GetValue(),
                                   0,
-                                  "SYN pkt has not 0 as initial sequence number."
-                                  "Probably, random sqn number has been implemented."
-                                  "Check this test");
+                                  "SYN pkt does not carry the initial sequence number");
         }
         else
         {
-            NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber().GetValue(),
+            NS_TEST_ASSERT_MSG_EQ(ToRelativeSeq(RECEIVER, h.GetSequenceNumber()).GetValue(),
                                   1,
-                                  "ACK pkt has not 1 as sequence number."
-                                  "Probably, random sqn number has been implemented."
-                                  "Check this test");
+                                  "ACK pkt does not follow the initial sequence number");
         }
 
         // Accounted for delayed ACK, but not received.
-        while (h.GetAckNumber() < m_rcvNextExpAck)
+        while (ack < m_rcvNextExpAck)
         {
             m_rcvNextExpAck -= GetSegSize(SENDER);
         }
@@ -245,7 +241,7 @@ TcpFastRetrTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who
             m_rcvNextExpAck = 50002;
         }
 
-        NS_TEST_ASSERT_MSG_EQ(h.GetAckNumber(), m_rcvNextExpAck, "ACKing something not considered");
+        NS_TEST_ASSERT_MSG_EQ(ack, m_rcvNextExpAck, "ACKing something not considered");
 
         if (m_pktDropped)
         {
@@ -277,7 +273,8 @@ TcpFastRetrTest::RcvAck(const Ptr<const TcpSocketState> tcb, const TcpHeader& h,
 
     if (who == SENDER)
     {
-        if (h.GetAckNumber().GetValue() < m_seqToKill)
+        uint32_t ack = ToRelativeSeq(SENDER, h.GetAckNumber()).GetValue();
+        if (ack < m_seqToKill)
         {
             NS_TEST_ASSERT_MSG_EQ(tcb->m_congState.Get(),
                                   TcpSocketState::CA_OPEN,
@@ -286,7 +283,7 @@ TcpFastRetrTest::RcvAck(const Ptr<const TcpSocketState> tcb, const TcpHeader& h,
                                   0,
                                   "Dupack different than 0 but no loss detected");
         }
-        else if (h.GetAckNumber().GetValue() == m_seqToKill)
+        else if (ack == m_seqToKill)
         {
             NS_TEST_ASSERT_MSG_EQ(GetDupAckCount(SENDER), m_dupAckReceived, "Dupack count differs");
 
@@ -328,7 +325,8 @@ TcpFastRetrTest::ProcessedAck(const Ptr<const TcpSocketState> tcb,
 
     if (who == SENDER)
     {
-        if (m_previousAck == h.GetAckNumber() && h.GetAckNumber().GetValue() < 50002)
+        SequenceNumber32 ack = ToRelativeSeq(SENDER, h.GetAckNumber());
+        if (m_previousAck == ack && ack.GetValue() < 50002)
         {
             m_dupAckReceived++;
 
@@ -352,12 +350,12 @@ TcpFastRetrTest::ProcessedAck(const Ptr<const TcpSocketState> tcb,
                 m_pktWasDropped = true;
             }
         }
-        else if (m_previousAck < h.GetAckNumber())
+        else if (m_previousAck < ack)
         {
             m_dupAckReceived = 0;
         }
 
-        m_previousAck = h.GetAckNumber();
+        m_previousAck = ack;
     }
     else if (who == RECEIVER)
     {
@@ -402,9 +400,9 @@ TcpFastRetrTest::PktDropped(const Ipv4Header& ipH, const TcpHeader& tcpH, Ptr<co
     NS_LOG_FUNCTION(this << ipH << tcpH);
 
     m_pktDropped = true;
-    m_rcvNextExpAck = tcpH.GetSequenceNumber();
+    m_rcvNextExpAck = ToRelativeSeq(SENDER, tcpH.GetSequenceNumber());
 
-    NS_TEST_ASSERT_MSG_EQ(tcpH.GetSequenceNumber(),
+    NS_TEST_ASSERT_MSG_EQ(m_rcvNextExpAck,
                           SequenceNumber32(m_seqToKill),
                           "Packet dropped but sequence number differs");
 }
@@ -437,6 +435,13 @@ class TcpFastRetrTestSuite : public TestSuite
             AddTestCase(new TcpFastRetrTest((*it), 5001, "Fast Retransmit testing"),
                         TestCase::Duration::QUICK);
         }
+
+        // With the initial sequence numbers driven by the clock
+        auto clockDrivenIsn = new TcpFastRetrTest(TcpNewReno::GetTypeId(),
+                                                  5001,
+                                                  "Fast Retransmit testing, clock driven ISN");
+        clockDrivenIsn->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+        AddTestCase(clockDrivenIsn, TestCase::Duration::QUICK);
     }
 };
 

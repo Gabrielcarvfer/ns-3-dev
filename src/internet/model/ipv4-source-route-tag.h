@@ -16,19 +16,13 @@ namespace ns3
 /**
  * @ingroup ipv4
  *
- * @brief Tag carrying the addresses of a loose source route
+ * @brief Tag carrying the addresses of a loose source route to follow
  *
- * Carries a route between a socket and the IPv4 layer: on the way down, the
- * route the application asked the datagram to follow, which the layer turns
- * into the option of the header; on the way up, the route recorded in the
- * option of a received datagram, reversed and ending at its sender, which a
- * connection can send its answers along (@RFC{9293}, Section 3.9.2.1,
- * MUST-51 to MUST-53), and an ICMP Echo Reply along (@RFC{1122}, Section
- * 3.2.2.6). The UDP and raw sockets remove it from the datagrams they
- * deliver: the application which answers a datagram is the one to reverse
- * its route (@RFC{1122}, Section 4.1.3.2), and one which sends a received
- * datagram on to another destination must not send it along the way back
- * to its sender.
+ * Carries the route the application, or the transport protocol, asks a
+ * datagram to follow down to the IPv4 layer, which turns it into the option
+ * of the header. The way back of a received datagram travels up in an
+ * Ipv4ReturnRouteTag instead, so that a datagram sent on as received does not
+ * follow it.
  */
 class Ipv4SourceRouteTag : public Tag
 {
@@ -66,6 +60,33 @@ class Ipv4SourceRouteTag : public Tag
 
   private:
     std::vector<Ipv4Address> m_route; //!< The addresses of the route
+};
+
+/**
+ * @ingroup ipv4
+ *
+ * @brief Tag carrying the way back of a received source routed datagram
+ *
+ * The IPv4 layer attaches it to a datagram which reached its final
+ * destination along a loose source route: the addresses the option recorded,
+ * reversed and followed by the sender of the datagram. TCP sends the segments
+ * of a connection along it (@RFC{9293}, Section 3.9.2.1, MUST-51 to MUST-53),
+ * and ICMP its Echo Reply (@RFC{1122}, Section 3.2.2.6). The UDP and raw
+ * sockets leave it on the datagrams they deliver, so that the application
+ * sees the route the datagram followed (@RFC{1122}, Section 4.1.3.2): an
+ * application which answers along the way back attaches it to the answer as
+ * an Ipv4SourceRouteTag. The IPv4 layer never sends a datagram along this
+ * tag, so a datagram an application sends on as received does not follow it.
+ */
+class Ipv4ReturnRouteTag : public Ipv4SourceRouteTag
+{
+  public:
+    /**
+     * @brief Get the type ID.
+     * @return The object TypeId.
+     */
+    static TypeId GetTypeId();
+    TypeId GetInstanceTypeId() const override;
 };
 
 } // namespace ns3

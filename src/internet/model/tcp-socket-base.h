@@ -1346,18 +1346,29 @@ class TcpSocketBase : public TcpSocket
     void SendKeepAlive();
 
     /**
-     * @brief Restart the keep-alive timer of an active connection
+     * @brief Start a new idle period, timed by the keep-alive timer
      *
-     * Called whenever a segment is received, since an incoming segment shows
-     * the peer is alive; outgoing data does not need to restart the timer,
-     * because the timeout skips the probe while sent data is outstanding.
+     * Called when the keep-alives are turned on, when their idle time
+     * changes, and when the connection enters or leaves a state they probe.
      */
     void RearmKeepAlive();
 
     /**
+     * @brief Record that a segment came in, showing that the peer is alive
+     *
+     * Called for every segment received. Only the time is recorded, as Linux
+     * does: the pending keep-alive timer finds out when it expires, and
+     * waits for the rest of the idle period then, so that no event is
+     * cancelled and scheduled anew for every segment. Outgoing data does
+     * not count, since the timeout skips the probe while sent data is
+     * outstanding.
+     */
+    void KeepAliveSegmentReceived();
+
+    /**
      * @brief Check whether the connection is in a state probed by the keep-alives
      *
-     * @return true in ESTABLISHED and CLOSE_WAIT.
+     * @return true in ESTABLISHED, CLOSE_WAIT and FIN_WAIT_2.
      */
     bool IsKeepAliveState() const;
 
@@ -1485,6 +1496,16 @@ class TcpSocketBase : public TcpSocket
      * @return The initial sequence number.
      */
     SequenceNumber32 GenerateIsn() const;
+
+    /**
+     * @brief Select the initial sequence number of a new connection
+     *
+     * The initial sequence number is drawn by GenerateIsn when the
+     * ClockDrivenIsn attribute of TcpL4Protocol is enabled, and is 0
+     * otherwise. The state anchored to the sequence numbers of this end
+     * (marks, congestion control) starts from it.
+     */
+    void SelectIsn();
 
     /**
      * @brief Read the MSS option from other side
@@ -1704,6 +1725,7 @@ class TcpSocketBase : public TcpSocket
     Time m_keepAliveInterval;                //!< Time between unanswered keep-alives
     uint32_t m_keepAliveRetries{0};          //!< Unanswered keep-alives before dropping
     uint32_t m_keepAlivesSent{0};            //!< Keep-alives sent without an answer
+    Time m_keepAliveIdleStart;               //!< Start of the idle period of the keep-alives
     EventId m_keepAliveEvent{};              //!< Keep-alive event
     Time m_cnTimeout;                        //!< Timeout for connection retry
 
@@ -1783,6 +1805,7 @@ class TcpSocketBase : public TcpSocket
 
     // Guesses over the other connection end
     bool m_activeOpen{false};             //!< True if SYN_RCVD was reached through an active open
+    SequenceNumber32 m_isn{0};            //!< Initial sequence number of this end
     SequenceNumber32 m_sndUrgentPoint{0}; //!< Sequence number past the urgent data being sent
     SequenceNumber32 m_rcvUrgentPoint{0}; //!< Sequence number past the urgent data received
     bool m_sndUrgentArmed{false};         //!< True once urgent data has been sent, since the

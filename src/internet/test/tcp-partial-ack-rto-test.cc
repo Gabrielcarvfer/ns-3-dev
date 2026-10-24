@@ -445,7 +445,7 @@ TcpRecoveryRtoTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho 
     {
         return;
     }
-    uint32_t seq = h.GetSequenceNumber().GetValue();
+    uint32_t seq = ToRelativeSeq(SENDER, h.GetSequenceNumber()).GetValue();
     if (m_txCount[seq]++ > 0 && GetTcb(SENDER)->m_congState == TcpSocketState::CA_LOSS)
     {
         m_retxAfterRto.push_back(seq);

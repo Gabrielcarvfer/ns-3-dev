@@ -152,6 +152,10 @@ class TcpRetransmissionReorderingChannel : public SimpleChannel
 
     /**
      * @brief Set the sequence number whose first retransmission is delayed.
+     *
+     * The sequence numbers are relative to the initial sequence number of the
+     * data sender, taken from the SYN it sent.
+     *
      * @param seq The sequence number.
      */
     void SetSeqToReorder(uint32_t seq)
@@ -174,8 +178,12 @@ class TcpRetransmissionReorderingChannel : public SimpleChannel
         if (ipHeader.GetProtocol() == TcpL4Protocol::PROT_NUMBER)
         {
             copy->RemoveHeader(tcpHeader);
+            if (tcpHeader.GetFlags() == TcpHeader::SYN)
+            {
+                m_isn = tcpHeader.GetSequenceNumber();
+            }
             isData = copy->GetSize() > 0;
-            seq = tcpHeader.GetSequenceNumber().GetValue();
+            seq = tcpHeader.GetSequenceNumber().GetValue() - m_isn.GetValue();
         }
         if (!isData)
         {
@@ -207,6 +215,7 @@ class TcpRetransmissionReorderingChannel : public SimpleChannel
 
   private:
     uint32_t m_seqToReorder{0};        //!< Sequence number whose retransmission is delayed
+    SequenceNumber32 m_isn{0};         //!< Initial sequence number of the data sender
     std::set<uint32_t> m_seqsSent;     //!< Data sequence numbers sent so far
     Ptr<Packet> m_held;                //!< The delayed retransmission, while held
     uint16_t m_heldProtocol{0};        //!< Protocol of the delayed retransmission
@@ -309,7 +318,7 @@ TcpReorderedRetransmissionTest::Tx(const Ptr<const Packet> p, const TcpHeader& h
 {
     if (who == SENDER && p->GetSize() > 0)
     {
-        m_txCount[h.GetSequenceNumber().GetValue()]++;
+        m_txCount[ToRelativeSeq(SENDER, h.GetSequenceNumber()).GetValue()]++;
     }
 }
 

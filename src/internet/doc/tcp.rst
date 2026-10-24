@@ -395,6 +395,9 @@ two classes, which an application has to set on the right one:
   single unanswered keep-alive must not be taken for a dead connection
   (MUST-29).
 
+The idle time and the interval are at least one millisecond: a zero value
+would have the timer expire over and over at the same instant.
+
 A keep-alive is an empty segment repeating the last octet acknowledged by the
 peer, which answers it with an acknowledgment. It is sent only once nothing
 was received for the idle time and no data is outstanding or waiting to be
@@ -402,7 +405,10 @@ sent, so that neither the retransmissions nor the zero window probes are
 duplicated. The connections are probed in the ESTABLISHED, CLOSE_WAIT and
 FIN_WAIT_2 states, as Linux does: the last two cover a half-closed connection
 whose peer went away, whichever side closed first. Any segment received starts the idle
-time anew; a connection whose peer answers none of the keep-alives is reset,
+time anew: as Linux does, the socket only records when the segment came in,
+and the pending timer, once it expires, waits for the rest of the idle time,
+so that the timer is not scheduled anew for every segment. A connection whose
+peer answers none of the keep-alives is reset,
 and its application notified through *NotifyErrorClose*. Changing
 ``KeepAliveTime`` on an idle connection applies to the idle time under way.
 

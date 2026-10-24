@@ -127,11 +127,12 @@ TcpSocket::GetTypeId()
                           MakeBooleanChecker())
             .AddAttribute(
                 "KeepAliveTime",
-                "Idle time after which the first keep-alive is sent. See also the "
-                "KeepAliveInterval and KeepAliveRetries attributes of ns3::TcpSocketBase.",
+                "Idle time after which the first keep-alive is sent, at least one "
+                "millisecond. See also the KeepAliveInterval and KeepAliveRetries attributes "
+                "of ns3::TcpSocketBase.",
                 TimeValue(Seconds(7200)),
                 MakeTimeAccessor(&TcpSocket::GetKeepAliveTime, &TcpSocket::SetKeepAliveTime),
-                MakeTimeChecker());
+                MakeTimeChecker(MilliSeconds(1)));
     return tid;
 }
 

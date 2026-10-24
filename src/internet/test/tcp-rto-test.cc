@@ -406,7 +406,7 @@ TcpTimeRtoTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
         {
             NS_LOG_INFO("TX: " << h << m_senderSentSegments);
 
-            NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber().GetValue(),
+            NS_TEST_ASSERT_MSG_EQ(ToRelativeSeq(SENDER, h.GetSequenceNumber()).GetValue(),
                                   1,
                                   "First packet was not correctly sent");
 
@@ -533,6 +533,24 @@ class TcpRtoTestSuite : public TestSuite
 
             AddTestCase(new TcpTimeRtoTest(t, t.GetName() + " RTO timing testing"),
                         TestCase::Duration::QUICK);
+
+            // With the initial sequence numbers driven by the clock
+            auto retransmit =
+                new TcpRtoTest(t, t.GetName() + " RTO retransmit testing, clock driven ISN");
+            retransmit->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+            AddTestCase(retransmit, TestCase::Duration::QUICK);
+            auto ssThresh = new TcpSsThreshRtoTest(
+                t,
+                seqToDrop,
+                Seconds(0.005),
+                t.GetName() +
+                    " RTO ssthresh testing, set to half of BytesInFlight, clock driven ISN");
+            ssThresh->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+            AddTestCase(ssThresh, TestCase::Duration::QUICK);
+            auto timing =
+                new TcpTimeRtoTest(t, t.GetName() + " RTO timing testing, clock driven ISN");
+            timing->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+            AddTestCase(timing, TestCase::Duration::QUICK);
         }
     }
 };

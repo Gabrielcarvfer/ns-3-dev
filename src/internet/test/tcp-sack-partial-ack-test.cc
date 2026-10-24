@@ -317,6 +317,19 @@ class TcpSackPartialAckTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpRwndLimitedRecoveryTest("Receive window limited recovery", {10001}),
                     TestCase::Duration::QUICK);
+
+        // With the initial sequence numbers driven by the clock
+        auto partialAck = new TcpSackPartialAckTest(
+            "No spurious retransmission on SACK partial ACKs, clock driven ISN",
+            {10001, 10501},
+            60);
+        partialAck->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+        AddTestCase(partialAck, TestCase::Duration::QUICK);
+        auto rwndLimited =
+            new TcpRwndLimitedRecoveryTest("Receive window limited recovery, clock driven ISN",
+                                           {10001});
+        rwndLimited->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+        AddTestCase(rwndLimited, TestCase::Duration::QUICK);
         AddTestCase(new TcpRwndLimitedRecoveryTest("Receive window limited recovery, two losses",
                                                    {10001, 11001}),
                     TestCase::Duration::QUICK);

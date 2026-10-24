@@ -393,6 +393,21 @@ class TcpPacingTestSuite : public TestSuite
                                       description),
                     TestCase::Duration::QUICK);
 
+        // Whether the initial window is paced does not depend on the initial
+        // sequence number
+        auto clockDrivenIsn = new TcpPacingTest(segmentSize,
+                                                packetSize,
+                                                numPackets,
+                                                pacingSsRatio,
+                                                pacingCaRatio,
+                                                ssThresh,
+                                                paceInitialWindow,
+                                                delAckMaxCount,
+                                                tid,
+                                                description + ", clock driven ISN");
+        clockDrivenIsn->SetClockDrivenIsn(true);
+        AddTestCase(clockDrivenIsn, TestCase::Duration::QUICK);
+
         paceInitialWindow = true;
         description = std::string("Pacing case 2: Slow start only, initial pacing");
         AddTestCase(new TcpPacingTest(segmentSize,

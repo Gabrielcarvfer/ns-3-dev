@@ -107,12 +107,12 @@ TcpSocketBase::GetTypeId()
             //                   MakeEnumAccessor (&TcpSocketBase::m_state),
             //                   MakeEnumChecker (CLOSED, "Closed"))
             .AddAttribute("KeepAliveInterval",
-                          "Time between the keep-alives which are not answered. The keep-alives "
-                          "are turned on, and their idle time set, by the KeepAlive and "
-                          "KeepAliveTime attributes of ns3::TcpSocket.",
+                          "Time between the keep-alives which are not answered, at least one "
+                          "millisecond. The keep-alives are turned on, and their idle time set, "
+                          "by the KeepAlive and KeepAliveTime attributes of ns3::TcpSocket.",
                           TimeValue(Seconds(75)),
                           MakeTimeAccessor(&TcpSocketBase::m_keepAliveInterval),
-                          MakeTimeChecker())
+                          MakeTimeChecker(MilliSeconds(1)))
             .AddAttribute("KeepAliveRetries",
                           "Number of unanswered keep-alives before the connection is dropped. "
                           "At least two, since a single unanswered keep-alive must not be "
@@ -456,6 +456,7 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_retxThresh(sock.m_retxThresh),
       m_limitedTx(sock.m_limitedTx),
       m_activeOpen(sock.m_activeOpen),
+      m_isn(sock.m_isn),
       m_sndUrgentPoint(sock.m_sndUrgentPoint),
       m_rcvUrgentPoint(sock.m_rcvUrgentPoint),
       m_sndUrgentArmed(sock.m_sndUrgentArmed),
@@ -1248,20 +1249,7 @@ TcpSocketBase::DoConnect()
         // from a passive open (RFC 9293, Section 3.5, MUST-11)
         m_activeOpen = true;
 
-        if (m_tcp->IsClockDrivenIsnEnabled())
-        {
-            // Pick the initial sequence number from the clock (RFC 9293,
-            // Section 3.4.1, MUST-8)
-            m_tcb->m_nextTxSequence = GenerateIsn();
-            m_tcb->m_highTxMark = m_tcb->m_nextTxSequence;
-            m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
-        }
-        // The marks compared with the sequence numbers of this end in the
-        // wrap aware arithmetic start from the initial sequence number, which
-        // may lie anywhere in the space when driven by the clock
-        m_ecnEchoSeq = m_tcb->m_nextTxSequence.Get();
-        m_ecnCWRSeq = m_tcb->m_nextTxSequence.Get();
-        m_sndFack = m_tcb->m_nextTxSequence.Get().GetValue();
+        SelectIsn();
 
         // send a SYN packet with ECE and CWR flags set if sender is ECN capable
         if (m_tcb->m_useEcn == TcpSocketState::On)
@@ -1884,11 +1872,10 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         tcpHeader.SetFlags(TcpHeader::RST);
     }
 
-    Ipv4SourceRouteTag returnRoute;
+    Ipv4ReturnRouteTag returnRoute;
     bool hasReturnRoute = packet->RemovePacketTag(returnRoute);
 
-    // Something came in, so the connection is not idle
-    RearmKeepAlive();
+    KeepAliveSegmentReceived();
     TcpStates_t stateBefore = m_state;
 
     if ((tcpHeader.GetFlags() & TcpHeader::URG) && !(tcpHeader.GetFlags() & TcpHeader::RST) &&
@@ -2998,6 +2985,7 @@ TcpSocketBase::ProcessSynSent(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         // wrap aware arithmetic start from its initial sequence number
         m_ecnCESeq = tcpHeader.GetSequenceNumber();
         m_highRxMark = tcpHeader.GetSequenceNumber();
+        m_highTxAck = tcpHeader.GetSequenceNumber();
         /* Check if we received an ECN SYN packet. Change the ECN state of receiver to ECN_IDLE if
          * the traffic is ECN capable and sender has sent ECN SYN packet
          */
@@ -3029,6 +3017,7 @@ TcpSocketBase::ProcessSynSent(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         // See the simultaneous open above
         m_ecnCESeq = tcpHeader.GetSequenceNumber();
         m_highRxMark = tcpHeader.GetSequenceNumber();
+        m_highTxAck = tcpHeader.GetSequenceNumber();
         m_tcb->m_highTxMark = ++m_tcb->m_nextTxSequence;
         m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
         // Before sending packets, update the pacing rate based on RTT measurement so far
@@ -3789,22 +3778,13 @@ TcpSocketBase::CompleteFork(Ptr<Packet> p [[maybe_unused]],
     m_dataRetrCount = m_dataRetries;
     SetupCallback();
     // Set the sequence number and send SYN+ACK
-    if (m_tcp->IsClockDrivenIsnEnabled())
-    {
-        // The initial sequence number is picked from the clock (RFC 9293,
-        // Section 3.4.1, MUST-8)
-        m_tcb->m_nextTxSequence = GenerateIsn();
-        m_tcb->m_highTxMark = m_tcb->m_nextTxSequence;
-        m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
-    }
-    // See DoConnect, and the same for the marks compared with the sequence
-    // numbers of the peer
-    m_ecnEchoSeq = m_tcb->m_nextTxSequence.Get();
-    m_ecnCWRSeq = m_tcb->m_nextTxSequence.Get();
-    m_sndFack = m_tcb->m_nextTxSequence.Get().GetValue();
+    SelectIsn();
+    // The marks compared with the sequence numbers of the peer in the wrap
+    // aware arithmetic start from its initial sequence number
     m_tcb->m_rxBuffer->SetNextRxSequence(h.GetSequenceNumber() + SequenceNumber32(1));
     m_ecnCESeq = h.GetSequenceNumber();
     m_highRxMark = h.GetSequenceNumber();
+    m_highTxAck = h.GetSequenceNumber();
 
     // The options of the SYN are negotiated by this socket, not by the
     // listener it was forked from
@@ -5282,6 +5262,10 @@ void
 TcpSocketBase::SetKeepAliveTime(Time keepAliveTime)
 {
     NS_LOG_FUNCTION(this << keepAliveTime);
+    // While data is outstanding, the timer is armed again with the idle time,
+    // which would otherwise expire again at the same instant, forever
+    NS_ABORT_MSG_IF(!keepAliveTime.IsStrictlyPositive(),
+                    "The keep-alive idle time must be positive, not " << keepAliveTime);
     m_keepAliveTime = keepAliveTime;
     if (m_keepAliveEvent.IsPending() && m_keepAlivesSent == 0)
     {
@@ -5322,7 +5306,15 @@ TcpSocketBase::RearmKeepAlive()
     }
 
     m_keepAlivesSent = 0;
+    m_keepAliveIdleStart = Simulator::Now();
     m_keepAliveEvent = Simulator::Schedule(m_keepAliveTime, &TcpSocketBase::KeepAliveTimeout, this);
+}
+
+void
+TcpSocketBase::KeepAliveSegmentReceived()
+{
+    m_keepAlivesSent = 0;
+    m_keepAliveIdleStart = Simulator::Now();
 }
 
 void
@@ -5333,6 +5325,20 @@ TcpSocketBase::KeepAliveTimeout()
     if (!IsKeepAliveState())
     {
         return;
+    }
+
+    if (m_keepAlivesSent == 0)
+    {
+        Time idleEnd = m_keepAliveIdleStart + m_keepAliveTime;
+        if (idleEnd > Simulator::Now())
+        {
+            // A segment came in since the timer was armed, or the peer
+            // answered the last keep-alive: the idle period started anew
+            m_keepAliveEvent = Simulator::Schedule(idleEnd - Simulator::Now(),
+                                                   &TcpSocketBase::KeepAliveTimeout,
+                                                   this);
+            return;
+        }
     }
 
     if (BytesInFlight() > 0 || m_txBuffer->SizeFromSequence(m_tcb->m_nextTxSequence) > 0)
@@ -5354,11 +5360,16 @@ TcpSocketBase::KeepAliveTimeout()
         // The socket API has no timed out error, and the peer is gone as far
         // as this end can tell
         m_errno = ERROR_NOTCONN;
-        // SendRST notifies the abort to the application: mark it, so that the
-        // close which follows does not notify a normal close on top of it
+        SendEmptyPacket(TcpHeader::RST);
+        NS_LOG_DEBUG(TcpStateName[m_state] << " -> CLOSED");
+        m_state = CLOSED;
         m_closeNotified = true;
-        SendRST();
-        CloseAndNotify();
+        // The application may let go of the socket when told of the abort,
+        // and deallocating the endpoint releases the reference of the TCP
+        // layer: nothing of the socket may be touched past this point
+        Ptr<TcpSocketBase> self(this);
+        NotifyErrorClose();
+        DeallocateEndPoint();
         return;
     }
 
@@ -5637,6 +5648,35 @@ TcpSocketBase::GetUrgentDataSize() const
         return 0;
     }
     return m_rcvUrgentPoint - GetRxReadPoint();
+}
+
+void
+TcpSocketBase::SelectIsn()
+{
+    NS_LOG_FUNCTION(this);
+
+    if (m_tcp->IsClockDrivenIsnEnabled())
+    {
+        // Pick the initial sequence number from the clock (RFC 9293,
+        // Section 3.4.1, MUST-8)
+        m_tcb->m_nextTxSequence = GenerateIsn();
+        m_tcb->m_highTxMark = m_tcb->m_nextTxSequence;
+        m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+        // The congestion control was initialized when the socket was created
+        // or forked, before the initial sequence number was known: its marks
+        // (e.g., the end of the HyStart round of TcpCubic) are anchored again
+        if (m_congestionControl)
+        {
+            m_congestionControl->Init(m_tcb);
+        }
+    }
+    m_isn = m_tcb->m_nextTxSequence;
+    // The marks compared with the sequence numbers of this end in the wrap
+    // aware arithmetic start from the initial sequence number, which may lie
+    // anywhere in the space when driven by the clock
+    m_ecnEchoSeq = m_tcb->m_nextTxSequence.Get();
+    m_ecnCWRSeq = m_tcb->m_nextTxSequence.Get();
+    m_sndFack = m_tcb->m_nextTxSequence.Get().GetValue();
 }
 
 SequenceNumber32
@@ -6147,8 +6187,9 @@ TcpSocketBase::IsPacingEnabled() const
         {
             return true;
         }
-        SequenceNumber32 highTxMark = m_tcb->m_highTxMark; // cast traced value
-        if (highTxMark.GetValue() > (GetInitialCwnd() * m_tcb->m_segmentSize))
+        // The octets sent so far, counted from the initial sequence number
+        uint32_t sent = m_tcb->m_highTxMark.Get().GetValue() - m_isn.GetValue();
+        if (sent > (GetInitialCwnd() * m_tcb->m_segmentSize))
         {
             return true;
         }

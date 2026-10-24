@@ -22,9 +22,11 @@
 #include "ns3/ipv6-l3-protocol.h"
 #include "ns3/ipv6-raw-socket-factory.h"
 #include "ns3/log.h"
+#include "ns3/map-scheduler.h"
 #include "ns3/node-container.h"
 #include "ns3/node.h"
 #include "ns3/nstime.h"
+#include "ns3/object-factory.h"
 #include "ns3/pointer.h"
 #include "ns3/rng-seed-manager.h"
 #include "ns3/simple-channel.h"
@@ -45,6 +47,7 @@
 
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <vector>
@@ -4553,10 +4556,10 @@ class TcpKeepAliveTestCase : public TestCase
     Ptr<Socket> m_accepted;      //!< The accepted socket of the passive runs
     bool m_watchAccepted{false}; //!< Whether the accepted socket is the probing one
 
-    uint32_t m_probesSent{0};          //!< Keep-alive probes the probing socket sent
-    SequenceNumber32 m_highestSent{0}; //!< Highest sequence number of the data sent
-    uint32_t m_closeNotifications{0};  //!< Close notifications of the probing socket
-    Time m_closed{Seconds(0)};         //!< Instant the probing socket gave up
+    uint32_t m_probesSent{0};                      //!< Keep-alive probes the probing socket sent
+    std::optional<SequenceNumber32> m_highestSent; //!< Highest sequence number of the data sent
+    uint32_t m_closeNotifications{0};              //!< Close notifications of the probing socket
+    Time m_closed{Seconds(0)};                     //!< Instant the probing socket gave up
     TcpSocket::TcpStates_t m_state{TcpSocket::CLOSED}; //!< State of the probing socket
 };
 
@@ -4622,14 +4625,15 @@ TcpKeepAliveTestCase::ProbeSent(Ptr<const Packet> packet,
 {
     if (packet->GetSize() > 0)
     {
-        m_highestSent = std::max(m_highestSent, header.GetSequenceNumber() + packet->GetSize());
+        SequenceNumber32 end = header.GetSequenceNumber() + packet->GetSize();
+        m_highestSent = m_highestSent ? std::max(*m_highestSent, end) : end;
         return;
     }
 
     // A keep-alive holds no data and repeats the sequence number of the last
     // octet sent, which the peer acknowledged already
-    if (header.GetFlags() == TcpHeader::ACK && m_highestSent > SequenceNumber32(0) &&
-        header.GetSequenceNumber() + 1 == m_highestSent)
+    if (header.GetFlags() == TcpHeader::ACK && m_highestSent &&
+        header.GetSequenceNumber() + 1 == *m_highestSent)
     {
         m_probesSent++;
     }
@@ -4641,7 +4645,7 @@ TcpKeepAliveTestCase::RunUnansweredKeepAlives(uint32_t retries)
     m_closed = Seconds(0);
     m_state = TcpSocket::CLOSED;
     m_probesSent = 0;
-    m_highestSent = SequenceNumber32(0);
+    m_highestSent.reset();
 
     NodeContainer nodes;
     nodes.Create(2);
@@ -4695,7 +4699,7 @@ uint32_t
 TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy, bool passive)
 {
     m_probesSent = 0;
-    m_highestSent = SequenceNumber32(0);
+    m_highestSent.reset();
     m_closeNotifications = 0;
     m_closed = Seconds(0);
     m_state = TcpSocket::CLOSED;
@@ -6101,6 +6105,9 @@ TcpLongUrgentDataTestCase::SegmentSent(Ptr<const Packet> packet,
     if (header.GetFlags() & TcpHeader::SYN)
     {
         m_isn = header.GetSequenceNumber();
+        // The urgent points are compared in the wrap aware arithmetic, from
+        // the initial sequence number
+        m_lastUrgentPoint = m_isn;
         m_isnKnown = true;
         return;
     }
@@ -6272,7 +6279,7 @@ class TcpKeepAliveBaseTestCase : public TestCase
     Ptr<Socket> m_client;                              //!< The probing socket
     Ptr<Socket> m_accepted;                            //!< The accepted socket of the server
     std::vector<Time> m_probes;                        //!< Instants of the keep-alives sent
-    SequenceNumber32 m_highestSent{0};                 //!< Next sequence number of the client
+    std::optional<SequenceNumber32> m_highestSent;     //!< Next sequence number of the client
     uint32_t m_normalCloses{0};                        //!< Normal close notifications
     uint32_t m_errorCloses{0};                         //!< Error close notifications
     TcpSocket::TcpStates_t m_state{TcpSocket::CLOSED}; //!< State of the client
@@ -6285,7 +6292,7 @@ TcpKeepAliveBaseTestCase::Setup(bool ipv6, Time keepAliveTime)
     m_nodes = NodeContainer();
     m_nodes.Create(2);
     m_probes.clear();
-    m_highestSent = SequenceNumber32(0);
+    m_highestSent.reset();
     m_normalCloses = 0;
     m_errorCloses = 0;
     m_state = TcpSocket::CLOSED;
@@ -6383,11 +6390,12 @@ TcpKeepAliveBaseTestCase::SegmentSent(Ptr<const Packet> packet,
     }
     if (length > 0)
     {
-        m_highestSent = std::max(m_highestSent, header.GetSequenceNumber() + length);
+        SequenceNumber32 end = header.GetSequenceNumber() + length;
+        m_highestSent = m_highestSent ? std::max(*m_highestSent, end) : end;
         return;
     }
-    if (header.GetFlags() == TcpHeader::ACK && m_highestSent > SequenceNumber32(0) &&
-        header.GetSequenceNumber() + 1 == m_highestSent)
+    if (header.GetFlags() == TcpHeader::ACK && m_highestSent &&
+        header.GetSequenceNumber() + 1 == *m_highestSent)
     {
         m_probes.push_back(Simulator::Now());
     }
@@ -6906,6 +6914,312 @@ TcpKeepAliveResetAnswerTestCase::DoRun()
     NS_TEST_ASSERT_MSG_EQ(m_errorCloses, 1, "The abort was not notified once");
     NS_TEST_ASSERT_MSG_EQ(m_normalCloses, 0, "The abort was notified as a close");
 
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Object aggregated to a socket, telling when the socket is deleted
+ */
+class TcpSocketLifetimeProbe : public Object
+{
+  public:
+    /**
+     * @brief Get the type ID.
+     * @return The object TypeId.
+     */
+    static TypeId GetTypeId()
+    {
+        static TypeId tid = TypeId("ns3::TcpSocketLifetimeProbe")
+                                .SetParent<Object>()
+                                .SetGroupName("Internet")
+                                .AddConstructor<TcpSocketLifetimeProbe>();
+        return tid;
+    }
+
+    ~TcpSocketLifetimeProbe() override
+    {
+        if (m_deleted)
+        {
+            *m_deleted = true;
+        }
+    }
+
+    bool* m_deleted{nullptr}; //!< Set when the socket, and this probe with it, is deleted
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test a socket let go of when its keep-alives give up on the peer
+ *
+ * The application may release its last reference to the socket when told of
+ * the abort, as ThreeGppHttpServer does: the socket is then deleted as its
+ * endpoint is deallocated, from within the keep-alive timer, which must not
+ * touch it afterwards. Run under a memory checker to catch an access to the
+ * deleted socket.
+ */
+class TcpKeepAliveReleaseOnAbortTestCase : public TcpKeepAliveBaseTestCase
+{
+  public:
+    TcpKeepAliveReleaseOnAbortTestCase()
+        : TcpKeepAliveBaseTestCase("A socket let go of when its keep-alives give up on the peer")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+TcpKeepAliveReleaseOnAbortTestCase::DoRun()
+{
+    Setup(false, Seconds(1));
+    bool deleted = false;
+    Ptr<TcpSocketLifetimeProbe> probe = CreateObject<TcpSocketLifetimeProbe>();
+    probe->m_deleted = &deleted;
+    m_client->AggregateObject(probe);
+    probe = nullptr;
+    // The only reference of the application is let go of upon the abort
+    m_client->SetCloseCallbacks(Callback<void, Ptr<Socket>>([this](Ptr<Socket>) {
+                                    m_normalCloses++;
+                                    m_client = nullptr;
+                                }),
+                                Callback<void, Ptr<Socket>>([this](Ptr<Socket>) {
+                                    m_errorCloses++;
+                                    m_client = nullptr;
+                                }));
+    Simulator::Schedule(Seconds(2), [this]() { BreakThePath(); });
+
+    Simulator::Stop(Seconds(20));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(m_resetSent, true, "The silent peer was not given up on");
+    NS_TEST_ASSERT_MSG_EQ(m_state, TcpSocket::CLOSED, "The connection was not closed");
+    NS_TEST_ASSERT_MSG_EQ(m_errorCloses, 1, "The abort was not notified once");
+    NS_TEST_ASSERT_MSG_EQ(m_normalCloses, 0, "The abort was notified as a close");
+    NS_TEST_ASSERT_MSG_EQ(deleted, true, "The socket let go of was not deleted");
+
+    m_accepted = nullptr;
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Scheduler counting the events scheduled far ahead
+ *
+ * A cancelled event stays in the scheduler until its time comes, so that
+ * the events scheduled far ahead and cancelled pile up.
+ */
+class TcpCountingScheduler : public MapScheduler
+{
+  public:
+    /**
+     * @brief Get the type ID.
+     * @return The object TypeId.
+     */
+    static TypeId GetTypeId()
+    {
+        static TypeId tid = TypeId("ns3::TcpCountingScheduler")
+                                .SetParent<MapScheduler>()
+                                .SetGroupName("Internet")
+                                .AddConstructor<TcpCountingScheduler>();
+        return tid;
+    }
+
+    TcpCountingScheduler()
+    {
+        s_farAhead = 0;
+    }
+
+    void Insert(const Scheduler::Event& ev) override
+    {
+        MapScheduler::Insert(ev);
+        if (ev.key.m_ts > static_cast<uint64_t>((Simulator::Now() + Minutes(10)).GetTimeStep()))
+        {
+            ++s_farAhead;
+        }
+    }
+
+    static inline uint64_t s_farAhead{0}; //!< Events scheduled more than ten minutes ahead
+};
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test that the keep-alive timer is not scheduled anew for every segment
+ *
+ * Every segment received starts the idle period anew, but an event cancelled
+ * in the scheduler stays there until its time comes, two hours later by
+ * default: a timer scheduled anew for every segment would leave one dead
+ * event per segment behind. The events held by the scheduler during a bulk
+ * transfer are the same with the keep-alives on as with them off, but for
+ * the timer of each end.
+ */
+class TcpKeepAliveTimerEventsTestCase : public TestCase
+{
+  public:
+    TcpKeepAliveTimerEventsTestCase()
+        : TestCase("The keep-alive timer is not scheduled anew for every segment")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Run a bulk transfer.
+     * @param keepAlive Whether the keep-alives are on, on both ends.
+     * @return The events scheduled more than ten minutes ahead.
+     */
+    uint64_t Run(bool keepAlive);
+};
+
+uint64_t
+TcpKeepAliveTimerEventsTestCase::Run(bool keepAlive)
+{
+    ObjectFactory factory;
+    factory.SetTypeId(TcpCountingScheduler::GetTypeId());
+    Simulator::SetScheduler(factory);
+    Config::SetDefault("ns3::TcpSocket::KeepAlive", BooleanValue(keepAlive));
+
+    NodeContainer nodes;
+    nodes.Create(2);
+    SimpleNetDeviceHelper devHelper;
+    devHelper.SetDeviceAttribute("DataRate", StringValue("20Mbps"));
+    devHelper.SetChannelAttribute("Delay", StringValue("1ms"));
+    NetDeviceContainer devices = devHelper.Install(nodes);
+    InternetStackHelper stack;
+    stack.Install(nodes);
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    const uint16_t port = 9924;
+    uint64_t received = 0;
+    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
+    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
+    server->Listen();
+    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+                              Callback<void, Ptr<Socket>, const Address&>(
+                                  [&received](Ptr<Socket> socket, const Address&) {
+                                      socket->SetRecvCallback(
+                                          Callback<void, Ptr<Socket>>([&received](Ptr<Socket> s) {
+                                              while (Ptr<Packet> packet = s->Recv())
+                                              {
+                                                  received += packet->GetSize();
+                                              }
+                                          }));
+                                  }));
+
+    Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
+    client->Bind();
+    auto fill = [](Ptr<Socket> socket, uint32_t available) {
+        while (available >= 1000 && socket->Send(Create<Packet>(1000), 0) > 0)
+        {
+            available -= 1000;
+        }
+    };
+    client->SetSendCallback(Callback<void, Ptr<Socket>, uint32_t>(fill));
+    client->SetConnectCallback(Callback<void, Ptr<Socket>>([fill](Ptr<Socket> socket) {
+                                   fill(socket, socket->GetTxAvailable());
+                               }),
+                               MakeNullCallback<void, Ptr<Socket>>());
+    client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
+
+    Simulator::Stop(Seconds(0.5));
+    Simulator::Run();
+    uint64_t farAhead = TcpCountingScheduler::s_farAhead;
+
+    NS_TEST_EXPECT_MSG_GT(received, 500000, "The transfer did not run");
+    client = nullptr;
+    server = nullptr;
+    Simulator::Destroy();
+    Config::Reset();
+    return farAhead;
+}
+
+void
+TcpKeepAliveTimerEventsTestCase::DoRun()
+{
+    uint64_t without = Run(false);
+    uint64_t with = Run(true);
+    // The timer of each end is armed as the connection is established, and
+    // goes on expiring no sooner than two hours later
+    NS_TEST_ASSERT_MSG_LT_OR_EQ(with,
+                                without + 2,
+                                "The keep-alive timer was scheduled anew for the segments");
+}
+
+/**
+ * @ingroup internet-test
+ * @ingroup tests
+ *
+ * @brief Test the shortest keep-alive idle time and interval
+ *
+ * A zero idle time would have the timer, armed again with it while data is
+ * outstanding, expire over and over at the same instant, so that the
+ * simulated time stops; a zero interval would send all the keep-alives, and
+ * the reset after them, at once. Both are refused, and a connection with the
+ * shortest ones runs through outstanding data.
+ */
+class TcpKeepAliveShortestTimesTestCase : public TcpKeepAliveBaseTestCase
+{
+  public:
+    TcpKeepAliveShortestTimesTestCase()
+        : TcpKeepAliveBaseTestCase("The shortest keep-alive idle time and interval")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+TcpKeepAliveShortestTimesTestCase::DoRun()
+{
+    for (const auto& [type, name] :
+         {std::pair<std::string, std::string>{"ns3::TcpSocket", "KeepAliveTime"},
+          {"ns3::TcpSocketBase", "KeepAliveInterval"}})
+    {
+        TypeId::AttributeInformation info;
+        NS_TEST_ASSERT_MSG_EQ(TypeId::LookupByName(type).LookupAttributeByName(name, &info),
+                              true,
+                              "No " << name << " attribute");
+        NS_TEST_ASSERT_MSG_EQ(info.checker->Check(TimeValue(Seconds(0))),
+                              false,
+                              "A zero " << name << " is accepted");
+        NS_TEST_ASSERT_MSG_EQ(info.checker->Check(TimeValue(MilliSeconds(1))),
+                              true,
+                              "A " << name << " of one millisecond is refused");
+    }
+
+    Setup(false, MilliSeconds(1));
+    m_client->SetAttribute("KeepAliveInterval", TimeValue(MilliSeconds(1)));
+    size_t answered = 0;
+    Simulator::Schedule(Seconds(1), [this, &answered]() {
+        answered = m_probes.size();
+        BreakThePath();
+        m_client->Send(Create<Packet>(100), 0);
+    });
+
+    Simulator::Stop(Seconds(3));
+    Simulator::Run();
+
+    NS_TEST_ASSERT_MSG_EQ(Simulator::Now(), Seconds(3), "The simulated time did not run");
+    NS_TEST_ASSERT_MSG_GT(answered, 0, "No keep-alive was sent");
+    NS_TEST_ASSERT_MSG_EQ(m_probes.size(), answered, "A keep-alive was sent with data outstanding");
+    NS_TEST_ASSERT_MSG_LT(Simulator::GetEventCount(),
+                          100000,
+                          "The keep-alive timer expired too often");
+    m_client = nullptr;
+    m_accepted = nullptr;
     Simulator::Destroy();
 }
 
@@ -7669,6 +7983,7 @@ TcpUnsignedWindowSenderTestCase::CompleteHandshake()
     NS_ABORT_MSG_IF(GetReplies().empty(), "The SYN was not answered");
     m_targetIsn = GetReplies().front().GetSequenceNumber();
     m_acked = m_targetIsn + 1;
+    m_highest = m_acked;
     SendSegmentFull(TcpHeader::ACK, 1001, m_acked.GetValue(), 0xFFFF);
     Simulator::Schedule(MilliSeconds(10), &TcpUnsignedWindowSenderTestCase::Acknowledge, this);
 }
@@ -10838,6 +11153,9 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpKeepAliveDelayedAckTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpKeepAliveScenariosTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpKeepAliveResetAnswerTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpKeepAliveReleaseOnAbortTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpKeepAliveTimerEventsTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpKeepAliveShortestTimesTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpSynWindowEdgeTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpReceiverSwsTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpScaledRightEdgeTestCase(), TestCase::Duration::QUICK);

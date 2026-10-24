@@ -12,6 +12,8 @@
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-option-ts.h"
 
+#include <optional>
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("TimestampTestSuite");
@@ -273,6 +275,98 @@ TimestampValueTestCase::Check()
 /**
  * @ingroup internet-test
  *
+ * @brief TCP TimeStamp echo Test.
+ *
+ * With delayed ACKs, an ACK acknowledging several segments echoes the
+ * timestamp of the earliest of them (@RFC{7323}, Section 4.3): the timestamp
+ * to echo is updated only by a segment which starts at or below the last
+ * acknowledgment sent. The sender sends a segment every 2 ms and the
+ * receiver acknowledges every other segment, so the two segments an ACK
+ * covers carry different timestamps.
+ *
+ * Run with clock driven initial sequence numbers, the initial sequence
+ * number of the sender is placed in the upper half of the sequence space, in
+ * which the wrap aware comparisons with a last acknowledgment sent left at 0
+ * would make the receiver echo the latest segment instead.
+ */
+class TimestampEchoTestCase : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param clockDrivenIsn Whether the initial sequence numbers are clock driven.
+     */
+    TimestampEchoTestCase(bool clockDrivenIsn);
+
+  protected:
+    void ConfigureEnvironment() override;
+    void ConfigureProperties() override;
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void FinalChecks() override;
+
+  private:
+    std::optional<uint32_t> m_earliestTs; //!< Timestamp of the earliest segment not acknowledged
+    uint32_t m_checkedAcks{0};            //!< ACKs whose echoed timestamp was checked
+};
+
+TimestampEchoTestCase::TimestampEchoTestCase(bool clockDrivenIsn)
+    : TcpGeneralTest(std::string("Timestamp echoed by delayed ACKs") +
+                     (clockDrivenIsn ? ", clock driven ISN" : ""))
+{
+    if (clockDrivenIsn)
+    {
+        SetClockDrivenIsn(true, UPPER_HALF_ISN_STREAM);
+    }
+}
+
+void
+TimestampEchoTestCase::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetAppPktCount(20);
+    SetAppPktInterval(MilliSeconds(2));
+}
+
+void
+TimestampEchoTestCase::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    SetInitialCwnd(SENDER, 40);
+    SetDelAckMaxCount(RECEIVER, 2);
+}
+
+void
+TimestampEchoTestCase::Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who == RECEIVER && p->GetSize() > 0 && !m_earliestTs)
+    {
+        m_earliestTs = DynamicCast<const TcpOptionTS>(h.GetOption(TcpOption::TS))->GetTimestamp();
+    }
+}
+
+void
+TimestampEchoTestCase::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who == RECEIVER && h.GetFlags() == TcpHeader::ACK && m_earliestTs)
+    {
+        NS_TEST_ASSERT_MSG_EQ(DynamicCast<const TcpOptionTS>(h.GetOption(TcpOption::TS))->GetEcho(),
+                              *m_earliestTs,
+                              "The ACK does not echo the earliest segment it acknowledges");
+        m_earliestTs.reset();
+        ++m_checkedAcks;
+    }
+}
+
+void
+TimestampEchoTestCase::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_GT(m_checkedAcks, 0, "No ACK was checked");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP TimeStamp TestSuite.
  */
 class TcpTimestampTestSuite : public TestSuite
@@ -287,6 +381,8 @@ class TcpTimestampTestSuite : public TestSuite
         AddTestCase(new TimestampTestCase(TimestampTestCase::ENABLED_SENDER),
                     TestCase::Duration::QUICK);
         AddTestCase(new TimestampTestCase(TimestampTestCase::ENABLED), TestCase::Duration::QUICK);
+        AddTestCase(new TimestampEchoTestCase(false), TestCase::Duration::QUICK);
+        AddTestCase(new TimestampEchoTestCase(true), TestCase::Duration::QUICK);
         AddTestCase(new TimestampValueTestCase(0.0, 0.01, "Value Check"),
                     TestCase::Duration::QUICK);
         AddTestCase(new TimestampValueTestCase(3.0, 0.5, "Value Check"), TestCase::Duration::QUICK);

@@ -235,20 +235,21 @@ TcpNoSackDupAckTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho
             return;
         }
 
-        if (h.GetSequenceNumber() <= m_highestSeqTx)
+        SequenceNumber32 seq = ToRelativeSeq(SENDER, h.GetSequenceNumber());
+        if (seq <= m_highestSeqTx)
         {
-            NS_LOG_DEBUG("Retransmission of seq=" << h.GetSequenceNumber());
+            NS_LOG_DEBUG("Retransmission of seq=" << seq);
             ++m_retransmissions;
             if (m_toDrop != 0)
             {
-                NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber(),
+                NS_TEST_ASSERT_MSG_EQ(seq,
                                       SequenceNumber32(m_toDrop),
                                       "Retransmitted a segment that was not dropped");
             }
         }
         else
         {
-            m_highestSeqTx = h.GetSequenceNumber();
+            m_highestSeqTx = seq;
         }
         return;
     }
@@ -266,9 +267,10 @@ TcpNoSackDupAckTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho
     }
 
     bool inject = false;
-    if (h.GetAckNumber() > m_lastAckTx)
+    SequenceNumber32 ack = ToRelativeSeq(SENDER, h.GetAckNumber());
+    if (ack > m_lastAckTx)
     {
-        m_lastAckTx = h.GetAckNumber();
+        m_lastAckTx = ack;
         ++m_advancingAcks;
         // With no drop, duplicate two consecutive ACKs
         inject = (m_toDrop == 0 && (m_advancingAcks == 3 || m_advancingAcks == 4));

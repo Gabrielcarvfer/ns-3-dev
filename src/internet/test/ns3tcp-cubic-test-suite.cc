@@ -31,6 +31,7 @@
 //    bottleneck link capacity and the TCP responds more quickly than in 3.
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/bulk-send-helper.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
@@ -42,15 +43,19 @@
 #include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
+#include "ns3/node-list.h"
 #include "ns3/output-stream-wrapper.h"
 #include "ns3/packet-sink-helper.h"
 #include "ns3/pcap-file.h"
 #include "ns3/point-to-point-helper.h"
 #include "ns3/point-to-point-net-device.h"
 #include "ns3/pointer.h"
+#include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/tcp-header.h"
+#include "ns3/tcp-l4-protocol.h"
+#include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/test.h"
 #include "ns3/trace-helper.h"
@@ -58,6 +63,7 @@
 #include "ns3/uinteger.h"
 
 #include <iomanip>
+#include <optional>
 
 using namespace ns3;
 
@@ -103,13 +109,17 @@ class Ns3TcpCubicTestCase : public TestCase
      * @param tcpFriendliness whether to enable TCP friendliness
      * @param baseRtt base RTT to use for test case
      * @param capacityIncrease whether to trigger a sudden capacity increase
+     * @param clockDrivenIsn whether the initial sequence numbers are clock
+     *        driven, with the one of the sender in the upper half of the
+     *        sequence space
      */
     Ns3TcpCubicTestCase(std::string testCase,
                         std::string prefix,
                         bool fastConvergence,
                         bool tcpFriendliness,
                         Time baseRtt,
-                        bool capacityIncrease);
+                        bool capacityIncrease,
+                        bool clockDrivenIsn = false);
     ~Ns3TcpCubicTestCase() override;
 
   private:
@@ -122,6 +132,17 @@ class Ns3TcpCubicTestCase : public TestCase
      * @param socketId socket ID to connect to
      */
     void ConnectCwndTrace(uint32_t nodeId, uint32_t socketId);
+
+    /**
+     * Record the sequence number of the first data segment sent
+     *
+     * @param packet the packet sent
+     * @param header the TCP header
+     * @param socket the sending socket
+     */
+    void FirstSegmentSent(Ptr<const Packet> packet,
+                          const TcpHeader& header,
+                          Ptr<const TcpSocketBase> socket);
 
     /**
      * Increases the device bandwidth to 100 Mbps
@@ -148,6 +169,8 @@ class Ns3TcpCubicTestCase : public TestCase
     bool m_tcpFriendliness;              //!< whether to enable TCP friendliness
     Time m_baseRtt;                      //!< the base RTT to use
     bool m_capacityIncrease;             //!< whether to trigger a capacity increase
+    bool m_clockDrivenIsn;               //!< whether the initial sequence numbers are clock driven
+    std::optional<SequenceNumber32> m_firstSeq; //!< sequence number of the first data segment
 };
 
 Ns3TcpCubicTestCase::Ns3TcpCubicTestCase(std::string testCase,
@@ -155,13 +178,15 @@ Ns3TcpCubicTestCase::Ns3TcpCubicTestCase(std::string testCase,
                                          bool fastConvergence,
                                          bool tcpFriendliness,
                                          Time baseRtt,
-                                         bool capacityIncrease)
+                                         bool capacityIncrease,
+                                         bool clockDrivenIsn)
     : TestCase(testCase),
       m_prefix(prefix),
       m_fastConvergence(fastConvergence),
       m_tcpFriendliness(tcpFriendliness),
       m_baseRtt(baseRtt),
-      m_capacityIncrease(capacityIncrease)
+      m_capacityIncrease(capacityIncrease),
+      m_clockDrivenIsn(clockDrivenIsn)
 {
 }
 
@@ -182,6 +207,21 @@ Ns3TcpCubicTestCase::ConnectCwndTrace(uint32_t nodeId, uint32_t socketId)
         "/NodeList/" + std::to_string(nodeId) + "/$ns3::TcpL4Protocol/SocketList/" +
             std::to_string(socketId) + "/CongestionWindow",
         MakeBoundCallback(&CubicCwndTracer, &m_cwndTimeSeries, &m_timeSeries));
+    Config::ConnectWithoutContext("/NodeList/" + std::to_string(nodeId) +
+                                      "/$ns3::TcpL4Protocol/SocketList/" +
+                                      std::to_string(socketId) + "/Tx",
+                                  MakeCallback(&Ns3TcpCubicTestCase::FirstSegmentSent, this));
+}
+
+void
+Ns3TcpCubicTestCase::FirstSegmentSent(Ptr<const Packet> packet,
+                                      const TcpHeader& header,
+                                      Ptr<const TcpSocketBase> socket)
+{
+    if (packet->GetSize() > 0 && !m_firstSeq)
+    {
+        m_firstSeq = header.GetSequenceNumber();
+    }
 }
 
 bool
@@ -261,6 +301,25 @@ Ns3TcpCubicTestCase::DoRun()
     internet.Install(sender);
     internet.Install(receiver);
     internet.Install(routers);
+
+    if (m_clockDrivenIsn)
+    {
+        // The secret of the sender is drawn from a stream of its own, in the
+        // first run, which places its initial sequence number in the upper
+        // half of the sequence space: there, the wrap aware comparisons with
+        // a mark left at 0 (e.g., the end of the HyStart round) never hold
+        uint32_t seed = RngSeedManager::GetSeed();
+        uint64_t run = RngSeedManager::GetRun();
+        RngSeedManager::SetSeed(1);
+        RngSeedManager::SetRun(1);
+        for (auto it = NodeList::Begin(); it != NodeList::End(); ++it)
+        {
+            (*it)->GetObject<TcpL4Protocol>()->SetAttribute("ClockDrivenIsn", BooleanValue(true));
+        }
+        sender.Get(0)->GetObject<TcpL4Protocol>()->AssignStreams(0);
+        RngSeedManager::SetSeed(seed);
+        RngSeedManager::SetRun(run);
+    }
 
     // Configure the root queue discipline
     TrafficControlHelper tch;
@@ -346,6 +405,15 @@ Ns3TcpCubicTestCase::DoRun()
         gnuplot.GenerateOutput(outfile);
     }
 
+    if (m_clockDrivenIsn)
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_firstSeq.has_value(), true, "No data segment was sent");
+        NS_TEST_ASSERT_MSG_GT_OR_EQ((*m_firstSeq - 1).GetValue(),
+                                    1U << 31,
+                                    "The initial sequence number of the sender is not in the "
+                                    "upper half of the sequence space: pick another stream");
+    }
+
     // Check that cwnd values are within tolerance of expected values
     // The expected values were determined by inspecting the plots generated
     if (m_prefix == "ns3-tcp-cubic-no-heuristic")
@@ -415,6 +483,17 @@ Ns3TcpCubicTestSuite::Ns3TcpCubicTestSuite()
                                         false,
                                         MilliSeconds(5),
                                         false),
+                TestCase::Duration::QUICK);
+
+    // The same with clock driven initial sequence numbers: HyStart leaves
+    // slow start as it does with an initial sequence number of 0
+    AddTestCase(new Ns3TcpCubicTestCase("no heuristic, clock driven ISN",
+                                        "ns3-tcp-cubic-no-heuristic",
+                                        false,
+                                        false,
+                                        MilliSeconds(5),
+                                        false,
+                                        true),
                 TestCase::Duration::QUICK);
 
     // Test Cubic with fast convergence but no TCP friendliness enabled

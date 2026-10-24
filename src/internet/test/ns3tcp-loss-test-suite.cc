@@ -188,7 +188,6 @@ Ns3TcpLossTestCase::DoSetup()
     // the data directory
     //
     std::ostringstream oss;
-    Config::SetDefault("ns3::TcpL4Protocol::ClockDrivenIsn", BooleanValue(m_clockDrivenIsn));
 
     oss << "ns3tcp-loss-" << m_tcpModel << m_testCase << (m_clockDrivenIsn ? "-isn" : "")
         << "-response-vectors.pcap";
@@ -394,6 +393,17 @@ Ns3TcpLossTestCase::DoRun()
     // Set up TCP/IP stack to all nodes (and create loopback device at device 0)
     InternetStackHelper internet;
     internet.InstallAll();
+
+    // Set on the protocols rather than through the attribute default, which
+    // NS_ATTRIBUTE_DEFAULT would override: the response vectors hold the
+    // sequence numbers, so the case runs with the initial sequence numbers
+    // it was recorded with, whatever the defaults
+    for (uint32_t i = 0; i < NodeList::GetNNodes(); ++i)
+    {
+        NodeList::GetNode(i)->GetObject<TcpL4Protocol>()->SetAttribute(
+            "ClockDrivenIsn",
+            BooleanValue(m_clockDrivenIsn));
+    }
 
     if (m_clockDrivenIsn)
     {

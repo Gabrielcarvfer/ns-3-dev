@@ -263,14 +263,29 @@ like a router, and returns an ICMP Time Exceeded when it runs out.
 
 At the final destination, the addresses the option recorded, reversed and
 followed by the sender, are the way back, which the IP layer attaches to the
-datagram as an ``Ipv4SourceRouteTag``. TCP sends the segments of a passively
+datagram as an ``Ipv4ReturnRouteTag``. TCP sends the segments of a passively
 opened connection along it, as well as the RSTs answering segments which
 reach no connection, unless the application set a route of its own (:rfc:`9293`,
-Section 3.9.2.1); a later acceptable segment recording a different route
-updates it. The ICMP Echo Reply follows it too (:rfc:`1122`, Section
-3.2.2.6). The UDP and raw sockets remove it from the datagrams they deliver:
-the application which answers a datagram is the one to reverse its route,
-which the raw sockets find in the header (:rfc:`1122`, Section 4.1.3.2).
+Section 3.9.2.1); a later segment the connection accepts which recorded a
+different route updates it. The ICMP Echo Reply follows it too (:rfc:`1122`,
+Section 3.2.2.6). The UDP and raw sockets leave the tag on the datagrams they
+deliver, so that the application learns the route a datagram followed
+(:rfc:`1122`, Section 4.1.3.2), and decides whether to answer along it, by
+attaching its route to the answer as an ``Ipv4SourceRouteTag``:
+
+.. sourcecode:: cpp
+
+  Ipv4ReturnRouteTag wayBack;
+  if (received->PeekPacketTag(wayBack))
+  {
+      Ipv4SourceRouteTag route;
+      route.SetRoute(wayBack.GetRoute());
+      answer->AddPacketTag(route);
+  }
+
+The IP layer only sends a datagram along an ``Ipv4SourceRouteTag``, never along
+an ``Ipv4ReturnRouteTag``, so that a datagram which an application sends on as
+received, to another destination, does not follow the way back to its sender.
 
 Ipv4QueueDiscItem
 *****************

@@ -170,14 +170,15 @@ TcpBytesInFlightTest::Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
     }
     else if (who == SENDER)
     {
-        if (h.GetAckNumber() > m_lastAckRecv)
+        SequenceNumber32 ack = ToRelativeSeq(SENDER, h.GetAckNumber());
+        if (ack > m_lastAckRecv)
         { // New ack
-            uint32_t diff = h.GetAckNumber() - m_lastAckRecv;
-            NS_LOG_DEBUG("Recv ACK=" << h.GetAckNumber());
+            uint32_t diff = ack - m_lastAckRecv;
+            NS_LOG_DEBUG("Recv ACK=" << ack);
 
             if (m_dupAckRecv > 0)
             { // Previously we got some ACKs
-                if (h.GetAckNumber() >= m_greatestSeqSent)
+                if (ack >= m_greatestSeqSent)
                 {                               // This an ACK which acknowledge all the window
                     m_guessedBytesInFlight = 0; // All outstanding data acked
                     diff = 0;
@@ -198,10 +199,10 @@ TcpBytesInFlightTest::Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
                 diff -= 1;
             }
             m_guessedBytesInFlight -= diff;
-            m_lastAckRecv = h.GetAckNumber();
+            m_lastAckRecv = ack;
             NS_LOG_DEBUG("Update m_guessedBytesInFlight to " << m_guessedBytesInFlight);
         }
-        else if (h.GetAckNumber() == m_lastAckRecv && m_lastAckRecv != SequenceNumber32(1) &&
+        else if (ack == m_lastAckRecv && m_lastAckRecv != SequenceNumber32(1) &&
                  (h.GetFlags() & TcpHeader::FIN) == 0)
         {
             // For each dupack I should guess that a segment has been received
@@ -225,16 +226,17 @@ TcpBytesInFlightTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
 {
     if (who == SENDER)
     {
+        SequenceNumber32 seq = ToRelativeSeq(SENDER, h.GetSequenceNumber());
         static SequenceNumber32 retr(0);
         static uint32_t times = 0;
 
-        if (m_greatestSeqSent <= h.GetSequenceNumber())
+        if (m_greatestSeqSent <= seq)
         { // This is not a retransmission
-            m_greatestSeqSent = h.GetSequenceNumber();
+            m_greatestSeqSent = seq;
             times = 0;
         }
 
-        if (retr == h.GetSequenceNumber())
+        if (retr == seq)
         {
             ++times;
         }
@@ -244,9 +246,9 @@ TcpBytesInFlightTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
             // count retransmission only one time
             m_guessedBytesInFlight += p->GetSize();
         }
-        retr = h.GetSequenceNumber();
+        retr = seq;
 
-        NS_LOG_DEBUG("TX size=" << p->GetSize() << " seq=" << h.GetSequenceNumber()
+        NS_LOG_DEBUG("TX size=" << p->GetSize() << " seq=" << seq
                                 << " m_guessedBytesInFlight=" << m_guessedBytesInFlight);
     }
 }
@@ -296,6 +298,18 @@ class TcpBytesInFlightTestSuite : public TestSuite
             new TcpBytesInFlightTest("BytesInFlight value, two drop of consecutive segments",
                                      toDrop),
             TestCase::Duration::QUICK);
+
+        // With the initial sequence numbers driven by the clock
+        auto consecutive = new TcpBytesInFlightTest(
+            "BytesInFlight value, two drop of consecutive segments, clock driven ISN",
+            toDrop);
+        consecutive->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+        AddTestCase(consecutive, TestCase::Duration::QUICK);
+        toDrop.clear();
+        auto noDrop =
+            new TcpBytesInFlightTest("BytesInFlight value, no drop, clock driven ISN", toDrop);
+        noDrop->SetClockDrivenIsn(true, TcpGeneralTest::UPPER_HALF_ISN_STREAM);
+        AddTestCase(noDrop, TestCase::Duration::QUICK);
     }
 };
 

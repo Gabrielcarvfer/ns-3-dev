@@ -12,6 +12,7 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("Ipv4SourceRouteTag");
 
 NS_OBJECT_ENSURE_REGISTERED(Ipv4SourceRouteTag);
+NS_OBJECT_ENSURE_REGISTERED(Ipv4ReturnRouteTag);
 
 TypeId
 Ipv4SourceRouteTag::GetTypeId()
@@ -88,6 +89,22 @@ std::vector<Ipv4Address>
 Ipv4SourceRouteTag::GetRoute() const
 {
     return m_route;
+}
+
+TypeId
+Ipv4ReturnRouteTag::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::Ipv4ReturnRouteTag")
+                            .SetParent<Ipv4SourceRouteTag>()
+                            .SetGroupName("Internet")
+                            .AddConstructor<Ipv4ReturnRouteTag>();
+    return tid;
+}
+
+TypeId
+Ipv4ReturnRouteTag::GetInstanceTypeId() const
+{
+    return GetTypeId();
 }
 
 } // namespace ns3

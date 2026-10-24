@@ -146,7 +146,7 @@ TcpPktsAckedOpenTest::Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
 {
     if (who == SENDER && (!(h.GetFlags() & TcpHeader::SYN)))
     {
-        m_segmentsReceived = h.GetAckNumber().GetValue();
+        m_segmentsReceived = ToRelativeSeq(SENDER, h.GetAckNumber()).GetValue();
     }
 }
 

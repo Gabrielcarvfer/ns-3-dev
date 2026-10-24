@@ -178,7 +178,6 @@ Ns3TcpStateTestCase::DoSetup()
     // We expect there to be a file called ns3tcp-state-response-vectors.pcap in
     // the data directory
     //
-    Config::SetDefault("ns3::TcpL4Protocol::ClockDrivenIsn", BooleanValue(m_clockDrivenIsn));
 
     std::ostringstream oss;
     oss << "ns3tcp-state" << m_testCase << (m_clockDrivenIsn ? "-isn" : "")
@@ -381,6 +380,17 @@ Ns3TcpStateTestCase::DoRun()
     // Set up TCP/IP stack to all nodes (and create loopback device at device 0)
     InternetStackHelper internet;
     internet.InstallAll();
+
+    // Set on the protocols rather than through the attribute default, which
+    // NS_ATTRIBUTE_DEFAULT would override: the response vectors hold the
+    // sequence numbers, so the case runs with the initial sequence numbers
+    // it was recorded with, whatever the defaults
+    for (uint32_t i = 0; i < NodeList::GetNNodes(); ++i)
+    {
+        NodeList::GetNode(i)->GetObject<TcpL4Protocol>()->SetAttribute(
+            "ClockDrivenIsn",
+            BooleanValue(m_clockDrivenIsn));
+    }
 
     if (m_clockDrivenIsn)
     {

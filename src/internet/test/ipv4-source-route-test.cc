@@ -804,9 +804,9 @@ class Ipv4SourceRouteHopLimitTest : public Ipv4OptionsTestBase
  *
  * @brief Test that a relayed datagram does not take the way back along
  *
- * The UDP and raw sockets deliver a source routed datagram without the way
- * back to its sender: an application which sends it on to a third party
- * sends it along no route.
+ * The UDP and raw sockets deliver a source routed datagram with the way back
+ * to its sender, which the IP layer does not send a datagram along: an
+ * application which sends it on to a third party sends it along no route.
  */
 class Ipv4SourceRouteUdpRelayTest : public Ipv4OptionsTestBase
 {
@@ -863,6 +863,21 @@ class Ipv4SourceRouteUdpRelayTest : public Ipv4OptionsTestBase
         raw->Bind();
         raw->SetRecvCallback(MakeCallback(&Ipv4SourceRouteUdpRelayTest::RelayRaw, this));
 
+        // The third party sees no way back: the datagram reached it directly
+        Ptr<Socket> third = Socket::CreateSocket(m_nodes.Get(2), UdpSocketFactory::GetTypeId());
+        third->Bind(InetSocketAddress(Ipv4Address::GetAny(), 10));
+        uint32_t relayed = 0;
+        uint32_t withWayBack = 0;
+        third->SetRecvCallback(
+            Callback<void, Ptr<Socket>>([&relayed, &withWayBack](Ptr<Socket> socket) {
+                while (Ptr<Packet> packet = socket->Recv())
+                {
+                    Ipv4ReturnRouteTag wayBack;
+                    ++relayed;
+                    withWayBack += packet->PeekPacketTag(wayBack) ? 1 : 0;
+                }
+            }));
+
         Ptr<Socket> sender = Socket::CreateSocket(m_nodes.Get(0), UdpSocketFactory::GetTypeId());
         sender->Bind();
         Ptr<Packet> packet = Create<Packet>(PAYLOAD);
@@ -872,6 +887,8 @@ class Ipv4SourceRouteUdpRelayTest : public Ipv4OptionsTestBase
         sender->SendTo(packet, 0, InetSocketAddress(Addr(2, 1), 9));
         RunSimulation();
 
+        NS_TEST_ASSERT_MSG_EQ(relayed, 1, "The relayed datagram did not arrive");
+        NS_TEST_ASSERT_MSG_EQ(withWayBack, 0, "The relayed datagram kept a stale way back");
         NS_TEST_ASSERT_MSG_EQ(m_observed[1].forwarded.size(), 1, "The route was not followed");
         NS_TEST_ASSERT_MSG_EQ(m_observed[3].sent.size(), 2, "The datagram was not relayed");
         for (const auto& header : m_observed[3].sent)
@@ -887,6 +904,117 @@ class Ipv4SourceRouteUdpRelayTest : public Ipv4OptionsTestBase
     }
 
     Ptr<Socket> m_relay; //!< The socket sending the datagrams on
+};
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Test that an application sees the way back of a received datagram
+ *
+ * The UDP and raw sockets hand the way back of a source routed datagram to
+ * the application (@RFC{1122}, Section 4.1.3.2), which may answer along it by
+ * attaching it to the answer as the route to follow.
+ */
+class Ipv4SourceRouteUdpReturnRouteTest : public Ipv4OptionsTestBase
+{
+  public:
+    /**
+     * Constructor.
+     * @param checksum Whether the checksums are enabled.
+     */
+    Ipv4SourceRouteUdpReturnRouteTest(bool checksum)
+        : Ipv4OptionsTestBase("An application sees the way back of a datagram", checksum)
+    {
+    }
+
+  private:
+    /**
+     * Answer the datagrams received by the UDP socket along their way back.
+     * @param socket The UDP socket.
+     */
+    void Answer(Ptr<Socket> socket)
+    {
+        Address from;
+        while (Ptr<Packet> packet = socket->RecvFrom(from))
+        {
+            Ipv4ReturnRouteTag wayBack;
+            if (!packet->PeekPacketTag(wayBack))
+            {
+                continue;
+            }
+            m_udpWayBack = wayBack.GetRoute();
+            Ptr<Packet> answer = Create<Packet>(PAYLOAD);
+            Ipv4SourceRouteTag route;
+            route.SetRoute(wayBack.GetRoute());
+            answer->AddPacketTag(route);
+            socket->SendTo(answer, 0, from);
+        }
+    }
+
+    void DoRun() override
+    {
+        BuildLine();
+        m_nodes.Get(1)->GetObject<Ipv4L3Protocol>()->SetAttribute("SourceRouteForwarding",
+                                                                  BooleanValue(true));
+
+        Ptr<Socket> receiver = Socket::CreateSocket(m_nodes.Get(3), UdpSocketFactory::GetTypeId());
+        receiver->Bind(InetSocketAddress(Ipv4Address::GetAny(), 9));
+        receiver->SetRecvCallback(MakeCallback(&Ipv4SourceRouteUdpReturnRouteTest::Answer, this));
+        Ptr<Socket> raw = Socket::CreateSocket(m_nodes.Get(3), Ipv4RawSocketFactory::GetTypeId());
+        raw->SetAttribute("Protocol", UintegerValue(iana::internetprotocolnumbers::UDP));
+        raw->Bind();
+        std::vector<Ipv4Address> rawWayBack;
+        raw->SetRecvCallback(Callback<void, Ptr<Socket>>([&rawWayBack](Ptr<Socket> socket) {
+            while (Ptr<Packet> packet = socket->Recv())
+            {
+                Ipv4ReturnRouteTag wayBack;
+                if (packet->PeekPacketTag(wayBack))
+                {
+                    rawWayBack = wayBack.GetRoute();
+                }
+            }
+        }));
+
+        Ptr<Socket> sender = Socket::CreateSocket(m_nodes.Get(0), UdpSocketFactory::GetTypeId());
+        sender->Bind();
+        uint32_t answers = 0;
+        sender->SetRecvCallback(Callback<void, Ptr<Socket>>([&answers](Ptr<Socket> socket) {
+            while (socket->Recv())
+            {
+                ++answers;
+            }
+        }));
+        Ptr<Packet> packet = Create<Packet>(PAYLOAD);
+        Ipv4SourceRouteTag route;
+        route.SetRoute({Addr(0, 1)});
+        packet->AddPacketTag(route);
+        sender->SendTo(packet, 0, InetSocketAddress(Addr(2, 1), 9));
+        RunSimulation();
+
+        std::vector<Ipv4Address> wayBack = {Addr(1, 0), Addr(0, 0)};
+        NS_TEST_ASSERT_MSG_EQ((m_udpWayBack == wayBack),
+                              true,
+                              "The UDP socket did not hand the way back over");
+        NS_TEST_ASSERT_MSG_EQ((rawWayBack == wayBack),
+                              true,
+                              "The raw socket did not hand the way back over");
+        NS_TEST_ASSERT_MSG_EQ(answers, 1, "The answer did not come back");
+        NS_TEST_ASSERT_MSG_EQ(m_observed[1].forwarded.size(),
+                              2,
+                              "The datagram and its answer did not both go through the hop");
+        NS_TEST_ASSERT_MSG_EQ(m_observed[3].sent.size(), 1, "The datagram was not answered");
+        for (const auto& header : m_observed[3].sent)
+        {
+            NS_TEST_ASSERT_MSG_EQ(header.HasLooseSourceRoute(),
+                                  true,
+                                  "The answer did not follow the way back");
+            NS_TEST_ASSERT_MSG_EQ(header.GetDestination(),
+                                  Addr(1, 0),
+                                  "The answer did not go through the hop the datagram did");
+        }
+    }
+
+    std::vector<Ipv4Address> m_udpWayBack; //!< The way back the UDP socket handed over
 };
 
 /**
@@ -1543,6 +1671,7 @@ class Ipv4SourceRouteTestSuite : public TestSuite
             AddTestCase(new Ipv4SourceRouteRelayLimitsTest(checksum), TestCase::Duration::QUICK);
             AddTestCase(new Ipv4SourceRouteHopLimitTest(checksum), TestCase::Duration::QUICK);
             AddTestCase(new Ipv4SourceRouteUdpRelayTest(checksum), TestCase::Duration::QUICK);
+            AddTestCase(new Ipv4SourceRouteUdpReturnRouteTest(checksum), TestCase::Duration::QUICK);
             AddTestCase(new Ipv4SourceRouteEchoTest(checksum), TestCase::Duration::QUICK);
             AddTestCase(new Ipv4SourceRouteRstTest(checksum), TestCase::Duration::QUICK);
             AddTestCase(new Ipv4SourceRouteIpv6SocketTest(checksum), TestCase::Duration::QUICK);

@@ -544,10 +544,12 @@ TcpL4Protocol::NoEndPointsFound(const TcpHeader& incomingHeader,
         Ptr<Packet> rstPacket = Create<Packet>();
         // The RST follows the way back of a source routed segment (RFC 9293,
         // Section 3.9.2.1, MUST-53)
-        Ipv4SourceRouteTag returnRoute;
+        Ipv4ReturnRouteTag returnRoute;
         if (incomingPacket && incomingPacket->PeekPacketTag(returnRoute))
         {
-            rstPacket->AddPacketTag(returnRoute);
+            Ipv4SourceRouteTag route;
+            route.SetRoute(returnRoute.GetRoute());
+            rstPacket->AddPacketTag(route);
         }
         TcpHeader outgoingTcpHeader;
 
