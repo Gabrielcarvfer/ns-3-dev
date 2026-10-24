@@ -1,4 +1,6 @@
-include $(CURDIR)/../sphinx/defines.mk
+# Relative to the Makefile directory (make runs there): $(CURDIR) would be
+# split at spaces in the checkout path.
+include ../sphinx/defines.mk
 
 SRC = ../../src
 # Temporary source directory, for build

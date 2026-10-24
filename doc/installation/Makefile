@@ -1,6 +1,8 @@
 # Makefile for Sphinx documentation
 #
-include $(CURDIR)/../sphinx/defines.mk
+# Relative to the Makefile directory (make runs there): $(CURDIR) would be
+# split at spaces in the checkout path.
+include ../sphinx/defines.mk
 
 # Internal variables.
 ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) source
