@@ -88,6 +88,12 @@ class LteNetDevice : public NetDevice
   protected:
     NetDevice::ReceiveCallback m_rxCallback; ///< receive callback
 
+    /// Trace fired when the device is given a packet to send.
+    TracedCallback<Ptr<const Packet>> m_txTrace;
+
+    /// Trace fired when the device passes a received packet up the stack.
+    TracedCallback<Ptr<const Packet>> m_rxTrace;
+
   private:
     Ptr<Node> m_node; ///< the node
 
