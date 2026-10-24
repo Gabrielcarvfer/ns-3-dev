@@ -630,7 +630,6 @@ class TcpTxBuffer : public Object
 
     uint32_t m_dupAckThresh{0}; //!< Duplicate Ack threshold from TcpSocketBase
     uint32_t m_segmentSize{0};  //!< Segment size from TcpSocketBase
-    bool m_renoSack{false};     //!< Indicates if AddRenoSack was called
     bool m_sackEnabled{true};   //!< Indicates if SACK is enabled on this connection
     bool m_sackSeen{false};     //!< Indicates if a SACK was received
 

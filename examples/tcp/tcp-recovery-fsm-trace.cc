@@ -21,8 +21,12 @@
  * The scenarios of the ns3-tcp-recovery-fsm test suite correspond to:
  *   --sack=1 --drops=20001:22001                                  (@RFC{6675})
  *   --sack=0 --drops=5001:6001:7001:8001:9001
- *            --ns3::TcpSocketBase::MinRto=400ms       (@RFC{6582} + @RFC{6675})
+ *            --ns3::TcpSocketBase::MinRto=300ms       (@RFC{6582} + @RFC{6298})
  *   --sack=1 --drops=5001:5001               (lost retransmission detection)
+ *   --sack=0 --drops=5001:5001          (lost retransmission, without SACK)
+ *   --sack=1 --drops=39501                                       (tail loss)
+ *   --sack=1 --drops=5001:16001         (loss of a segment sent in recovery)
+ * The reordering case of the test suite has no equivalent here.
  */
 
 #include "ns3/applications-module.h"

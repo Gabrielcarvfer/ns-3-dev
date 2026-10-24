@@ -512,7 +512,7 @@ def verify_main(argv):
         ok &= check(
             all(b != "LOSS" for _a, b in seq),
             "no retransmission timeout: CA_LOSS never entered "
-            "(RFC 6582 Section 3.2 / RFC 6675 Section 6 timer restart)",
+            "(RFC 6298 Section 5.3 timer restart on every partial ACK)",
         )
         ok &= check(
             seq[-1][1] == "OPEN" if seq else False, "recovery left to CA_OPEN on the full ACK"

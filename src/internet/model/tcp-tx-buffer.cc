@@ -1093,7 +1093,11 @@ TcpTxBuffer::NextSeg(SequenceNumber32* seq, SequenceNumber32* seqHigh, bool isRe
      *     HighRxt MUST NOT be updated.
      *
      * This point require too much interaction between us and TcpSocketBase.
-     * We choose to not respect the SHOULD (allowed from RFC MUST/SHOULD definition)
+     * We choose to not respect the SHOULD (allowed from RFC MUST/SHOULD definition).
+     * Rules (1) and (3) are relaxed when the scoreboard holds no SACK block
+     * (criterion (1.b) is not applied): once a partial ACK leaves only
+     * unSACKed data outstanding, rule (3) returns it, standing in for the
+     * rescue retransmission of rule (4) in that case.
      */
     NS_LOG_INFO("Can't return anything");
     return false;
@@ -1426,8 +1430,6 @@ TcpTxBuffer::AddRenoSack()
         NS_LOG_INFO("No segment available to add a Reno SACK");
         return;
     }
-
-    m_renoSack = true;
 
     // We can _never_ SACK the head, so start from the second segment sent
     auto it = ++m_sentList.begin();

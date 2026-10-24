@@ -387,7 +387,7 @@ TcpTxBufferTestCase::TestRenoSackSingleSegment()
     txBuf->SetRWndCallback(MakeCallback(&TcpTxBufferTestCase::GetRWnd, this));
     txBuf->SetHeadSequence(SequenceNumber32(1));
     txBuf->SetSegmentSize(segmentSize);
-    txBuf->SetSackEnabled(true);
+    txBuf->SetSackEnabled(false);
     txBuf->SetDupAckThresh(3);
 
     txBuf->Add(Create<Packet>(segmentSize));

@@ -1862,6 +1862,30 @@ While in the recovery phase, the congestion window is inflated by segmentSize
 on arrival of every ACK when NewReno is used. The congestion window is kept
 same when SACK based loss recovery is used.
 
+Without SACK, ns-3 implements the Slow-but-Steady variant of NewReno
+(RFC 3782, Section 4): the retransmission timer is restarted on every partial
+ACK received during fast recovery, and after a timeout, as RFC 6298,
+Section 5.3 prescribes for every ACK acknowledging new data (also permitted
+by RFC 6675, Section 6). RFC 6582, Section 3.2, step 3, describes the
+Impatient variant instead, which restarts the timer only upon the first
+partial ACK of a fast recovery; RFC 6582 dropped the discussion of the two
+variants (see its Appendix B). With the Slow-but-Steady variant, a recovery
+repairing one lost segment per round trip time is not cut short by a
+timeout, at the cost of a slower recovery when many segments of a window are
+lost. The fast retransmit which starts the recovery does not re-arm the
+timer: following RFC 6298, Section 5.1, a timer already running for the
+outstanding data is left untouched by the transmission of a segment.
+
+With SACK, a retransmission which is lost again is detected, as in Linux,
+when a segment transmitted after the retransmission is SACKed: the
+retransmission is then marked as lost and resent during the same recovery,
+instead of waiting for the retransmission timer. This detection has no
+reordering window: a retransmission merely delayed in the network behind a
+segment sent after it is resent spuriously. RACK (RFC 8985) also uses a zero
+reordering window during loss recovery as long as no reordering has been
+observed, but it widens the window once reordering is detected (e.g., via
+DSACK); ns-3 neither detects reordering nor adapts the window.
+
 Duplicate acknowledgments follow the definition of RFC 5681, Section 2:
 without SACK, an acknowledgment which carries data or changes the advertised
 window (a window update) is not a duplicate acknowledgment. With SACK, an

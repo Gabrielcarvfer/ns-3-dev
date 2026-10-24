@@ -19,6 +19,7 @@
 #include "ns3/packet-sink-helper.h"
 #include "ns3/packet-sink.h"
 #include "ns3/point-to-point-helper.h"
+#include "ns3/point-to-point-net-device.h"
 #include "ns3/pointer.h"
 #include "ns3/ppp-header.h"
 #include "ns3/simulator.h"
@@ -70,6 +71,20 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
         m_seqsToDrop.insert(seq);
     }
 
+    /**
+     * Delay the first transmission of a data segment until the given number
+     * of later data segments have been received, reordering it behind them.
+     * @param seq The sequence number.
+     * @param segments The number of later segments delivered before it.
+     * @param device The device on which the delayed segment is delivered.
+     */
+    void AddSeqToHold(uint32_t seq, uint32_t segments, Ptr<PointToPointNetDevice> device)
+    {
+        m_seqToHold = seq;
+        m_holdSegments = segments;
+        m_device = device;
+    }
+
   private:
     bool DoCorrupt(Ptr<Packet> p) override
     {
@@ -88,10 +103,26 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
         {
             return false;
         }
-        auto it = m_seqsToDrop.find(tcp.GetSequenceNumber().GetValue());
+        uint32_t seq = tcp.GetSequenceNumber().GetValue();
+        auto it = m_seqsToDrop.find(seq);
         if (it != m_seqsToDrop.end())
         {
             m_seqsToDrop.erase(it);
+            return true;
+        }
+        if (m_held)
+        {
+            if (--m_holdSegments == 0)
+            {
+                // Delivered right after the segment being received
+                Simulator::ScheduleNow(&PointToPointNetDevice::Receive, m_device, m_held);
+                m_held = nullptr;
+            }
+        }
+        else if (m_seqToHold != 0 && seq == m_seqToHold)
+        {
+            m_seqToHold = 0;
+            m_held = p->Copy();
             return true;
         }
         return false;
@@ -102,6 +133,10 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
     }
 
     std::multiset<uint32_t> m_seqsToDrop; //!< Sequence numbers to drop.
+    uint32_t m_seqToHold{0};              //!< Sequence number to delay (0 for none).
+    uint32_t m_holdSegments{0};           //!< Later segments to deliver before the held one.
+    Ptr<Packet> m_held;                   //!< The delayed segment, while held.
+    Ptr<PointToPointNetDevice> m_device;  //!< Device on which the held segment is delivered.
 };
 
 /**
@@ -111,23 +146,40 @@ class TcpSeqMultiDropErrorModel : public ErrorModel
  *
  * The test transfers data over a point-to-point link, drops the configured
  * data segments (dropping a sequence number twice drops the original
- * transmission and the retransmission) and records the congestion state
- * machine transitions and the retransmitted segments. It then compares them
- * with the expected ones:
+ * transmission and the retransmission), optionally delays one segment behind
+ * later ones, and records the congestion state machine transitions and the
+ * retransmitted segments. It then compares them with the expected ones. In
+ * every case, a new recovery is never entered before the cumulative ACK
+ * reaches the recovery point of the previous recovery or timeout
+ * (@RFC{6582}, Section 3.2, step 4, and @RFC{6675}, Section 5.1).
  *
- * - Two separated losses with SACK (@RFC{6675}): CA_OPEN -> CA_DISORDER on the
- *   first duplicate ACK, CA_DISORDER -> CA_RECOVERY on the third, each lost
- *   segment retransmitted exactly once (no NewReno-style forced
- *   retransmission on partial ACKs) and CA_RECOVERY -> CA_OPEN on the full
- *   ACK, without retransmission timeouts.
+ * The cases, by default going through CA_OPEN -> CA_DISORDER (first
+ * duplicate ACK), CA_DISORDER -> CA_RECOVERY (loss inferred) and
+ * CA_RECOVERY -> CA_OPEN (full ACK), without retransmission timeouts:
+ *
+ * - Two separated losses with SACK (@RFC{6675}): each lost segment is
+ *   retransmitted exactly once (no NewReno-style forced retransmission on
+ *   partial ACKs).
  * - Five alternating losses without SACK (@RFC{6582}): one retransmission per
  *   partial ACK per RTT, with the recovery lasting longer than the minimum
  *   RTO, so the recovery completes without timeouts only if the
- *   retransmission timer is reset on every partial ACK (@RFC{6675},
- *   Section 6).
+ *   retransmission timer is reset on every partial ACK (@RFC{6298},
+ *   Section 5.3).
  * - A lost retransmission with SACK: the retransmission is deemed lost when
  *   a segment sent after it is SACKed, and it is retransmitted again during
- *   the same recovery, without retransmission timeouts.
+ *   the same recovery.
+ * - A lost retransmission without SACK: nothing reveals the loss of the
+ *   retransmission, which is recovered by the retransmission timer
+ *   (CA_RECOVERY -> CA_LOSS -> CA_OPEN).
+ * - A tail loss: the last segment is lost, no duplicate ACK follows, and the
+ *   retransmission timer recovers it (CA_OPEN -> CA_LOSS -> CA_OPEN).
+ * - The loss of the first new segment sent during the recovery of another
+ *   loss: it belongs to the next window of data, and it is repaired by a
+ *   second recovery, started once the first one has ended.
+ * - A segment reordered behind two later segments, without loss: the two
+ *   duplicate ACKs move the sender to CA_DISORDER, but no loss is inferred
+ *   (CA_DISORDER -> CA_OPEN on the cumulative ACK), and nothing is
+ *   retransmitted.
  */
 class Ns3TcpRecoveryFsmTestCase : public TestCase
 {
@@ -139,18 +191,40 @@ class Ns3TcpRecoveryFsmTestCase : public TestCase
      * @param drops Data sequence numbers to drop (repeats allowed).
      * @param expectedRetx Expected retransmissions (sequence number -> count).
      * @param minRto Minimum retransmission timeout.
+     * @param expectedTransitions Expected congestion state transitions, as
+     *        "OLD->NEW" strings (empty for the single fast recovery episode
+     *        CA_OPEN -> CA_DISORDER -> CA_RECOVERY -> CA_OPEN).
      */
     Ns3TcpRecoveryFsmTestCase(const std::string& name,
                               bool sack,
                               const std::vector<uint32_t>& drops,
                               const std::map<uint32_t, uint32_t>& expectedRetx,
-                              Time minRto)
+                              Time minRto,
+                              const std::vector<std::string>& expectedTransitions = {})
         : TestCase(name),
           m_sack(sack),
           m_drops(drops),
           m_expectedRetx(expectedRetx),
-          m_minRto(minRto)
+          m_minRto(minRto),
+          m_expectedTransitions(expectedTransitions)
     {
+        if (m_expectedTransitions.empty())
+        {
+            m_expectedTransitions = {"CA_OPEN->CA_DISORDER",
+                                     "CA_DISORDER->CA_RECOVERY",
+                                     "CA_RECOVERY->CA_OPEN"};
+        }
+    }
+
+    /**
+     * Delay the first transmission of a data segment behind later segments.
+     * @param seq The sequence number of the delayed segment.
+     * @param segments The number of later segments delivered before it.
+     */
+    void SetHold(uint32_t seq, uint32_t segments)
+    {
+        m_holdSeq = seq;
+        m_holdSegments = segments;
     }
 
   private:
@@ -168,6 +242,18 @@ class Ns3TcpRecoveryFsmTestCase : public TestCase
         oss << TcpSocketState::TcpCongStateName[oldValue] << "->"
             << TcpSocketState::TcpCongStateName[newValue];
         m_transitions.push_back(oss.str());
+
+        if (newValue == TcpSocketState::CA_RECOVERY)
+        {
+            NS_TEST_EXPECT_MSG_GT_OR_EQ(m_highestAck,
+                                        m_recoveryPoint,
+                                        "Recovery entered before the cumulative ACK reached the "
+                                        "recovery point of the previous episode");
+        }
+        if (newValue == TcpSocketState::CA_RECOVERY || newValue == TcpSocketState::CA_LOSS)
+        {
+            m_recoveryPoint = m_highestTx;
+        }
     }
 
     /**
@@ -189,23 +275,59 @@ class Ns3TcpRecoveryFsmTestCase : public TestCase
         }
     }
 
+    /**
+     * Trace the received segments, keeping the highest cumulative ACK.
+     * @param packet The received packet.
+     * @param header The TCP header.
+     * @param socket The receiving socket.
+     */
+    void RxTrace(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
+    {
+        if ((header.GetFlags() & TcpHeader::ACK) && header.GetAckNumber() > m_highestAck)
+        {
+            m_highestAck = header.GetAckNumber();
+        }
+    }
+
+    /**
+     * Trace the highest sequence number sent (HighData).
+     * @param oldValue Old value.
+     * @param newValue New value.
+     */
+    void HighestTxTrace(SequenceNumber32 oldValue, SequenceNumber32 newValue)
+    {
+        m_highestTx = newValue;
+    }
+
     /// Connect the traces to the sender socket (created at application start).
     void ConnectTraces()
     {
+        const std::string socket = "/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/";
         Config::ConnectWithoutContext(
-            "/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/CongState",
+            socket + "CongState",
             MakeCallback(&Ns3TcpRecoveryFsmTestCase::CongStateTrace, this));
-        Config::ConnectWithoutContext("/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/Tx",
+        Config::ConnectWithoutContext(socket + "Tx",
                                       MakeCallback(&Ns3TcpRecoveryFsmTestCase::TxTrace, this));
+        Config::ConnectWithoutContext(socket + "Rx",
+                                      MakeCallback(&Ns3TcpRecoveryFsmTestCase::RxTrace, this));
+        Config::ConnectWithoutContext(
+            socket + "HighestSequence",
+            MakeCallback(&Ns3TcpRecoveryFsmTestCase::HighestTxTrace, this));
     }
 
-    bool m_sack;                                 //!< Whether SACK is enabled.
-    std::vector<uint32_t> m_drops;               //!< Sequence numbers to drop.
-    std::map<uint32_t, uint32_t> m_expectedRetx; //!< Expected retransmission counts.
-    Time m_minRto;                               //!< Minimum retransmission timeout.
-    std::vector<std::string> m_transitions;      //!< Observed state transitions.
-    std::set<uint32_t> m_seqsSent;               //!< Sequence numbers transmitted so far.
-    std::map<uint32_t, uint32_t> m_retx;         //!< Observed retransmission counts.
+    bool m_sack;                                    //!< Whether SACK is enabled.
+    std::vector<uint32_t> m_drops;                  //!< Sequence numbers to drop.
+    std::map<uint32_t, uint32_t> m_expectedRetx;    //!< Expected retransmission counts.
+    Time m_minRto;                                  //!< Minimum retransmission timeout.
+    std::vector<std::string> m_expectedTransitions; //!< Expected state transitions.
+    uint32_t m_holdSeq{0};                          //!< Sequence number to delay (0 for none).
+    uint32_t m_holdSegments{0};                     //!< Later segments delivered before it.
+    std::vector<std::string> m_transitions;         //!< Observed state transitions.
+    std::set<uint32_t> m_seqsSent;                  //!< Sequence numbers transmitted so far.
+    std::map<uint32_t, uint32_t> m_retx;            //!< Observed retransmission counts.
+    SequenceNumber32 m_highestAck{0};               //!< Highest cumulative ACK received.
+    SequenceNumber32 m_highestTx{0};                //!< Highest sequence number sent.
+    SequenceNumber32 m_recoveryPoint{0};            //!< HighData at the last recovery or timeout.
 };
 
 void
@@ -237,6 +359,12 @@ Ns3TcpRecoveryFsmTestCase::DoRun()
     {
         errorModel->AddSeqToDrop(seq);
     }
+    if (m_holdSeq != 0)
+    {
+        errorModel->AddSeqToHold(m_holdSeq,
+                                 m_holdSegments,
+                                 DynamicCast<PointToPointNetDevice>(devices.Get(1)));
+    }
     devices.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(errorModel));
 
     uint16_t port = 5000;
@@ -260,21 +388,17 @@ Ns3TcpRecoveryFsmTestCase::DoRun()
 
     NS_TEST_ASSERT_MSG_EQ(rxBytes, 40000, "Not all data was delivered");
 
-    // The recovery episode must follow CA_OPEN -> CA_DISORDER (first dupack),
-    // CA_DISORDER -> CA_RECOVERY (loss inferred) and CA_RECOVERY -> CA_OPEN
-    // (full ACK), without ever entering CA_LOSS (no retransmission timeout)
-    std::vector<std::string> expectedTransitions{"CA_OPEN->CA_DISORDER",
-                                                 "CA_DISORDER->CA_RECOVERY",
-                                                 "CA_RECOVERY->CA_OPEN"};
-    NS_TEST_ASSERT_MSG_EQ(m_transitions.size(),
-                          expectedTransitions.size(),
-                          "Unexpected number of congestion state transitions");
-    for (std::size_t i = 0; i < expectedTransitions.size() && i < m_transitions.size(); i++)
-    {
-        NS_TEST_ASSERT_MSG_EQ(m_transitions[i],
-                              expectedTransitions[i],
-                              "Unexpected congestion state transition");
-    }
+    auto join = [](const std::vector<std::string>& v) {
+        std::string out;
+        for (const auto& t : v)
+        {
+            out += (out.empty() ? "" : ", ") + t;
+        }
+        return out;
+    };
+    NS_TEST_ASSERT_MSG_EQ(join(m_transitions),
+                          join(m_expectedTransitions),
+                          "Unexpected congestion state transitions");
 
     NS_TEST_ASSERT_MSG_EQ(m_retx.size(),
                           m_expectedRetx.size(),
@@ -320,16 +444,20 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
 
         // RFC 6582: five alternating losses, one retransmission per partial
-        // ACK per RTT. The recovery spans five RTTs (~500 ms), longer than
-        // the minimum RTO (400 ms), so it completes without timeouts only if
-        // the retransmission timer is reset on every partial ACK (RFC 6675,
-        // Section 6)
+        // ACK per RTT. The last ACK before the losses restarts the timer
+        // about 200 ms before the first partial ACK, the partial ACKs are
+        // about 100 ms apart, and the full ACK arrives about 400 ms after the
+        // first partial ACK. With an RTO of 300 ms (the minimum), resetting
+        // the timer on every partial ACK (RFC 6298, Section 5.3) leaves at
+        // least 100 ms of margin to the timeout, while resetting it on the
+        // first partial ACK only (the Impatient variant of RFC 6582,
+        // Section 3.2) times out about 100 ms before the full ACK
         AddTestCase(new Ns3TcpRecoveryFsmTestCase(
                         "NewReno recovery with five losses and multiple partial ACKs",
                         false,
                         {5001, 6001, 7001, 8001, 9001},
                         {{5001, 1}, {6001, 1}, {7001, 1}, {8001, 1}, {9001, 1}},
-                        MilliSeconds(400)),
+                        MilliSeconds(300)),
                     TestCase::Duration::QUICK);
 
         // Lost retransmission: the retransmission is deemed lost when a
@@ -341,6 +469,62 @@ class Ns3TcpRecoveryFsmTestSuite : public TestSuite
                                                   {{5001, 2}},
                                                   Seconds(1)),
                     TestCase::Duration::QUICK);
+
+        // Lost retransmission without SACK: only the retransmission timer
+        // recovers it, and the duplicate ACKs which follow the timeout do not
+        // start a new recovery before the cumulative ACK reaches the recovery
+        // point (RFC 6582, Section 3.2, step 4; RFC 6675, Section 5.1)
+        AddTestCase(new Ns3TcpRecoveryFsmTestCase("NewReno recovery with a lost retransmission",
+                                                  false,
+                                                  {5001, 5001},
+                                                  {{5001, 2}},
+                                                  Seconds(1),
+                                                  {"CA_OPEN->CA_DISORDER",
+                                                   "CA_DISORDER->CA_RECOVERY",
+                                                   "CA_RECOVERY->CA_LOSS",
+                                                   "CA_LOSS->CA_OPEN"}),
+                    TestCase::Duration::QUICK);
+
+        // Tail loss: the last segment (bytes 39501 to 40000) is lost, no
+        // duplicate ACK follows, and the retransmission timer recovers it
+        AddTestCase(new Ns3TcpRecoveryFsmTestCase("Tail loss recovered by a timeout",
+                                                  true,
+                                                  {39501},
+                                                  {{39501, 1}},
+                                                  Seconds(1),
+                                                  {"CA_OPEN->CA_LOSS", "CA_LOSS->CA_OPEN"}),
+                    TestCase::Duration::QUICK);
+
+        // Loss of the first new segment sent during the recovery (16001,
+        // the recovery point): the ACK of the retransmission of 5001 reaches
+        // the recovery point and ends the recovery, and the loss of 16001,
+        // which belongs to the next window of data, starts a new recovery,
+        // which RFC 6675, Section 5.1 (and RFC 6582, Section 3.2, step 2)
+        // allows once the cumulative ACK has reached the recovery point
+        AddTestCase(new Ns3TcpRecoveryFsmTestCase("Loss of a segment sent during the recovery",
+                                                  true,
+                                                  {5001, 16001},
+                                                  {{5001, 1}, {16001, 1}},
+                                                  Seconds(1),
+                                                  {"CA_OPEN->CA_DISORDER",
+                                                   "CA_DISORDER->CA_RECOVERY",
+                                                   "CA_RECOVERY->CA_OPEN",
+                                                   "CA_OPEN->CA_DISORDER",
+                                                   "CA_DISORDER->CA_RECOVERY",
+                                                   "CA_RECOVERY->CA_OPEN"}),
+                    TestCase::Duration::QUICK);
+
+        // Reordering without loss: a segment delayed behind two later
+        // segments causes two duplicate ACKs only, below the threshold
+        auto reordering =
+            new Ns3TcpRecoveryFsmTestCase("Reordering without loss",
+                                          true,
+                                          {},
+                                          {},
+                                          Seconds(1),
+                                          {"CA_OPEN->CA_DISORDER", "CA_DISORDER->CA_OPEN"});
+        reordering->SetHold(5001, 2);
+        AddTestCase(reordering, TestCase::Duration::QUICK);
     }
 };
 

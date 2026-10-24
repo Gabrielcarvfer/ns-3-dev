@@ -2513,16 +2513,17 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
 
             // In NewReno-style recovery (RFC 6582, Section 3.2), a partial ACK
             // implies that the first unacknowledged segment was also lost:
-            // retransmit it, unless it has been already retransmitted. With
+            // retransmit it (ReceivedAck() has marked it as lost). With
             // SACK, retransmissions are governed by the scoreboard and the
             // pipe (RFC 6675, Section 5), and are performed by
             // SendPendingData(), so no forced retransmission must occur here
-            if (!m_sackEnabled &&
-                !m_txBuffer->IsRetransmittedDataAcked(ackNumber + m_tcb->m_segmentSize))
+            if (!m_sackEnabled)
             {
                 DoRetransmit(); // Assume the next seq is lost. Retransmit lost packet
-                m_tcb->m_cWndInfl = SafeSubtraction(m_tcb->m_cWndInfl, bytesAcked);
             }
+            // The inflated window (traced only) is deflated by the newly
+            // acknowledged data, with or without SACK
+            m_tcb->m_cWndInfl = SafeSubtraction(m_tcb->m_cWndInfl, bytesAcked);
 
             // This partial ACK acknowledge the fact that one segment has been
             // previously lost and now successfully received. All others have
@@ -2530,10 +2531,11 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_srtt);
             // RFC 6298, Section 5.3: restart the retransmission timer on every
             // ACK acknowledging new data. This is the Slow-but-Steady variant
-            // of NewReno (RFC 6582, Section 6), which departs from RFC 6582,
-            // Section 3.2, step 3, where only the first partial ACK of a fast
-            // recovery resets the timer: a recovery spanning several partial
-            // ACKs would otherwise be cut short by a spurious timeout
+            // of NewReno (RFC 3782, Section 4, dropped by RFC 6582, see its
+            // Appendix B), which departs from RFC 6582, Section 3.2, step 3,
+            // where only the first partial ACK of a fast recovery resets the
+            // timer: a recovery spanning several partial ACKs would otherwise
+            // be cut short by a spurious timeout
             NewAck(ackNumber, true);
             NS_LOG_DEBUG("Partial ACK of " << ackNumber
                                            << " in fast recovery (RTO reset);"
@@ -2634,10 +2636,14 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             }
             else if (m_tcb->m_congState == TcpSocketState::CA_LOSS)
             {
-                // Recalculate the segs acked, that are from m_recover to ackNumber
-                // (which are the ones we have not passed to PktsAcked and that
-                // can increase cWnd)
-                segsAcked = (ackNumber - m_recover) / m_tcb->m_segmentSize;
+                // Every segment this ACK covers is new to the congestion
+                // control: the partial ACKs only passed their own segments.
+                // Counting from the recovery point left the window at one
+                // segment when the ACK of the retransmission landed on it,
+                // which is the common case of a receiver holding the data
+                // sent after the lost segment (RFC 5681, Section 3.1)
+                segsAcked =
+                    static_cast<uint32_t>(ackNumber - oldHeadSequence) / m_tcb->m_segmentSize;
 
                 m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_srtt);
 

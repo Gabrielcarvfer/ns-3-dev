@@ -12,7 +12,12 @@
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/tcp-header.h"
+#include "ns3/tcp-tx-buffer.h"
 #include "ns3/test.h"
+
+#include <map>
+#include <string>
+#include <vector>
 
 using namespace ns3;
 
@@ -26,9 +31,11 @@ NS_LOG_COMPONENT_DEFINE("TcpPartialAckRtoTestSuite");
  * @RFC{6298} (Section 5.3) calls for restarting the retransmission timer on
  * every ACK acknowledging new data, including the partial ACKs received
  * during fast recovery: this is the Slow-but-Steady variant of NewReno
- * (@RFC{6582}, Section 6), which departs from the Impatient variant of
+ * (@RFC{3782}, Section 4; @RFC{6582} dropped the discussion of the variants,
+ * see its Appendix B), which departs from the Impatient variant of
  * @RFC{6582}, Section 3.2, step 3, resetting the timer only upon the first
- * partial acknowledgment of a fast recovery.
+ * partial acknowledgment of a fast recovery. @RFC{6298}, Section 5.3, and
+ * @RFC{6675}, Section 6, permit it.
  *
  * The test drops several segments of the same window, so that (with SACK
  * disabled) the fast recovery phase spans multiple partial ACKs and lasts
@@ -243,6 +250,268 @@ TcpLossPartialAckRtoTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
+ * @brief Check that the ACK which ends the CA_LOSS state grows the window.
+ *
+ * A segment and its fast retransmission are dropped, so that the segment is
+ * recovered by the retransmission timer. The receiver holds every segment
+ * sent after it, and the acknowledgment of the retransmission covers all of
+ * them at once, landing on the recovery point. That acknowledgment is the
+ * first one of the slow start which follows the timeout, and it must grow
+ * the congestion window from the one segment of the loss window
+ * (RFC 5681, Section 3.1): otherwise the sender keeps sending one segment
+ * per round trip time until the next acknowledgment.
+ */
+class TcpLossExitCwndTest : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param name Test description.
+     */
+    TcpLossExitCwndTest(const std::string& name)
+        : TcpGeneralTest(name)
+    {
+    }
+
+  protected:
+    void ConfigureEnvironment() override;
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
+    Ptr<ErrorModel> CreateReceiverErrorModel() override;
+    void AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
+    void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                        const TcpSocketState::TcpCongState_t newValue) override;
+    void FinalChecks() override;
+
+  private:
+    /**
+     * @brief Check the congestion window once the ACK ending CA_LOSS is processed.
+     */
+    void CheckCwnd();
+
+    uint32_t m_rtos{0};      //!< Retransmission timeouts at the sender
+    uint32_t m_lossExits{0}; //!< Transitions out of CA_LOSS
+};
+
+void
+TcpLossExitCwndTest::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetAppPktSize(500);
+    SetAppPktCount(30);
+    SetPropagationDelay(MilliSeconds(100));
+}
+
+Ptr<TcpSocketMsgBase>
+TcpLossExitCwndTest::CreateSenderSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
+    socket->SetAttribute("InitialCwnd", UintegerValue(10));
+    socket->SetAttribute("Timestamp", BooleanValue(false));
+    socket->SetAttribute("Sack", BooleanValue(false));
+    socket->SetAttribute("MinRto", TimeValue(MilliSeconds(500)));
+    return socket;
+}
+
+Ptr<ErrorModel>
+TcpLossExitCwndTest::CreateReceiverErrorModel()
+{
+    Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
+    // The segment and its fast retransmission
+    errorModel->AddSeqToKill(SequenceNumber32(10001));
+    errorModel->AddSeqToKill(SequenceNumber32(10001));
+    return errorModel;
+}
+
+void
+TcpLossExitCwndTest::AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who)
+{
+    if (who == SENDER)
+    {
+        m_rtos++;
+    }
+}
+
+void
+TcpLossExitCwndTest::CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                                    const TcpSocketState::TcpCongState_t newValue)
+{
+    if (oldValue == TcpSocketState::CA_LOSS && newValue == TcpSocketState::CA_OPEN)
+    {
+        m_lossExits++;
+        // The congestion control runs after the state change, within the
+        // processing of the same ACK
+        Simulator::ScheduleNow(&TcpLossExitCwndTest::CheckCwnd, this);
+    }
+}
+
+void
+TcpLossExitCwndTest::CheckCwnd()
+{
+    Ptr<const TcpSocketState> tcb = GetTcb(SENDER);
+    NS_TEST_ASSERT_MSG_GT_OR_EQ(tcb->m_cWnd.Get(),
+                                2 * tcb->m_segmentSize,
+                                "The ACK ending the CA_LOSS state did not grow the window");
+}
+
+void
+TcpLossExitCwndTest::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_EQ(m_rtos, 1, "The lost retransmission was not recovered by one timeout");
+    NS_TEST_ASSERT_MSG_EQ(m_lossExits, 1, "The CA_LOSS state was not left once");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Check the transition from fast recovery to CA_LOSS on a timeout.
+ *
+ * Without SACK, a segment and its fast retransmission are dropped: nothing
+ * reveals the loss of the retransmission, and the retransmission timer
+ * expires during the fast recovery. The timeout must terminate the recovery
+ * (@RFC{6675}, Section 5.1; @RFC{6582}, Section 3.2, step 4): the sender
+ * moves from CA_RECOVERY to CA_LOSS, the congestion window is set to the
+ * loss window of one segment (@RFC{5681}, Section 3.1), the slow start
+ * threshold is kept at two segments at least, the duplicate ACK guesses are
+ * dropped and only the first unacknowledged segment is retransmitted. The
+ * sender then goes back to CA_OPEN, without entering fast recovery again.
+ */
+class TcpRecoveryRtoTest : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param name Test description.
+     */
+    TcpRecoveryRtoTest(const std::string& name)
+        : TcpGeneralTest(name)
+    {
+    }
+
+  protected:
+    void ConfigureEnvironment() override;
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
+    Ptr<ErrorModel> CreateReceiverErrorModel() override;
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void BeforeRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
+    void AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who) override;
+    void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                        const TcpSocketState::TcpCongState_t newValue) override;
+    void FinalChecks() override;
+
+  private:
+    static constexpr uint32_t LOST_SEQ = 10001; //!< Sequence number of the dropped segment
+
+    std::vector<std::string> m_transitions; //!< Observed congestion state transitions
+    std::map<uint32_t, uint32_t> m_txCount; //!< Transmissions per data sequence number
+    std::vector<uint32_t> m_retxAfterRto;   //!< Retransmissions sent in CA_LOSS
+    TcpSocketState::TcpCongState_t m_stateBeforeRto{TcpSocketState::CA_OPEN}; //!< State
+    uint32_t m_rtos{0}; //!< Retransmission timeouts at the sender
+};
+
+void
+TcpRecoveryRtoTest::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetAppPktSize(500);
+    SetAppPktCount(30);
+    SetPropagationDelay(MilliSeconds(100));
+}
+
+Ptr<TcpSocketMsgBase>
+TcpRecoveryRtoTest::CreateSenderSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
+    socket->SetAttribute("InitialCwnd", UintegerValue(10));
+    socket->SetAttribute("Timestamp", BooleanValue(false));
+    socket->SetAttribute("Sack", BooleanValue(false));
+    socket->SetAttribute("MinRto", TimeValue(MilliSeconds(500)));
+    return socket;
+}
+
+Ptr<ErrorModel>
+TcpRecoveryRtoTest::CreateReceiverErrorModel()
+{
+    Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
+    // The segment and its fast retransmission
+    errorModel->AddSeqToKill(SequenceNumber32(LOST_SEQ));
+    errorModel->AddSeqToKill(SequenceNumber32(LOST_SEQ));
+    return errorModel;
+}
+
+void
+TcpRecoveryRtoTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who != SENDER || p->GetSize() == 0)
+    {
+        return;
+    }
+    uint32_t seq = h.GetSequenceNumber().GetValue();
+    if (m_txCount[seq]++ > 0 && GetTcb(SENDER)->m_congState == TcpSocketState::CA_LOSS)
+    {
+        m_retxAfterRto.push_back(seq);
+    }
+}
+
+void
+TcpRecoveryRtoTest::BeforeRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who)
+{
+    if (who == SENDER)
+    {
+        m_stateBeforeRto = tcb->m_congState;
+    }
+}
+
+void
+TcpRecoveryRtoTest::AfterRTOExpired(const Ptr<const TcpSocketState> tcb, SocketWho who)
+{
+    if (who != SENDER)
+    {
+        return;
+    }
+    m_rtos++;
+    NS_TEST_ASSERT_MSG_EQ(m_stateBeforeRto,
+                          TcpSocketState::CA_RECOVERY,
+                          "The timeout did not expire during the fast recovery");
+    NS_TEST_ASSERT_MSG_EQ(tcb->m_congState, TcpSocketState::CA_LOSS, "CA_LOSS not entered");
+    NS_TEST_ASSERT_MSG_EQ(tcb->m_cWnd.Get(), tcb->m_segmentSize, "Loss window is not one segment");
+    NS_TEST_ASSERT_MSG_GT_OR_EQ(tcb->m_ssThresh.Get(),
+                                2 * tcb->m_segmentSize,
+                                "Slow start threshold below two segments");
+    NS_TEST_ASSERT_MSG_EQ(GetTxBuffer(SENDER)->GetSacked(), 0, "Guessed SACKs left after the RTO");
+    NS_TEST_ASSERT_MSG_EQ(tcb->m_bytesInFlight.Get(),
+                          tcb->m_segmentSize,
+                          "More than the retransmitted segment in flight after the RTO");
+}
+
+void
+TcpRecoveryRtoTest::CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                                   const TcpSocketState::TcpCongState_t newValue)
+{
+    m_transitions.push_back(std::string(TcpSocketState::TcpCongStateName[oldValue]) + "->" +
+                            TcpSocketState::TcpCongStateName[newValue]);
+}
+
+void
+TcpRecoveryRtoTest::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_EQ(m_rtos, 1, "Not exactly one retransmission timeout");
+    std::vector<std::string> expected{"CA_OPEN->CA_DISORDER",
+                                      "CA_DISORDER->CA_RECOVERY",
+                                      "CA_RECOVERY->CA_LOSS",
+                                      "CA_LOSS->CA_OPEN"};
+    NS_TEST_ASSERT_MSG_EQ(m_transitions.size(), expected.size(), "Unexpected transitions");
+    for (std::size_t i = 0; i < expected.size(); ++i)
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_transitions[i], expected[i], "Unexpected transition");
+    }
+    NS_TEST_ASSERT_MSG_EQ(m_txCount[LOST_SEQ], 3, "The lost segment was not sent three times");
+    NS_TEST_ASSERT_MSG_EQ(m_retxAfterRto.size(), 1, "Not exactly one retransmission in CA_LOSS");
+    NS_TEST_ASSERT_MSG_EQ(m_retxAfterRto.front(), LOST_SEQ, "Wrong segment retransmitted");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief Partial ACK RTO reset TestSuite
  */
 class TcpPartialAckRtoTestSuite : public TestSuite
@@ -255,6 +524,10 @@ class TcpPartialAckRtoTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpLossPartialAckRtoTest(
                         "Partial ACKs after a timeout reset the retransmission timer"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpLossExitCwndTest("The ACK ending CA_LOSS grows the window"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpRecoveryRtoTest("A timeout during fast recovery enters CA_LOSS"),
                     TestCase::Duration::QUICK);
     }
 };
