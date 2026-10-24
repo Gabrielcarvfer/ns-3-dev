@@ -129,10 +129,11 @@ class TcpDctcp : public TcpLinuxReno
         m_nextSeq;      //!< TCP sequence number threshold for beginning a new observation window
     bool m_nextSeqFlag; //!< Variable used in setting the value of m_nextSeq for first time
     bool m_ceState;     //!< DCTCP Congestion Experienced state
-    bool m_delayedAckReserved; //!< Delayed Ack state
-    double m_g;                //!< Estimation gain
-    bool m_useEct0;            //!< Use ECT(0) for ECN codepoint
-    bool m_initialized;        //!< Whether DCTCP has been initialized
+    bool m_delayedAckReserved;     //!< Delayed Ack state
+    double m_g;                    //!< Estimation gain
+    bool m_useEct0;                //!< Use ECT(0) for ECN codepoint
+    bool m_initialized;            //!< Whether DCTCP has been initialized
+    bool m_linuxArithmetic{false}; //!< Compute as the tcp_dctcp.c of Linux does
     /**
      * @brief Callback pointer for congestion state update
      */

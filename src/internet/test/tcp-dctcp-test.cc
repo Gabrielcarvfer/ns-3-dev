@@ -642,6 +642,142 @@ TcpDctcpToLinuxReno::ExecuteTest()
 /**
  * @ingroup internet-test
  *
+ * @brief Check the DCTCP reduction of the slow start threshold
+ *
+ * With no ECN marking on the path, alpha decays to zero, and only the ECN
+ * Echo which makes the socket enter CA_CWR may use the DCTCP reduction
+ * (1 - alpha / 2). A loss, detected by a fast retransmission (CA_RECOVERY)
+ * or by a retransmission timeout (no ECN Echo held), halves the flight
+ * size (RFC 8257, Section 3.5).
+ */
+class TcpDctcpSsThreshTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor
+     * @param congState congestion state when the threshold is computed
+     * @param ecnState ECN state when the threshold is computed
+     * @param expectedSegments expected slow start threshold (segments)
+     * @param name Name of the test
+     */
+    TcpDctcpSsThreshTest(TcpSocketState::TcpCongState_t congState,
+                         TcpSocketState::EcnState_t ecnState,
+                         uint32_t expectedSegments,
+                         const std::string& name)
+        : TestCase(name),
+          m_congState(congState),
+          m_ecnState(ecnState),
+          m_expectedSegments(expectedSegments)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    TcpSocketState::TcpCongState_t m_congState; //!< congestion state
+    TcpSocketState::EcnState_t m_ecnState;      //!< ECN state
+    uint32_t m_expectedSegments;                //!< expected ssthresh (segments)
+};
+
+void
+TcpDctcpSsThreshTest::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_cWnd = 100 * segmentSize;
+    state->m_congState = m_congState;
+    state->m_ecnState = m_ecnState;
+
+    Ptr<TcpDctcp> cong = CreateObject<TcpDctcp>();
+    cong->SetAttribute("DctcpAlphaOnInit", DoubleValue(0));
+
+    NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 100 * segmentSize),
+                          m_expectedSegments * segmentSize,
+                          "Unexpected slow start threshold");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Check the Linux arithmetic of TcpDctcp
+ *
+ * With the LinuxArithmetic attribute, as Linux tcp_dctcp.c, a loss halves the
+ * window in whole segments (dctcp_react_to_loss()), the ECN Echo reduction
+ * rounds the decrease down in whole segments (dctcp_ssthresh()), and alpha,
+ * in 1/1024, decays to zero once smaller than the shift of the gain
+ * (dctcp_update_alpha()), so that an ECN Echo no longer reduces the window.
+ */
+class TcpDctcpLinuxArithmeticTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor
+     * @param linuxArithmetic Whether the LinuxArithmetic attribute is set
+     * @param name Name of the test
+     */
+    TcpDctcpLinuxArithmeticTest(bool linuxArithmetic, const std::string& name)
+        : TestCase(name),
+          m_linux(linuxArithmetic)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    bool m_linux; //!< Whether the LinuxArithmetic attribute is set
+};
+
+void
+TcpDctcpLinuxArithmeticTest::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_cWnd = 205 * segmentSize;
+    state->m_congState = TcpSocketState::CA_RECOVERY;
+
+    Ptr<TcpDctcp> cong = CreateObject<TcpDctcp>();
+    cong->SetAttribute("LinuxArithmetic", BooleanValue(m_linux));
+
+    NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 205 * segmentSize),
+                          m_linux ? 102 * segmentSize : 102 * segmentSize + segmentSize / 2,
+                          "Unexpected slow start threshold on a loss");
+
+    state->m_congState = TcpSocketState::CA_OPEN;
+    state->m_ecnState = TcpSocketState::ECN_ECE_RCVD;
+    NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 205 * segmentSize),
+                          m_linux ? 103 * segmentSize : 102 * segmentSize + segmentSize / 2,
+                          "Unexpected reduction with alpha = 1");
+
+    // A hundred windows with no ECN Echo
+    state->m_ecnState = TcpSocketState::ECN_IDLE;
+    state->m_cWnd = 100 * segmentSize;
+    state->m_highTxMark = SequenceNumber32(1000);
+    for (uint32_t i = 0; i < 101; ++i)
+    {
+        state->m_lastAckedSeq = state->m_highTxMark;
+        state->m_highTxMark = state->m_highTxMark + 1000;
+        cong->PktsAcked(state, 1, MilliSeconds(100));
+    }
+    state->m_ecnState = TcpSocketState::ECN_ECE_RCVD;
+    if (m_linux)
+    {
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 100 * segmentSize),
+                              100 * segmentSize,
+                              "Alpha must have decayed to zero");
+    }
+    else
+    {
+        NS_TEST_ASSERT_MSG_LT(cong->GetSsThresh(state, 100 * segmentSize),
+                              100 * segmentSize,
+                              "Alpha must not have decayed to zero");
+    }
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP DCTCP TestSuite
  */
 class TcpDctcpTestSuite : public TestSuite
@@ -671,6 +807,25 @@ class TcpDctcpTestSuite : public TestSuite
         AddTestCase(new TcpDctcpCodePointsTest(3,
                                                "ECE Functionality Test: ECE should only be sent by "
                                                "receiver when it receives CE flags"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpDctcpSsThreshTest(TcpSocketState::CA_OPEN,
+                                             TcpSocketState::ECN_ECE_RCVD,
+                                             100,
+                                             "ECN Echo: DCTCP reduction, alpha = 0"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpDctcpSsThreshTest(TcpSocketState::CA_RECOVERY,
+                                             TcpSocketState::ECN_IDLE,
+                                             50,
+                                             "Fast retransmission: the flight size is halved"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpDctcpSsThreshTest(TcpSocketState::CA_OPEN,
+                                             TcpSocketState::ECN_IDLE,
+                                             50,
+                                             "Retransmission timeout: the flight size is halved"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpDctcpLinuxArithmeticTest(false, "Default arithmetic"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpDctcpLinuxArithmeticTest(true, "Linux arithmetic"),
                     TestCase::Duration::QUICK);
     }
 };

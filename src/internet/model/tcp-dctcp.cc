@@ -14,6 +14,8 @@
 #include "ns3/abort.h"
 #include "ns3/log.h"
 
+#include <cmath>
+
 namespace ns3
 {
 
@@ -43,6 +45,16 @@ TcpDctcp::GetTypeId()
                           "Use ECT(0) for ECN codepoint, if false use ECT(1)",
                           BooleanValue(true),
                           MakeBooleanAccessor(&TcpDctcp::m_useEct0),
+                          MakeBooleanChecker())
+            .AddAttribute("LinuxArithmetic",
+                          "Compute as the tcp_dctcp.c of Linux does: alpha in 1/1024, its "
+                          "decay by a shift of DctcpShiftG (down to zero once smaller than "
+                          "the shift), the window reductions in whole segments, the one on a "
+                          "loss from the window (max(cwnd >> 1, 2)) rather than from the "
+                          "FlightSize, and the observation window ending at the highest "
+                          "sequence number sent",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpDctcp::m_linuxArithmetic),
                           MakeBooleanChecker())
             .AddTraceSource("CongestionEstimate",
                             "Update sender-side congestion estimate state",
@@ -85,7 +97,8 @@ TcpDctcp::TcpDctcp(const TcpDctcp& sock)
       m_delayedAckReserved(sock.m_delayedAckReserved),
       m_g(sock.m_g),
       m_useEct0(sock.m_useEct0),
-      m_initialized(sock.m_initialized)
+      m_initialized(sock.m_initialized),
+      m_linuxArithmetic(sock.m_linuxArithmetic)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -123,13 +136,28 @@ TcpDctcp::Init(Ptr<TcpSocketState> tcb)
 // way as a conventional TCP, i.e. reduce ssthresh as @RFC{5681} does. With non-ECN
 // routers, m_alpha decays toward zero, so the DCTCP reduction below would leave
 // ssthresh at ~cwnd on a packet loss (no back-off). Distinguish the congestion
-// event type: on inferred loss (CA_LOSS) apply the @RFC{5681} reduction; otherwise
-// apply the ECN-driven DCTCP reduction (in which case bytesInFlight is ignored).
+// event type: the ECN-driven DCTCP reduction (in which case bytesInFlight is
+// ignored) applies only to the ECN Echo which makes the socket enter CA_CWR;
+// a fast retransmission (the socket is already in CA_RECOVERY) or a
+// retransmission timeout (the socket does not hold an ECN Echo) applies the
+// @RFC{5681} reduction, as Linux dctcp_react_to_loss() does.
 uint32_t
 TcpDctcp::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
-    if (tcb->m_congState == TcpSocketState::CA_LOSS)
+    bool ecnEcho = tcb->m_ecnState == TcpSocketState::ECN_ECE_RCVD &&
+                   tcb->m_congState != TcpSocketState::CA_RECOVERY &&
+                   tcb->m_congState != TcpSocketState::CA_LOSS;
+    if (m_linuxArithmetic)
+    {
+        // dctcp_react_to_loss() and dctcp_ssthresh(), in whole segments
+        uint32_t segCwnd = tcb->GetCwndInSegments();
+        uint32_t ssThresh =
+            ecnEcho ? segCwnd - ((segCwnd * static_cast<uint32_t>(m_alpha * 1024)) >> 11)
+                    : segCwnd >> 1;
+        return std::max(ssThresh, 2U) * tcb->m_segmentSize;
+    }
+    if (!ecnEcho)
     {
         return std::max(bytesInFlight / 2, 2 * tcb->m_segmentSize);
     }
@@ -147,10 +175,30 @@ TcpDctcp::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time&
     }
     if (!m_nextSeqFlag)
     {
-        m_nextSeq = tcb->m_nextTxSequence;
+        m_nextSeq = m_linuxArithmetic ? tcb->m_highTxMark.Get() : tcb->m_nextTxSequence.Get();
         m_nextSeqFlag = true;
     }
-    if (tcb->m_lastAckedSeq >= m_nextSeq)
+    if (m_linuxArithmetic && tcb->m_lastAckedSeq >= m_nextSeq)
+    {
+        // dctcp_update_alpha(), alpha in 1/1024
+        auto alpha = static_cast<uint32_t>(m_alpha * 1024);
+        auto shiftG = static_cast<uint32_t>(std::lround(-std::log2(m_g)));
+        uint32_t decay = alpha >> shiftG;
+        alpha -= (decay == 0 ? alpha : decay);
+        uint32_t delivered = m_ackedBytesTotal / tcb->m_segmentSize;
+        uint32_t deliveredCe = m_ackedBytesEcn / tcb->m_segmentSize;
+        if (deliveredCe > 0)
+        {
+            deliveredCe <<= (10 - shiftG);
+            deliveredCe /= std::max(1U, delivered);
+            alpha = std::min(alpha + deliveredCe, 1024U);
+        }
+        m_alpha = alpha / 1024.0;
+        m_traceCongestionEstimate(m_ackedBytesEcn, m_ackedBytesTotal, m_alpha);
+        NS_LOG_INFO(this << " m_alpha " << m_alpha);
+        Reset(tcb);
+    }
+    else if (tcb->m_lastAckedSeq >= m_nextSeq)
     {
         double bytesEcn = 0.0; // Corresponds to variable M in RFC 8257
         if (m_ackedBytesTotal > 0)
@@ -176,7 +224,7 @@ void
 TcpDctcp::Reset(Ptr<TcpSocketState> tcb)
 {
     NS_LOG_FUNCTION(this << tcb);
-    m_nextSeq = tcb->m_nextTxSequence;
+    m_nextSeq = m_linuxArithmetic ? tcb->m_highTxMark.Get() : tcb->m_nextTxSequence.Get();
     m_ackedBytesEcn = 0;
     m_ackedBytesTotal = 0;
 }

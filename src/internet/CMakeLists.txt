@@ -343,6 +343,7 @@ set(test_sources
     test/neighbor-cache-test.cc
     test/rtt-test.cc
     test/tcp-abe-test.cc
+    test/tcp-ack-counting-test.cc
     test/tcp-advertised-window-test.cc
     test/tcp-bbr-test.cc
     test/tcp-bbr-recovery-test.cc
@@ -404,6 +405,7 @@ set(test_sources
     test/tcp-tso-defer-test.cc
     test/tcp-tx-buffer-test.cc
     test/tcp-vegas-test.cc
+    test/tcp-westwood-plus-test.cc
     test/tcp-veno-test.cc
     test/tcp-window-update-test-suite.cc
     test/tcp-wscaling-test.cc
