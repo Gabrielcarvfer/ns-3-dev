@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="pyviz-token" content="%TOKEN%">
+<title>ns-3 PyViz</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <strong class="brand"><img src="/ns-3-logo.png" alt="ns-3" height="18"><span class="brand-text">PyViz</span></strong>
+  <button id="play-pause" title="Pause or resume the simulation">Pause</button>
+  <button data-action="restart" title="Rerun the scenario from the beginning">Restart</button>
+  <label title="Simulated seconds per wall-clock second"><span class="label-text">Speed</span> <input id="speed" type="range" min="-2" max="2" step="0.1" value="-2"><output id="speed-value">0.01x</output></label>
+  <label title="Steps the link rates are averaged over"><span class="label-text">Smooth</span> <input id="smoothing" type="range" min="1" max="50" step="1" value="5"></label>
+  <label title="Whose transmissions are drawn"><span class="label-text">Traffic</span> <select id="transmissions"><option value="all">All nodes</option><option value="selected">Selected</option><option value="none">None</option></select></label>
+  <label title="Node size"><span class="label-text">Size</span> <input id="node-size" type="range" min="0.25" max="4" step="0.25" value="1"></label>
+  <button id="toggle-trails" aria-pressed="false" title="Draw the recent path of moving nodes">Trails</button>
+  <button id="zoom-fit" title="Fit the view to the scenario">Fit</button>
+  <button id="screenshot" title="Save the topology as SVG">Screenshot</button>
+  <select id="global-panels" hidden title="Simulation-wide panels"><option value="">Panels...</option></select>
+  <span id="clock" title="">Waiting for simulation</span>
+</header>
+<main>
+  <section class="topology">
+    <svg id="scene" role="img" aria-label="Network topology"><g id="viewport"></g></svg>
+    <div id="node-menu" hidden></div>
+    <div id="tooltip" hidden></div>
+    <div id="drag-coords" hidden></div>
+    <div id="taskbar" aria-label="Minimized windows"></div>
+  </section>
+  <aside>
+    <nav class="tabs">
+      <button data-tab="node" class="selected">Node</button>
+      <button data-tab="types">Types</button>
+      <button data-tab="console">Console</button>
+      <button id="minimize-sidebar" class="minimize" title="Minimize the sidebar to the taskbar">Minimize</button>
+    </nav>
+    <section id="tab-node">
+      <div id="panels"><p>Click a node to inspect it; Shift/Ctrl-click to select several. Right-click for panels.</p></div>
+      <article id="objects"></article>
+    </section>
+    <section id="tab-types" hidden>
+      <input id="type-filter" type="search" placeholder="Filter classes">
+      <div id="types"></div>
+      <article id="details"><p>Select a type to inspect its attributes and trace sources.</p></article>
+    </section>
+    <section id="tab-console" hidden>
+      <p><small>Python console. <code>ns</code>, <code>viz</code> and the selected <code>node</code> are defined.</small></p>
+      <pre id="console-output"></pre>
+      <textarea id="console-input" rows="3" placeholder="Shift+Enter to run"></textarea>
+      <button id="console-run">Run</button>
+    </section>
+  </aside>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

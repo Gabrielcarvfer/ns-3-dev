@@ -1,0 +1,75 @@
+"""Node summary: name, mobility, devices, MAC and IP addresses."""
+
+from ns import ns
+
+
+def _device_lines(node):
+    ipv4 = node.GetObject[ns.Ipv4]()
+    ipv6 = node.GetObject[ns.Ipv6]()
+    lines = []
+    for index in range(int(node.GetNDevices())):
+        device = node.GetDevice(index)
+        type_name = str(device.GetInstanceTypeId().GetName())
+        lines.append(["NetDevice %d" % index, type_name])
+        name = str(ns.Names.FindName(device))
+        if name:
+            lines.append(["  Name", name])
+        try:
+            if type_name == "ns3::lrwpan::LrWpanNetDevice":
+                lines.append(["  MAC short address", str(device.GetMac().GetShortAddress())])
+                lines.append(["  MAC extended address", str(device.GetMac().GetExtendedAddress())])
+            else:
+                suffix = " (Generated)" if type_name == "ns3::SixLowPanNetDevice" else ""
+                lines.append(
+                    [
+                        "  MAC address",
+                        str(ns.Mac48Address.ConvertFrom(device.GetAddress())) + suffix,
+                    ]
+                )
+        except Exception:
+            lines.append(["  Address", str(device.GetAddress())])
+        if ipv4:
+            interface = int(ipv4.GetInterfaceForDevice(device))
+            if interface != -1:
+                for i in range(int(ipv4.GetNAddresses(interface))):
+                    address = ipv4.GetAddress(interface, i)
+                    lines.append(
+                        [
+                            "  IPv4 address",
+                            "%s/%s (Subnet Mask: %s)"
+                            % (
+                                address.GetLocal(),
+                                address.GetMask().GetPrefixLength(),
+                                address.GetMask(),
+                            ),
+                        ]
+                    )
+        if ipv6:
+            interface = int(ipv6.GetInterfaceForDevice(device))
+            if interface != -1:
+                for i in range(int(ipv6.GetNAddresses(interface))):
+                    address = ipv6.GetAddress(interface, i)
+                    lines.append(
+                        ["  IPv6 address", "%s%s" % (address.GetAddress(), address.GetPrefix())]
+                    )
+    return lines
+
+
+def build(viz, node_index):
+    node = ns.NodeList.GetNode(node_index)
+    items = []
+    name = str(ns.Names.FindName(node))
+    if name:
+        items.append(["Name", name])
+    items.extend(viz.tooltip_lines(node_index))
+    mobility = node.GetObject[ns.MobilityModel]()
+    if mobility:
+        position = mobility.__deref__().GetPosition()
+        items.append(["Mobility model", str(mobility.__deref__().GetInstanceTypeId().GetName())])
+        items.append(["Position", "(%.2f, %.2f, %.2f)" % (position.x, position.y, position.z)])
+    items.extend(_device_lines(node))
+    return {"sections": [{"title": "Node %d" % node_index, "items": items}]}
+
+
+def register(viz):
+    viz.add_node_panel("node-info", "Node summary", build)

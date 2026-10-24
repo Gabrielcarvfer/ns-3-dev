@@ -13,20 +13,13 @@
 
 #include "ns3/abort.h"
 #include "ns3/config.h"
-#include "ns3/ethernet-header.h"
 #include "ns3/log.h"
-#include "ns3/lr-wpan-mac-header.h"
-#include "ns3/lr-wpan-net-device.h"
 #include "ns3/node-list.h"
-#include "ns3/ppp-header.h"
 #include "ns3/simulator.h"
-#include "ns3/wifi-mac-header.h"
-#include "ns3/wifi-net-device.h"
 
 #include <cstdlib>
+#include <functional>
 #include <sstream>
-
-using namespace ns3::lrwpan;
 
 NS_LOG_COMPONENT_DEFINE("PyViz");
 
@@ -129,50 +122,26 @@ PyViz::PyViz()
     NS_LOG_FUNCTION_NOARGS();
     NS_ASSERT(g_visualizer == nullptr);
     g_visualizer = this;
+}
 
-    // WiFi
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/MacTx",
-                            MakeCallback(&PyViz::TraceNetDevTxWifi, this));
-
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/MacRx",
-                            MakeCallback(&PyViz::TraceNetDevRxWifi, this));
-    // Lr-Wpan
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::lrwpan::LrWpanNetDevice/Mac/MacTx",
-                            MakeCallback(&PyViz::TraceNetDevTxLrWpan, this));
-
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::lrwpan::LrWpanNetDevice/Mac/MacRx",
-                            MakeCallback(&PyViz::TraceNetDevRxLrWpan, this));
-
-    // CSMA
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacTx",
-                            MakeCallback(&PyViz::TraceNetDevTxCsma, this));
-
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacRx",
-                            MakeCallback(&PyViz::TraceNetDevRxCsma, this));
-
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacPromiscRx",
-                            MakeCallback(&PyViz::TraceNetDevPromiscRxCsma, this));
-
-    // Generic queue drop
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/TxQueue/Drop",
-                            MakeCallback(&PyViz::TraceDevQueueDrop, this));
-    // IPv4 drop
-    Config::ConnectFailSafe("/NodeList/*/$ns3::Ipv4L3Protocol/Drop",
-                            MakeCallback(&PyViz::TraceIpv4Drop, this));
-
-    // Point-to-Point
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/MacTx",
-                            MakeCallback(&PyViz::TraceNetDevTxPointToPoint, this));
-
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/MacRx",
-                            MakeCallback(&PyViz::TraceNetDevRxPointToPoint, this));
-
-    // LTE
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::LteNetDevice/Tx",
-                            MakeCallback(&PyViz::TraceNetDevTxLte, this));
-
-    Config::ConnectFailSafe("/NodeList/*/DeviceList/*/$ns3::LteNetDevice/Rx",
-                            MakeCallback(&PyViz::TraceNetDevRxLte, this));
+bool
+PyViz::ConnectTrace(const std::string& handler, const std::string& path)
+{
+    NS_LOG_FUNCTION(this << handler << path);
+    // Generic handlers only: Python maps each technology's trace sources to
+    // them (and adapts other signatures), so this module does not need to
+    // link against any device or protocol module.
+    static const std::map<std::string, std::function<CallbackBase(PyViz*)>> handlers = {
+        {"Tx", [](PyViz* p) { return MakeCallback(&PyViz::TraceTx, p); }},
+        {"Rx", [](PyViz* p) { return MakeCallback(&PyViz::TraceRx, p); }},
+        {"Drop", [](PyViz* p) { return MakeCallback(&PyViz::TraceDrop, p); }},
+    };
+    auto it = handlers.find(handler);
+    if (it == handlers.end())
+    {
+        return false;
+    }
+    return Config::ConnectFailSafe(path, it->second(this));
 }
 
 void
@@ -182,15 +151,11 @@ PyViz::RegisterCsmaLikeDevice(const std::string& deviceTypeName)
 
     std::ostringstream sstream;
     sstream << "/NodeList/*/DeviceList/*/$" << deviceTypeName << "/MacTx";
-    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceNetDevTxCsma, this));
+    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceTx, this));
 
     sstream.str("");
     sstream << "/NodeList/*/DeviceList/*/$" << deviceTypeName << "/Rx";
-    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceNetDevRxCsma, this));
-
-    sstream.str("");
-    sstream << "/NodeList/*/DeviceList/*/$" << deviceTypeName << "/PromiscRx";
-    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceNetDevPromiscRxCsma, this));
+    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceRx, this));
 }
 
 void
@@ -200,11 +165,11 @@ PyViz::RegisterWifiLikeDevice(const std::string& deviceTypeName)
 
     std::ostringstream sstream;
     sstream << "/NodeList/*/DeviceList/*/$" << deviceTypeName << "/Tx";
-    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceNetDevTxWifi, this));
+    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceTx, this));
 
     sstream.str("");
     sstream << "/NodeList/*/DeviceList/*/$" << deviceTypeName << "/Rx";
-    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceNetDevRxWifi, this));
+    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceRx, this));
 }
 
 void
@@ -214,11 +179,11 @@ PyViz::RegisterPointToPointLikeDevice(const std::string& deviceTypeName)
 
     std::ostringstream sstream;
     sstream << "/NodeList/*/DeviceList/*/$" << deviceTypeName << "/TxQueue/Dequeue";
-    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceNetDevTxPointToPoint, this));
+    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceTx, this));
 
     sstream.str("");
     sstream << "/NodeList/*/DeviceList/*/$" << deviceTypeName << "/Rx";
-    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceNetDevRxPointToPoint, this));
+    Config::Connect(sstream.str(), MakeCallback(&PyViz::TraceRx, this));
 }
 
 void
@@ -234,7 +199,7 @@ PyViz::SetPacketCaptureOptions(uint32_t nodeId, PacketCaptureOptions options)
 void
 PyViz::RegisterDropTracePath(const std::string& tracePath)
 {
-    Config::Connect(tracePath, MakeCallback(&PyViz::TraceDevQueueDrop, this));
+    Config::Connect(tracePath, MakeCallback(&PyViz::TraceDrop, this));
 }
 
 PyViz::~PyViz()
@@ -281,7 +246,7 @@ PyViz::CallbackStopSimulation()
     }
 }
 
-void
+bool
 PyViz::SimulatorRunUntil(Time time)
 {
     NS_LOG_LOGIC("SimulatorRunUntil " << time << " (now is " << Simulator::Now() << ")");
@@ -320,7 +285,7 @@ PyViz::SimulatorRunUntil(Time time)
 
     if (Simulator::Now() >= time)
     {
-        return;
+        return true;
     }
 
     // Schedule a dummy callback function for the target time, to make
@@ -342,8 +307,15 @@ PyViz::SimulatorRunUntil(Time time)
     }
     else
     {
-        impl->Run();
+        // Simulator::Run() rather than impl->Run(): it also stops Time from
+        // tracking every Time object for resolution changes, which otherwise
+        // grows a set on each Time construction and slows the run down.
+        Simulator::Run();
     }
+    // m_stop is set only by CallbackStopSimulation and Pause(), so it stays
+    // false when the run ended because no events remain or the simulation
+    // called Simulator::Stop().
+    return m_stop;
 }
 
 Time
@@ -459,12 +431,50 @@ PyViz::FilterPacket(Ptr<const Packet> packet, const PacketCaptureOptions& option
     }
 }
 
-void
-PyViz::TraceDevQueueDrop(std::string context, Ptr<const Packet> packet)
+// --------- generic trace handlers -------------------
+
+namespace
 {
-    NS_LOG_FUNCTION(context << packet->GetUid());
+/**
+ * Extract the node and device indices from a trace context.
+ *
+ * @param context Trace context of the form "/NodeList/N/DeviceList/D/...".
+ * @return Pair of node index N and device index D (0 if absent).
+ */
+std::pair<uint32_t, uint32_t>
+ContextIndices(const std::string& context)
+{
     std::vector<std::string> splitPath = PathSplit(context);
-    int nodeIndex = std::stoi(splitPath[1]);
+    uint32_t device =
+        splitPath.size() > 3 && splitPath[2] == "DeviceList" ? std::stoi(splitPath[3]) : 0;
+    return {static_cast<uint32_t>(std::stoi(splitPath[1])), device};
+}
+} // namespace
+
+void
+PyViz::TraceTx(std::string context, Ptr<const Packet> packet)
+{
+    auto [node, device] = ContextIndices(context);
+    RecordTx(node, device, packet);
+}
+
+void
+PyViz::TraceRx(std::string context, Ptr<const Packet> packet)
+{
+    auto [node, device] = ContextIndices(context);
+    RecordRx(node, device, packet);
+}
+
+void
+PyViz::TraceDrop(std::string context, Ptr<const Packet> packet)
+{
+    RecordDrop(ContextIndices(context).first, packet);
+}
+
+void
+PyViz::RecordDrop(uint32_t nodeIndex, Ptr<const Packet> packet)
+{
+    NS_LOG_FUNCTION(nodeIndex << packet->GetUid());
     Ptr<Node> node = NodeList::GetNode(nodeIndex);
 
     if (m_nodesOfInterest.find(nodeIndex) == m_nodesOfInterest.end())
@@ -506,32 +516,12 @@ PyViz::TraceDevQueueDrop(std::string context, Ptr<const Packet> packet)
     }
 }
 
-void
-PyViz::TraceIpv4Drop(std::string context,
-                     const ns3::Ipv4Header& hdr,
-                     Ptr<const Packet> packet,
-                     ns3::Ipv4L3Protocol::DropReason reason,
-                     Ptr<Ipv4> dummy_ipv4,
-                     uint32_t interface)
-{
-    Ptr<Packet> packetCopy = packet->Copy();
-    packetCopy->AddHeader(hdr);
-    TraceDevQueueDrop(context, packetCopy);
-}
-
 // --------- TX device tracing -------------------
 
 void
-PyViz::TraceNetDevTxCommon(
-    const std::string& context,
-    Ptr<const Packet> packet,
-    const std::variant<Mac16Address, Mac48Address, Mac64Address>& destination)
+PyViz::RecordTx(uint32_t nodeIndex, uint32_t devIndex, Ptr<const Packet> packet)
 {
-    NS_LOG_FUNCTION(context << packet->GetUid() << *packet);
-
-    std::vector<std::string> splitPath = PathSplit(context);
-    int nodeIndex = std::stoi(splitPath[1]);
-    int devIndex = std::stoi(splitPath[3]);
+    NS_LOG_FUNCTION(nodeIndex << devIndex << packet->GetUid());
     Ptr<Node> node = NodeList::GetNode(nodeIndex);
     Ptr<NetDevice> device = node->GetDevice(devIndex);
 
@@ -550,7 +540,6 @@ PyViz::TraceNetDevTxCommon(
         lastPacket.time = Simulator::Now();
         lastPacket.packet = packet->Copy();
         lastPacket.device = device;
-        lastPacket.to = destination;
 
         last.lastTransmittedPackets.push_back(lastPacket);
         while (last.lastTransmittedPackets.size() > captureOptions->numLastPackets)
@@ -578,31 +567,6 @@ PyViz::TraceNetDevTxCommon(
     }
 
     TxRecordValue record = {Simulator::Now(), node, false};
-
-    if (std::holds_alternative<Mac16Address>(destination))
-    {
-        if (std::get<Mac16Address>(destination) == Mac16Address("FF:FF"))
-        {
-            record.isBroadcast = true;
-        }
-    }
-    else if (std::holds_alternative<Mac48Address>(destination))
-    {
-        if (std::get<Mac48Address>(destination) == device->GetBroadcast())
-        {
-            record.isBroadcast = true;
-        }
-    }
-    else if (std::holds_alternative<Mac64Address>(destination))
-    {
-        if (std::get<Mac64Address>(destination) == Mac64Address("FF:FF:FF:FF:FF:FF:FF:FF"))
-        {
-            // Note: A broadcast using th the MAC 64 bit address is not really used in practice.
-            // instead the 16 bit MAC address is used.
-            record.isBroadcast = true;
-        }
-    }
-
     m_txRecords[TxRecordKey(device->GetChannel(), packet->GetUid())] = record;
 
     PyVizPacketTag tag;
@@ -611,78 +575,10 @@ PyViz::TraceNetDevTxCommon(
     packet->AddByteTag(tag);
 }
 
-void
-PyViz::TraceNetDevTxWifi(std::string context, Ptr<const Packet> packet)
-{
-    NS_LOG_FUNCTION(context << packet->GetUid() << *packet);
-
-    /*
-     *  To DS    From DS   Address 1    Address 2    Address 3    Address 4
-     *----------------------------------------------------------------------
-     *    0        0       Destination  Source        BSSID         N/A
-     *    0        1       Destination  BSSID         Source        N/A
-     *    1        0       BSSID        Source        Destination   N/A
-     *    1        1       Receiver     Transmitter   Destination   Source
-     */
-    WifiMacHeader hdr;
-    NS_ABORT_IF(packet->PeekHeader(hdr) == 0);
-
-    std::variant<Mac16Address, Mac48Address, Mac64Address> destinationAddress;
-    if (hdr.IsToDs())
-    {
-        destinationAddress = hdr.GetAddr3();
-    }
-    else
-    {
-        destinationAddress = hdr.GetAddr1();
-    }
-    TraceNetDevTxCommon(context, packet, destinationAddress);
-}
-
-void
-PyViz::TraceNetDevTxLrWpan(std::string context, Ptr<const Packet> packet)
-{
-    LrWpanMacHeader hdr;
-    NS_ABORT_IF(packet->PeekHeader(hdr) == 0);
-    std::variant<Mac16Address, Mac48Address, Mac64Address> destinationAddress;
-
-    switch (hdr.GetDstAddrMode())
-    {
-    case lrwpan::AddressMode::EXT_ADDR:
-        destinationAddress = hdr.GetExtDstAddr();
-        break;
-    default:
-        destinationAddress = hdr.GetShortDstAddr();
-        break;
-    }
-
-    TraceNetDevTxCommon(context, packet, destinationAddress);
-}
-
-void
-PyViz::TraceNetDevTxCsma(std::string context, Ptr<const Packet> packet)
-{
-    EthernetHeader ethernetHeader;
-    NS_ABORT_IF(packet->PeekHeader(ethernetHeader) == 0);
-    std::variant<Mac16Address, Mac48Address, Mac64Address> destinationAddress;
-    destinationAddress = ethernetHeader.GetDestination();
-    TraceNetDevTxCommon(context, packet, destinationAddress);
-}
-
-void
-PyViz::TraceNetDevTxPointToPoint(std::string context, Ptr<const Packet> packet)
-{
-    std::variant<Mac16Address, Mac48Address, Mac64Address> destinationAddress;
-    destinationAddress = Mac48Address();
-    TraceNetDevTxCommon(context, packet, destinationAddress);
-}
-
 // --------- RX device tracing -------------------
 
 void
-PyViz::TraceNetDevRxCommon(const std::string& context,
-                           Ptr<const Packet> packet,
-                           const std::variant<Mac16Address, Mac48Address, Mac64Address>& source)
+PyViz::RecordRx(uint32_t nodeIndex, uint32_t devIndex, Ptr<const Packet> packet)
 {
     uint32_t uid;
     PyVizPacketTag tag;
@@ -697,10 +593,7 @@ PyViz::TraceNetDevRxCommon(const std::string& context,
         uid = packet->GetUid();
     }
 
-    NS_LOG_FUNCTION(context << uid);
-    std::vector<std::string> splitPath = PathSplit(context);
-    int nodeIndex = std::stoi(splitPath[1]);
-    int devIndex = std::stoi(splitPath[3]);
+    NS_LOG_FUNCTION(nodeIndex << devIndex << uid);
 
     // ---- statistics
     NetDeviceStatistics& stats = FindNetDeviceStatistics(nodeIndex, devIndex);
@@ -720,7 +613,6 @@ PyViz::TraceNetDevRxCommon(const std::string& context,
         lastPacket.time = Simulator::Now();
         lastPacket.packet = packet->Copy();
         lastPacket.device = device;
-        lastPacket.from = source;
 
         last.lastReceivedPackets.push_back(lastPacket);
         while (last.lastReceivedPackets.size() > captureOptions->numLastPackets)
@@ -747,6 +639,14 @@ PyViz::TraceNetDevRxCommon(const std::string& context,
     }
 
     TxRecordValue& record = recordIter->second;
+
+    m_packetFlowSamples.push_back(
+        {record.time, Simulator::Now(), record.srcNode, node, packet->GetSize(), uid});
+    constexpr std::size_t MAX_PACKET_FLOW_SAMPLES = 512;
+    if (m_packetFlowSamples.size() > MAX_PACKET_FLOW_SAMPLES)
+    {
+        m_packetFlowSamples.erase(m_packetFlowSamples.begin());
+    }
 
     if (record.srcNode == node)
     {
@@ -797,113 +697,6 @@ PyViz::TraceNetDevRxCommon(const std::string& context,
     }
 }
 
-void
-PyViz::TraceNetDevRxWifi(std::string context, Ptr<const Packet> packet)
-{
-    NS_LOG_FUNCTION(context << packet->GetUid());
-
-    /*
-     *  To DS    From DS   Address 1    Address 2    Address 3    Address 4
-     *----------------------------------------------------------------------
-     *    0        0       Destination  Source        BSSID         N/A
-     *    0        1       Destination  BSSID         Source        N/A
-     *    1        0       BSSID        Source        Destination   N/A
-     *    1        1       Receiver     Transmitter   Destination   Source
-     */
-    WifiMacHeader hdr;
-    NS_ABORT_IF(packet->PeekHeader(hdr) == 0);
-    std::variant<Mac16Address, Mac48Address, Mac64Address> sourceAddress;
-    if (!hdr.IsFromDs())
-    {
-        sourceAddress = hdr.GetAddr2();
-    }
-    else if (!hdr.IsToDs())
-    {
-        sourceAddress = hdr.GetAddr3();
-    }
-    else // if (hdr.IsToDs())
-    {
-        sourceAddress = hdr.GetAddr4();
-    }
-
-    TraceNetDevRxCommon(context, packet, sourceAddress);
-}
-
-void
-PyViz::TraceNetDevRxLrWpan(std::string context, Ptr<const Packet> packet)
-{
-    LrWpanMacHeader hdr;
-    NS_ABORT_IF(packet->PeekHeader(hdr) == 0);
-    std::variant<Mac16Address, Mac48Address, Mac64Address> sourceAddress;
-    switch (hdr.GetSrcAddrMode())
-    {
-    case lrwpan::AddressMode::EXT_ADDR:
-        sourceAddress = hdr.GetExtSrcAddr();
-        break;
-    default:
-        sourceAddress = hdr.GetShortSrcAddr();
-        break;
-    }
-
-    TraceNetDevRxCommon(context, packet, sourceAddress);
-}
-
-void
-PyViz::TraceNetDevRxCsma(std::string context, Ptr<const Packet> packet)
-{
-    EthernetHeader ethernetHeader;
-    NS_ABORT_IF(packet->PeekHeader(ethernetHeader) == 0);
-    std::variant<Mac16Address, Mac48Address, Mac64Address> sourceAddress;
-    sourceAddress = ethernetHeader.GetSource();
-    TraceNetDevRxCommon(context, packet, sourceAddress);
-}
-
-void
-PyViz::TraceNetDevRxPointToPoint(std::string context, Ptr<const Packet> packet)
-{
-    std::variant<Mac16Address, Mac48Address, Mac64Address> sourceAddress;
-    sourceAddress = Mac48Address();
-    TraceNetDevRxCommon(context, packet, sourceAddress);
-}
-
-void
-PyViz::TraceNetDevPromiscRxCsma(std::string context, Ptr<const Packet> packet)
-{
-    EthernetHeader ethernetHeader;
-    NS_ABORT_IF(packet->PeekHeader(ethernetHeader) == 0);
-
-    NetDevice::PacketType packetType = NetDevice::PACKET_OTHERHOST; // FIXME
-
-    // Other packet types are already being received by
-    // TraceNetDevRxCsma; we don't want to receive them twice.
-    if (packetType == NetDevice::PACKET_OTHERHOST)
-    {
-        std::variant<Mac16Address, Mac48Address, Mac64Address> destinationAddress;
-        destinationAddress = ethernetHeader.GetDestination();
-        TraceNetDevRxCommon(context, packet, destinationAddress);
-    }
-}
-
-void
-PyViz::TraceNetDevTxLte(std::string context,
-                        Ptr<const Packet> packet,
-                        const Mac48Address& destination)
-{
-    NS_LOG_FUNCTION(context);
-    std::variant<Mac16Address, Mac48Address, Mac64Address> destinationAddress;
-    destinationAddress = destination;
-    TraceNetDevTxCommon(context, packet, destinationAddress);
-}
-
-void
-PyViz::TraceNetDevRxLte(std::string context, Ptr<const Packet> packet, const Mac48Address& source)
-{
-    NS_LOG_FUNCTION(context);
-    std::variant<Mac16Address, Mac48Address, Mac64Address> sourceAddress;
-    sourceAddress = source;
-    TraceNetDevRxCommon(context, packet, sourceAddress);
-}
-
 // ---------------------
 
 TransmissionSampleList
@@ -924,6 +717,12 @@ PyViz::GetTransmissionSamples() const
     }
     NS_LOG_DEBUG("GetTransmissionSamples END");
     return list;
+}
+
+std::vector<PacketFlowSample>
+PyViz::GetPacketFlowSamples() const
+{
+    return m_packetFlowSamples;
 }
 
 PacketDropSampleList

@@ -42,7 +42,15 @@ but other contemporaneous versions may also work.
 
 ### New user-visible features
 
+- (visualizer) PyViz was rewritten as a browser based visualizer with no GTK dependencies. It adds a recursive object inspector with attribute editing, a TypeId browser, multi-node selection, movable and minimizable panel windows, optional FlowMonitor plots with zoom, battery indicators for nodes with an energy source, mobility trails and LTE transmissions. The GTK visualizer was removed.
+- (lte) `LteNetDevice` has new `Tx` and `Rx` trace sources.
+
 ### Bugs fixed
+
+- (visualizer) PyViz no longer aborts when trace sources of modules that are not built (such as LTE) are missing.
+- (visualizer) PyViz simulations no longer slow down over time: stepping now goes through `Simulator::Run()`, which stops `Time` from tracking every `Time` object.
+- (visualizer) Restarting a PyViz simulation no longer aborts when the scenario uses `Names`, and no longer frees objects the scenario created from Python.
+- (visualizer) CSMA receptions are no longer counted twice by PyViz.
 
 ## Release 3.49
 
