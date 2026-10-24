@@ -18,10 +18,15 @@
 #include "ns3/random-variable-stream.h"
 #include "ns3/traced-value.h"
 
+#include <vector>
+
 class TcpBbrCheckGainValuesTest;
+class TcpBbrRecorder;
 
 namespace ns3
 {
+
+class TcpBbrLinuxTimingTest;
 
 /**
  * @ingroup congestionOps
@@ -93,6 +98,15 @@ class TcpBbr : public TcpCongestionOps
 
     std::string GetName() const override;
     bool HasCongControl() const override;
+
+    /**
+     * @brief Get the least number of segments of a GSO packet: one below a
+     * pacing rate of 1.2 Mbit/s, two above, as bbr_min_tso_segs() of Linux
+     *
+     * @param tcb internal congestion state
+     * @return the number of segments
+     */
+    uint32_t GetMinTsoSegs(Ptr<const TcpSocketState> tcb) const override;
     void CongControl(Ptr<TcpSocketState> tcb,
                      const TcpRateOps::TcpRateConnection& rc,
                      const TcpRateOps::TcpRateSample& rs) override;
@@ -109,6 +123,18 @@ class TcpBbr : public TcpCongestionOps
      * @relates TcpBbrCheckGainValuesTest
      */
     friend class ::TcpBbrCheckGainValuesTest;
+
+    /**
+     * @brief TcpBbrRecorder friend class (for tests).
+     * @relates TcpBbrRecorder
+     */
+    friend class ::TcpBbrRecorder;
+
+    /**
+     * @brief TcpBbrLinuxTimingTest friend class (for tests).
+     * @relates TcpBbrLinuxTimingTest
+     */
+    friend class TcpBbrLinuxTimingTest;
 
     /**
      * @brief Advances pacing gain using cycle gain algorithm, while in BBR_PROBE_BW state
@@ -208,6 +234,58 @@ class TcpBbr : public TcpCongestionOps
     uint32_t InFlight(Ptr<TcpSocketState> tcb, double gain);
 
     /**
+     * @brief The data in flight that BBR targets, with LinuxArithmetic, as
+     * bbr_inflight() of Linux: the BDP in whole packets, rounded up, plus the
+     * ACK aggregation allowance if asked, plus three GSO packets
+     * (bbr_quantization_budget()), rounded up to an even number of packets.
+     * @param tcb the socket state.
+     * @param gain gain factor.
+     * @param aggregation whether to add the ACK aggregation allowance.
+     * @return the data in flight, in bytes.
+     */
+    uint32_t LinuxInFlight(Ptr<TcpSocketState> tcb, double gain, bool aggregation);
+
+    /**
+     * @brief Bandwidth in the unit of Linux.
+     * @param tcb the socket state.
+     * @param bw the bandwidth.
+     * @return whole packets per microsecond, scaled by 2^24 (BW_UNIT).
+     */
+    uint64_t BwUnits(Ptr<const TcpSocketState> tcb, DataRate bw) const;
+
+    /**
+     * @brief The current time, rounded down to the Linux jiffy with LinuxHz
+     * @return the time
+     */
+    Time JiffiesNow() const;
+
+    /**
+     * @brief Set the phases in which PROBE_BW starts
+     * @param phases The phases, separated by spaces
+     */
+    void SetProbeBwStartPhases(std::string phases);
+
+    /**
+     * @brief The GSO packet size that BBR expects, as bbr_tso_segs_goal() of
+     * Linux: the data sent in about 1 ms at the pacing rate, at least one or
+     * two segments (bbr_min_tso_segs()), at most 64 KiB and 127 segments.
+     * @param tcb the socket state.
+     * @return the number of segments.
+     */
+    uint32_t TsoSegsGoal(Ptr<const TcpSocketState> tcb) const;
+
+    /**
+     * @brief The data that will be in the network when the next packet
+     * leaves, as bbr_packets_in_net_at_edt() of Linux: the data in flight,
+     * less that delivered at the bottleneck bandwidth until the departure
+     * time of the pacing, plus a GSO packet when the pacing gain is above 1.
+     * @param tcb the socket state.
+     * @param inFlight the data in flight, in bytes.
+     * @return the data in the network at the departure time, in bytes.
+     */
+    uint32_t InNetAtEdt(Ptr<const TcpSocketState> tcb, uint32_t inFlight) const;
+
+    /**
      * @brief Initializes the full pipe estimator.
      */
     void InitFullPipe();
@@ -230,6 +308,17 @@ class TcpBbr : public TcpCongestionOps
      * @returns true if want to move to next value otherwise false.
      */
     bool IsNextCyclePhase(Ptr<TcpSocketState> tcb, const TcpRateOps::TcpRateSample& rs);
+
+    /**
+     * @brief Handles the loss recovery as Linux
+     * (bbr_set_cwnd_to_recover_or_restore()): deducts the newly lost data,
+     * starts the packet conservation and a round when a recovery starts, and
+     * restores the window when it ends, from the state of the previous ACK.
+     * @param tcb the socket state.
+     * @param rs rate sample.
+     * @return true if the packet conservation sets the window.
+     */
+    bool LinuxRecoverOrRestore(Ptr<TcpSocketState> tcb, const TcpRateOps::TcpRateSample& rs);
 
     /**
      * @brief Modulates congestion window in BBR_PROBE_RTT.
@@ -271,6 +360,25 @@ class TcpBbr : public TcpCongestionOps
      * @param gain pacing gain.
      */
     void SetPacingRate(Ptr<TcpSocketState> tcb, double gain);
+
+    /**
+     * @brief Pacing rate for a bandwidth and a gain, less the pacing margin.
+     *
+     * With LinuxArithmetic, as bbr_rate_bytes_per_sec() of Linux: the
+     * bandwidth in packets per microsecond and the gain in fixed point, the
+     * rate rounded down to whole bytes per second.
+     * @param tcb the socket state.
+     * @param bw bandwidth.
+     * @param gain gain.
+     * @return the pacing rate, bounded by the maximum pacing rate.
+     */
+    DataRate BwToPacingRate(Ptr<const TcpSocketState> tcb, DataRate bw, double gain) const;
+
+    /**
+     * @brief The high gain of the startup.
+     * @return HighGain, or 739/256 with LinuxArithmetic (bbr_high_gain).
+     */
+    double GetHighGain() const;
 
     /**
      * @brief Updates send quantum based on the network model.
@@ -383,13 +491,20 @@ class TcpBbr : public TcpCongestionOps
     uint32_t m_extraAckedWinRtt{0};       //!< Age of extra acked in rtt
     uint32_t m_extraAckedWinRttLength{5}; //!< Window length of extra acked window
     uint32_t m_ackEpochAckedResetThresh{
-        1 << 17}; //!< Max allowed val for m_ackEpochAcked, after which sampling epoch is reset
-    uint32_t m_extraAckedIdx{0}; //!< Current index in extra acked array
-    Time m_ackEpochTime;         //!< Starting of ACK sampling epoch time
-    uint32_t m_ackEpochAcked{0}; //!< Bytes ACked in sampling epoch
-    bool m_hasSeenRtt{false};    //!< Have we seen RTT sample yet?
-    double m_pacingMargin{0.01}; //!< BBR intentionally reduces the pacing rate by 1% to drain any
-                                 //!< standing queues. See `bbr_rate_bytes_per_sec` in Linux.
+        1 << 20}; //!< Segments acknowledged in an ACK aggregation epoch past which it is reset
+    uint32_t m_extraAckedIdx{0};                //!< Current index in extra acked array
+    Time m_ackEpochTime;                        //!< Starting of ACK sampling epoch time
+    uint32_t m_ackEpochAcked{0};                //!< Bytes ACked in sampling epoch
+    bool m_hasSeenRtt{false};                   //!< Have we seen RTT sample yet?
+    bool m_linuxArithmetic{false};              //!< Compute the pacing rate and the gains as Linux
+    std::vector<uint32_t> m_probeBwStartPhases; //!< Phases in which PROBE_BW starts, in turn
+    uint32_t m_probeBwEntries{0};               //!< Number of entries into PROBE_BW
+    bool m_linuxRecovery{false};                //!< Handle the loss recovery as Linux
+    TcpSocketState::TcpCongState_t m_prevCaState{
+        TcpSocketState::CA_OPEN}; //!< Congestion state seen on the previous ACK (LinuxRecovery)
+    uint32_t m_linuxHz{0};        //!< Rate of the Linux jiffies timing the minimum RTT (0: exact)
+    double m_pacingMargin{0.01};  //!< BBR intentionally reduces the pacing rate by 1% to drain any
+                                  //!< standing queues. See `bbr_rate_bytes_per_sec` in Linux.
 };
 
 } // namespace ns3

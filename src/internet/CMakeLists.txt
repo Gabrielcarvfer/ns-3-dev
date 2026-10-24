@@ -345,6 +345,7 @@ set(test_sources
     test/tcp-abe-test.cc
     test/tcp-advertised-window-test.cc
     test/tcp-bbr-test.cc
+    test/tcp-bbr-recovery-test.cc
     test/tcp-bic-test.cc
     test/tcp-bytes-in-flight-test.cc
     test/tcp-classic-recovery-test.cc
