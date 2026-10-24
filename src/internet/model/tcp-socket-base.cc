@@ -2649,7 +2649,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
     else if (ackNumber == oldHeadSequence)
     {
         // DupAck. Artificially call PktsAcked: after all, one segment has been ACKed.
-        m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_srtt);
+        m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_lastRtt);
     }
     else if (ackNumber > oldHeadSequence)
     {
@@ -2719,7 +2719,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             // This partial ACK acknowledge the fact that one segment has been
             // previously lost and now successfully received. All others have
             // been processed when they come under the form of dupACKs
-            m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_srtt);
+            m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_lastRtt);
             // RFC 6298, Section 5.3: restart the retransmission timer on every
             // ACK acknowledging new data. This is the Slow-but-Steady variant
             // of NewReno (RFC 3782, Section 4, dropped by RFC 6582, see its
@@ -2740,7 +2740,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
         // of RecoveryPoint.
         else if (ackNumber < m_recover && m_tcb->m_congState == TcpSocketState::CA_LOSS)
         {
-            m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_srtt);
+            m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_lastRtt);
             m_congestionControl->IncreaseWindow(m_tcb, segsAcked);
 
             NS_LOG_DEBUG(" Cong Control Called, cWnd=" << m_tcb->m_cWnd
@@ -2759,7 +2759,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
         }
         else if (m_tcb->m_congState == TcpSocketState::CA_CWR)
         {
-            m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_srtt);
+            m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_lastRtt);
             // TODO: need to check behavior if marking is compounded by loss
             // and/or packet reordering
             if (!m_congestionControl->HasCongControl() && segsAcked >= 1)
@@ -2772,7 +2772,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
         {
             if (m_tcb->m_congState == TcpSocketState::CA_OPEN)
             {
-                m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_srtt);
+                m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_lastRtt);
             }
             else if (m_tcb->m_congState == TcpSocketState::CA_DISORDER)
             {
@@ -2780,7 +2780,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                 {
                     m_congestionControl->PktsAcked(m_tcb,
                                                    segsAcked - oldDupAckCount,
-                                                   m_tcb->m_srtt);
+                                                   m_tcb->m_lastRtt);
                 }
 
                 if (!isDupack)
@@ -2809,13 +2809,15 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             // phase.
             else if (m_tcb->m_congState == TcpSocketState::CA_RECOVERY)
             {
-                // Recalculate the segs acked, that are from m_recover to ackNumber
-                // (which are the ones we have not passed to PktsAcked and that
-                // can increase cWnd)
-                // TODO:  check consistency for dynamic segment size
-                segsAcked =
-                    static_cast<uint32_t>(ackNumber - oldHeadSequence) / m_tcb->m_segmentSize;
-                m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_srtt);
+                // PktsAcked() is told of every segment this ACK covers, as
+                // Linux tcp_clean_rtx_queue() does, while the window grows
+                // below only by the segments newly delivered (Linux
+                // acked_sacked in tcp_cong_control()): the segments SACKed
+                // during the recovery were already counted as delivered
+                m_congestionControl->PktsAcked(m_tcb,
+                                               static_cast<uint32_t>(ackNumber - oldHeadSequence) /
+                                                   m_tcb->m_segmentSize,
+                                               m_tcb->m_lastRtt);
                 m_congestionControl->CwndEvent(m_tcb, TcpSocketState::CA_EVENT_COMPLETE_CWR);
                 m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_OPEN);
                 m_tcb->m_congState = TcpSocketState::CA_OPEN;
@@ -2836,7 +2838,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                 segsAcked =
                     static_cast<uint32_t>(ackNumber - oldHeadSequence) / m_tcb->m_segmentSize;
 
-                m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_srtt);
+                m_congestionControl->PktsAcked(m_tcb, segsAcked, m_tcb->m_lastRtt);
 
                 m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_OPEN);
                 m_tcb->m_congState = TcpSocketState::CA_OPEN;
@@ -4647,8 +4649,21 @@ TcpSocketBase::EstimateRtt(const TcpHeader& tcpHeader)
 
         // In case of multiple packets being ACKed in a single acknowledgement, `m_lastRtt` is
         // RTT of the last (S)ACKed packet calculated using the data packet with the latest
-        // transmission time
-        Time lastRtt = CalculateRttSample(tcpHeader, latestTransmittedPktHistory);
+        // transmission time. Its transmission time gives that RTT exactly, unless it was
+        // retransmitted: the echoed timestamp has a granularity of one millisecond, and
+        // belongs to the oldest segment of a delayed ACK (as Linux, which feeds the
+        // congestion control with the timestamps only when no clean sample is available)
+        Time lastRtt;
+        if (!latestTransmittedPktHistory.retx &&
+            ackSeq >= latestTransmittedPktHistory.seq +
+                          SequenceNumber32(latestTransmittedPktHistory.count))
+        {
+            lastRtt = Simulator::Now() - latestTransmittedPktHistory.time;
+        }
+        else
+        {
+            lastRtt = CalculateRttSample(tcpHeader, latestTransmittedPktHistory);
+        }
         if (!lastRtt.IsZero())
         {
             NS_LOG_DEBUG("Last RTT sample updated to: " << lastRtt);

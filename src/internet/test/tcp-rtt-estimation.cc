@@ -11,6 +11,7 @@
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/rtt-estimator.h"
+#include "ns3/tcp-congestion-ops.h"
 
 using namespace ns3;
 
@@ -232,6 +233,145 @@ TcpRttEstimationWithLossTest::CreateReceiverErrorModel()
 /**
  * @ingroup internet-test
  *
+ * @brief Congestion control recording the RTT given to PktsAcked().
+ *
+ * Every call is checked against the RTT sample of the last ACKed segment,
+ * which is what Linux passes to the pkts_acked() hook of the congestion
+ * controls (ack_sample.rtt_us), as opposed to the smoothed RTT.
+ */
+class TcpRttSampleRecorder : public TcpNewReno
+{
+  public:
+    /**
+     * @brief Get the type ID.
+     * @return the object TypeId
+     */
+    static TypeId GetTypeId();
+
+    void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt) override;
+    Ptr<TcpCongestionOps> Fork() override;
+
+    static uint32_t m_calls;           //!< Calls of PktsAcked() after an RTT sample
+    static uint32_t m_smoothedSamples; //!< Calls given an RTT other than the last sample
+    static uint32_t m_wholeMsSamples;  //!< Calls given an RTT of whole milliseconds
+};
+
+uint32_t TcpRttSampleRecorder::m_calls = 0;
+uint32_t TcpRttSampleRecorder::m_smoothedSamples = 0;
+uint32_t TcpRttSampleRecorder::m_wholeMsSamples = 0;
+
+NS_OBJECT_ENSURE_REGISTERED(TcpRttSampleRecorder);
+
+TypeId
+TcpRttSampleRecorder::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::TcpRttSampleRecorder")
+                            .SetParent<TcpNewReno>()
+                            .AddConstructor<TcpRttSampleRecorder>()
+                            .SetGroupName("Internet");
+    return tid;
+}
+
+void
+TcpRttSampleRecorder::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt)
+{
+    if (tcb->m_lastRtt.Get().IsZero())
+    {
+        return;
+    }
+    m_calls++;
+    if (rtt != tcb->m_lastRtt.Get())
+    {
+        m_smoothedSamples++;
+    }
+    if (rtt.GetNanoSeconds() % 1000000 == 0)
+    {
+        m_wholeMsSamples++;
+    }
+}
+
+Ptr<TcpCongestionOps>
+TcpRttSampleRecorder::Fork()
+{
+    return CopyObject<TcpRttSampleRecorder>(this);
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Check that the congestion control is given the RTT samples.
+ *
+ * The first data segment is acknowledged by the delayed ACK timer, so that
+ * its RTT sample is far from the RTT measured in the handshake, and the
+ * smoothed RTT differs from the samples for the rest of the connection.
+ * Each call of PktsAcked() must carry the sample of the ACK being processed,
+ * as the delay based congestion controls (e.g., Vegas, Veno, Illinois, YeAH,
+ * and the HyStart of CUBIC) track the minimum and the variation of the RTT
+ * samples.
+ *
+ * The one way delay is not a whole number of milliseconds, so that a sample
+ * taken from the echoed timestamp (whose clock ticks every millisecond) is
+ * distinguished from one taken from the transmission time of the segment,
+ * which must be used when the segment was not retransmitted, as in Linux.
+ */
+class TcpRttSampleToCongestionControlTest : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param desc Test description.
+     * @param enableTs Enable TimeStamp option.
+     */
+    TcpRttSampleToCongestionControlTest(const std::string& desc, bool enableTs)
+        : TcpGeneralTest(desc),
+          m_enableTs(enableTs)
+    {
+    }
+
+  protected:
+    void ConfigureEnvironment() override;
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
+    void FinalChecks() override;
+
+  private:
+    bool m_enableTs; //!< Enable TimeStamp option
+};
+
+void
+TcpRttSampleToCongestionControlTest::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetAppPktCount(20);
+    SetPropagationDelay(MicroSeconds(50300));
+    SetCongestionControl(TcpRttSampleRecorder::GetTypeId());
+    TcpRttSampleRecorder::m_calls = 0;
+    TcpRttSampleRecorder::m_smoothedSamples = 0;
+    TcpRttSampleRecorder::m_wholeMsSamples = 0;
+}
+
+Ptr<TcpSocketMsgBase>
+TcpRttSampleToCongestionControlTest::CreateSenderSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> s = TcpGeneralTest::CreateSenderSocket(node);
+    s->SetAttribute("Timestamp", BooleanValue(m_enableTs));
+    return s;
+}
+
+void
+TcpRttSampleToCongestionControlTest::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_GT(TcpRttSampleRecorder::m_calls, 0, "PktsAcked() was never called");
+    NS_TEST_ASSERT_MSG_EQ(TcpRttSampleRecorder::m_smoothedSamples,
+                          0,
+                          "PktsAcked() was given an RTT other than the last RTT sample");
+    NS_TEST_ASSERT_MSG_EQ(TcpRttSampleRecorder::m_wholeMsSamples,
+                          0,
+                          "PktsAcked() was given an RTT measured with the timestamps");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP RTT estimation TestSuite
  */
 class TcpRttEstimationTestSuite : public TestSuite
@@ -295,6 +435,15 @@ class TcpRttEstimationTestSuite : public TestSuite
                                                      true,
                                                      1000,
                                                      toDrop),
+                    TestCase::Duration::QUICK);
+
+        AddTestCase(new TcpRttSampleToCongestionControlTest(
+                        "The congestion control is given the RTT samples, ts",
+                        true),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpRttSampleToCongestionControlTest(
+                        "The congestion control is given the RTT samples, no ts",
+                        false),
                     TestCase::Duration::QUICK);
     }
 };

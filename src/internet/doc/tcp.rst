@@ -413,6 +413,23 @@ Here follows a list of supported TCP congestion control algorithms. For an
 academic paper on many of these congestion control algorithms, see
 http://dl.acm.org/citation.cfm?id=2756518 .
 
+The models derived from :cpp:class:`TcpNewReno` (H-TCP, HighSpeed, Hybla,
+Illinois, LEDBAT, TCP-LP, Scalable, Vegas, Veno, Westwood+ and YeAH) inherit,
+wherever they do not override it, its window growth, which follows
+:rfc:`5681` and counts ACKs: the slow start adds one segment per ACK and the
+congestion avoidance adds SMSS*SMSS/cwnd per ACK. The Linux implementations of
+the same algorithms count instead the segments acknowledged (byte counting,
+:rfc:`3465`, see Linux Reno below), so that, with a receiver acknowledging
+every other segment, the |ns3| models grow by about 1.5 times per RTT in slow
+start, instead of 2, and by half a segment per RTT in the Reno phases of
+congestion avoidance, instead of one. This is a modelling choice, not a defect,
+but it should be kept in mind when comparing these models with Linux.
+The RTT that the congestion controls receive (``rtt`` in
+:cpp:func:`TcpCongestionOps::PktsAcked`) is the sample of the last
+acknowledged segment, measured from its transmission time (or from the
+timestamp option when it was retransmitted), as the ``rtt_us`` of the
+``ack_sample`` of Linux, not the smoothed RTT.
+
 NewReno
 ^^^^^^^
 NewReno algorithm introduces partial ACKs inside the well-established Reno
@@ -454,6 +471,17 @@ CUBIC is documented in :rfc:`9438`, and the |ns3| implementation is patterned
 partly on the Linux implementation and partly on the RFC, although the Linux
 4.4 kernel implementation (through the Direct Code Execution environment) has
 been used to validate the behavior.
+
+As in Linux, HyStart leaves slow start when the minimum RTT of a round exceeds
+the minimum RTT by one eighth of it, bounded between ``HyStartDelayMin`` (4 ms)
+and ``HyStartDelayMax`` (16 ms), or when closely spaced ACKs arrive for half
+the minimum RTT since the start of the round (the whole minimum RTT when the
+flow is paced). Linux also adds to the ACK train threshold an allowance for
+TSO/GRO aggregation, which is not modelled. Since the ACK train detection
+depends on where the round starts within a train of ACKs, and the Linux
+receiver acknowledges every segment at the start of a connection (quick ACK
+mode) while the |ns3| receiver delays its ACKs from the first segment, the two
+stacks may leave slow start at different windows on the same path.
 
 Linux Reno
 ^^^^^^^^^^
@@ -575,6 +603,11 @@ This coefficient is used to calculate both the slow start threshold
 and the congestion window when in slow start and in congestion avoidance,
 respectively.
 
+The reference RTT (attribute ``RRTT``) is 25 ms, as in the Hybla paper and
+in Linux. Linux also sets the initial congestion window to rho segments, and
+increases the window per ACK in congestion avoidance, while |ns3| keeps the
+configured initial window and counts the segments acknowledged.
+
 More information at: http://dl.acm.org/citation.cfm?id=2756518
 
 Westwood
@@ -624,6 +657,12 @@ Following the implementation of Vegas in Linux, we use 2, 4, and 1 as the
 default values of alpha, beta, and gamma, respectively, but they can be
 modified through the Attribute system.
 
+On a loss, Vegas halves the window as Reno does (Linux
+``tcp_reno_ssthresh()``); the slow start threshold Vegas keeps when it adjusts
+the window by itself is used only for those adjustments. |ns3| computes diff
+as in the Vegas paper, cWnd * (RTT - BaseRTT) / RTT, while Linux divides by
+BaseRTT instead of RTT, which gives a slightly larger diff when a queue builds.
+
 More information at: http://dx.doi.org/10.1109/49.464716
 
 Scalable
@@ -636,8 +675,10 @@ RTT, Scalable increases its cwnd per:
 .. math::  cwnd = cwnd + 0.01
    :label: scalablecwndincrement
 
-Following Linux implementation of Scalable, we use 50 instead of 100 to account
-for delayed ACK.
+As in the Linux implementation of Scalable, the increment is counted per
+segment acknowledged rather than per ACK: the window grows by one segment
+every 100 segments acknowledged (attribute ``AIFactor``), whether or not the
+receiver delays its ACKs.
 
 On the first detection of congestion in a given RTT, cwnd is reduced based on
 the following equation:
@@ -707,6 +748,11 @@ switches to probing the new maximum window with a 'slow start' strategy.
 If a loss occur in either these phases, the current window (before the loss)
 can be treated as the new maximum, and the reduced (with a multiplicative
 decrease factor Beta) window size can be used as the new minimum.
+
+As in the BIC paper and Linux, fast convergence sets the last maximum to the
+midpoint between the window and the reduced window, and slow start counts the
+segments acknowledged. Linux also divides the increment counter by a running
+estimate of the number of segments per ACK; this is not modelled.
 
 More information at: http://ieeexplore.ieee.org/xpl/articleDetails.jsp?arnumber=1354672
 
@@ -858,6 +904,12 @@ to 20 Mb/s) to create a higher BDP link, such as:
 
 More information (paper): http://www.hamilton.ie/net/htcp3.pdf
 
+The window grows by alpha segments per RTT (alpha / cWnd segments per ACK),
+and the backoff factor, RTTmin / RTTmax, is bounded to [0.5, 0.8], as in the
+paper and in Linux. Linux also scales alpha with the minimum RTT (relative to
+100 ms) and counts the segments acknowledged rather than the ACKs; these are
+not modelled.
+
 More information (Internet Draft): https://tools.ietf.org/html/draft-leith-tcp-htcp-06
 
 LEDBAT
@@ -941,6 +993,18 @@ where owdMin and owdMax are the minimum and maximum one way delays experienced
 throughout the connection, LP_WITHIN_INF indicates if TCP-LP is in inference
 phase or not
 
+The one way delay is the difference between the timestamp of the receiver and
+the echoed timestamp of the sender, in milliseconds. When the receiver delays
+its ACKs, the delay it holds a segment is part of that difference: once
+TCP-LP has reduced the window to one segment, every segment waits for the
+delayed ACK timer, which looks like a large queueing delay and keeps the
+window at one segment within the inference time. TCP-LP therefore needs a
+receiver which does not delay its ACKs (``TcpSocket::DelAckCount`` set to 1)
+to use the available bandwidth. Linux estimates the clock rate of the
+receiver from the timestamps and scales the one way delay with an integer
+division by that rate, which in practice removes most of the delay-based
+reductions, so that Linux TCP-LP behaves almost as Reno.
+
 More information (paper): http://cs.northwestern.edu/~akuzma/rice/doc/TCP-LP.pdf
 
 Data Center TCP (DCTCP)
@@ -999,6 +1063,12 @@ Following the recommendation of RFC 8257, the default values of the parameters a
   g = 0.0625 (i.e., 1/16)
 
   initial alpha (\alpha) = 1
+
+A loss, detected either by a fast retransmission or by a retransmission
+timeout, halves the slow start threshold as in :rfc:`5681` (:rfc:`8257`,
+Section 3.5, and Linux ``dctcp_react_to_loss()``); the reduction based on
+alpha applies only to the ECN Echo. Without ECN marking on the path, DCTCP
+therefore behaves as Linux Reno.
 
 
 To enable DCTCP on all TCP sockets, the following configuration can be used::

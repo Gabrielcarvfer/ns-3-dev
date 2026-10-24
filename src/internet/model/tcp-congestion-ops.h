@@ -120,7 +120,7 @@ class TcpCongestionOps : public Object
      *
      * @param tcb internal congestion state
      * @param segmentsAcked count of segments acked
-     * @param rtt last rtt
+     * @param rtt RTT sample of the last ACKed segment (not the smoothed RTT)
      */
     virtual void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt);
 

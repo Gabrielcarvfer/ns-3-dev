@@ -104,18 +104,18 @@
 // Case 'cubic-50ms-no-ecn': CUBIC single flow, 50ms base RTT, 50 Mbps link, ECN disabled, CoDel:
 //     ./ns3 run 'tcp-validation --firstTcpType=cubic --linkRate=50Mbps --baseRtt=50ms
 //     --queueUseEcn=0 --stopTime=20s --validate=1 --validation=cubic-50ms-no-ecn'
-//    - Maximum value of cwnd is 511 segments at 5.4593 seconds
-//    - cwnd decreases to 173 segments at 5.80304 seconds
-//    - cwnd reaches another local maxima around 14.2815 seconds of 236 segments
-//    - cwnd reaches a second maximum around 18.048 seconds of 234 segments
+//    - Maximum value of cwnd is 297 segments at 5.46266 seconds
+//    - cwnd decreases to 145 segments at 5.61221 seconds
+//    - cwnd reaches another local maxima around 15.2282 seconds of 239 segments
+//    - cwnd reaches a second maximum around 18.5703 seconds of 235 segments
 //
 // Case 'cubic-50ms-ecn': CUBIC single flow, 50ms base RTT, 50 Mbps link, ECN enabled, CoDel:
 //     ./ns3 run 'tcp-validation --firstTcpType=cubic --linkRate=50Mbps --baseRtt=50ms
 //     --queueUseEcn=0 --stopTime=20s --validate=1 --validation=cubic-50ms-no-ecn'
-//    - Maximum value of cwnd is 511 segments at 5.4593 seconds
-//    - cwnd decreases to 173 segments at 5.7939 seconds
-//    - cwnd reaches another local maxima around 14.3477 seconds of 236 segments
-//    - cwnd reaches a second maximum around 18.064 seconds of 234 segments
+//    - Maximum value of cwnd is 297 segments at 5.46314 seconds
+//    - cwnd decreases to 145 segments at 5.61245 seconds
+//    - cwnd reaches another local maxima around 15.2371 seconds of 239 segments
+//    - cwnd reaches a second maximum around 18.5804 seconds of 235 segments
 
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
@@ -164,9 +164,9 @@ TraceFirstCwnd(std::ofstream* ofStream, uint32_t oldCwnd, uint32_t newCwnd)
     {
         double now = Simulator::Now().GetSeconds();
         double cwnd = static_cast<double>(newCwnd) / 1448;
-        if ((now > 5.43) && (now < 5.465) && (cwnd < 500))
+        if ((now > 5.43) && (now < 5.465) && (cwnd < 285))
         {
-            NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected >= 500)");
+            NS_LOG_WARN("now " << Now().As(Time::S) << " cwnd " << cwnd << " (expected >= 285)");
             g_validationFailed = true;
         }
         else if ((now > 5.795) && (now < 6) && (cwnd > 390))

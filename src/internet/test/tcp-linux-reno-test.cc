@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only
  *
  */
+#include "tcp-error-model.h"
 #include "tcp-general-test.h"
 
 #include "ns3/config.h"
@@ -375,6 +376,112 @@ TcpLinuxRenoCongAvoidTest::DoTeardown()
 /**
  * @ingroup internet-test
  *
+ * @brief Check the window growth on the ACK which ends a fast recovery.
+ *
+ * A segment of the initial window is dropped, so that the receiver SACKs
+ * every segment sent after it, and the ACK of its retransmission covers all
+ * of them at once. When it ends the recovery, the congestion window is set to
+ * the slow start threshold, and it may grow only by the segments newly
+ * delivered by that ACK (Linux acked_sacked in tcp_cong_control()): the SACKed
+ * segments were delivered earlier, during the recovery. Counting them again
+ * would grow the window of Linux Reno by several segments at once.
+ */
+class TcpLinuxRenoRecoveryExitTest : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param name Test description.
+     */
+    TcpLinuxRenoRecoveryExitTest(const std::string& name)
+        : TcpGeneralTest(name)
+    {
+    }
+
+  protected:
+    void ConfigureEnvironment() override;
+    void ConfigureProperties() override;
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
+    Ptr<ErrorModel> CreateReceiverErrorModel() override;
+    void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                        const TcpSocketState::TcpCongState_t newValue) override;
+    void FinalChecks() override;
+
+  private:
+    /**
+     * @brief Check the congestion window once the ACK ending the recovery is processed.
+     */
+    void CheckCwnd();
+
+    uint32_t m_recoveryExits{0}; //!< Transitions from CA_RECOVERY to CA_OPEN
+};
+
+void
+TcpLinuxRenoRecoveryExitTest::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetAppPktSize(500);
+    SetAppPktCount(30);
+    SetPropagationDelay(MilliSeconds(50));
+    SetCongestionControl(TcpLinuxReno::GetTypeId());
+}
+
+void
+TcpLinuxRenoRecoveryExitTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    SetInitialCwnd(SENDER, 10);
+}
+
+Ptr<TcpSocketMsgBase>
+TcpLinuxRenoRecoveryExitTest::CreateSenderSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
+    socket->SetAttribute("Timestamp", BooleanValue(false));
+    socket->SetAttribute("Sack", BooleanValue(true));
+    return socket;
+}
+
+Ptr<ErrorModel>
+TcpLinuxRenoRecoveryExitTest::CreateReceiverErrorModel()
+{
+    Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
+    errorModel->AddSeqToKill(SequenceNumber32(1001));
+    return errorModel;
+}
+
+void
+TcpLinuxRenoRecoveryExitTest::CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                                             const TcpSocketState::TcpCongState_t newValue)
+{
+    if (oldValue == TcpSocketState::CA_RECOVERY && newValue == TcpSocketState::CA_OPEN)
+    {
+        m_recoveryExits++;
+        // The congestion control runs after the state change, within the
+        // processing of the same ACK
+        Simulator::ScheduleNow(&TcpLinuxRenoRecoveryExitTest::CheckCwnd, this);
+    }
+}
+
+void
+TcpLinuxRenoRecoveryExitTest::CheckCwnd()
+{
+    Ptr<const TcpSocketState> tcb = GetTcb(SENDER);
+    NS_TEST_ASSERT_MSG_LT_OR_EQ(tcb->m_cWnd.Get(),
+                                tcb->m_ssThresh.Get() + tcb->m_segmentSize,
+                                "The ACK ending the recovery grew the window by the segments "
+                                "SACKed during the recovery");
+}
+
+void
+TcpLinuxRenoRecoveryExitTest::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_EQ(m_recoveryExits, 1, "The fast recovery was not left once");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TestSuite for the behavior of Linux Reno
  */
 class TcpLinuxRenoTestSuite : public TestSuite
@@ -562,6 +669,11 @@ class TcpLinuxRenoTestSuite : public TestSuite
                         cong_control_type,
                         "Congestion Avoidance MSS = 1500, socket send size = 1500, delack = 2 " +
                             cong_control_type.GetName()),
+                    TestCase::Duration::QUICK);
+
+        AddTestCase(new TcpLinuxRenoRecoveryExitTest(
+                        "The ACK ending a fast recovery grows the window by the newly "
+                        "delivered segments only"),
                     TestCase::Duration::QUICK);
     }
 };

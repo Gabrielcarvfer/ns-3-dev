@@ -355,7 +355,7 @@ Ns3TcpCubicTestCase::DoRun()
                               true,
                               "cwnd outside range");
         // Time just before a reduction does not have much variation
-        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(9), Seconds(9.6), 84, 89),
+        NS_TEST_ASSERT_MSG_EQ(CheckValues(Seconds(8.6), Seconds(9.1), 84, 89),
                               true,
                               "cwnd outside range");
     }
