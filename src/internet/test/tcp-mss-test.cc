@@ -387,9 +387,7 @@ TcpSegmentDataSizeTestCase::DoRun()
     NodeContainer nodes;
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->SetAttribute("SegmentSize",

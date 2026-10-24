@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
+#include "tcp-test-pair.h"
+
 #include "ns3/boolean.h"
 #include "ns3/global-value.h"
 #include "ns3/iana-ieee802-numbers.h"
@@ -751,9 +753,7 @@ class Ipv4SourceRouteHopLimitTest : public Ipv4OptionsTestBase
                               false,
                               "A route through a broadcast address was accepted");
 
-        Ptr<Socket> server = Socket::CreateSocket(m_nodes.Get(3), TcpSocketFactory::GetTypeId());
-        server->Bind(InetSocketAddress(Ipv4Address::GetAny(), 80));
-        server->Listen();
+        Ptr<Socket> server = InstallTcpListener(m_nodes.Get(3), 80);
         Ptr<TcpSocketBase> connected = DynamicCast<TcpSocketBase>(
             Socket::CreateSocket(m_nodes.Get(0), TcpSocketFactory::GetTypeId()));
         connected->Bind();
@@ -1460,9 +1460,7 @@ class Ipv4SourceRouteTcpListenerTest : public Ipv4SourceRouteTcpTestBase
 
         // A listener without a route of its own, which a SYN reaches from a
         // source which never answers
-        Ptr<Socket> other = Socket::CreateSocket(m_nodes.Get(3), TcpSocketFactory::GetTypeId());
-        other->Bind(InetSocketAddress(Ipv4Address::GetAny(), 81));
-        other->Listen();
+        Ptr<Socket> other = InstallTcpListener(m_nodes.Get(3), 81);
         Simulator::Schedule(Seconds(1), [this]() {
             TcpHeader syn;
             syn.SetSourcePort(1234);

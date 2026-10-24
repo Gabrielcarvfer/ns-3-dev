@@ -55,19 +55,6 @@ class TcpLinuxSndBufTestCase : public TestCase
     void DoRun() override;
 
     /**
-     * Accept callback: read everything as it arrives.
-     * @param socket The accepted socket.
-     * @param from The peer address.
-     */
-    void Accepted(Ptr<Socket> socket, const Address& from);
-
-    /**
-     * Receive callback of the receiver.
-     * @param socket The receiving socket.
-     */
-    void Read(Ptr<Socket> socket);
-
-    /**
      * Write the data not yet queued, as far as the socket takes it.
      * @param socket The sending socket.
      * @param available The space the socket reports.
@@ -103,21 +90,6 @@ TcpLinuxSndBufTestCase::SegmentSent(Ptr<const Packet> packet,
     if (packet->GetSize() > 0)
     {
         m_lastTx = Simulator::Now();
-    }
-}
-
-void
-TcpLinuxSndBufTestCase::Accepted(Ptr<Socket> socket, const Address& from)
-{
-    socket->SetRecvCallback(MakeCallback(&TcpLinuxSndBufTestCase::Read, this));
-}
-
-void
-TcpLinuxSndBufTestCase::Read(Ptr<Socket> socket)
-{
-    while (Ptr<Packet> packet = socket->Recv())
-    {
-        m_received += packet->GetSize();
     }
 }
 
@@ -158,11 +130,7 @@ TcpLinuxSndBufTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(10));
 
     const uint16_t port = 9910;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpLinuxSndBufTestCase::Accepted, this));
+    Ptr<Socket> server = InstallTcpByteSink(nodes.Get(1), port, m_received);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -224,19 +192,6 @@ class TcpLinuxCwndLimitedTestCase : public TestCase
     void CwndChange(uint32_t oldValue, uint32_t newValue);
 
     /**
-     * Accept callback: read everything as it arrives.
-     * @param socket The accepted socket.
-     * @param from The peer address.
-     */
-    void Accepted(Ptr<Socket> socket, const Address& from);
-
-    /**
-     * Receive callback of the receiver.
-     * @param socket The receiving socket.
-     */
-    void Read(Ptr<Socket> socket);
-
-    /**
      * Write the data.
      * @param socket The sending socket.
      */
@@ -254,21 +209,6 @@ void
 TcpLinuxCwndLimitedTestCase::CwndChange(uint32_t oldValue, uint32_t newValue)
 {
     m_maxCwnd = std::max(m_maxCwnd, newValue);
-}
-
-void
-TcpLinuxCwndLimitedTestCase::Accepted(Ptr<Socket> socket, const Address& from)
-{
-    socket->SetRecvCallback(MakeCallback(&TcpLinuxCwndLimitedTestCase::Read, this));
-}
-
-void
-TcpLinuxCwndLimitedTestCase::Read(Ptr<Socket> socket)
-{
-    while (Ptr<Packet> packet = socket->Recv())
-    {
-        m_received += packet->GetSize();
-    }
 }
 
 void
@@ -294,11 +234,7 @@ TcpLinuxCwndLimitedTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "100Mbps", MilliSeconds(10));
 
     const uint16_t port = 9911;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpLinuxCwndLimitedTestCase::Accepted, this));
+    Ptr<Socket> server = InstallTcpByteSink(nodes.Get(1), port, m_received);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();

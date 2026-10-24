@@ -161,11 +161,9 @@ TcpForcedPushTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "", MilliSeconds(10));
 
     const uint16_t port = 9907;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpForcedPushTestCase::Accepted, this));
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1),
+                                            port,
+                                            MakeCallback(&TcpForcedPushTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();

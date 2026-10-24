@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
+#include "tcp-test-pair.h"
+
 #include "ns3/boolean.h"
 #include "ns3/config.h"
 #include "ns3/data-rate.h"
@@ -133,19 +135,6 @@ class TcpLinuxRecoveryTransfer : public TestCase
     virtual void SrttChange(Time oldValue, Time newValue);
 
     /**
-     * Accept callback: read everything as it arrives.
-     * @param socket The accepted socket.
-     * @param from The peer address.
-     */
-    void Accepted(Ptr<Socket> socket, const Address& from);
-
-    /**
-     * Receive callback of the receiver.
-     * @param socket The receiving socket.
-     */
-    void Read(Ptr<Socket> socket);
-
-    /**
      * Write the data.
      * @param socket The sending socket.
      */
@@ -182,21 +171,6 @@ TcpLinuxRecoveryTransfer::SrttChange(Time oldValue, Time newValue)
 }
 
 void
-TcpLinuxRecoveryTransfer::Accepted(Ptr<Socket> socket, const Address& from)
-{
-    socket->SetRecvCallback(MakeCallback(&TcpLinuxRecoveryTransfer::Read, this));
-}
-
-void
-TcpLinuxRecoveryTransfer::Read(Ptr<Socket> socket)
-{
-    while (Ptr<Packet> packet = socket->Recv())
-    {
-        m_received += packet->GetSize();
-    }
-}
-
-void
 TcpLinuxRecoveryTransfer::Write(Ptr<Socket> socket)
 {
     socket->Send(Create<Packet>(BYTES), 0);
@@ -229,11 +203,7 @@ TcpLinuxRecoveryTransfer::Transfer(const std::set<uint32_t>& drops)
     Ipv4InterfaceContainer interfaces = address.Assign(devices);
 
     const uint16_t port = 9915;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpLinuxRecoveryTransfer::Accepted, this));
+    Ptr<Socket> server = InstallTcpByteSink(nodes.Get(1), port, m_received);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();

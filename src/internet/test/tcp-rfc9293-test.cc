@@ -125,6 +125,31 @@ NS_LOG_COMPONENT_DEFINE("TcpRfc9293TestSuite");
 /**
  * @ingroup internet-test
  *
+ * Receive a datagram from an IPv4 raw socket and strip its IPv4 and TCP
+ * headers.
+ *
+ * @param socket the raw socket
+ * @param ipv4 the IPv4 header of the datagram
+ * @param tcp the TCP header of the datagram
+ * @return true if the datagram carries a TCP segment
+ */
+static bool
+ReceiveRawTcp(Ptr<Socket> socket, Ipv4Header& ipv4, TcpHeader& tcp)
+{
+    Address from;
+    Ptr<Packet> packet = socket->RecvFrom(from);
+    packet->RemoveHeader(ipv4);
+    if (ipv4.GetProtocol() != 6)
+    {
+        return false;
+    }
+    packet->RemoveHeader(tcp);
+    return true;
+}
+
+/**
+ * @ingroup internet-test
+ *
  * Build a TCP segment byte by byte, with a window of 4096 bytes and a zero
  * checksum: TcpHeader derives its data offset from the options it carries,
  * so that a malformed option cannot be expressed through it.
@@ -235,6 +260,40 @@ class TcpCraftedSegmentTestCase : public TestCase
                          uint32_t payload = 0);
 
     /**
+     * Inject a segment with the given sequence numbers and window at the
+     * given time (see SendSegmentFull).
+     *
+     * @param at The time.
+     * @param flags The TCP flags.
+     * @param seq The sequence number.
+     * @param ack The acknowledgment number.
+     * @param window The window to advertise.
+     * @param corruptChecksum Whether to send a checksum which does not match.
+     * @param urgentPointer The urgent pointer.
+     * @param payload The number of data bytes to carry.
+     */
+    void SendSegmentFullAt(Time at,
+                           uint8_t flags,
+                           uint32_t seq,
+                           uint32_t ack,
+                           uint16_t window,
+                           bool corruptChecksum = false,
+                           uint16_t urgentPointer = 0,
+                           uint32_t payload = 0)
+    {
+        Simulator::Schedule(at,
+                            &TcpCraftedSegmentTestCase::SendSegmentFull,
+                            this,
+                            flags,
+                            seq,
+                            ack,
+                            window,
+                            corruptChecksum,
+                            urgentPointer,
+                            payload);
+    }
+
+    /**
      * Get the segments received from the target.
      * @return The headers of the received segments.
      */
@@ -289,9 +348,7 @@ TcpCraftedSegmentTestCase::SetupTopology(bool listen, bool removeProberTcp)
 
     if (listen)
     {
-        m_target = Socket::CreateSocket(m_nodes.Get(1), TcpSocketFactory::GetTypeId());
-        m_target->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_targetPort));
-        m_target->Listen();
+        m_target = InstallTcpListener(m_nodes.Get(1), m_targetPort);
     }
 
     if (removeProberTcp)
@@ -392,18 +449,12 @@ TcpCraftedSegmentTestCase::SendSegmentFull(uint8_t flags,
 void
 TcpCraftedSegmentTestCase::ReceiveRaw(Ptr<Socket> socket)
 {
-    Address from;
-    Ptr<Packet> packet = socket->RecvFrom(from);
-
     Ipv4Header ipv4;
-    packet->RemoveHeader(ipv4);
-    if (ipv4.GetProtocol() != 6)
+    TcpHeader tcp;
+    if (!ReceiveRawTcp(socket, ipv4, tcp))
     {
         return;
     }
-
-    TcpHeader tcp;
-    packet->RemoveHeader(tcp);
     m_replies.push_back(tcp);
 }
 
@@ -595,9 +646,7 @@ TcpIcmpSourceQuenchTestCase::DoRun()
 
     const uint16_t serverPort = 4478;
 
-    Ptr<Socket> server = Socket::CreateSocket(m_nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), serverPort));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(m_nodes.Get(1), serverPort);
 
     m_socket = Socket::CreateSocket(m_nodes.Get(0), TcpSocketFactory::GetTypeId());
     m_socket->Bind();
@@ -708,18 +757,12 @@ TcpMalformedOptionsResetTestCase::TcpMalformedOptionsResetTestCase()
 void
 TcpMalformedOptionsResetTestCase::ReceiveRaw(Ptr<Socket> socket)
 {
-    Address from;
-    Ptr<Packet> packet = socket->RecvFrom(from);
-
     Ipv4Header ipv4;
-    packet->RemoveHeader(ipv4);
-    if (ipv4.GetProtocol() != 6)
+    TcpHeader tcp;
+    if (!ReceiveRawTcp(socket, ipv4, tcp))
     {
         return;
     }
-
-    TcpHeader tcp;
-    packet->RemoveHeader(tcp);
     if (tcp.GetDestinationPort() != m_proberPort)
     {
         return;
@@ -756,9 +799,7 @@ TcpMalformedOptionsResetTestCase::DoRun()
 
     // The target listens, so that a well-formed SYN would be answered with a
     // SYN+ACK rather than with a RST
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_targetPort));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), m_targetPort);
 
     Ptr<Socket> prober = Socket::CreateSocket(nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
     prober->SetAttribute("Protocol", UintegerValue(6));
@@ -831,18 +872,12 @@ TcpInitialSequenceNumberTestCase::TcpInitialSequenceNumberTestCase()
 void
 TcpInitialSequenceNumberTestCase::ReceiveRaw(Ptr<Socket> socket)
 {
-    Address from;
-    Ptr<Packet> packet = socket->RecvFrom(from);
-
     Ipv4Header ipv4;
-    packet->RemoveHeader(ipv4);
-    if (ipv4.GetProtocol() != 6)
+    TcpHeader tcp;
+    if (!ReceiveRawTcp(socket, ipv4, tcp))
     {
         return;
     }
-
-    TcpHeader tcp;
-    packet->RemoveHeader(tcp);
     if ((tcp.GetFlags() & (TcpHeader::SYN | TcpHeader::ACK)) == (TcpHeader::SYN | TcpHeader::ACK))
     {
         m_isns.push_back(tcp.GetSequenceNumber().GetValue());
@@ -874,9 +909,7 @@ TcpInitialSequenceNumberTestCase::DoRun()
     NodeContainer nodes;
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes);
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_targetPort));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), m_targetPort);
 
     Ptr<Socket> prober = Socket::CreateSocket(nodes.Get(0), Ipv4RawSocketFactory::GetTypeId());
     prober->SetAttribute("Protocol", UintegerValue(6));
@@ -989,16 +1022,7 @@ TcpPassiveHighIsnTestCase::DoRun()
         SetupTopology();
         m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                     MakeCallback(&TcpPassiveHighIsnTestCase::Accepted, this));
-        Simulator::Schedule(Seconds(1),
-                            &TcpPassiveHighIsnTestCase::SendSegmentFull,
-                            this,
-                            TcpHeader::SYN,
-                            1U,
-                            0U,
-                            static_cast<uint16_t>(65535),
-                            false,
-                            static_cast<uint16_t>(0),
-                            0U);
+        SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1, 0, 65535);
         Simulator::Stop(Seconds(1.5));
         Simulator::Run();
         // The replies of every topology accumulate: the last one is the
@@ -1021,29 +1045,15 @@ TcpPassiveHighIsnTestCase::DoRun()
 
     // Complete the handshake, let the target send, then report the first
     // segment lost with three duplicate ACKs
-    Simulator::Schedule(Seconds(2),
-                        &TcpPassiveHighIsnTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::ACK,
-                        2U,
-                        (isn + 1).GetValue(),
-                        static_cast<uint16_t>(65535),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(2), TcpHeader::ACK, 2, (isn + 1).GetValue(), 65535);
     Simulator::Schedule(Seconds(2.5), &TcpPassiveHighIsnTestCase::SendData, this);
     for (uint32_t i = 0; i < 3; ++i)
     {
-        Simulator::Schedule(Seconds(3) + MilliSeconds(i),
-                            &TcpPassiveHighIsnTestCase::SendSegmentFull,
-                            this,
-                            TcpHeader::ACK,
-                            2U,
-                            (isn + 1).GetValue(),
-                            static_cast<uint16_t>(65535),
-                            false,
-                            static_cast<uint16_t>(0),
-                            0U);
+        SendSegmentFullAt(Seconds(3) + MilliSeconds(i),
+                          TcpHeader::ACK,
+                          2,
+                          (isn + 1).GetValue(),
+                          65535);
     }
     Simulator::Stop(Seconds(4));
     Simulator::Run();
@@ -1199,9 +1209,7 @@ TcpUrgentDataTestCase::DoRun()
 
     const uint16_t port = 9301;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
     // The urgent data callback is inherited by the socket forked on accept
     server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                               MakeCallback(&TcpUrgentDataTestCase::AcceptedSocket, this));
@@ -1234,19 +1242,35 @@ TcpUrgentDataTestCase::DoRun()
  * @ingroup internet-test
  * @ingroup tests
  *
- * @brief Test the support for the End of Option List and NOP options
+ * @brief Test that a SYN carrying a header feature the target does not use
+ * still opens a connection
  *
- * Ported from the OptionSupportTest of tcpreq. @RFC{9293}, Section 3.1
- * requires the two legacy options to be supported (MUST-4), receivers to be
- * prepared to process options which do not begin on a word boundary
- * (MUST-64), and the padding after the End of Option List option to be zeroed
- * (MUST-69): a SYN carrying them must still open a connection.
+ * Ported from the OptionSupportTest, UnknownOptionTest and ReservedFlagsTest
+ * of tcpreq. @RFC{9293}, Section 3.1 requires the End of Option List and NOP
+ * options to be supported (MUST-4), options not beginning on a word boundary
+ * to be processed (MUST-64), the padding after the End of Option List to be
+ * zeroed (MUST-69), an unknown option with a length field to be ignored
+ * without error (MUST-6, MUST-68), and the reserved bits to be ignored. The
+ * SYN must be answered with a SYN+ACK and never reset.
  */
-class TcpLegacyOptionsTestCase : public TcpCraftedSegmentTestCase
+class TcpSynProbeTestCase : public TcpCraftedSegmentTestCase
 {
   public:
-    TcpLegacyOptionsTestCase()
-        : TcpCraftedSegmentTestCase("Legacy options are supported (MUST-4, MUST-64)")
+    /**
+     * Constructor.
+     * @param name The name of the test case.
+     * @param probe What the SYN carries, for the failure messages.
+     * @param options The raw option bytes of the SYN.
+     * @param reserved The reserved bits of the SYN.
+     */
+    TcpSynProbeTestCase(const std::string& name,
+                        const std::string& probe,
+                        const std::vector<uint8_t>& options,
+                        uint8_t reserved = 0)
+        : TcpCraftedSegmentTestCase(name),
+          m_probe(probe),
+          m_options(options),
+          m_reserved(reserved)
     {
     }
 
@@ -1254,125 +1278,30 @@ class TcpLegacyOptionsTestCase : public TcpCraftedSegmentTestCase
     void DoRun() override
     {
         SetupTopology();
-
-        // NOP, NOP, End of Option List, and one byte of zeroed padding: the
-        // option list does not begin on a word boundary
         Simulator::Schedule(Seconds(1),
-                            &TcpLegacyOptionsTestCase::SendSegment,
+                            &TcpSynProbeTestCase::SendSegment,
                             this,
                             TcpHeader::SYN,
-                            std::vector<uint8_t>{0x01, 0x01, 0x00, 0x00},
-                            0,
+                            m_options,
+                            m_reserved,
                             0);
-
         Simulator::Stop(Seconds(5));
         Simulator::Run();
 
         // Nothing acknowledges the SYN+ACK, so the target may retransmit it
         NS_TEST_ASSERT_MSG_GT_OR_EQ(CountReplies(TcpHeader::SYN | TcpHeader::ACK),
                                     1,
-                                    "A SYN with legacy options was not answered with a SYN+ACK");
+                                    "A SYN with " << m_probe << " was not answered with a SYN+ACK");
         NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::RST),
                               0,
-                              "A SYN with legacy options was reset");
+                              "A SYN with " << m_probe << " was reset");
 
         Simulator::Destroy();
     }
-};
 
-/**
- * @ingroup internet-test
- * @ingroup tests
- *
- * @brief Test that an unknown option is ignored without error
- *
- * Ported from the UnknownOptionTest of tcpreq. @RFC{9293}, Section 3.1
- * (MUST-6) requires any option which is not implemented to be ignored without
- * error, as long as it has a length field (MUST-68), so a SYN carrying one
- * must still open a connection.
- */
-class TcpUnknownOptionTestCase : public TcpCraftedSegmentTestCase
-{
-  public:
-    TcpUnknownOptionTestCase()
-        : TcpCraftedSegmentTestCase("Unknown options are ignored without error (MUST-6)")
-    {
-    }
-
-  private:
-    void DoRun() override
-    {
-        SetupTopology();
-
-        // Option kind 158 is reserved by IANA, and is the one tcpreq probes
-        // with: kind, length, three bytes of data, and one byte of padding
-        Simulator::Schedule(Seconds(1),
-                            &TcpUnknownOptionTestCase::SendSegment,
-                            this,
-                            TcpHeader::SYN,
-                            std::vector<uint8_t>{158, 0x05, 0x58, 0xfa, 0x89, 0x01, 0x01, 0x00},
-                            0,
-                            0);
-
-        Simulator::Stop(Seconds(5));
-        Simulator::Run();
-
-        // Nothing acknowledges the SYN+ACK, so the target may retransmit it
-        NS_TEST_ASSERT_MSG_GT_OR_EQ(CountReplies(TcpHeader::SYN | TcpHeader::ACK),
-                                    1,
-                                    "A SYN with an unknown option was not answered with a SYN+ACK");
-        NS_TEST_ASSERT_MSG_EQ(CountReplies(TcpHeader::RST),
-                              0,
-                              "A SYN with an unknown option was reset");
-
-        Simulator::Destroy();
-    }
-};
-
-/**
- * @ingroup internet-test
- * @ingroup tests
- *
- * @brief Test that the reserved bits of the header are ignored
- *
- * Ported from the ReservedFlagsTest of tcpreq. The bits reserved for future
- * use in the header of @RFC{9293}, Section 3.1 must be ignored by a receiver
- * which does not implement whatever uses them, so a SYN setting one must
- * still open a connection.
- */
-class TcpReservedFlagsTestCase : public TcpCraftedSegmentTestCase
-{
-  public:
-    TcpReservedFlagsTestCase()
-        : TcpCraftedSegmentTestCase("Reserved header bits are ignored")
-    {
-    }
-
-  private:
-    void DoRun() override
-    {
-        SetupTopology();
-
-        // The third reserved bit, as tcpreq probes with
-        Simulator::Schedule(Seconds(1),
-                            &TcpReservedFlagsTestCase::SendSegment,
-                            this,
-                            TcpHeader::SYN,
-                            std::vector<uint8_t>{},
-                            0x4,
-                            0);
-
-        Simulator::Stop(Seconds(5));
-        Simulator::Run();
-
-        // Nothing acknowledges the SYN+ACK, so the target may retransmit it
-        NS_TEST_ASSERT_MSG_GT_OR_EQ(
-            CountReplies(TcpHeader::SYN | TcpHeader::ACK),
-            1,
-            "A SYN with a reserved bit set was not answered with a SYN+ACK");
-
-        Simulator::Destroy();
-    }
+    std::string m_probe;            //!< What the SYN carries
+    std::vector<uint8_t> m_options; //!< The raw option bytes of the SYN
+    uint8_t m_reserved;             //!< The reserved bits of the SYN
 };
 
 /**
@@ -1525,11 +1454,10 @@ TcpAdvertisedMssTestCase::DoRun()
     // the receiver is what must bound the segments it sends
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1400));
 
-    Ptr<Socket> sender = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    sender->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    sender->Listen();
-    sender->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpAdvertisedMssTestCase::Accepted, this));
+    Ptr<Socket> sender =
+        InstallTcpListener(nodes.Get(1),
+                           port,
+                           MakeCallback(&TcpAdvertisedMssTestCase::Accepted, this));
 
     Ptr<Socket> receiver = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     receiver->Bind();
@@ -2026,18 +1954,12 @@ class TcpLocalAddressTestCase : public TestCase
 void
 TcpLocalAddressTestCase::ReceiveRaw(Ptr<Socket> socket)
 {
-    Address from;
-    Ptr<Packet> packet = socket->RecvFrom(from);
-
     Ipv4Header ipv4;
-    packet->RemoveHeader(ipv4);
-    if (ipv4.GetProtocol() != 6)
+    TcpHeader tcp;
+    if (!ReceiveRawTcp(socket, ipv4, tcp))
     {
         return;
     }
-
-    TcpHeader tcp;
-    packet->RemoveHeader(tcp);
     m_sources.emplace(tcp.GetSourcePort(), ipv4.GetSource());
 }
 
@@ -2179,11 +2101,8 @@ TcpTimeWaitTestCase::DoRun()
 
     const uint16_t port = 9901;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpTimeWaitTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1), port, MakeCallback(&TcpTimeWaitTestCase::Accepted, this));
 
     // The active close is the one which lingers in TIME-WAIT
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
@@ -2309,11 +2228,8 @@ TcpNagleTestCase::CountSegments(bool noDelay)
 
     const uint16_t port = 9902;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpNagleTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1), port, MakeCallback(&TcpNagleTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -2449,9 +2365,7 @@ TcpDelayedAckTestCase::DoRun()
 
     const uint16_t port = 9903;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -2759,11 +2673,10 @@ TcpZeroWindowProbeTestCase::DoRun()
 
     const uint16_t port = 9905;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpZeroWindowProbeTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1),
+                           port,
+                           MakeCallback(&TcpZeroWindowProbeTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -2919,11 +2832,8 @@ TcpPushFlagTestCase::DoRun()
 
     const uint16_t port = 9906;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpPushFlagTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1), port, MakeCallback(&TcpPushFlagTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -2976,18 +2886,12 @@ class TcpAdvertisedMssBoundTestCase : public TestCase
 void
 TcpAdvertisedMssBoundTestCase::ReceiveRaw(Ptr<Socket> socket)
 {
-    Address from;
-    Ptr<Packet> packet = socket->RecvFrom(from);
-
     Ipv4Header ipv4;
-    packet->RemoveHeader(ipv4);
-    if (ipv4.GetProtocol() != 6)
+    TcpHeader tcp;
+    if (!ReceiveRawTcp(socket, ipv4, tcp))
     {
         return;
     }
-
-    TcpHeader tcp;
-    packet->RemoveHeader(tcp);
     if (tcp.HasOption(TcpOption::MSS))
     {
         Ptr<const TcpOptionMSS> mss =
@@ -3255,11 +3159,10 @@ TcpBroadcastLookalikeTestCase::DoRun()
 
     const uint16_t port = 9412;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(2), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpBroadcastLookalikeTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(2),
+                           port,
+                           MakeCallback(&TcpBroadcastLookalikeTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -3482,11 +3385,10 @@ TcpUnsignedWindowTestCase::DoRun()
 
     const uint16_t port = 9908;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpUnsignedWindowTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1),
+                           port,
+                           MakeCallback(&TcpUnsignedWindowTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -3551,27 +3453,9 @@ TcpChecksumTestCase::DoRun()
     SetupTopology();
 
     // A SYN whose checksum does not match must be dropped without an answer
-    Simulator::Schedule(Seconds(1),
-                        &TcpChecksumTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        true,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1, 0, 4096, true);
     // The same SYN, with the checksum the receiver expects, is answered
-    Simulator::Schedule(Seconds(3),
-                        &TcpChecksumTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(3), TcpHeader::SYN, 1, 0, 4096);
 
     Simulator::Stop(Seconds(6));
     Simulator::Run();
@@ -3664,16 +3548,7 @@ TcpShrinkingWindowTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpShrinkingWindowTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpShrinkingWindowTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1U,
-                        0U,
-                        m_largeWindow,
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1, 0, m_largeWindow);
     Simulator::Schedule(Seconds(2), &TcpShrinkingWindowTestCase::CompleteHandshake, this);
     Simulator::Schedule(Seconds(3), &TcpShrinkingWindowTestCase::ShrinkWindow, this);
 
@@ -3825,16 +3700,7 @@ TcpMalformedOptionsAbortTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpMalformedOptionsAbortTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpMalformedOptionsAbortTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1, 0, 4096);
     Simulator::Schedule(Seconds(2), &TcpMalformedOptionsAbortTestCase::CompleteHandshake, this);
     Simulator::Schedule(Seconds(3), &TcpMalformedOptionsAbortTestCase::SendMalformedAck, this);
 
@@ -4077,16 +3943,7 @@ TcpEmptyZeroWindowProbeTestCase::DoRun()
                                 MakeCallback(&TcpEmptyZeroWindowProbeTestCase::Accepted, this));
 
     // A SYN, then an ACK, both advertising a zero window
-    Simulator::Schedule(Seconds(1),
-                        &TcpEmptyZeroWindowProbeTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1U,
-                        0U,
-                        static_cast<uint16_t>(0),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1, 0, 0);
     Simulator::Schedule(Seconds(2), &TcpEmptyZeroWindowProbeTestCase::CompleteHandshake, this);
 
     Simulator::Stop(Seconds(8));
@@ -4248,16 +4105,7 @@ TcpUrgentHighIsnTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpUrgentHighIsnTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpUrgentHighIsnTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        HIGH_ISN,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, HIGH_ISN, 0, 4096);
     Simulator::Schedule(Seconds(2), &TcpUrgentHighIsnTestCase::CompleteHandshake, this);
     Simulator::Schedule(Seconds(3), &TcpUrgentHighIsnTestCase::SendUrgent, this, HIGH_ISN + 1);
     Simulator::Schedule(Seconds(4), &TcpUrgentHighIsnTestCase::SendUrgentData, this);
@@ -4479,9 +4327,7 @@ TcpKeepAliveTestCase::RunUnansweredKeepAlives(uint32_t retries)
 
     const uint16_t port = 9910;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -4540,11 +4386,8 @@ TcpKeepAliveTestCase::CountKeepAlives(bool keepAlive, bool busy, bool passive)
         Config::SetDefault("ns3::TcpSocketBase::KeepAliveRetries", UintegerValue(3));
     }
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpKeepAliveTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1), port, MakeCallback(&TcpKeepAliveTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -5117,11 +4960,10 @@ TcpSendAfterShutdownTestCase::DoRun()
 
     const uint16_t port = 9920;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpSendAfterShutdownTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1),
+                           port,
+                           MakeCallback(&TcpSendAfterShutdownTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -5228,16 +5070,7 @@ TcpUrgentReadPointTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpUrgentReadPointTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpUrgentReadPointTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, 4096);
     Simulator::Schedule(Seconds(2), &TcpUrgentReadPointTestCase::CompleteHandshake, this);
     Simulator::Schedule(Seconds(3), [this]() {
         SendSegmentFull(TcpHeader::ACK | TcpHeader::URG | TcpHeader::PSH,
@@ -5364,16 +5197,7 @@ TcpUrgentSpuriousNotificationTestCase::DoRun()
         MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
         MakeCallback(&TcpUrgentSpuriousNotificationTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpUrgentSpuriousNotificationTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, 4096);
     Simulator::Schedule(Seconds(2),
                         &TcpUrgentSpuriousNotificationTestCase::CompleteHandshake,
                         this);
@@ -5541,16 +5365,7 @@ TcpUrgentWrapTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpUrgentWrapTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpUrgentWrapTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(65535),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, 65535);
     Simulator::Schedule(Seconds(2), &TcpUrgentWrapTestCase::CompleteHandshake, this);
 
     Simulator::Stop(Seconds(10));
@@ -5665,16 +5480,7 @@ TcpUrgentZeroWindowTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpUrgentZeroWindowTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpUrgentZeroWindowTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, 4096);
     Simulator::Schedule(Seconds(2), &TcpUrgentZeroWindowTestCase::CompleteHandshake, this);
     Simulator::Schedule(Seconds(3), &TcpUrgentZeroWindowTestCase::SendUrgent, this);
     Simulator::Schedule(Seconds(4), [this]() { m_available = m_accepted->GetRxAvailable(); });
@@ -5766,9 +5572,7 @@ TcpZeroWindowProbeUrgentTestCase::Run(uint32_t beyond)
 
     const uint16_t port = 9921;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -5944,11 +5748,10 @@ TcpLongUrgentDataTestCase::DoRun()
 
     const uint16_t port = 9922;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpLongUrgentDataTestCase::Accepted, this));
+    Ptr<Socket> server =
+        InstallTcpListener(nodes.Get(1),
+                           port,
+                           MakeCallback(&TcpLongUrgentDataTestCase::Accepted, this));
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -6668,16 +6471,7 @@ TcpKeepAliveResetAnswerTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpKeepAliveResetAnswerTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpKeepAliveResetAnswerTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, 4096);
     Simulator::Schedule(Seconds(2), &TcpKeepAliveResetAnswerTestCase::CompleteHandshake, this);
     // The keep-alive leaves two seconds after the handshake
     Simulator::Schedule(Seconds(4.5), &TcpKeepAliveResetAnswerTestCase::Reset, this);
@@ -6879,9 +6673,7 @@ TcpKeepAliveTimerEventsTestCase::Run(bool keepAlive)
 
     const uint16_t port = 9924;
     uint64_t received = 0;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
     server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                               Callback<void, Ptr<Socket>, const Address&>(
                                   [&received](Ptr<Socket> socket, const Address&) {
@@ -7206,9 +6998,7 @@ TcpRightEdgeBaseTestCase::Run(uint32_t buffer,
 
     const uint16_t port = 9924;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
     server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                               Callback<void, Ptr<Socket>, const Address&>(
                                   [this, readSize, readInterval](Ptr<Socket> s, const Address&) {
@@ -7375,9 +7165,7 @@ TcpWindowUpdateAfterReadTestCase::DoRun()
     const uint16_t port = 9925;
 
     Ptr<Socket> accepted;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
     server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                               Callback<void, Ptr<Socket>, const Address&>(
                                   [&accepted](Ptr<Socket> s, const Address&) { accepted = s; }));
@@ -7550,9 +7338,7 @@ TcpPushScenariosTestCase::Run(const std::vector<std::pair<Time, uint32_t>>& writ
 
     const uint16_t port = 9926;
 
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -7752,16 +7538,7 @@ TcpUnsignedWindowSenderTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpUnsignedWindowSenderTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpUnsignedWindowSenderTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(0xFFFF),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, 0xFFFF);
     Simulator::Schedule(Seconds(2), &TcpUnsignedWindowSenderTestCase::CompleteHandshake, this);
 
     Simulator::Stop(Seconds(5));
@@ -7935,16 +7712,7 @@ TcpChecksumEstablishedTestCase::DoRun()
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpChecksumEstablishedTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpChecksumEstablishedTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(4096),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, 4096);
     Simulator::Schedule(Seconds(2), &TcpChecksumEstablishedTestCase::CompleteHandshake, this);
 
     size_t beforeData = 0;
@@ -8100,16 +7868,7 @@ TcpShrinkingWindowProbeTestCase::Run(uint16_t window)
     m_target->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
                                 MakeCallback(&TcpShrinkingWindowProbeTestCase::Accepted, this));
 
-    Simulator::Schedule(Seconds(1),
-                        &TcpShrinkingWindowProbeTestCase::SendSegmentFull,
-                        this,
-                        TcpHeader::SYN,
-                        1000U,
-                        0U,
-                        static_cast<uint16_t>(m_largeWindow),
-                        false,
-                        static_cast<uint16_t>(0),
-                        0U);
+    SendSegmentFullAt(Seconds(1), TcpHeader::SYN, 1000, 0, m_largeWindow);
     Simulator::Schedule(Seconds(2), &TcpShrinkingWindowProbeTestCase::CompleteHandshake, this);
     // The same acknowledgment, with a window which moves the right edge back
     Simulator::Schedule(m_shrunk, [this, window]() {
@@ -8322,6 +8081,14 @@ class TcpRawSegmentTestCase : public TcpCraftedSegmentTestCase
      * number of the target from it.
      */
     void CompleteHandshake();
+
+    /**
+     * Connect the target towards the prober at 1 s, run the simulation
+     * until 1.5 s and learn the initial sequence number of the target from
+     * its SYN.
+     * @return false if the target sent no SYN
+     */
+    bool ConnectTarget();
 
     /**
      * Open a connection from the raw socket, timing its SYN so that the
@@ -8596,6 +8363,24 @@ TcpRawSegmentTestCase::Handshake(Time at, const std::vector<uint8_t>& synOptions
     syn.window = 65535;
     SendAt(at, syn);
     Simulator::Schedule(at + MilliSeconds(500), &TcpRawSegmentTestCase::CompleteHandshake, this);
+}
+
+bool
+TcpRawSegmentTestCase::ConnectTarget()
+{
+    Simulator::Schedule(Seconds(1),
+                        &Socket::Connect,
+                        m_target,
+                        InetSocketAddress(m_interfaces.GetAddress(0), m_proberPort));
+    Simulator::Stop(Seconds(1.5));
+    Simulator::Run();
+    NS_TEST_ASSERT_MSG_EQ_RETURNS_BOOL(m_headers.empty(), false, "The target sent no SYN");
+    if (m_headers.empty())
+    {
+        return false;
+    }
+    m_targetIsn = m_headers.front().GetSequenceNumber();
+    return true;
 }
 
 void
@@ -8993,19 +8778,10 @@ class TcpSynSentResetTestCase : public TcpRawSegmentTestCase
         m_target->TraceConnectWithoutContext(
             "State",
             MakeCallback(&TcpSynSentResetTestCase::TargetStateChanged, this));
-        Simulator::Schedule(Seconds(1),
-                            &Socket::Connect,
-                            m_target,
-                            InetSocketAddress(m_interfaces.GetAddress(0), m_proberPort));
-        Simulator::Stop(Seconds(1.5));
-        Simulator::Run();
-
-        NS_TEST_ASSERT_MSG_EQ(m_headers.empty(), false, "The target sent no SYN");
-        if (m_headers.empty())
+        if (!ConnectTarget())
         {
             return;
         }
-        m_targetIsn = m_headers.front().GetSequenceNumber();
 
         // No ACK, then an ACK of something else than the SYN
         SendRelativeAt(Seconds(0), TcpHeader::RST, 0, 0);
@@ -9491,11 +9267,10 @@ class TcpUrgentSynSentTestCase : public TestCase
         Ipv4InterfaceContainer interfaces = address.Assign(devices);
 
         const uint16_t port = 9700;
-        Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-        server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-        server->Listen();
-        server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                                  MakeCallback(&TcpUrgentSynSentTestCase::Accepted, this));
+        Ptr<Socket> server =
+            InstallTcpListener(nodes.Get(1),
+                               port,
+                               MakeCallback(&TcpUrgentSynSentTestCase::Accepted, this));
 
         Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
         client->Connect(InetSocketAddress(interfaces.GetAddress(1), port));
@@ -9689,18 +9464,10 @@ class TcpSynInSynchronizedStateTestCase : public TcpRawSegmentTestCase
         m_target->TraceConnectWithoutContext(
             "State",
             MakeCallback(&TcpSynInSynchronizedStateTestCase::TargetStateChanged, this));
-        Simulator::Schedule(Seconds(1),
-                            &Socket::Connect,
-                            m_target,
-                            InetSocketAddress(m_interfaces.GetAddress(0), m_proberPort));
-        Simulator::Stop(Seconds(1.5));
-        Simulator::Run();
-        NS_TEST_ASSERT_MSG_EQ(m_headers.empty(), false, "The target sent no SYN");
-        if (m_headers.empty())
+        if (!ConnectTarget())
         {
             return;
         }
-        m_targetIsn = m_headers.front().GetSequenceNumber();
 
         // The SYN+ACK of the prober, whose initial sequence number is 1000
         SendRelativeAt(Seconds(0), TcpHeader::SYN | TcpHeader::ACK, 1000, 1);
@@ -9879,18 +9646,10 @@ class TcpMalformedSynSentTestCase : public TcpRawSegmentTestCase
         m_target->TraceConnectWithoutContext(
             "State",
             MakeCallback(&TcpMalformedSynSentTestCase::TargetStateChanged, this));
-        Simulator::Schedule(Seconds(1),
-                            &Socket::Connect,
-                            m_target,
-                            InetSocketAddress(m_interfaces.GetAddress(0), m_proberPort));
-        Simulator::Stop(Seconds(1.5));
-        Simulator::Run();
-        NS_TEST_ASSERT_MSG_EQ(m_headers.empty(), false, "The target sent no SYN");
-        if (m_headers.empty())
+        if (!ConnectTarget())
         {
             return;
         }
-        m_targetIsn = m_headers.front().GetSequenceNumber();
 
         std::size_t before = m_headers.size();
         SendRelativeAt(Seconds(0), TcpHeader::SYN | TcpHeader::ACK, 1000, 7, malformed);
@@ -10450,18 +10209,10 @@ class TcpSimultaneousOpenAsymmetricOptionsTestCase : public TcpRawSegmentTestCas
         m_target->SetConnectCallback(
             MakeCallback(&TcpSimultaneousOpenAsymmetricOptionsTestCase::Succeeded, this),
             MakeNullCallback<void, Ptr<Socket>>());
-        Simulator::Schedule(Seconds(1),
-                            &Socket::Connect,
-                            m_target,
-                            InetSocketAddress(m_interfaces.GetAddress(0), m_proberPort));
-        Simulator::Stop(Seconds(1.5));
-        Simulator::Run();
-        NS_TEST_ASSERT_MSG_EQ(m_headers.empty(), false, "The target sent no SYN");
-        if (m_headers.empty())
+        if (!ConnectTarget())
         {
             return;
         }
-        m_targetIsn = m_headers.front().GetSequenceNumber();
 
         // NOP, window scale 2, NOP, NOP, timestamp (TSval 1000, TSecr 0)
         const std::vector<uint8_t> synOptions = {0x01,
@@ -10838,18 +10589,10 @@ class TcpWindowUpdateHighIsnTestCase : public TcpRawSegmentTestCase
         m_target->TraceConnectWithoutContext(
             "RWND",
             MakeCallback(&TcpWindowUpdateHighIsnTestCase::RwndChanged, this));
-        Simulator::Schedule(Seconds(1),
-                            &Socket::Connect,
-                            m_target,
-                            InetSocketAddress(m_interfaces.GetAddress(0), m_proberPort));
-        Simulator::Stop(Seconds(1.5));
-        Simulator::Run();
-        NS_TEST_ASSERT_MSG_EQ(m_headers.empty(), false, "The target sent no SYN");
-        if (m_headers.empty())
+        if (!ConnectTarget())
         {
             return;
         }
-        m_targetIsn = m_headers.front().GetSequenceNumber();
 
         const uint32_t peerIsn = 0x90000000;
         SendRelativeAt(Seconds(0), TcpHeader::SYN | TcpHeader::ACK, peerIsn, 1);
@@ -11110,9 +10853,7 @@ class TcpIcmpSourceQuenchEndToEndTestCase : public TestCase
         const uint16_t udpPort = 9802;
         const uint16_t localPort = 9803;
 
-        Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-        server->Bind(InetSocketAddress(Ipv4Address::GetAny(), tcpPort));
-        server->Listen();
+        Ptr<Socket> server = InstallTcpListener(nodes.Get(1), tcpPort);
 
         Ptr<Socket> tcp = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
         tcp->Bind(InetSocketAddress(local, localPort));
@@ -11316,9 +11057,24 @@ class TcpRfc9293TestSuite : public TestSuite
         AddTestCase(new TcpInitialSequenceNumberTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpPassiveHighIsnTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpUrgentDataTestCase(), TestCase::Duration::QUICK);
-        AddTestCase(new TcpLegacyOptionsTestCase(), TestCase::Duration::QUICK);
-        AddTestCase(new TcpUnknownOptionTestCase(), TestCase::Duration::QUICK);
-        AddTestCase(new TcpReservedFlagsTestCase(), TestCase::Duration::QUICK);
+        // NOP, NOP, End of Option List and a zeroed padding byte, so that
+        // the option list does not begin on a word boundary
+        AddTestCase(new TcpSynProbeTestCase("Legacy options are supported (MUST-4, MUST-64)",
+                                            "legacy options",
+                                            {0x01, 0x01, 0x00, 0x00}),
+                    TestCase::Duration::QUICK);
+        // Kind 158, reserved by IANA, as tcpreq probes: kind, length, three
+        // bytes of data, two NOPs and an End of Option List
+        AddTestCase(new TcpSynProbeTestCase("Unknown options are ignored without error (MUST-6)",
+                                            "an unknown option",
+                                            {158, 0x05, 0x58, 0xfa, 0x89, 0x01, 0x01, 0x00}),
+                    TestCase::Duration::QUICK);
+        // The third reserved bit, as tcpreq probes
+        AddTestCase(new TcpSynProbeTestCase("Reserved header bits are ignored",
+                                            "a reserved bit set",
+                                            {},
+                                            0x4),
+                    TestCase::Duration::QUICK);
         AddTestCase(new TcpResetAckTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpAdvertisedMssTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TcpSimultaneousOpenTestCase(), TestCase::Duration::QUICK);

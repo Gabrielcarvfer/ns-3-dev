@@ -75,19 +75,6 @@ class TcpTsoDeferTestCase : public TestCase
                      Ptr<const TcpSocketBase> socket);
 
     /**
-     * Accept callback: read everything as it arrives.
-     * @param socket The accepted socket.
-     * @param from The peer address.
-     */
-    void Accepted(Ptr<Socket> socket, const Address& from);
-
-    /**
-     * Receive callback of the receiver.
-     * @param socket The receiving socket.
-     */
-    void Read(Ptr<Socket> socket);
-
-    /**
      * Write the data.
      * @param socket The sending socket.
      */
@@ -128,21 +115,6 @@ TcpTsoDeferTestCase::SegmentSent(Ptr<const Packet> packet,
 }
 
 void
-TcpTsoDeferTestCase::Accepted(Ptr<Socket> socket, const Address& from)
-{
-    socket->SetRecvCallback(MakeCallback(&TcpTsoDeferTestCase::Read, this));
-}
-
-void
-TcpTsoDeferTestCase::Read(Ptr<Socket> socket)
-{
-    while (Ptr<Packet> packet = socket->Recv())
-    {
-        m_received += packet->GetSize();
-    }
-}
-
-void
 TcpTsoDeferTestCase::Write(Ptr<Socket> socket)
 {
     socket->Send(Create<Packet>(BYTES), 0);
@@ -163,11 +135,7 @@ TcpTsoDeferTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(10));
 
     const uint16_t port = 9908;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpTsoDeferTestCase::Accepted, this));
+    Ptr<Socket> server = InstallTcpByteSink(nodes.Get(1), port, m_received);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -237,19 +205,6 @@ class TcpTsoDeferFillTestCase : public TestCase
                      Ptr<const TcpSocketBase> socket);
 
     /**
-     * Accept callback: read everything as it arrives.
-     * @param socket The accepted socket.
-     * @param from The peer address.
-     */
-    void Accepted(Ptr<Socket> socket, const Address& from);
-
-    /**
-     * Receive callback of the receiver.
-     * @param socket The receiving socket.
-     */
-    void Read(Ptr<Socket> socket);
-
-    /**
      * Write the data.
      * @param socket The sending socket.
      */
@@ -291,21 +246,6 @@ TcpTsoDeferFillTestCase::SegmentSent(Ptr<const Packet> packet,
 }
 
 void
-TcpTsoDeferFillTestCase::Accepted(Ptr<Socket> socket, const Address& from)
-{
-    socket->SetRecvCallback(MakeCallback(&TcpTsoDeferFillTestCase::Read, this));
-}
-
-void
-TcpTsoDeferFillTestCase::Read(Ptr<Socket> socket)
-{
-    while (Ptr<Packet> packet = socket->Recv())
-    {
-        m_received += packet->GetSize();
-    }
-}
-
-void
 TcpTsoDeferFillTestCase::Write(Ptr<Socket> socket)
 {
     socket->Send(Create<Packet>(BYTES), 0);
@@ -329,11 +269,7 @@ TcpTsoDeferFillTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(50));
 
     const uint16_t port = 9909;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpTsoDeferFillTestCase::Accepted, this));
+    Ptr<Socket> server = InstallTcpByteSink(nodes.Get(1), port, m_received);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -392,19 +328,6 @@ class TcpTsoDeferSplitTestCase : public TestCase
                      Ptr<const TcpSocketBase> socket);
 
     /**
-     * Accept callback: read everything as it arrives.
-     * @param socket The accepted socket.
-     * @param from The peer address.
-     */
-    void Accepted(Ptr<Socket> socket, const Address& from);
-
-    /**
-     * Receive callback of the receiver.
-     * @param socket The receiving socket.
-     */
-    void Read(Ptr<Socket> socket);
-
-    /**
      * Write the data.
      * @param socket The sending socket.
      */
@@ -441,21 +364,6 @@ TcpTsoDeferSplitTestCase::SegmentSent(Ptr<const Packet> packet,
 }
 
 void
-TcpTsoDeferSplitTestCase::Accepted(Ptr<Socket> socket, const Address& from)
-{
-    socket->SetRecvCallback(MakeCallback(&TcpTsoDeferSplitTestCase::Read, this));
-}
-
-void
-TcpTsoDeferSplitTestCase::Read(Ptr<Socket> socket)
-{
-    while (Ptr<Packet> packet = socket->Recv())
-    {
-        m_received += packet->GetSize();
-    }
-}
-
-void
 TcpTsoDeferSplitTestCase::Write(Ptr<Socket> socket)
 {
     socket->Send(Create<Packet>(BYTES), 0);
@@ -481,11 +389,7 @@ TcpTsoDeferSplitTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(50));
 
     const uint16_t port = 9912;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpTsoDeferSplitTestCase::Accepted, this));
+    Ptr<Socket> server = InstallTcpByteSink(nodes.Get(1), port, m_received);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -599,9 +503,7 @@ TcpTsoDeferNagleTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "100Mbps", MilliSeconds(10));
 
     const uint16_t port = 9913;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
+    Ptr<Socket> server = InstallTcpListener(nodes.Get(1), port);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
@@ -794,19 +696,6 @@ class TcpTsoDeferFillNagleTestCase : public TestCase
                      Ptr<const TcpSocketBase> socket);
 
     /**
-     * Accept callback: read everything as it arrives.
-     * @param socket The accepted socket.
-     * @param from The peer address.
-     */
-    void Accepted(Ptr<Socket> socket, const Address& from);
-
-    /**
-     * Receive callback of the receiver.
-     * @param socket The receiving socket.
-     */
-    void Read(Ptr<Socket> socket);
-
-    /**
      * Write data.
      * @param socket The sending socket.
      * @param size Bytes to write.
@@ -857,21 +746,6 @@ TcpTsoDeferFillNagleTestCase::AckReceived(Ptr<const Packet> packet,
 }
 
 void
-TcpTsoDeferFillNagleTestCase::Accepted(Ptr<Socket> socket, const Address& from)
-{
-    socket->SetRecvCallback(MakeCallback(&TcpTsoDeferFillNagleTestCase::Read, this));
-}
-
-void
-TcpTsoDeferFillNagleTestCase::Read(Ptr<Socket> socket)
-{
-    while (Ptr<Packet> packet = socket->Recv())
-    {
-        m_received += packet->GetSize();
-    }
-}
-
-void
 TcpTsoDeferFillNagleTestCase::Write(Ptr<Socket> socket, uint32_t size)
 {
     socket->Send(Create<Packet>(size), 0);
@@ -893,11 +767,7 @@ TcpTsoDeferFillNagleTestCase::DoRun()
     Ipv4InterfaceContainer interfaces = InstallTcpTestPair(nodes, "10Mbps", MilliSeconds(50));
 
     const uint16_t port = 9914;
-    Ptr<Socket> server = Socket::CreateSocket(nodes.Get(1), TcpSocketFactory::GetTypeId());
-    server->Bind(InetSocketAddress(Ipv4Address::GetAny(), port));
-    server->Listen();
-    server->SetAcceptCallback(MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
-                              MakeCallback(&TcpTsoDeferFillNagleTestCase::Accepted, this));
+    Ptr<Socket> server = InstallTcpByteSink(nodes.Get(1), port, m_received);
 
     Ptr<Socket> client = Socket::CreateSocket(nodes.Get(0), TcpSocketFactory::GetTypeId());
     client->Bind();
