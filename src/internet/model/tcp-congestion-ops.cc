@@ -85,6 +85,46 @@ TcpCongestionOps::CongControl(Ptr<TcpSocketState> tcb,
 
 // RENO
 
+uint32_t
+TcpCongestionOps::LinuxSlowStart(Ptr<TcpSocketState> tcb, uint32_t& cwnd, uint32_t acked)
+{
+    uint32_t newCwnd = std::min(cwnd + acked, tcb->m_ssThresh.Get() / tcb->m_segmentSize);
+    acked -= newCwnd - cwnd;
+    cwnd = newCwnd;
+    tcb->m_cWnd = cwnd * tcb->m_segmentSize;
+    return acked;
+}
+
+void
+TcpCongestionOps::LinuxCongAvoidAi(uint32_t& cwnd, uint32_t& count, uint32_t w, uint32_t acked)
+{
+    if (count >= w)
+    {
+        count = 0;
+        ++cwnd;
+    }
+    count += acked;
+    if (count >= w)
+    {
+        uint32_t delta = count / w;
+        count -= delta * w;
+        cwnd += delta;
+    }
+}
+
+uint32_t
+TcpCongestionOps::LinuxLastMaxCwnd(uint32_t segCwnd,
+                                   uint32_t lastMaxCwnd,
+                                   uint32_t beta,
+                                   bool fastConvergence)
+{
+    if (segCwnd < lastMaxCwnd && fastConvergence)
+    {
+        return (segCwnd * (1024 + beta)) / (2 * 1024);
+    }
+    return segCwnd;
+}
+
 NS_OBJECT_ENSURE_REGISTERED(TcpNewReno);
 
 TypeId

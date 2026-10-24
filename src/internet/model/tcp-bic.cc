@@ -174,11 +174,7 @@ TcpBic::LinuxIncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
     uint32_t acked = segmentsAcked;
     if (tcb->m_cWnd < tcb->m_ssThresh)
     {
-        // tcp_slow_start()
-        uint32_t newCwnd = std::min(cwnd + acked, tcb->m_ssThresh.Get() / tcb->m_segmentSize);
-        acked -= newCwnd - cwnd;
-        cwnd = newCwnd;
-        tcb->m_cWnd = cwnd * tcb->m_segmentSize;
+        acked = LinuxSlowStart(tcb, cwnd, acked);
         if (acked == 0)
         {
             return;
@@ -200,19 +196,7 @@ TcpBic::LinuxIncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         m_cnt = Update(tcb);
     }
 
-    // tcp_cong_avoid_ai()
-    if (m_cWndCnt >= m_cnt)
-    {
-        m_cWndCnt = 0;
-        ++cwnd;
-    }
-    m_cWndCnt += acked;
-    if (m_cWndCnt >= m_cnt)
-    {
-        uint32_t delta = m_cWndCnt / m_cnt;
-        m_cWndCnt -= delta * m_cnt;
-        cwnd += delta;
-    }
+    LinuxCongAvoidAi(cwnd, m_cWndCnt, m_cnt, acked);
     tcb->m_cWnd = cwnd * tcb->m_segmentSize;
     NS_LOG_INFO("In CongAvoid, cwnd " << cwnd << " cnt " << m_cnt << " count " << m_cWndCnt);
 }
@@ -393,14 +377,7 @@ TcpBic::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
         // bictcp_recalc_ssthresh(), with beta in 1/1024
         const auto beta = static_cast<uint32_t>(std::lround(m_beta * 1024));
         m_jEpochStart = 0;
-        if (segCwnd < m_lastMaxCwnd && m_fastConvergence)
-        {
-            m_lastMaxCwnd = (segCwnd * (1024 + beta)) / (2 * 1024);
-        }
-        else
-        {
-            m_lastMaxCwnd = segCwnd;
-        }
+        m_lastMaxCwnd = LinuxLastMaxCwnd(segCwnd, m_lastMaxCwnd, beta, m_fastConvergence);
         ssThresh = segCwnd <= m_lowWnd ? segCwnd >> 1 : (segCwnd * beta) / 1024;
         return std::max(ssThresh, 2U) * tcb->m_segmentSize;
     }

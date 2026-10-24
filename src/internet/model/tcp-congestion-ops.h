@@ -209,6 +209,44 @@ class TcpCongestionOps : public Object
      * @return a pointer of the copied object
      */
     virtual Ptr<TcpCongestionOps> Fork() = 0;
+
+  protected:
+    /**
+     * @brief Grow the window in segments as Linux tcp_slow_start(), the
+     * segments beyond ssThresh being left for the congestion avoidance
+     *
+     * @param tcb internal congestion state, whose cWnd is set to the new window
+     * @param cwnd the window in segments, updated
+     * @param acked count of segments acked
+     * @return the acknowledged segments left for the congestion avoidance
+     */
+    static uint32_t LinuxSlowStart(Ptr<TcpSocketState> tcb, uint32_t& cwnd, uint32_t acked);
+
+    /**
+     * @brief Grow the window in segments by one segment for every w
+     * acknowledged segments, as Linux tcp_cong_avoid_ai()
+     *
+     * @param cwnd the window in segments, updated
+     * @param count the acknowledged segments not yet counted (snd_cwnd_cnt), updated
+     * @param w segments to acknowledge per segment of growth
+     * @param acked count of segments acked
+     */
+    static void LinuxCongAvoidAi(uint32_t& cwnd, uint32_t& count, uint32_t w, uint32_t acked);
+
+    /**
+     * @brief Get the last maximum window of BIC and CUBIC after a loss, as
+     * Linux bictcp_recalc_ssthresh() and cubictcp_recalc_ssthresh()
+     *
+     * @param segCwnd the window in segments at the loss
+     * @param lastMaxCwnd the last maximum window in segments
+     * @param beta the multiplicative decrease factor in 1/1024
+     * @param fastConvergence whether fast convergence is enabled
+     * @return the new last maximum window in segments
+     */
+    static uint32_t LinuxLastMaxCwnd(uint32_t segCwnd,
+                                     uint32_t lastMaxCwnd,
+                                     uint32_t beta,
+                                     bool fastConvergence);
 };
 
 /**
