@@ -48,6 +48,14 @@ LteNetDevice::GetTypeId()
                           UintegerValue(30000),
                           MakeUintegerAccessor(&LteNetDevice::SetMtu, &LteNetDevice::GetMtu),
                           MakeUintegerChecker<uint16_t>())
+            .AddTraceSource("Tx",
+                            "A packet has been given to the device to be sent.",
+                            MakeTraceSourceAccessor(&LteNetDevice::m_txTrace),
+                            "ns3::Packet::TracedCallback")
+            .AddTraceSource("Rx",
+                            "A packet has been received by the device.",
+                            MakeTraceSourceAccessor(&LteNetDevice::m_rxTrace),
+                            "ns3::Packet::TracedCallback")
             .AddTraceSource("MacRxDrop",
                             "A packet has been dropped because no protocol handler consumed it.",
                             MakeTraceSourceAccessor(&LteNetDevice::m_macRxDropTrace),
@@ -258,6 +266,8 @@ void
 LteNetDevice::Receive(Ptr<Packet> p)
 {
     NS_LOG_FUNCTION(this << p);
+
+    m_rxTrace(p);
 
     Ipv4Header ipv4Header;
     Ipv6Header ipv6Header;

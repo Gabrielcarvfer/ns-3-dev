@@ -271,6 +271,7 @@ LteUeNetDevice::Send(Ptr<Packet> packet, const Address& dest, uint16_t protocolN
                         protocolNumber != iana::ieee802numbers::IPV6,
                     "unsupported protocol " << protocolNumber
                                             << ", only IPv4 and IPv6 are supported");
+    m_txTrace(packet);
     return m_nas->Send(packet, protocolNumber);
 }
 
