@@ -14,6 +14,7 @@
 #include "ns3/tcp-header.h"
 #include "ns3/tcp-prr-recovery.h"
 #include "ns3/tcp-socket-base.h"
+#include "ns3/tcp-tx-buffer.h"
 #include "ns3/test.h"
 
 #include <limits>
@@ -371,6 +372,152 @@ TcpNonSackUndoTest::FinalChecks()
 /**
  * @ingroup internet-test
  *
+ * @brief Check the PartialAckInWindow attribute of TcpSocketBase.
+ *
+ * Without SACK, five segments, every other one, are dropped, so that the ACKs
+ * of the retransmissions are partial ones. The recovery uses PRR as
+ * Linux does (SegmentQuota, PriorCwndRecoverFs), which leaves no room in the
+ * window at the partial ACK. With PartialAckInWindow, as Linux, the next
+ * lost segment is retransmitted only once the window allows it: no
+ * retransmission of the recovery takes the bytes in flight above the
+ * congestion window. Without it, the segment is retransmitted at once, at
+ * the partial ACK (@RFC{6582}, Section 3.2, step 3), above the window.
+ */
+class TcpPartialAckInWindowTest : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param name Test description.
+     * @param inWindow Value of the PartialAckInWindow attribute.
+     */
+    TcpPartialAckInWindowTest(const std::string& name, bool inWindow)
+        : TcpGeneralTest(name),
+          m_inWindow(inWindow)
+    {
+    }
+
+  protected:
+    void ConfigureProperties() override;
+    void ConfigureEnvironment() override;
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override;
+    Ptr<TcpSocketMsgBase> CreateReceiverSocket(Ptr<Node> node) override;
+    Ptr<ErrorModel> CreateReceiverErrorModel() override;
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override;
+    void FinalChecks() override;
+
+  private:
+    bool m_inWindow;               //!< Value of the PartialAckInWindow attribute
+    SequenceNumber32 m_highTx{0};  //!< Highest data sequence number sent
+    uint32_t m_retransmissions{0}; //!< Retransmissions in CA_RECOVERY
+    uint32_t m_aboveWindow{0};     //!< Retransmissions taking the flight above cWnd
+};
+
+void
+TcpPartialAckInWindowTest::ConfigureEnvironment()
+{
+    TcpGeneralTest::ConfigureEnvironment();
+    SetRecoveryAlgorithm(TcpPrrRecovery::GetTypeId());
+    SetAppPktSize(500);
+    SetAppPktCount(120);
+    SetAppPktInterval(MicroSeconds(10));
+    SetPropagationDelay(MilliSeconds(50));
+}
+
+void
+TcpPartialAckInWindowTest::ConfigureProperties()
+{
+    TcpGeneralTest::ConfigureProperties();
+    SetInitialCwnd(SENDER, 20);
+    // The segments carry the timestamp option on top of the data size the
+    // test expects
+    SetSegmentSize(SENDER, GetSegSize(SENDER) + TcpSocketBase::GetSegmentOptionsSize());
+}
+
+Ptr<TcpSocketMsgBase>
+TcpPartialAckInWindowTest::CreateSenderSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
+    socket->SetAttribute("Sack", BooleanValue(false));
+    socket->SetAttribute("PartialAckInWindow", BooleanValue(m_inWindow));
+    socket->SetAttribute("MinRto", TimeValue(Seconds(1)));
+    Ptr<TcpPrrRecovery> recovery = CreateObject<TcpPrrRecovery>();
+    recovery->SetAttribute("SegmentQuota", BooleanValue(true));
+    recovery->SetAttribute("PriorCwndRecoverFs", BooleanValue(true));
+    socket->SetRecoveryAlgorithm(recovery);
+    return socket;
+}
+
+Ptr<TcpSocketMsgBase>
+TcpPartialAckInWindowTest::CreateReceiverSocket(Ptr<Node> node)
+{
+    Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateReceiverSocket(node);
+    socket->SetAttribute("Sack", BooleanValue(false));
+    return socket;
+}
+
+Ptr<ErrorModel>
+TcpPartialAckInWindowTest::CreateReceiverErrorModel()
+{
+    Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
+    for (uint32_t seq = 2001; seq <= 6001; seq += 1000)
+    {
+        errorModel->AddSeqToKill(SequenceNumber32(seq));
+    }
+    return errorModel;
+}
+
+void
+TcpPartialAckInWindowTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who)
+{
+    if (who != SENDER || p->GetSize() == 0)
+    {
+        return;
+    }
+    SequenceNumber32 seq = ToRelativeSeq(SENDER, h.GetSequenceNumber());
+    if (seq >= m_highTx)
+    {
+        m_highTx = seq + p->GetSize();
+        return;
+    }
+    Ptr<const TcpSocketState> tcb = GetTcb(SENDER);
+    if (tcb->m_congState != TcpSocketState::CA_RECOVERY || seq == SequenceNumber32(2001))
+    {
+        // The fast retransmission itself is not subject to the window
+        return;
+    }
+    m_retransmissions++;
+    // The flight, the retransmitted segment included
+    uint32_t inFlight = GetSenderSocket()->GetTxBuffer()->BytesInFlight();
+    NS_LOG_DEBUG("Retransmission of " << seq << " with " << inFlight << " bytes in flight, cWnd "
+                                      << tcb->m_cWnd);
+    if (inFlight > tcb->m_cWnd.Get())
+    {
+        m_aboveWindow++;
+    }
+}
+
+void
+TcpPartialAckInWindowTest::FinalChecks()
+{
+    NS_TEST_ASSERT_MSG_GT(m_retransmissions,
+                          0,
+                          "The second loss was not retransmitted in the recovery");
+    if (m_inWindow)
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_aboveWindow, 0, "A retransmission exceeded the window");
+    }
+    else
+    {
+        NS_TEST_ASSERT_MSG_GT(m_aboveWindow,
+                              0,
+                              "The partial ACK did not retransmit at once, above the window");
+    }
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TestSuite for the loss recovery without SACK
  */
 class TcpNoSackRecoveryTestSuite : public TestSuite
@@ -390,6 +537,15 @@ class TcpNoSackRecoveryTestSuite : public TestSuite
                 new TcpNonSackUndoTest("Without NonSackUndo, a " + what + " is kept", false, rto),
                 TestCase::Duration::QUICK);
         }
+        AddTestCase(new TcpPartialAckInWindowTest(
+                        "PartialAckInWindow retransmits after a partial ACK within the window",
+                        true),
+                    TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpPartialAckInWindowTest("Without PartialAckInWindow, a partial ACK retransmits "
+                                          "at once",
+                                          false),
+            TestCase::Duration::QUICK);
     }
 };
 

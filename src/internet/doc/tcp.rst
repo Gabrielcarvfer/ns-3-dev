@@ -312,10 +312,11 @@ the delayed ACK count, an in-sequence segment that is *pushed*, as
 ``tcp_measure_rcv_mss()`` and ``tcp_cleanup_rbuf()`` of Linux do: a
 segment carrying PSH, or a segment shorter than the MSS, likely ends a write
 of the peer, which may wait for its ACK, and the ACK is sent if the
-application has read all the data received. A Linux sender sets PSH at the
-end of each write and at least every half of the largest window of the
-peer (``forced_push()``), about every third segment in a bulk transfer,
-so that this accounts for a few percent of the ACKs of a Linux receiver.
+application has read all the data received. A Linux sender sets PSH on
+the last segment of each GSO packet, every second segment in a bulk
+transfer, mostly the second of the two segments that an ACK acknowledges,
+so that this accounts for a few percent of the ACKs of a Linux receiver
+(see the ``ForcedPush`` attribute below).
 
 As in Linux, out-of-order data does not enter the mode by itself: it is
 acknowledged at once anyway. The model simplifies Linux in a few ways. The
@@ -332,7 +333,18 @@ towards the share of it that its accounting of the buffer overhead
 of slow start than the model does (some 70 against 16 in a 20 Mbit/s
 transfer with a 4 MiB buffer).
 Linux also enters the mode on a segment starting at the right edge of the
-window, such as a zero window probe, which the model does not.
+window, such as a zero window probe, which the model does not. With the
+attribute set, a data segment carrying CWR is acknowledged at once, whatever
+the delayed ACK count or SACK compression, as ``tcp_ecn_accept_cwr()`` of
+Linux does, since the sender may have a very small window.
+
+The SACK option follows the timestamps option, the options being padded at
+their end to a multiple of four bytes: 12 + 8 n bytes of options for n SACK
+blocks. Linux precedes it with two NOP options, aligning the blocks on 32
+bits as the example of :rfc:`2018` (Section 3) does: 16 + 8 n bytes. The
+``TcpSocketBase::AlignSackOption`` attribute (false by default) reproduces
+this; the ACKs with SACK are then as long as those of Linux, and reach the
+sender at the same time over a slow link.
 
 Linux also merges the ACKs of out-of-order data (*SACK compression*,
 ``__tcp_ack_snd_check()``), which the ``TcpSocketBase::SackCompression``
@@ -341,9 +353,23 @@ out-of-order data at a given RCV.NXT are still sent at once, so that the
 sender can retransmit fast, but the following ones wait for
 ``TcpSocketBase::SackCompressionDelay`` (1 ms by default, as
 ``tcp_comp_sack_delay_ns``) or 5% of the smoothed RTT, whichever is shorter,
-and one ACK then covers all the data received meanwhile, up to 44 segments
+plus ``TcpSocketBase::SackCompressionSlack`` (100 us by default, as
+``tcp_comp_sack_slack_ns``, the slack of the range timer of Linux, which
+expires at the end of its range unless another timer is due), and one ACK
+then covers all the data received meanwhile, up to 44 segments
 (``tcp_comp_sack_nr``). Any ACK sent, such as the immediate ACK of data
-filling a gap, ends the wait. The ACKs are not held back in the quick ACK
+filling a gap, ends the wait. As ``tcp_sack_new_ofo_skb()``, out-of-order
+data that extends a SACK block other than the first two, or that starts a
+new block while two exist, sends the ACK held back at once, with the SACK
+blocks of before its arrival, and is left to the next ACK. With
+``LinuxRcvWindow`` as well, data that fills a gap only in part counts as the
+first of the three ACKs sent at once at the new RCV.NXT, unless more than
+one segment arrived since the last ACK and the window has not shrunk (which
+the data delivered and not yet read usually prevents), as
+``__tcp_ack_snd_check()``. As Linux (``inet_csk_clear_xmit_timer()``), an ACK
+sent leaves the delayed ACK timer running, and the timer, when it expires,
+sends the ACK held back, if any (``tcp_delack_timer_handler()``), possibly
+before the compression delay elapses. The ACKs are not held back in the quick ACK
 mode, nor upon a segment marked CE that starts an ECN-Echo, and the held
 ACKs carry ECN-Echo as the other ones. This departs from :rfc:`5681`
 (Section 4.2), whose receiver SHOULD send an immediate duplicate ACK for each
@@ -370,11 +396,22 @@ with ``DelAckTimeout`` as its upper bound, as ``TCP_DELACK_MAX`` in Linux:
 * each time it expires, it doubles, bounded by the RTO
   (``tcp_delack_timer_handler()``);
 * above 40 ms, the timer is bounded by the smoothed RTT (but not below
-  40 ms) and by 500 ms (``tcp_send_delayed_ack()``).
+  40 ms) and by 500 ms (``tcp_send_delayed_ack()``);
+* with ``TcpSocketBase::RtoTimerGranularity`` as well (see below), the
+  timeout and the intervals between the segments are counted in whole ticks
+  (jiffies), the smoothed RTT is rounded up to whole ticks, and the timer
+  expires on a tick as the retransmission timer: armed during tick k with a
+  timeout of n ticks, it expires on tick k + n + 1.
 
 The timeout thus stays within the 500 ms that :rfc:`9293` (Section 3.8.6.3)
-and :rfc:`1122` allow. The interactive (*pingpong*) mode of Linux, which
-bounds the timer by 200 ms and resets it to 40 ms on expiry, is not modelled.
+and :rfc:`1122` allow. Linux enters its interactive (*pingpong*) mode, which
+bounds the timer by 200 ms, sends no quick ACK, and resets the timeout to
+40 ms on expiry, when it receives the FIN of the peer (``tcp_fin()``), so
+that a FIN that arrives with all the data acknowledged, and that the
+application does not answer at once with its own FIN, is acknowledged on the
+delayed ACK timer. ``AdaptiveDelAck`` reproduces this; the other entries of
+Linux into the interactive mode, on data sent shortly after data received,
+are not modelled.
 
 **Advertised window**
 
@@ -387,46 +424,77 @@ attribute (false by default) reproduces:
 
 * the buffer is twice ``RcvBufSize``, as Linux doubles the size given to
   ``SO_RCVBUF`` (and as ``net.ipv4.tcp_rmem`` is set to twice the size in the
-  comparisons with Linux), and every segment held, in sequence and not yet
-  read or out of order, is charged its data plus the overhead of its skb:
-  ``TcpSocketBase::RcvSkbOverhead`` (1336 bytes by default) for a segment that
-  starts an skb, and ``TcpSocketBase::RcvCoalescedOverhead`` (128 bytes by
-  default) for a segment coalesced into the skb of the one before it, up to
-  17 segments per skb. The defaults reproduce the windows of Linux 6.12 under
-  DCE with 1448-byte segments; the overheads depend on the network driver;
+  comparisons with Linux), and every skb held, in sequence and not yet read,
+  or out of order, is charged its memory (``truesize``). The skbs are those
+  that the virtio-net driver of Linux 6.12 builds, with mergeable receive
+  buffers, as in DCE: a frame whose IP datagram is not longer than
+  ``TcpSocketBase::RcvCopyBreak`` (624 bytes) is copied into the head of a
+  new skb of ``TcpSocketBase::RcvHeadTruesize`` (1248 bytes); a larger one
+  stays in its receive buffer, attached to such an skb as a page fragment of
+  ``TcpSocketBase::RcvFragTruesize`` (1536 bytes). The receive buffers are
+  carved in turn, one per segment received, from pages of
+  ``TcpSocketBase::RcvFragPageSize`` (32768 bytes), the last buffer of a page
+  taking the room left (2048 bytes, once every 21 segments);
+  ``TcpSocketBase::RcvBufferOffset`` (0) counts the buffers that the node
+  took for frames received before the SYN. A segment that follows the last
+  skb, not read yet, of the receive queue or of the out-of-order queue is
+  coalesced into it (``tcp_try_coalesce()``): copied into the room left in a
+  head that holds all its data, at no cost, or else as more fragments, up to
+  17: its page fragment, charged alone, or the head that holds its data,
+  charged without the ``sk_buff`` structure (224 bytes). A FIN without data
+  takes an skb of its own, held until the socket is closed;
 * the memory left is converted into window with the ratio of the length of a
   full-sized segment to its memory, measured on the first one received
   (``scaling_ratio``, 1448/2784, i.e. 133/256, with the defaults; 1/2 before);
 * the SYN offers half the buffer, rounded down to whole segments, with the
   window scale that Linux derives from the largest of the buffer and
   ``net.core.rmem_max`` (212992 bytes). Once the connection is established,
-  the window is bound to half the buffer minus one segment
-  (``tcp_init_buffer_space()``), then, once the first full-sized segment is
+  the window is bound to half the buffer minus one segment, the advertised
+  MSS of the route, which for the socket of a listener does not discount the
+  timestamps (``tcp_init_buffer_space()``), then, once the first full-sized segment is
   measured, to the window of the whole buffer (``window_clamp``);
 * the window starts from the one of the SYN and grows by two segments with
   each segment received, as long as the memory left allows it
-  (``rcv_ssthresh``, ``tcp_grow_window()``); with ``TcpSocketBase::QuickAck``,
-  a segment that grows it is acknowledged at once;
+  (``rcv_ssthresh``, ``tcp_grow_window()``); out-of-order segments grow it
+  only with SACK, so that the duplicate ACKs of a connection without SACK
+  carry the same window and trigger the fast retransmit of the sender
+  (``tcp_data_queue_ofo()``); with ``TcpSocketBase::QuickAck``,
+  a segment that grows it is acknowledged at once: as Linux
+  (``icsk_ack.quick |= 1``), the count of quick ACKs is or-ed with one, so
+  that an even count left, such as the 16 quick ACKs of the start of the
+  connection, is not consumed while the window grows, and the segments are
+  still acknowledged one by one that many times once it stops growing;
 * when the memory left falls below half the bound of the window, the quick
   ACKs stop, and a window smaller than one segment, or than 1/16 of the
   buffer, is advertised as zero;
 * the window is rounded up to the unit of the window scale (to a multiple of
   the segment size without window scaling), and it never shrinks: the right
   edge already advertised is kept, rounded up to the unit of the window scale;
-* since Linux acknowledges a segment before the application reads the data
-  it brings, the data read while the segment is processed is still charged
-  for the ACK of the segment, and, once the application has read, an ACK
+* Linux processes a segment before the application reads the data it
+  brings: a segment acknowledged at once, as the second full-sized segment
+  not acknowledged yet whose window is not smaller than the one advertised,
+  as a quick ACK, or as out-of-order data, advertises the memory of the data
+  not read yet (``__tcp_ack_snd_check()``), as does the ACK of a delayed ACK
+  timer, with ``AdaptiveDelAck``, about to expire, within a quarter of its
+  timeout (``tcp_send_delayed_ack()``). Otherwise the ACK, if due, is sent
+  once the application has read (``tcp_cleanup_rbuf()``), and advertises the
+  memory left after the read. Once the application has read, an ACK also
   announces the window if it has at least doubled from a window fallen to
-  half its bound (``tcp_cleanup_rbuf()``), instead of the window update of
-  the ns-3 receiver.
+  half its bound, instead of the window update of the ns-3 receiver.
 
 During a long recovery, the segments held out of order use the memory of
 the buffer, so that the right edge of the window stays where it was when the
 loss occurred, and the sender cannot send new data beyond it, as with Linux.
-The receive buffer autotuning of Linux (``tcp_rcv_space_adjust()``,
-``tcp_moderate_rcvbuf``), the memory pressure of the system, the pruning of
-the out-of-order queue and the receive MSS estimation beyond the first segment
-are not modelled.
+The memory of the skbs is reserved as Linux does, by whole pages that the
+socket keeps in advance (``sk_forward_alloc``) and that reach the memory of
+the protocol through a per-CPU reserve of 1 MiB; against the limits of
+``TcpSocketBase::LinuxTcpMem`` (none by default), as ``net.ipv4.tcp_mem``,
+the socket being alone on the node, it enters the memory pressure, in which
+the window is bound to four segments, and may fail to reserve, as the
+memory over ``sk_rcvbuf`` does (see below). The receive buffer autotuning
+of Linux (``tcp_rcv_space_adjust()``, ``tcp_moderate_rcvbuf``), the
+collapse of the queues (``tcp_collapse()``) and the receive MSS estimation
+beyond the first segment are not modelled.
 
 -------------------
 
@@ -458,19 +526,115 @@ another short one is unacknowledged, is not modelled.
 
 The sender sets PSH on the last segment of the buffered data, the one after
 which no more data is queued (:rfc:`9293`, Section 3.9.1.3, MUST-61). Linux
-sets it more often: on the segment that ends each application write
-(``tcp_push()``), and on the segment that takes the data written past half
-the largest window of the peer since the last PSH (``forced_push()``). The
-``TcpSocketBase::ForcedPush`` attribute (false by default) reproduces both,
-for the data sent for the first time. A Linux receiver acknowledges a
-pushed segment at once once its application has read it, which the
-``QuickAck`` attribute models, so that the PSH flags of the sender shape the
-ACKs of the receiver. Which segments end a write depends on the application:
-a Linux bulk sender whose send buffer is full writes, each time an ACK frees
-space, about the two segments the ACK acknowledged, so that every second
-segment carries PSH and the receiver ACKs at the same points as its delayed
-ACKs; an application writing in fixed chunks that are not a multiple of the
-MSS makes the receiver acknowledge many segments alone.
+sets it far more often, and the ``TcpSocketBase::ForcedPush`` attribute
+(false by default) reproduces it:
+
+* on the last segment of each GSO packet, a burst of new data of more than
+  one segment that Linux hands to the device in one piece
+  (``__tcp_transmit_skb()``, to expedite GRO at the receiver). A GSO packet
+  holds up to ``tcp_tso_autosize()`` segments, the data sent in about 1 ms
+  at the pacing rate that Linux computes even without pacing (200% of
+  cwnd * MSS / SRTT below half the slow start threshold, 120% above), at
+  least two and at most 64 KiB, within what the windows allow, the short
+  segment that ``FillReceiveWindow`` sends up to the right edge of the
+  receive window included (``tcp_mss_split_point()``): in a bulk transfer
+  whose ACKs each acknowledge two segments, every second segment carries
+  PSH;
+* on the segment that ends the skb holding the end of an application write
+  (``tcp_push()``), unless the next write appends to it before it is sent,
+  which clears the flag, as in a bulk transfer whose application writes
+  ahead;
+* on the segment that ends the skb filled past half the largest window of
+  the peer since the last PSH (``forced_push()``).
+
+The sender lays out the data written in skbs as Linux
+(``tcp_sendmsg_locked()``): each write fills the last skb up to the size
+goal of ``tcp_xmit_size_goal()``, a GSO packet of 64 KiB bounded by half the
+largest window of the peer, counting only its data not yet sent, then new
+skbs. As Linux sends the skbs it fills during the write (``tcp_push_one()``
+and ``forced_push()``), the last skb of a write that the windows let go in
+part is filled again: with an initial window of 10 segments and a window of
+64 KiB offered by the peer, the skbs end 10 segments, then every 22
+segments, after the first byte. A GSO packet takes the data of the next
+skb up to the segments that the congestion window allows, at most half of
+it (``tcp_grow_skb()`` and ``tcp_cwnd_test()``), so that the end of an skb,
+and its PSH, may move forward. The size of the GSO packets follows the
+pacing rate that a congestion control sets itself, such as ``TcpBbr``, with
+at least ``TcpCongestionOps::GetMinTsoSegs()`` segments
+(``min_tso_segs()``).
+
+The retransmissions keep the PSH of the writes, which Linux stores in its
+skbs, but not the PSH of the GSO packets, which it sets on the copy of the
+skb it sends only. Linux retransmits the lost part of an skb of its
+retransmission queue, the GSO packet with which the data was first sent
+(split at the SACKed data), as one GSO packet, up to the TSO size and the
+congestion window (``tcp_retransmit_skb()``), whose last segment then
+carries PSH: with ``ForcedPush`` or ``TsoDefer``, the sender retransmits the
+consecutive lost segments first sent in one GSO packet together as well.
+
+A Linux receiver acknowledges a pushed segment at once once its application
+has read it, which the ``QuickAck`` attribute models, so that the PSH flags
+of the sender shape the ACKs of the receiver.
+
+Linux also defers the transmission of new data that the windows allow only
+in part (``tcp_tso_should_defer()``): outside of loss recovery, within 1 ms
+of its last transmission, while less than a GSO packet, less than the whole
+skb and less than a third of the window can be sent, and while the oldest
+outstanding segment was sent at least half an SRTT ago, it waits for the
+next ACK to send a larger GSO packet; the end of an skb that is not the
+last one is sent at once. With ACKs that each acknowledge one segment, it
+thus sends two segments every second ACK. The ``TcpSocketBase::TsoDefer``
+attribute (false by default) reproduces it; a deferral that the congestion
+window causes counts as cwnd-limited, for the window to keep growing. Both
+attributes model Linux implementation choices that :rfc:`9293` does not
+require, hence off by default.
+
+With either attribute, the GSO packets are cut as Linux cuts them
+(``tcp_mss_split_point()``): a packet takes the segments the congestion
+window allows, at most half of it, cut by the end of its skb and by the
+right edge of the receive window, where, with ``FillReceiveWindow``, a short
+segment fills the window. A packet starts only if its first segment fits
+the receive window (``tcp_snd_wnd_test()``), so that the short segment
+filling the window is sent only with the full segment before it. With
+``TsoDefer`` and Nagle's algorithm (``TcpNoDelay`` false), Nagle follows
+Linux (``tcp_nagle_check()``), Minshall's variant: a short last segment of
+new data waits only while a short segment sent is not acknowledged, while
+:rfc:`9293` waits while any data is not acknowledged; so does the short
+segment that would fill the receive window. The GSO size follows the pacing
+rate of Linux, of 200% in slow start below half the slow start threshold,
+both counted in segments, and of 120% above.
+
+Linux accounts the send buffer by the memory of its skbs (``sk_wmem_queued``):
+the data written and not acknowledged, and for each skb, written or sent
+and not fully acknowledged, its overhead (``truesize``). A write takes no new
+skb once that cost reaches the buffer size, queuing only the data it could
+(``sk_stream_memory_free()``), and the application may write again only
+once the free buffer is at least half the cost
+(``sk_stream_is_writeable()``). With ``ForcedPush`` or ``TsoDefer``, the
+``TcpSocketBase::SndSkbOverhead`` attribute (0, disabled, by default)
+reproduces it, each skb costing that many bytes beyond its data (768 for
+the skbs of Linux 6.12 on a 64 bit machine): the skbs filled after the
+application waited for space hold the size goal of that time. As Linux
+(``tcp_check_space()``), the application waiting for space is woken once
+the ACK that frees it has sent the data it allows.
+
+Linux grows the congestion window only while it limits the transmissions
+(``tcp_is_cwnd_limited()``): while the flight filled it, or a TSO deferral
+was due to it, in the window of data last sent, and in slow start up to
+twice the largest flight of that window (``tcp_cwnd_validate()``), so that
+the window of a sender limited by the receive window or by the application
+stops growing. The ``TcpSocketBase::LinuxCwndLimited`` attribute (false by
+default) reproduces it, for all the congestion controls.
+
+With pacing (``TcpSocketState::EnablePacing``), either attribute also paces
+the GSO packets as the internal pacing of Linux, which BBR uses without the
+fq queuing discipline (``tcp_pacing_check()``,
+``tcp_update_skb_after_send()``): a GSO packet is sent whole, and it delays
+the next one by its transmission time at the pacing rate, less the delay
+with which it left after its departure time, up to half of it; the first ten
+segments of the connection are not paced. Otherwise, the sender paces
+segment by segment, after the initial window unless
+``TcpSocketState::PaceInitialWindow`` is set.
 
 -------------------
 
@@ -489,20 +653,22 @@ but not those below the incoming segment, which is itself dropped if the
 memory still does not fit. When it dropped data, Linux forgets its SACK
 blocks: it *reneges* on the data it SACKed.
 
-The ``TcpSocketBase::PruneOverhead`` attribute (0, disabled, by default)
+With ``LinuxRcvWindow``, the receiver reproduces this with the memory of its
+skbs (see above), dropping the out-of-order data that does not fit without
+an ACK, and the data in sequence with an ACK that advertises a zero window
+(``ICSK_ACK_NOMEM``) if other data is not read yet. Without it, the
+``TcpSocketBase::PruneOverhead`` attribute (0, disabled, by default)
 reproduces this, accounting the data buffered at that many times its size
 against twice ``RcvBufSize``, so that the out-of-order data the receiver
 holds are bounded by ``2 * RcvBufSize / PruneOverhead``. Reneging is allowed
 by :rfc:`2018` but discouraged, hence the option is off by default. Linux
-prunes for global memory pressure (``tcp_mem``) as well, which the model
-does not distinguish: in the Linux kernel library used to compare the two
-stacks, a receiver with a 4 MiB buffer (8 MiB of ``sk_rcvbuf``) pruned its
-out-of-order queue once it held some 3.1 to 3.5 MB, a ``PruneOverhead`` of
-about 2.5, whereas buffers of up to 1 MiB holding a whole window of
-out-of-order data were not pruned.
-With ``LinuxRcvWindow``, the limit is the doubled buffer of that model, and
-the clamp sets its ``rcv_ssthresh``, from which that model grows the window
-again.
+prunes for global memory pressure (``tcp_mem``) as well, which
+``PruneOverhead`` does not distinguish: in the Linux kernel library used to
+compare the two stacks, whose ``tcp_mem`` is 738 984 1476 pages, a receiver
+with a 4 MiB buffer (8 MiB of ``sk_rcvbuf``) pruned its out-of-order queue
+once it held some 3.1 to 3.5 MB, a ``PruneOverhead`` of about 2.5, whereas
+buffers of up to 1 MiB holding a whole window of out-of-order data were not
+pruned; ``LinuxRcvWindow`` with ``LinuxTcpMem`` reproduces these prunings.
 
 With SACK, the sender detects that the receiver reneged when the cumulative
 ACK reaches a segment it marked as SACKed. As :rfc:`2018` (Section 8) and
@@ -518,7 +684,23 @@ timer to expire after half the smoothed RTT, at least 10 ms
 information and marks all the data lost (``tcp_timeout_mark_lost()``), with
 the reduction of the congestion window to one segment of any timeout, which
 the ``TcpSocketBase::SackRenegingTimeout`` attribute (false by default)
-reproduces.
+reproduces. Until the timeout, Linux keeps its scoreboard: the data at the
+left edge, which it SACKed, is neither counted in flight nor retransmitted,
+and the ACK that reveals the reneging retransmits nothing
+(``tcp_fastretrans_alert()`` returns), sending only new data. With
+``RtoTimerGranularity``, the timer expires on its ticks, as the jiffies of
+Linux.
+
+Linux retransmits only the data deemed lost (``tcp_xmit_retransmit_queue()``),
+on the ACKs, while the data written by the application only goes out as new
+data (``tcp_push()``). :rfc:`6675` also retransmits, when no new data can be
+sent, the first segment not SACKed below the highest SACK, deemed lost or not
+(``NextSeg()``, rule (3)). The ``TcpSocketBase::ForwardRetransmit`` attribute
+(true by default) can disable it, as Linux removed its forward
+retransmission; the data marked lost is then retransmitted also above the
+highest SACK, which :rfc:`6675` does not (criterion (1.b)), as after a
+timeout that marked all the data lost. With ``ForcedPush`` or ``TsoDefer``,
+the transmissions that the application writes trigger send new data only.
 
 -------------------
 
@@ -806,6 +988,19 @@ target moves ahead, its window grows slightly slower than when the count is
 recomputed on every ACK. The ``CntUpdateInterval`` attribute (zero by
 default, 1/32 s for the behaviour of Linux) reproduces this.
 
+The ``LinuxHz`` attribute (zero by default) follows instead the whole integer
+arithmetic of the Linux ``tcp_cubic.c``, with its clock in jiffies at this
+rate (the ``CONFIG_HZ`` of the kernel, e.g. 100): the epoch starts and the
+count is kept for ``HZ/32`` in whole jiffies, the minimum delay is rounded up
+to a jiffy, the delay samples within a second of the start of an epoch are
+discarded, the time to the origin K is the integer cube root of
+``cubic_root()`` in 1/1024 s, beta is 717/1024 and C is 410/1024 (in fixed
+point), the threshold is ``cwnd * 717 / 1024`` of cWnd, a timeout clears
+the whole state (``bictcp_reset()``), and the window grows as
+``tcp_slow_start()`` and ``tcp_cong_avoid_ai()``. The window then follows
+the one of Linux segment by segment, where the published function, in
+seconds, makes the window grow a few ACKs earlier or later.
+
 Linux Reno
 ^^^^^^^^^^
 TCP Linux Reno (class :cpp:class:`TcpLinuxReno`) is designed to provide a
@@ -932,8 +1127,10 @@ the congestion is detected, and b() is the one of that window. Setting the
 attribute ``TcpHighSpeed::LinuxDecrease`` to true (default false) computes the
 decrease as the Linux ``hstcp_ssthresh()`` does instead: b() is the one of the
 window at the last increase in congestion avoidance, so that a loss ending
-slow start halves the window whatever its size, and the decrease applies to
-cWnd.
+slow start halves the window whatever its size, the decrease applies to
+cWnd, and b() is the one of the Linux table, in 1/256 (``cwnd - ((cwnd * md)
+>> 8)``). As in Linux, the increments counted towards the next segment of
+growth are discarded when the window is reduced.
 More information at: http://dl.acm.org/citation.cfm?id=2756518
 
 Hybla
@@ -972,7 +1169,9 @@ implementation (``tcp_hybla.c``) that are not part of the published algorithm:
   eight values, as the fixed-point arithmetic of Linux does. The truncation
   of rho^2/cwnd slows the congestion avoidance down for large windows (by
   about 10% for a window of 100 segments and rho = 1.6), and a window that
-  has not grown for a window of ACKs gains a segment.
+  has not grown for a window of ACKs gains a segment. The slow start
+  threshold is then also half the window in whole segments
+  (``tcp_reno_ssthresh()``), instead of half the FlightSize in bytes.
 
 More information at: http://dl.acm.org/citation.cfm?id=2756518
 
@@ -1004,7 +1203,11 @@ jiffies, whose rate is the attribute ``LinuxHz`` (default 1000, the HZ of the
 kernel; RTTs are rounded up to a jiffy), the samples, in bytes per jiffy, are
 filtered by two cascaded moving averages of gain 1/8, and the slow start
 threshold is the estimate times the minimum of the RTT samples, which
-restarts after a retransmission timeout. When a congestion is detected, the slow
+restarts after a retransmission timeout. As in Linux (``tcp_westwood_init()``),
+the first window starts with the first transmission of data, a round trip
+before the first ACK. The RTTs in jiffies make the threshold depend on
+``LinuxHz``: the Linux kernel of LKL, used by DCE, runs with HZ=100, which
+rounds an RTT of 82 ms up to 90 ms. When a congestion is detected, the slow
 start threshold is set to the estimated bandwidth times the minimum RTT, and
 the window to the threshold when the recovery ends. Linux instead halves the
 window during the fast recovery (or the ECN reduction), as Reno, and sets the
@@ -1078,13 +1281,19 @@ RTT, Scalable increases its cwnd per:
 As in the Linux implementation of Scalable, the increment is counted per
 segment acknowledged rather than per ACK: the window grows by one segment
 every 100 segments acknowledged (attribute ``AIFactor``), whether or not the
-receiver delays its ACKs.
+receiver delays its ACKs, and the segments counted towards the next increase
+are discarded when the window is reduced.
 
 On the first detection of congestion in a given RTT, cwnd is reduced based on
 the following equation:
 
 .. math::  cwnd = cwnd - ceil(0.125 \cdot cwnd)
    :label: scalablecwnddecrement
+
+The decrease applies to the bytes in flight when the congestion is detected.
+Setting the attribute ``TcpScalable::LinuxDecrease`` to true (default false)
+computes it as Linux ``tcp_scalable_ssthresh()`` does instead, from cWnd,
+rounding the decrease down: ``cwnd - (cwnd >> 3)``.
 
 More information at: http://dl.acm.org/citation.cfm?id=956989
 
@@ -1126,6 +1335,18 @@ because the loss encountered is more likely a corruption-based loss than a
 congestion-based. Only when N is greater than beta, Veno halves its sending
 rate as in Reno.
 
+The ``LinuxArithmetic`` attribute (false by default) follows Linux
+``tcp_veno.c``, with the ``CountAckedSegments`` attribute of
+:cpp:class:`TcpNewReno` for its Reno increases: the RTT samples are taken in
+microseconds plus one, N is computed in half segments (and compared with twice
+beta) only while Veno is on with more than two samples, and kept otherwise;
+the segments acknowledged beyond ssthresh in slow start go to congestion
+avoidance; in the congestive state, the window grows by one segment on the ACK
+which follows a window of acknowledged segments, every other such window,
+from the count of acknowledged segments of :cpp:class:`TcpNewReno`; the
+window is halved in whole segments; and Veno restarts, with a new BaseRTT,
+when data is sent with none in flight.
+
 More information at: http://dx.doi.org/10.1109/JSAC.2002.807336
 
 BIC
@@ -1159,6 +1380,16 @@ than the ACKs, a receiver delaying its ACKs makes the window grow twice as fast
 as the algorithm states. The ``AckRatioCompensation`` attribute (false by
 default) reproduces this. As in Linux, the segments counted towards the next
 window increase are discarded when the window is reduced.
+
+The ``LinuxHz`` attribute (zero by default) follows the integer arithmetic of
+the Linux ``tcp_bic.c``, with its clock in jiffies at this rate (the
+``CONFIG_HZ`` of the kernel): the count is kept for ``HZ/32`` while the
+window does not change, beta is 819/1024, the delayed ACK ratio compensation
+applies (``delayed_ack += pkts_acked - (delayed_ack >> 4)``, with the
+segments cumulatively acknowledged, see ``TcpSocketBase::LinuxPktsAcked``),
+a timeout clears the state (``bictcp_reset()``), and the window grows as
+``tcp_slow_start()`` and ``tcp_cong_avoid_ai()``. Linux uses a
+``SmoothPart`` of 20.
 
 More information at: http://ieeexplore.ieee.org/xpl/articleDetails.jsp?arnumber=1354672
 
@@ -1205,6 +1436,13 @@ Fast mode and per cWnd segments in the Slow mode, the count being cleared when
 the window is reduced, and the segments acknowledged beyond ssthresh in slow
 start go to the congestion avoidance. Otherwise, the Fast mode keeps its own
 count in the embedded :cpp:class:`TcpScalable` object.
+
+The ``LinuxArithmetic`` attribute (false by default) computes as Linux
+``tcp_yeah.c`` with the Vegas helpers of ``tcp_vegas.c``: the RTT samples are
+taken in microseconds plus one, Q and the comparison of L with 1/Phy are
+computed in integers, an RTT ends once the ACK is after (not at) the highest
+sequence number sent when it started, and the RTT measurements, BaseRTT
+included, restart when data is sent with none in flight.
 
 More information: http://www.csc.lsu.edu/~sjpark/cs7601/4-YeAH_TCP.pdf
 
@@ -1287,6 +1525,24 @@ default parameter settings:
 * eta2 = 0.1
 * eta3 = 0.8
 
+In congestion avoidance, each acknowledged segment adds alpha / cwnd
+segments, the fractions of segment being carried to the next ACKs. With the
+``CountAckedSegments`` attribute of :cpp:class:`TcpNewReno`, the increase
+follows instead Linux (``tcp_illinois_cong_avoid()``): it counts the segments
+that the ACK removes from the retransmission queue (``pkts_acked``), including
+those SACKed before, so that the ACK which ends a recovery grows the window by
+about alpha segments at once; alpha is in 1/128, the count restarts when the
+window is reduced, and the remainder of an increase is dropped.
+
+The ``LinuxArithmetic`` attribute (false by default) computes alpha, beta and
+the slow start threshold as Linux ``tcp_illinois.c`` does: the delays are in
+microseconds and the arithmetic in integers, alpha in 1/128 and beta in 1/64
+of a unit; the decrease of the window, ``(cwnd * beta) >> 6`` segments, is
+rounded down, so that the threshold is rounded up; alpha and beta are updated
+once the ACK is after (not at) the right edge of the RTT, the highest sequence
+number sent when it started; and the RTTs with a low delay are counted towards
+the return of alpha to alphaMax only once the delay rose above d1.
+
 More information: http://www.doi.org/10.1145/1190095.1190166
 
 H-TCP
@@ -1330,7 +1586,14 @@ paper); the ``RttScaling`` attribute (false by default) enables it. The
 other differences of Linux are those of its integer arithmetic (alpha is
 recomputed only when the window grows, the elapsed time is counted in
 jiffies, and the ACK that grows the window does not count towards the next
-increase), which make its window grow slightly slower.
+increase), which make its window grow slightly slower. The ``LinuxHz``
+attribute (zero by default) follows them, as the Linux ``tcp_htcp.c``, with
+its clock in jiffies at this rate (the ``CONFIG_HZ`` of the kernel): alpha
+and beta in 1/128, the RTTs in jiffies, the adaptive backoff switched by the
+throughput estimate (``measure_achieved_throughput()``, from the segments
+cumulatively acknowledged, see ``TcpSocketBase::LinuxPktsAcked``), the
+backoff applied to cWnd, and the per-ACK increase of ``htcp_cong_avoid()``.
+The adaptive backoff of the H-TCP paper is not used then.
 
 More information (Internet Draft): https://tools.ietf.org/html/draft-leith-tcp-htcp-06
 
@@ -1404,7 +1667,7 @@ receipt of an ACK of new data:
 
 .. math::
 
-  d &= \text{timestamp of the receiver} - \text{echoed timestamp} \\
+  d &= \text{timestamp of the receiver} - \text{send time of the data} \\
   d_{min} &= \min(d_{min}, d), \quad d_{max} = \max(d_{max}, d) \\
   sd &= \frac{7}{8} \times sd + \frac{1}{8} \times d \\
   \text{early congestion indication if } sd &> d_{min} + \delta \times (d_{max} - d_{min})
@@ -1440,9 +1703,23 @@ window is small, or the delayed ACK timeout (200 ms by default in |ns3|,
 40 ms in Linux) when it is alone. Once the window is small, most rounds have
 such an ACK, which looks like queueing: TCP-LP keeps reducing its window, a
 positive feedback which leaves a single TCP-LP flow, without any other
-traffic, at one or two segments (the paper does not consider delayed ACKs).
-A receiver which does not delay its ACKs
-(``TcpSocket::DelAckCount`` set to 1) avoids it.
+traffic, at one or two segments. The ``TcpLp::AckHoldFilter`` attribute (false
+by default) removes that bias: the delay is measured from the send time of the
+most recently sent segment that the ACK acknowledges (the one whose arrival
+triggered it), instead of the echoed timestamp, and once the receiver has
+acknowledged more than one segment with an ACK (it delays its ACKs), the ACKs
+of a single segment, sent by its delayed ACK timer, give no sample. In
+addition, after a reduction, the smoothed delay still holds the delays of the
+larger window, until a few samples of the data sent after the reduction have
+come in: these old samples set the window to one segment. The
+``TcpLp::RestartSmoothing`` attribute (false by default) restarts the smoothed
+delay at the first sample of the data sent after each reaction. Neither
+mechanism is part of the paper (which does not consider delayed ACKs) nor of
+Linux, so both are off by default and ``TcpLp`` follows the paper, which
+collapses to a window of one or two segments with a delaying receiver.
+With both set, a single TCP-LP flow uses the bottleneck
+as NewReno does, and a TCP-LP flow yields it to a NewReno flow, and uses it
+again once the NewReno flow ends (``ns3-tcp-lp`` test suite).
 
 Linux estimates the clock rate of the receiver from the timestamps and scales
 the one way delay with an integer division by that rate, which in practice
@@ -1470,7 +1747,8 @@ and the raw echoed timestamp (which includes the timestamp offset of this
 end), the reactions on every ACK and the resets of the minimum and maximum
 delays, the window reductions in segments, the halving of the window, not of
 the bytes in flight, for the slow start threshold (``tcp_reno_ssthresh()``),
-and the hold of slow start too within the inference. Together with
+and the hold of slow start too within the inference. The ``AckHoldFilter`` and
+``RestartSmoothing`` attributes do not apply to it. Together with
 ``TcpSocketBase::RandomTimestampOffset``, it reproduces the Linux TCP-LP
 between two Linux hosts, whose delay-based reductions mostly disappear.
 
@@ -1538,6 +1816,14 @@ timeout, halves the slow start threshold as in :rfc:`5681` (:rfc:`8257`,
 Section 3.5, and Linux ``dctcp_react_to_loss()``); the reduction based on
 alpha applies only to the ECN Echo. Without ECN marking on the path, DCTCP
 therefore behaves as Linux Reno.
+
+The ``LinuxArithmetic`` attribute (false by default) computes as Linux
+``tcp_dctcp.c`` does: alpha is in 1/1024 and decays by a shift of
+``DctcpShiftG`` once per window, down to zero once it is smaller than the
+shift (``dctcp_update_alpha()``); the reductions are in whole segments, a loss
+halving the window (``max(cwnd >> 1, 2)``) rather than the FlightSize, and the
+ECN Echo rounding the decrease ``(cwnd * alpha) >> 11`` down; the observation
+window ends at the highest sequence number sent.
 
 
 To enable DCTCP on all TCP sockets, the following configuration can be used::
@@ -1674,6 +1960,46 @@ implementation of BBR in ns-3:
 * BBR should enable (if not already done) TCP pacing feature.
 * Test to validate the values of ``pacing_gain`` and ``cwnd_gain`` in different phases
   of BBR.
+* Test of the initial pacing rate and of the gains computed as Linux.
+
+The initial pacing rate is the initial window over the smoothed RTT (or 1 ms
+without an RTT sample), times the high gain, less the 1% pacing margin, as in
+Linux (``bbr_init_pacing_rate_from_rtt()``) and the Internet Draft. The
+``TcpBbr::LinuxArithmetic`` attribute (false by default) also reproduces the
+fixed point arithmetic of Linux: the bandwidth in whole packets per
+microsecond scaled by 2^24 (``BW_UNIT``), the gains in units of 1/256 (a high
+gain of 739/256 and a drain gain of 88/256, whatever ``HighGain``), the pacing
+rate rounded down to whole bytes per second (``bbr_rate_bytes_per_sec()``),
+the target window in whole packets plus three GSO packets, rounded up to an
+even number (``bbr_inflight()``, ``bbr_quantization_budget()``), the ACK
+aggregation in packets over microseconds, a bandwidth filter starting
+empty, a minimum RTT that only a smaller sample in whole microseconds renews
+before it expires (``bbr_update_min_rtt()``), and the data in flight counted
+at the departure time of the next packet of the pacing, to leave DRAIN and
+the phases of the gain cycle (``bbr_packets_in_net_at_edt()``). With
+``TcpBbr::LinuxHz`` set to the ``CONFIG_HZ`` of a Linux kernel, the minimum
+RTT and PROBE_RTT are timed in its jiffies (``tcp_jiffies32``), so that
+PROBE_RTT starts at the first jiffy past the window, as Linux.
+
+Through a fast recovery, ``TcpBbr`` sets its window to the data in flight
+plus the data delivered when the recovery starts, then keeps it at least at
+that level (packet conservation) for one round trip, starting a new round,
+and restores the window of before the recovery when it ends (Linux
+``bbr_set_cwnd_to_recover_or_restore()``). Linux evaluates these transitions
+once per ACK, from the state of the previous ACK: a recovery which ends and
+starts again on one ACK (see ``TcpSocketBase::RecoveryReentry``) stays one
+recovery, the data newly deemed lost reduces the window in any state, and
+the window saved before a reduction depends on that previous state
+(``bbr_save_cwnd()``). The ``TcpBbr::LinuxRecovery`` attribute (false by
+default) reproduces this.
+
+PROBE_BW starts in a phase of the pacing gain cycle drawn among the
+seven phases but the draining one, as Linux (``bbr_reset_probe_bw_mode()``),
+or in the phases that the ``TcpBbr::ProbeBwStartPhases`` attribute lists, one
+per entry into PROBE_BW, e.g., to reproduce the phases that a Linux run drew. With
+pacing, the ``TsoDefer`` or ``ForcedPush`` attributes of ``TcpSocketBase``
+pace whole GSO packets as the internal pacing of Linux (see the Linux-like
+options below).
 
 An example program, ``examples/tcp/tcp-bbr-example.cc``, is provided to experiment
 with BBR for one long running flow. This example uses a simple topology
@@ -1868,6 +2194,10 @@ been implemented:
    window (`Section 6.1.5 <https://tools.ietf.org/html/rfc3168#section-6.1.5>`_).
 5. The sender should ignore the ECE bits set in the packet arriving out of
    window (`Section 6.1.2 <https://tools.ietf.org/html/rfc3168#section-6.1.2>`_).
+6. The sender sets CWR on the first new data segment sent after any reduction
+   of its window, by an ECN Echo, a fast retransmission or a retransmission
+   timeout, as Linux ``tcp_ecn_queue_cwr()`` does; an undone reduction is not
+   signaled (`Section 6.1.2 <https://tools.ietf.org/html/rfc3168#section-6.1.2>`_).
 
 Open issues
 ^^^^^^^^^^^
@@ -2007,6 +2337,7 @@ Several tests have dependencies outside of the ``internet`` module, so they
 are located in a system test directory called ``src/test/ns3tcp``.
 
 * **ns3-tcp-loss:** Check behavior of ns-3 TCP upon packet losses
+* **ns3-tcp-lp:** Check that a TCP-LP flow uses a bottleneck alone and yields it to NewReno
 * **ns3-tcp-no-delay:** Check that ns-3 TCP Nagle's algorithm works correctly and that it can be disabled
 * **ns3-tcp-socket:** Check that ns-3 TCP successfully transfers an application data write of various sizes
 * **ns3-tcp-state:** Check the operation of the TCP state machine for several cases
@@ -2222,6 +2553,29 @@ fast recovery started. This departs from RFC 5681 and RFC 6582, which keep
 the reduced window, hence the option is off by default. Duplicate ACKs
 received while the recovery is held are processed as during the recovery,
 whereas Linux already undoes on them.
+
+A partial ACK of a fast recovery without SACK implies that the first
+unacknowledged segment was lost too, and RFC 6582 (Section 3.2, step 3)
+retransmits it at once, whatever the congestion window. Linux marks it lost
+instead (``tcp_newreno_mark_lost()``) and leaves its retransmission to the
+window, sized by PRR (``tcp_xmit_retransmit_queue()`` stops when the packets
+in flight reach the congestion window), so that the retransmission may wait
+for the next duplicate ACK. The ``TcpSocketBase::PartialAckInWindow``
+attribute (false by default) reproduces this.
+
+With SACK, a fast recovery ends when the cumulative ACK reaches the recovery
+point (RFC 6675, Section 5, step (A)), and a new one starts on a later
+duplicate ACK. When data sent after the start of the recovery is already
+deemed lost, Linux starts the new recovery on the very ACK which ends the
+previous one (``tcp_time_to_recover()`` in ``tcp_fastretrans_alert()``), so
+that a congestion control which follows the congestion state ACK by ACK
+(e.g., ``TcpBbr`` with ``LinuxRecovery``) sees a single recovery. The
+``TcpSocketBase::RecoveryReentry`` attribute (false by default) reproduces
+this. As in Linux, whose ``tcp_cong_control()`` then gives that ACK to the
+window reduction only, the window does not grow on that ACK, the new
+threshold is computed from the window of the end of the previous recovery,
+and, the ACK advancing SND.UNA, PRR may send a segment more
+(``FLAG_SND_UNA_ADVANCED`` in ``tcp_cwnd_reduction()``).
 
 Forward Acknowledgement (FACK)
 ++++++++++++++++++++++++++++++
@@ -2481,6 +2835,35 @@ default) since it departs from the RFCs:
   oldest newly SACKed segment never retransmitted (``sack_rtt_us``), which
   updates SRTT, RTTVAR and the RTO. :rfc:`7323`, Section 4.1, takes the
   samples only from the ACKs advancing the left edge of the window.
+* ``LinuxCaRtt``: the RTT sample that the congestion control receives
+  (``PktsAcked()``, and ``TcpSocketState::m_lastRtt``) is the one of Linux
+  (``ca_rtt_us``): the time since the transmission of the newest segment the
+  ACK acknowledges for the first time, unless the acknowledged data includes
+  a retransmitted segment (Karn), or, when the ACK newly SACKs segments never
+  retransmitted, since the transmission of the newest of them; without either,
+  an ACK of new data gives the sample of the timestamps. By default, the
+  sample is the one of the newest segment acknowledged, from the timestamps
+  when it was retransmitted, and a duplicate ACK gives none. The SACK samples
+  let the delay-based congestion controls (e.g., Veno) follow the queue
+  during a recovery as Linux does. ``LinuxCaRtt`` also samples the RTT
+  estimator as Linux (``seq_rtt_us``): from the time since the transmission
+  of the SYN, or of the oldest segment newly acknowledged, to the
+  microsecond, unless the acknowledged data includes a retransmitted segment,
+  the timestamps being used only then. With timestamps, the estimator
+  otherwise takes the samples of the timestamps (:rfc:`7323`, Section 4), of
+  a granularity of one millisecond, which also shifts the pacing rates and the
+  TSO sizes derived from SRTT. An ACK of new data that gives no other sample,
+  such as after a retransmission timeout, gives the sample of the timestamps
+  to the estimator as well (``tcp_ack_update_rtt()``).
+* ``LinuxPktsAcked``: the congestion control is told of each ACK
+  (``PktsAcked()``) once, before the ACK changes the congestion state, with
+  the segments it acknowledges cumulatively (none for a duplicate ACK, and not
+  the newly SACKed ones), as Linux calls ``pkts_acked()`` from
+  ``tcp_clean_rtx_queue()``, before ``tcp_fastretrans_alert()``. By default,
+  the state machine calls it as it processes the ACK, after a move to
+  ``CA_DISORDER`` or ``CA_RECOVERY``, with a segment for each duplicate ACK.
+  The congestion controls that average the segments per ACK (e.g., the
+  delayed ACK ratio of BIC, the throughput of H-TCP) then see what Linux sees.
 
 The retransmission timeout follows :rfc:`6298`: RTO = SRTT + max(G, 4 *
 RTTVAR), bounded below by ``TcpSocketBase::MinRto``, where G is
@@ -2512,7 +2895,14 @@ without SACK, an acknowledgment which carries data or changes the advertised
 window (a window update) is not a duplicate acknowledgment. With SACK, an
 acknowledgment carrying new SACK information is counted as a duplicate
 acknowledgment as RFC 6675, Section 2 prescribes, whatever window it
-advertises.
+advertises. Such an acknowledgment may also advance SND.UNA: it then
+acknowledges new data, so that it grows the congestion window (RFC 5681,
+Section 3.1) and restarts the retransmission timer (RFC 6298, Section 5.3)
+even though the sender stays in CA_DISORDER. As in the open state, the
+window grows by one segment per ACK in slow start, or, with the
+``TcpNewReno::CountAckedSegments`` attribute, by the segments delivered,
+those acknowledged and those newly SACKed, as Linux (``acked_sacked`` in
+``tcp_cong_control()``).
 
 Proportional Rate Reduction
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2559,6 +2949,15 @@ the two differ when the congestion control has cut the window below the data
 in flight, where the window of Linux then grows during the recovery. The
 ``TcpPrrRecovery::PriorCwndRecoverFs`` attribute (false by default) selects
 the Linux value.
+
+Without SACK, a duplicate ACK delivers a segment, but :rfc:`9937` stops
+counting them once the data delivered reaches RecoverFS, against the
+duplicate ACKs that spurious retransmissions cause. Linux counts every
+duplicate ACK that it takes as the SACK of a segment (``tcp_add_reno_sack()``),
+up to all the segments sent but the first (``tcp_limit_reno_sacked()``), so
+that in a long recovery limited by the receive window it sends what the ACKs
+delivered once the window opens. The ``TcpPrrRecovery::LinuxRenoDelivered``
+attribute (false by default) selects the Linux count.
 
 Otherwise, the congestion window is updated by either using Conservative Reduction
 Bound (CRB) or Slow Start Reduction Bound (SSRB) with SSRB being the default

@@ -75,7 +75,7 @@ TcpRateLinux::GenerateSample(uint32_t delivered,
         m_rateSample.m_delivered = -1;
         m_rateSample.m_interval = Seconds(0);
         m_rateSampleTrace(m_rateSample);
-        return m_rateSample;
+        return EndSample();
     }
 
     // LINUX:
@@ -106,7 +106,7 @@ TcpRateLinux::GenerateSample(uint32_t delivered,
         m_rateSample.m_interval = Seconds(0);
         m_rateSample.m_priorTime = Seconds(0); // To make rate sample invalid
         m_rateSampleTrace(m_rateSample);
-        return m_rateSample;
+        return EndSample();
     }
 
     /* Record the last non-app-limited or the highest app-limited bw */
@@ -122,7 +122,23 @@ TcpRateLinux::GenerateSample(uint32_t delivered,
     }
 
     m_rateSampleTrace(m_rateSample);
-    return m_rateSample;
+    return EndSample();
+}
+
+const TcpRateOps::TcpRateSample&
+TcpRateLinux::EndSample()
+{
+    m_lastSample = m_rateSample;
+    // The packets delivered by the next ACK alone make its sample: one
+    // delivering nothing new gives an invalid sample, and one delivering
+    // older packets only does not reuse the timing of this one
+    m_rateSample.m_deliveryRate = DataRate(0);
+    m_rateSample.m_isAppLimited = false;
+    m_rateSample.m_priorDelivered = 0;
+    m_rateSample.m_priorTime = Seconds(0);
+    m_rateSample.m_sendElapsed = Seconds(0);
+    m_rateSample.m_ackElapsed = Seconds(0);
+    return m_lastSample;
 }
 
 void

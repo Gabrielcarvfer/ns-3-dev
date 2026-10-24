@@ -579,6 +579,102 @@ TcpRateLinuxWithBufferTest::DoTeardown()
 /**
  * @ingroup internet-test
  *
+ * @brief Check that each ACK builds its rate sample from scratch
+ *
+ * Two packets sent together carry the same delivery information. The ACK of
+ * the second one, after the ACK of the first, must sample the time elapsed
+ * since then up to its own arrival, as Linux, which builds the rate sample of
+ * every ACK afresh (tcp_ack()), rather than keep the interval of the previous
+ * ACK, which would overestimate the delivery rate.
+ */
+class TcpRateLinuxFreshSampleTest : public TestCase
+{
+  public:
+    TcpRateLinuxFreshSampleTest()
+        : TestCase("Each ACK builds its rate sample from scratch")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Send packets of 1000 bytes
+     * @param first Whether this is the start of the transmission
+     * @param count the number of packets
+     */
+    void Send(bool first, uint32_t count);
+
+    /**
+     * Deliver a packet and generate the sample of its ACK
+     * @param index the index of the packet
+     * @param interval the expected interval of the sample
+     */
+    void Deliver(uint32_t index, Time interval);
+
+    TcpRateLinux m_rateOps;         //!< Rate operations
+    Ptr<TcpTxBuffer> m_txBuffer;    //!< Buffer making the packets
+    std::vector<TcpTxItem*> m_skbs; //!< Packets sent
+    uint32_t m_sent{0};             //!< Number of packets sent
+};
+
+void
+TcpRateLinuxFreshSampleTest::DoRun()
+{
+    m_txBuffer = CreateObject<TcpTxBuffer>();
+    m_txBuffer->SetHeadSequence(SequenceNumber32(1));
+    m_txBuffer->Add(Create<Packet>(3000));
+    // From 1 s on: a delivery time of zero stands for none
+    const Time base = Seconds(1);
+    Simulator::Schedule(base, &TcpRateLinuxFreshSampleTest::Send, this, true, 1);
+    Simulator::Schedule(base + MilliSeconds(50),
+                        &TcpRateLinuxFreshSampleTest::Deliver,
+                        this,
+                        0,
+                        MilliSeconds(50));
+    Simulator::Schedule(base + MilliSeconds(60),
+                        &TcpRateLinuxFreshSampleTest::Send,
+                        this,
+                        false,
+                        2);
+    // Both are timed from the delivery at 50 ms
+    Simulator::Schedule(base + MilliSeconds(150),
+                        &TcpRateLinuxFreshSampleTest::Deliver,
+                        this,
+                        1,
+                        MilliSeconds(100));
+    Simulator::Schedule(base + MilliSeconds(250),
+                        &TcpRateLinuxFreshSampleTest::Deliver,
+                        this,
+                        2,
+                        MilliSeconds(200));
+    Simulator::Run();
+    Simulator::Destroy();
+}
+
+void
+TcpRateLinuxFreshSampleTest::Send(bool first, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        TcpTxItem* skb = m_txBuffer->CopyFromSequence(1000, SequenceNumber32(1 + 1000 * m_sent));
+        m_rateOps.SkbSent(skb, first && i == 0);
+        m_skbs.push_back(skb);
+        ++m_sent;
+    }
+}
+
+void
+TcpRateLinuxFreshSampleTest::Deliver(uint32_t index, Time interval)
+{
+    m_rateOps.SkbDelivered(m_skbs[index]);
+    auto sample = m_rateOps.GenerateSample(1, 0, false, 0, Seconds(0));
+    NS_TEST_ASSERT_MSG_EQ(sample.m_interval, interval, "Wrong sampling interval");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief the TestSuite for the TcpRateLinux test case
  */
 class TcpRateOpsTestSuite : public TestSuite
@@ -636,6 +732,7 @@ class TcpRateOpsTestSuite : public TestSuite
             new TcpRateLinuxWithBufferTest(500,
                                            "Checking rate sample values with arbitrary SACK Block"),
             TestCase::Duration::QUICK);
+        AddTestCase(new TcpRateLinuxFreshSampleTest(), TestCase::Duration::QUICK);
     }
 };
 

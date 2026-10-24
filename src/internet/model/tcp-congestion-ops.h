@@ -185,6 +185,16 @@ class TcpCongestionOps : public Object
                              const TcpRateOps::TcpRateConnection& rc,
                              const TcpRateOps::TcpRateSample& rs);
 
+    /**
+     * @brief Get the least number of segments of a GSO packet of Linux
+     * (min_tso_segs(), or the tcp_min_tso_segs sysctl if the congestion
+     * control does not define it)
+     *
+     * @param tcb internal congestion state
+     * @return the number of segments
+     */
+    virtual uint32_t GetMinTsoSegs(Ptr<const TcpSocketState> tcb) const;
+
     // Present in Linux but not in ns-3 yet:
     /* call when ack arrives (optional) */
     //     void (*in_ack_event)(struct sock *sk, u32 flags);
@@ -273,6 +283,29 @@ class TcpNewReno : public TcpCongestionOps
      * @param w segments to acknowledge per segment of growth (at least 1)
      */
     void CountedIncrease(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, uint32_t w);
+
+    /**
+     * @brief Get the count of acknowledged segments of the congestion
+     * avoidance (Linux snd_cwnd_cnt)
+     *
+     * @return the count of acknowledged segments not yet counted in the window growth
+     */
+    uint32_t GetCwndCount() const
+    {
+        return m_cWndCnt;
+    }
+
+    /**
+     * @brief Set the count of acknowledged segments of the congestion
+     * avoidance (Linux snd_cwnd_cnt), for derived models whose Linux
+     * implementation changes it with their own rules
+     *
+     * @param count the new count
+     */
+    void SetCwndCount(uint32_t count)
+    {
+        m_cWndCnt = count;
+    }
 
   private:
     bool m_countAckedSegments{false}; //!< Grow the window per acknowledged segment

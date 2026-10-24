@@ -924,6 +924,12 @@ TcpL4Protocol::AddSocket(Ptr<TcpSocketBase> socket)
     m_sockets[m_socketIndex++] = socket;
 }
 
+uint32_t
+TcpL4Protocol::GetNSockets() const
+{
+    return static_cast<uint32_t>(m_sockets.size());
+}
+
 bool
 TcpL4Protocol::RemoveSocket(Ptr<TcpSocketBase> socket)
 {

@@ -20,7 +20,9 @@
 #include "ns3/timer.h"
 #include "ns3/traced-value.h"
 
+#include <array>
 #include <deque>
+#include <map>
 #include <optional>
 #include <queue>
 #include <stdint.h>
@@ -1095,8 +1097,15 @@ class TcpSocketBase : public TcpSocket
 
     /**
      * @brief FIN is in sequence, notify app and respond with a FIN
+     *
+     * With the AdaptiveDelAck attribute, as tcp_fin() of Linux, a FIN that
+     * the application does not answer at once, received without data and
+     * with no data waiting for an ACK, starts the interactive (pingpong) mode
+     * and is acknowledged on the delayed ACK timer.
+     *
+     * @param finSegment Whether the FIN was just received, without data
      */
-    void DoPeerClose();
+    void DoPeerClose(bool finSegment = false);
 
     /**
      * @brief Cancel all timer when endpoint is deleted
@@ -1250,6 +1259,106 @@ class TcpSocketBase : public TcpSocket
     bool CanSendPartialSegment(uint32_t availableWindow, uint32_t nPacketsSent) const;
 
     /**
+     * @brief Get the cost of the data held in the send buffer, as Linux
+     * accounts it (sk_wmem_queued), its skbs included
+     * @return the cost, in bytes
+     */
+    uint64_t GetLinuxSndBufCost() const;
+
+    /**
+     * @brief Check if the application may write, as sk_stream_is_writeable()
+     * of Linux: the free buffer is at least half its cost
+     * @return true if it may write
+     */
+    bool IsLinuxWritable() const;
+
+    /**
+     * @brief Send the data the application wrote: with ForcedPush or
+     * TsoDefer, new data only, as tcp_push() of Linux
+     */
+    void SendWrittenData();
+
+    /**
+     * @brief Let the congestion control grow the window, unless, with
+     * LinuxCwndLimited, the window does not limit the transmissions
+     * @param segmentsAcked Segments acknowledged
+     */
+    void IncreaseWindow(uint32_t segmentsAcked);
+
+    /**
+     * @brief Check if the congestion window limits the transmissions, as
+     * tcp_is_cwnd_limited() of Linux
+     * @return true if it does
+     */
+    bool IsLinuxCwndLimited() const;
+
+    /**
+     * @brief Record whether the congestion window limited the transmissions,
+     * as tcp_cwnd_validate() of Linux at the end of tcp_write_xmit()
+     * @param sent Segments just sent
+     * @param cwndLimited True if a TSO deferral was due to the window
+     */
+    void ValidateLinuxCwnd(uint32_t sent, bool cwndLimited);
+
+    /**
+     * @brief Get the number of segments of the GSO packets Linux sends, as
+     * tcp_tso_autosize() computes it from the pacing rate, the one the
+     * congestion control sets if it implements CongControl
+     * @return the number of segments, at least those of
+     * TcpCongestionOps::GetMinTsoSegs()
+     */
+    uint32_t GetLinuxTsoSegments() const;
+
+    /**
+     * @brief Get the size of the skbs that Linux fills with the data written
+     * (tcp_xmit_size_goal())
+     * @return the size goal, in bytes
+     */
+    uint32_t GetLinuxSizeGoal() const;
+
+    /**
+     * @brief Check if Linux would defer sending new data, waiting for an ACK
+     * to send a larger GSO packet (tcp_tso_should_defer())
+     * @param next Sequence number of the next segment to send
+     * @param skbLen Data of the skb from next
+     * @param tail True if the skb is the last of the write queue
+     * @return true to defer
+     */
+    bool ShouldDeferTso(SequenceNumber32 next, uint32_t skbLen, bool tail) const;
+
+    /**
+     * @brief Queue the data of an application write in skbs as Linux
+     * (tcp_sendmsg_locked()): the last skb is filled up to the size goal,
+     * again as the data in it is sent, and PSH marks the skb that ends the
+     * write or that takes the data written past half the largest window
+     * of the peer since the last PSH (forced_push()); with SndSkbOverhead,
+     * the write stops before a new skb once the send buffer is full
+     * @param start Sequence number of the first byte written
+     * @param end Sequence number following the last byte written
+     * @return the bytes queued
+     */
+    uint32_t QueueLinuxWrite(SequenceNumber32 start, SequenceNumber32 end);
+
+    /**
+     * @brief Get the segments of new data that Linux may send in a GSO packet
+     * as the congestion window allows (tcp_cwnd_test()): at most half the
+     * window and the GSO size
+     * @return the number of segments, 0 if the window is full
+     */
+    uint32_t GetLinuxCwndQuota() const;
+
+    /**
+     * @brief Get the skb of Linux that the next segment of new data starts,
+     * first moving into it the data of the next skb that the GSO packet
+     * can take (tcp_grow_skb())
+     * @param next Sequence number of the next segment to send
+     * @param quota Segments that the GSO packet can take
+     * @param tail Set to true if the skb is the last of the write queue
+     * @return the data of the skb from next, or 0 if no skb holds next
+     */
+    uint32_t GrowLinuxSkb(SequenceNumber32 next, uint32_t quota, bool* tail);
+
+    /**
      * @brief Make room for out-of-order data in the memory of the receive
      * buffer, pruning the out-of-order queue as tcp_prune_queue() of Linux
      * @param seq Sequence number of the incoming out-of-order segment
@@ -1351,6 +1460,27 @@ class TcpSocketBase : public TcpSocket
     virtual Time CalculateRttSample(const TcpHeader& tcpHeader, const RttHistory& rttHistory);
 
     /**
+     * @brief Set the RTT sample of the ACK for the congestion control as
+     * Linux ca_rtt_us, with the LinuxCaRtt attribute
+     *
+     * @param tcpHeader the header of the ACK
+     * @param advanced whether the ACK acknowledges new data cumulatively
+     * @param sacked whether the ACK newly SACKs data
+     */
+    void UpdateLinuxCaRtt(const TcpHeader& tcpHeader, bool advanced, bool sacked);
+
+    /**
+     * @brief Tell the congestion control of the segments an ACK acknowledges,
+     * from the processing of the ACK by the state machine
+     *
+     * Nothing is done with the LinuxPktsAcked attribute, the congestion
+     * control having been told already, as Linux pkts_acked().
+     *
+     * @param segmentsAcked the segments acknowledged
+     */
+    void StatePktsAcked(uint32_t segmentsAcked);
+
+    /**
      * @brief Take into account the packet for RTT estimation
      * @param tcpHeader the packet's TCP header
      */
@@ -1372,12 +1502,29 @@ class TcpSocketBase : public TcpSocket
     Time GetRtoTimerDelay() const;
 
     /**
+     * @brief Stop the delayed ACK timer once an ACK is sent
+     *
+     * With the SackCompression attribute, as Linux (inet_csk_clear_xmit_timer()),
+     * the timer is left running: it sends, when it expires, an ACK held back
+     * by SACK compression, if any.
+     */
+    void StopDelAckTimer();
+
+    /**
      * @brief Divide a time by a tick period, rounding up
      * @param t the time
      * @param tick the tick period, strictly positive
      * @return the number of ticks covering t
      */
     static int64_t DivideRoundUp(const Time& t, const Time& tick);
+
+    /**
+     * @brief Get the delay to the tick on which a Linux timer armed now for
+     * a number of ticks of RtoTimerGranularity expires
+     * @param ticks the length of the timer, in ticks
+     * @return the delay of the timer
+     */
+    Time GetTickTimerDelay(int64_t ticks) const;
 
     /**
      * @brief Update the RTT history, when we send TCP segments
@@ -1416,6 +1563,15 @@ class TcpSocketBase : public TcpSocket
      * @param currentDelivered Currently (S)ACKed bytes
      */
     void EnterRecovery(uint32_t currentDelivered);
+
+    /**
+     * @brief Signal a window reduction with CWR on the next new data segment
+     *
+     * RFC 3168, Section 6.1.2: when an ECN-capable sender reduces its window
+     * for any reason, it sets CWR on the first new data segment sent after
+     * the reduction (as Linux tcp_ecn_queue_cwr()).
+     */
+    void QueueCwr();
 
     /**
      * @brief Record the window before a window reduction, so that the
@@ -1487,14 +1643,49 @@ class TcpSocketBase : public TcpSocket
      * @name Receive window of Linux (LinuxRcvWindow attribute)
      *
      * As Linux, the window is derived from the memory left in the receive
-     * buffer, of which each segment held, in sequence and not yet read, or
-     * out of order, uses its data plus the overhead of its skb (see
-     * LinuxRunMemory()). The memory is converted into window with the ratio of the
-     * data to the memory of the segments received (scaling_ratio), and the
-     * window grows from its initial value towards its bound as segments
-     * arrive (rcv_ssthresh).
+     * buffer by the skbs held, in sequence and not yet read, or out of
+     * order (see LinuxRcvSkb). The memory is converted into window with the
+     * ratio of the data to the memory of the segments received
+     * (scaling_ratio), and the window grows from its initial value towards
+     * its bound as segments arrive (rcv_ssthresh).
      * @{
      */
+
+    /**
+     * @brief An skb of Linux holding received data, for its memory
+     *
+     * As the virtio-net driver of Linux with mergeable receive buffers, a
+     * frame of up to RcvCopyBreak bytes is copied into the head of a new
+     * skb, of RcvHeadTruesize bytes. A larger one stays in its receive
+     * buffer, a page fragment of RcvFragTruesize bytes (or more, see
+     * RcvFragPageSize), attached to the skb. tcp_try_coalesce() appends a
+     * segment to the skb before it: into the room left in a head that
+     * holds all its data, or else as more fragments, up to MAX_SKB_FRAGS
+     * (17): the page fragment of the segment, charged alone, or the head
+     * that holds its data, charged without the sk_buff structure.
+     */
+    struct LinuxRcvSkb
+    {
+        SequenceNumber32 seq; //!< First sequence number
+        SequenceNumber32 end; //!< Sequence number following the data
+        uint32_t truesize{0}; //!< Memory charged (truesize)
+        uint32_t frags{0};    //!< Page fragments (nr_frags)
+        uint32_t tailroom{0}; //!< Room left in the head, when it holds all the data
+        uint32_t fragSize{0}; //!< Memory of the page fragment of a new skb
+        bool headData{false}; //!< The head holds data (skb_headlen() not zero)
+    };
+
+    /**
+     * @brief Set the limits of the TCP memory (LinuxTcpMem attribute)
+     * @param limits The limits in pages, "min pressure max", or empty
+     */
+    void SetLinuxTcpMem(std::string limits);
+
+    /**
+     * @brief Get the limits of the TCP memory (LinuxTcpMem attribute)
+     * @return The limits in pages, "min pressure max", or empty
+     */
+    std::string GetLinuxTcpMem() const;
 
     /**
      * @brief Convert receive buffer memory into window, as tcp_win_from_space()
@@ -1504,33 +1695,97 @@ class TcpSocketBase : public TcpSocket
     int64_t LinuxWinFromSpace(int64_t space) const;
 
     /**
-     * @brief Memory used by a run of contiguous segments
-     *
-     * As Linux coalesces contiguous segments into one skb, up to
-     * MAX_SKB_FRAGS (17) segments, the first segment of each skb is charged
-     * RcvSkbOverhead, and the others RcvCoalescedOverhead, beyond their data.
-     *
-     * @param bytes Data bytes of the run
-     * @param segments Segments of the run
-     * @return The memory in bytes
+     * @brief Build the skb of a received segment, taking the next receive
+     * buffer of the driver
+     * @param seq Sequence number of the segment
+     * @param len Data bytes of the segment
+     * @param ipLen Length of the IP datagram that carried it
+     * @return The skb
      */
-    int64_t LinuxRunMemory(int64_t bytes, int64_t segments) const;
+    LinuxRcvSkb LinuxNewSkb(SequenceNumber32 seq, uint32_t len, uint32_t ipLen) const;
 
     /**
-     * @brief Memory used by the data held in the receive buffer
-     * @param extraBytes Bytes to be accounted in addition to the buffer (or
-     * less than it, if negative)
-     * @return The memory in bytes, as sk_rmem_alloc
+     * @brief Append an skb to the one before it, as skb_try_coalesce()
+     * @param to The skb before
+     * @param from The skb appended
+     * @return The memory charged for the skb appended, if it was appended
      */
-    int64_t LinuxRmemAlloc(int64_t extraBytes) const;
+    std::optional<uint32_t> LinuxCoalesce(LinuxRcvSkb& to, const LinuxRcvSkb& from) const;
+
+    /**
+     * @brief Account for a segment of data accepted by the receive buffer,
+     * as tcp_queue_rcv(), tcp_data_queue_ofo() and tcp_ofo_queue(), with
+     * tcp_measure_rcv_mss() and tcp_grow_window()
+     * @param skb The skb of the segment (see LinuxNewSkb())
+     * @param inSequence Whether the segment was in sequence
+     */
+    void LinuxQueueSegment(const LinuxRcvSkb& skb, bool inSequence);
+
+    /**
+     * @brief Charge memory to the socket, from its forward allocation, as sk_mem_charge()
+     * @param size Bytes charged
+     */
+    void LinuxMemCharge(uint32_t size);
+
+    /**
+     * @brief Free memory of the socket, as sk_mem_uncharge(), returning
+     * the whole pages of its forward allocation to the protocol
+     * (sk_mem_reclaim())
+     * @param size Bytes freed
+     */
+    void LinuxMemUncharge(uint32_t size);
+
+    /**
+     * @brief Count pages in or out of the memory of the protocol, through
+     * the per-CPU reserve, as sk_memory_allocated_add()
+     * @param pages Pages added (removed, if negative)
+     */
+    void LinuxMemAllocatedAdd(int64_t pages);
+
+    /**
+     * @brief Reserve memory for an skb, as sk_rmem_schedule(), against the
+     * limits of LinuxTcpMem
+     * @param size Bytes needed
+     * @return true if the memory is available
+     */
+    bool LinuxRmemSchedule(uint32_t size);
+
+    /**
+     * @brief Bound the window under memory pressure, as tcp_adjust_rcv_ssthresh()
+     */
+    void LinuxAdjustRcvSsThresh();
+
+    /**
+     * @brief Drop out-of-order skbs, from the last one, as tcp_prune_ofo_queue()
+     * @param seq Sequence number of the incoming segment
+     * @return true if skbs were dropped
+     */
+    bool LinuxPruneOfoQueue(SequenceNumber32 seq);
+
+    /**
+     * @brief Make room for an incoming segment, as tcp_try_rmem_schedule()
+     * and tcp_prune_queue(), reneging on out-of-order data if needed
+     * @param seq Sequence number of the incoming segment
+     * @param size Memory of its skb
+     * @return false if the segment is to be dropped
+     */
+    bool LinuxTryRmemSchedule(SequenceNumber32 seq, uint32_t size);
+
+    /**
+     * @brief Memory used by the skbs held, as sk_rmem_alloc
+     *
+     * While a received segment is processed, before the application reads,
+     * the data read since its arrival is still held.
+     *
+     * @return The memory in bytes
+     */
+    int64_t LinuxRmemAlloc() const;
 
     /**
      * @brief Window that the free memory of the receive buffer allows, as tcp_space()
-     * @param extraBytes Bytes to be accounted in addition to the buffer (or
-     * less than it, if negative)
      * @return The window in bytes (possibly negative)
      */
-    int64_t LinuxSpace(int64_t extraBytes) const;
+    int64_t LinuxSpace() const;
 
     /**
      * @brief Select the initial window and window scale, as
@@ -1547,10 +1802,11 @@ class TcpSocketBase : public TcpSocket
     /**
      * @brief Account for a data segment received, as tcp_measure_rcv_mss()
      * and tcp_grow_window()
-     * @param len Data bytes of the segment
+     * @param skb The skb of the segment
+     * @param truesize Its memory for tcp_grow_window() (truesize_adjust())
      * @param inSequence Whether the segment was in sequence
      */
-    void LinuxDataReceived(uint32_t len, bool inSequence);
+    void LinuxDataReceived(const LinuxRcvSkb& skb, uint32_t truesize, bool inSequence);
 
     /**
      * @brief Window the free memory allows, without the rules against
@@ -1568,15 +1824,29 @@ class TcpSocketBase : public TcpSocket
     /** @} */
 
     /**
+     * @brief Tell if more than one segment received since the last ACK calls
+     * for an ACK at once, as __tcp_ack_snd_check() of Linux
+     *
+     * With the LinuxRcvWindow attribute set, as Linux, the ACK is due if more
+     * than one receive MSS arrived in sequence since the last window
+     * advertised, and either the application has read all the data or the
+     * window to advertise has not shrunk below the one last advertised.
+     * Without the attribute, any such data calls for an ACK.
+     *
+     * @return true if the ACK is due
+     */
+    bool LinuxAckDue();
+
+    /**
      * @brief Tell if the ACK of out-of-order data is to be compressed
      *
      * With the SackCompression attribute set, as __tcp_ack_snd_check() of
      * Linux, the first three ACKs of out-of-order data at a given RCV.NXT are
      * sent at once, so that the sender can retransmit fast, and the following
      * ones wait, up to the SackCompressionDelay or 5% of the RTT, whichever
-     * is shorter, for more data that the same ACK can cover. Up to 44 ACKs
-     * are merged so (tcp_comp_sack_nr). The ACK is not compressed in the
-     * quick ACK mode, nor upon a new CE mark.
+     * is shorter, plus the SackCompressionSlack, for more data that the same ACK can cover. Up to
+     * 44 ACKs are merged so (tcp_comp_sack_nr). The ACK is not compressed in the quick ACK mode,
+     * nor upon a new CE mark.
      *
      * @return true if the ACK waits, false if it is to be sent at once
      */
@@ -1603,11 +1873,29 @@ class TcpSocketBase : public TcpSocket
      * Without the AdaptiveDelAck attribute, it is DelAckTimeout. With it, as
      * tcp_send_delayed_ack() of Linux, it is the adaptive timeout, bounded by
      * the smoothed RTT (but not below 40 ms) and 500 ms when above 40 ms, and
-     * by DelAckTimeout in any case.
+     * by DelAckTimeout in any case. With a RtoTimerGranularity as well, the
+     * timeout counts whole ticks, as the jiffies of Linux, and the timer
+     * expires on a tick (see GetTickTimerDelay()).
      *
      * @return the delay of the delayed ACK timer
      */
-    Time GetDelAckDelay() const;
+    Time GetDelAckDelay();
+
+    /**
+     * @brief Get the timeout of the delayed ACK timer of AdaptiveDelAck,
+     * bounded as tcp_send_delayed_ack() of Linux (in whole ticks with a
+     * RtoTimerGranularity)
+     * @return the timeout
+     */
+    Time GetDelAckAto() const;
+
+    /**
+     * @brief Tell if the delayed ACK timer, with AdaptiveDelAck, is to
+     * expire within a quarter of its timeout, as tcp_send_delayed_ack() of
+     * Linux, which then sends the ACK at once
+     * @return true if the timer is about to expire
+     */
+    bool DelAckAboutToExpire() const;
 
     /**
      * @brief Timeout at LAST_ACK, close the connection
@@ -1966,6 +2254,22 @@ class TcpSocketBase : public TcpSocket
     static uint32_t SafeSubtraction(uint32_t a, uint32_t b);
 
     /**
+     * @brief Whether pacing follows the internal pacing of Linux, which paces
+     * each GSO packet as a whole (with TsoDefer or ForcedPush)
+     * @return true if the Linux pacing model is used
+     */
+    bool IsLinuxPacing() const;
+
+    /**
+     * @brief Account a GSO packet just sent in the Linux pacing model
+     * (tcp_update_skb_after_send()): it delays the next one by its
+     * transmission time at the pacing rate, less the delay with which it was
+     * sent, up to half of it, after the first ten segments
+     * @param bytes Data bytes of the GSO packet
+     */
+    void LinuxPaceSent(uint32_t bytes);
+
+    /**
      * @brief Notify Pacing
      */
     void NotifyPacingPerformed();
@@ -2004,11 +2308,14 @@ class TcpSocketBase : public TcpSocket
 
   protected:
     // Counters and events
-    EventId m_retxEvent{};     //!< Retransmission event
-    EventId m_lastAckEvent{};  //!< Last ACK timeout event
-    EventId m_delAckEvent{};   //!< Delayed ACK timeout event
-    EventId m_persistEvent{};  //!< Persist event: Send 1 byte to probe for a non-zero Rx window
-    EventId m_timewaitEvent{}; //!< TIME_WAIT expiration event: Move this socket to CLOSED state
+    EventId m_retxEvent{};       //!< Retransmission event
+    EventId m_lastAckEvent{};    //!< Last ACK timeout event
+    EventId m_delAckEvent{};     //!< Delayed ACK timeout event
+    bool m_ackNow{false};        //!< The next ACK is sent at once (ICSK_ACK_NOW of Linux)
+    bool m_delAckPending{false}; //!< A delayed ACK awaits its timer (ICSK_ACK_TIMER of Linux)
+    Time m_delAckExpiry{0};      //!< Expiry requested for the delayed ACK (icsk_ack.timeout)
+    EventId m_persistEvent{};    //!< Persist event: Send 1 byte to probe for a non-zero Rx window
+    EventId m_timewaitEvent{};   //!< TIME_WAIT expiration event: Move this socket to CLOSED state
 
     // ACK management
     uint32_t m_dupAckCount{0};    //!< Dupack counter
@@ -2024,6 +2331,7 @@ class TcpSocketBase : public TcpSocket
     // SACK compression of Linux (tcp_comp_sack_*)
     bool m_sackCompression{false};        ///< Delay the ACKs of out-of-order data as Linux
     Time m_sackCompressionDelay;          ///< Bound on the delay of a compressed ACK
+    Time m_sackCompressionSlack;          ///< Slack of the timer of a compressed ACK
     uint32_t m_compressedAcks{0};         ///< ACKs held back since the last ACK sent
     uint32_t m_compressDupAcks{0};        ///< ACKs of out-of-order data sent at the current RCV.NXT
     SequenceNumber32 m_compressRcvNxt{0}; ///< RCV.NXT that m_compressDupAcks refers to
@@ -2038,48 +2346,89 @@ class TcpSocketBase : public TcpSocket
     // Adaptive delayed ACK timeout of Linux (icsk_ack.ato)
     bool m_adaptiveDelAck{false}; ///< Adapt the delayed ACK timeout as Linux
     Time m_ato{0};                ///< Adaptive delayed ACK timeout, zero before the first data
+    bool m_pingPong{false};       ///< Interactive mode of Linux, entered on the FIN of the peer
 
     // Receive window of Linux (LinuxRcvWindow attribute)
-    bool m_linuxRcvWindow{false};       //!< Derive the window from the buffer as Linux
-    uint32_t m_rcvSkbOverhead{0};       //!< Memory charged per skb beyond its data
-    uint32_t m_rcvCoalescedOverhead{0}; //!< Memory charged per coalesced segment beyond its data
-    bool m_lxInit{false};               //!< Initial window selected
-    bool m_lxEstablished{false};        //!< Window bound set for the established connection
-    uint32_t m_lxRcvBuf{0};             //!< Receive buffer memory (sk_rcvbuf)
-    uint32_t m_lxRatio{128};            //!< Data to memory ratio, in 1/256 (scaling_ratio)
-    uint32_t m_lxAdvMss{0};             //!< Advertised MSS (advmss)
-    uint32_t m_lxRcvMss{0};             //!< Estimated MSS of the peer (rcv_mss)
-    uint32_t m_lxWindowClamp{0};        //!< Bound of the window (window_clamp)
-    uint32_t m_lxRcvSsThresh{0};        //!< Current bound of the window (rcv_ssthresh)
-    uint32_t m_lxRcvWnd{0};             //!< Window last advertised (rcv_wnd)
-    SequenceNumber32 m_lxRcvWup{0};     //!< RCV.NXT when the window was last advertised
-    uint32_t m_lxHeldBytes{0};          //!< Data just delivered, still held by Linux at the ACK
-    bool m_lxInReceive{false};          //!< A received segment is being processed
-    uint8_t m_lxWScale{0};              //!< Window scale selected for the SYN
+    bool m_linuxRcvWindow{false};         //!< Derive the window from the buffer as Linux
+    uint32_t m_rcvHeadTruesize{0};        //!< Memory of an skb without page fragment
+    uint32_t m_rcvFragTruesize{0};        //!< Memory of a receive buffer of the driver
+    uint32_t m_rcvCopyBreak{0};           //!< Largest IP datagram copied into the skb head
+    uint32_t m_rcvFragPageSize{0};        //!< Page the receive buffers are carved from
+    uint32_t m_rcvBufferOffset{0};        //!< Receive buffers taken before the connection
+    bool m_lxInit{false};                 //!< Initial window selected
+    bool m_lxEstablished{false};          //!< Window bound set for the established connection
+    uint32_t m_lxRcvBuf{0};               //!< Receive buffer memory (sk_rcvbuf)
+    uint32_t m_lxRatio{128};              //!< Data to memory ratio, in 1/256 (scaling_ratio)
+    uint32_t m_lxAdvMss{0};               //!< Advertised MSS (advmss)
+    uint32_t m_lxRcvMss{0};               //!< Estimated MSS of the peer (rcv_mss)
+    uint32_t m_lxWindowClamp{0};          //!< Bound of the window (window_clamp)
+    uint32_t m_lxRcvSsThresh{0};          //!< Current bound of the window (rcv_ssthresh)
+    uint32_t m_lxRcvWnd{0};               //!< Window last advertised (rcv_wnd)
+    SequenceNumber32 m_lxRcvWup{0};       //!< RCV.NXT when the window was last advertised
+    bool m_lxInReceive{false};            //!< A received segment is being processed
+    bool m_lxSoftirq{false};              //!< The application has not read the segment yet
+    SequenceNumber32 m_lxSoftirqRead{0};  //!< Data read when the segment arrived
+    uint32_t m_lxInitAdvMss{0};           //!< advmss when the window bound is set
+    uint64_t m_lxRxPackets{0};            //!< Segments received, each in a receive buffer
+    std::deque<LinuxRcvSkb> m_lxRcvQueue; //!< Skbs in sequence (sk_receive_queue)
+    std::map<SequenceNumber32, LinuxRcvSkb> m_lxOfoQueue; //!< Skbs out of order, by sequence
+    SequenceNumber32 m_lxOooLast{0};     //!< Sequence of the last skb out of order (ooo_last_skb)
+    std::array<int64_t, 3> m_lxTcpMem{}; //!< Limits of the TCP memory in pages (tcp_mem)
+    int64_t m_lxFwdAlloc{0};             //!< Memory reserved by the socket (sk_forward_alloc)
+    int64_t m_lxMemPerCpu{0};            //!< Pages of the per-CPU reserve (per_cpu_fw_alloc)
+    int64_t m_lxMemAllocated{0};         //!< Pages of the protocol (memory_allocated)
+    bool m_lxMemPressure{false};         //!< Memory pressure of the protocol (tcp_memory_pressure)
+    bool m_lxNoMem{false};               //!< The data could not be queued (ICSK_ACK_NOMEM)
+    uint8_t m_lxWScale{0};               //!< Window scale selected for the SYN
 
     // Window updates (RFC 5681, Section 2, duplicate ACK condition (e))
     std::optional<uint32_t> m_lastAckWindow; //!< Advertised window of the last incoming ACK
     bool m_ackWindowUpdate{false};           //!< True if the ACK being processed changes the window
 
     // Nagle algorithm
-    bool m_noDelay{false}; //!< Set to true to disable Nagle's algorithm
+    bool m_noDelay{false};                    //!< Set to true to disable Nagle's algorithm
+    std::optional<SequenceNumber32> m_sndSml; //!< End of the last short segment sent (snd_sml)
 
     // Sender silly window syndrome avoidance
     bool m_fillRcvWindow{false}; //!< Fill the receive window with a short segment, as Linux
     uint32_t m_maxSndWnd{0};     //!< Largest send window offered by the peer, Max(SND.WND)
 
     // PSH flag as Linux
-    bool m_forcedPush{false};                    //!< Set PSH as Linux
-    std::deque<SequenceNumber32> m_writeEnds;    //!< Ends of the application writes not yet sent
-    std::optional<SequenceNumber32> m_pushedSeq; //!< End of the last segment sent with PSH
+    bool m_forcedPush{false}; //!< Set PSH as Linux
+
+    /// An skb of the Linux write queue
+    struct LinuxSkb
+    {
+        SequenceNumber32 end; //!< Sequence number following its data
+        bool push;            //!< Its last segment carries PSH
+    };
+
+    std::deque<LinuxSkb> m_lxSkbs;                 //!< skbs of Linux holding the data not yet sent
+    std::deque<SequenceNumber32> m_lxPushEnds;     //!< Ends of the data sent with PSH, not acked
+    std::optional<SequenceNumber32> m_lxPushedSeq; //!< Data written at the last PSH (pushed_seq)
+    std::optional<SequenceNumber32> m_lxSentEnd;   //!< Data Linux sends while the writes queue it
+    bool m_lxTxStarted{false};      //!< A write started the transmission, not yet sent
+    bool m_gsoPush{false};          //!< The segment being sent ends a GSO packet of Linux
+    bool m_tsoDefer{false};         //!< Defer partial bursts as Linux TSO
+    bool m_linuxCwndLimited{false}; //!< Grow cwnd only while it limits, as Linux
+    uint32_t m_sndSkbOverhead{0};   //!< Send buffer cost of an skb beyond its data
+    std::deque<SequenceNumber32> m_lxRtxSkbEnds; //!< Ends of the skbs sent, as Linux
+    bool m_lxNoSpace{false};                     //!< A write found the buffer full (SOCK_NOSPACE)
+    bool m_lxIsCwndLimited{false};               //!< The cwnd limited the window of data sent
+    uint32_t m_lxMaxPacketsOut{0};               //!< Largest flight of that window, in segments
+    std::optional<SequenceNumber32> m_lxCwndUsageSeq; //!< End of that window (cwnd_usage_seq)
+    std::optional<Time> m_lastDataTxTime{};           //!< Time of the last data transmission
 
     // Receive buffer memory as Linux
     double m_pruneOverhead{0};               //!< Memory overhead of the buffered data, 0 if none
     std::optional<uint32_t> m_rcvSsthresh{}; //!< Clamp of the advertised window, as rcv_ssthresh
 
+    bool m_alignSackOption{false}; //!< Precede the SACK option with two NOPs, as Linux
+
     // SACK reneging as Linux
     bool m_sackRenegingTimeout{false}; //!< Short timeout on SACK reneging, as Linux
     uint32_t m_renegingEvents{0};      //!< SACK reneging events already handled
+    bool m_newDataOnly{false};         //!< The transmission sends no retransmission, as Linux
 
     // Retries
     uint32_t m_synCount{0};      //!< Count of remaining connection retries
@@ -2170,22 +2519,27 @@ class TcpSocketBase : public TcpSocket
     // Fast Retransmit and Recovery
     SequenceNumber32 m_recover{
         0}; //!< Previous highest Tx seqnum for fast recovery (set it to initial seq number)
-    bool m_recoverActive{false}; //!< Whether "m_recover" has been set/activated
-                                 //!< It is used to avoid comparing with the old m_recover value
-                                 //!< which was set for handling previous congestion event.
-    uint32_t m_retxThresh{3};    //!< Fast Retransmit threshold
-    bool m_limitedTx{true};      //!< perform limited transmit
-    bool m_nonSackUndo{false};   //!< Undo non-SACK recoveries ending at the recovery point
-    uint32_t m_undoCwnd{0};      //!< cWnd before the window reduction, for NonSackUndo
-    uint32_t m_undoSsThresh{0};  //!< ssThresh before the window reduction (0: no undo)
-    bool m_undoPending{false};   //!< Recovery held at the recovery point, to be undone
+    bool m_recoverActive{false};    //!< Whether "m_recover" has been set/activated
+                                    //!< It is used to avoid comparing with the old m_recover value
+                                    //!< which was set for handling previous congestion event.
+    uint32_t m_retxThresh{3};       //!< Fast Retransmit threshold
+    bool m_limitedTx{true};         //!< perform limited transmit
+    bool m_forwardRetransmit{true}; //!< Retransmit unSACKed data not deemed lost (rule (3))
+    bool m_nonSackUndo{false};      //!< Undo non-SACK recoveries ending at the recovery point
+    uint32_t m_undoCwnd{0};         //!< cWnd before the window reduction, for NonSackUndo
+    uint32_t m_undoSsThresh{0};     //!< ssThresh before the window reduction (0: no undo)
+    bool m_undoPending{false};      //!< Recovery held at the recovery point, to be undone
+    bool m_partialAckInWindow{false}; //!< Partial ACK retransmissions wait for the window
+    bool m_recoveryReentry{false};    //!< Recover again on the ACK ending a recovery with losses
 
     // Transmission Control Block
     Ptr<TcpSocketState> m_tcb;                 //!< Congestion control information
     Ptr<TcpCongestionOps> m_congestionControl; //!< Congestion control
     Ptr<TcpRecoveryOps> m_recoveryOps;         //!< Recovery Algorithm
     Ptr<TcpRateOps> m_rateOps;                 //!< Rate operations
-    Time m_ackRttSample{0}; //!< RTT sample of the ACK being processed (zero if none)
+    Time m_ackRttSample{0};       //!< RTT sample of the ACK being processed (zero if none)
+    bool m_linuxCaRtt{false};     //!< Give the congestion control the RTT sample of Linux
+    bool m_linuxPktsAcked{false}; //!< Call PktsAcked() once per ACK, as Linux pkts_acked()
 
     // Guesses over the other connection end
     bool m_activeOpen{false};             //!< True if SYN_RCVD was reached through an active open
@@ -2221,6 +2575,11 @@ class TcpSocketBase : public TcpSocket
 
     // Pacing related variable
     Timer m_pacingTimer{Timer::CANCEL_ON_DESTROY}; //!< Pacing Event
+    Time m_paceNext{0};         //!< Earliest departure of the next skb, as tcp_wstamp_ns
+    uint32_t m_dataSegsOut{0};  //!< Data segments sent, as data_segs_out of Linux
+    uint32_t m_paceSkbBytes{0}; //!< Bytes of the GSO packet being sent, for pacing
+    bool m_inGsoBurst{false};   //!< SendPendingData() is sending a GSO packet
+    bool m_gsoLast{true};       //!< The segment being sent ends its GSO packet
 
     // Parameters related to Explicit Congestion Notification
     TracedValue<SequenceNumber32> m_ecnEchoSeq{
@@ -2228,6 +2587,7 @@ class TcpSocketBase : public TcpSocket
     TracedValue<SequenceNumber32> m_ecnCESeq{
         0}; //!< Sequence number of the last received Congestion Experienced
     TracedValue<SequenceNumber32> m_ecnCWRSeq{0}; //!< Sequence number of the last sent CWR
+    bool m_cwrPending{false}; //!< A window reduction is to be signaled with CWR on new data
 };
 
 /**

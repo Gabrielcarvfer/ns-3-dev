@@ -291,6 +291,67 @@ PrrSegmentQuotaTest::DoRun()
 /**
  * @ingroup internet-test
  *
+ * @brief Test the LinuxRenoDelivered attribute of TcpPrrRecovery
+ *
+ * A recovery without SACK, with 1000-byte segments, a RecoverFS of 4000
+ * bytes, 2000 bytes in flight and a slow start threshold of 12000 bytes, so
+ * that PRR-CRB applies: the duplicate ACKs each deliver a segment. By
+ * default, the delivered data stop growing at RecoverFS (RFC 9937, Section
+ * 6.2), after the fourth duplicate ACK, and the quota after the sixth is
+ * 3000 bytes. As Linux (tcp_add_reno_sack()), each duplicate ACK taken as a
+ * SACK delivers a segment, and the quota is 5000 bytes.
+ */
+class PrrLinuxRenoDeliveredTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param linux Value of the LinuxRenoDelivered attribute.
+     * @param expectedSendCount Expected cwnd minus bytes in flight after the ACKs.
+     * @param name Test description.
+     */
+    PrrLinuxRenoDeliveredTest(bool linux, uint32_t expectedSendCount, const std::string& name)
+        : TestCase(name),
+          m_linux(linux),
+          m_expectedSendCount(expectedSendCount)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    bool m_linux;                 //!< Value of the LinuxRenoDelivered attribute.
+    uint32_t m_expectedSendCount; //!< Expected cwnd minus bytes in flight after the ACKs.
+};
+
+void
+PrrLinuxRenoDeliveredTest::DoRun()
+{
+    const uint32_t segmentSize = 1000;
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = segmentSize;
+    state->m_ssThresh = 12000;
+    state->m_bytesInFlight = 2000;
+    state->m_sackEnabled = false;
+
+    Ptr<TcpPrrRecovery> recovery = CreateObject<TcpPrrRecovery>();
+    recovery->SetAttribute("LinuxRenoDelivered", BooleanValue(m_linux));
+
+    recovery->EnterRecovery(state, 3, 4000, 0, 0);
+    recovery->UpdateBytesSent(segmentSize);
+    for (int i = 0; i < 5; ++i)
+    {
+        recovery->DoRecovery(state, 0, true);
+    }
+
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get() - state->m_bytesInFlight.Get(),
+                          m_expectedSendCount,
+                          "Unexpected send quota");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief Test the PriorCwndRecoverFs attribute of TcpPrrRecovery
  *
  * A congestion control has cut cWnd to one segment, below the 149 segments in
@@ -538,6 +599,13 @@ class PrrRecoveryTestSuite : public TestSuite
         AddTestCase(new PrrPriorCwndTest(false, 1000, "Prr RecoverFS is the flight size"),
                     TestCase::Duration::QUICK);
         AddTestCase(new PrrPriorCwndTest(true, 2000, "Prr RecoverFS is the prior window"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(
+            new PrrLinuxRenoDeliveredTest(false, 3000, "Prr delivered data bounded by RecoverFS"),
+            TestCase::Duration::QUICK);
+        AddTestCase(new PrrLinuxRenoDeliveredTest(true,
+                                                  5000,
+                                                  "Prr delivered data of every dupack, as Linux"),
                     TestCase::Duration::QUICK);
         AddTestCase(new PrrCongestionControlCutTest(), TestCase::Duration::QUICK);
     }

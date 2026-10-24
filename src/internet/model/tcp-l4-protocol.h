@@ -276,6 +276,12 @@ class TcpL4Protocol : public IpL4Protocol
     bool RemoveSocket(Ptr<TcpSocketBase> socket);
 
     /**
+     * @brief Get the number of sockets made operational (see AddSocket())
+     * @return the number of sockets
+     */
+    uint32_t GetNSockets() const;
+
+    /**
      * @brief Remove an IPv4 Endpoint.
      * @param endPoint the end point to remove
      */

@@ -73,6 +73,7 @@ class TcpPrrRecovery : public TcpClassicRecovery
                                       //!< phase (RFC 9937 RecoverFS)
     bool m_segmentQuota{false};       //!< Round the proportional send quota up to whole segments
     bool m_priorCwndRecoverFs{false}; //!< RecoverFS is the window at the start of the recovery
+    bool m_linuxRenoDelivered{false}; //!< Count every duplicate ACK taken as a SACK, as Linux
 };
 } // namespace ns3
 

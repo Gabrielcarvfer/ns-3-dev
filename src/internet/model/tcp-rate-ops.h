@@ -245,7 +245,16 @@ class TcpRateLinux : public TcpRateOps
   private:
     // Rate sample related variables
     TcpRateConnection m_rate;   //!< Rate information
-    TcpRateSample m_rateSample; //!< Rate sample (continuously updated)
+    TcpRateSample m_rateSample; //!< Rate sample being built from the ACK being processed
+    TcpRateSample m_lastSample; //!< Rate sample generated from the last ACK
+
+    /**
+     * @brief Return the sample generated from the ACK just processed, and
+     * start the sample of the next ACK afresh, as Linux, which builds the
+     * rate sample of each ACK from scratch (tcp_ack())
+     * @return the sample generated
+     */
+    const TcpRateSample& EndSample();
 
     TracedCallback<const TcpRateConnection&> m_rateTrace;   //!< Rate trace
     TracedCallback<const TcpRateSample&> m_rateSampleTrace; //!< Rate Sample trace

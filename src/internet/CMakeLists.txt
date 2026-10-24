@@ -367,9 +367,13 @@ set(test_sources
     test/tcp-illinois-test.cc
     test/tcp-ledbat-test.cc
     test/tcp-linux-reno-test.cc
+    test/tcp-linux-pacing-test.cc
     test/tcp-linux-rcv-window-test.cc
+    test/tcp-linux-recovery-test.cc
+    test/tcp-linux-sndbuf-test.cc
     test/tcp-loss-test.cc
     test/tcp-lost-retransmission-test.cc
+    test/tcp-disorder-ack-test.cc
     test/tcp-lp-test.cc
     test/tcp-no-sack-dupack-test.cc
     test/tcp-no-sack-recovery-test.cc
@@ -382,6 +386,7 @@ set(test_sources
     test/tcp-quick-ack-test.cc
     test/tcp-prr-recovery-test.cc
     test/tcp-prune-test.cc
+    test/tcp-recovery-reentry-test.cc
     test/tcp-rate-ops-test.cc
     test/tcp-rfc9293-test.cc
     test/tcp-rto-test.cc
@@ -394,6 +399,7 @@ set(test_sources
     test/tcp-syn-connection-failed-test.cc
     test/tcp-test.cc
     test/tcp-timestamp-test.cc
+    test/tcp-tso-defer-test.cc
     test/tcp-tx-buffer-test.cc
     test/tcp-vegas-test.cc
     test/tcp-veno-test.cc

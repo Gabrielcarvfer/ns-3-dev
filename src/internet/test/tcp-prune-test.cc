@@ -38,7 +38,11 @@ NS_LOG_COMPONENT_DEFINE("TcpPruneTest");
  * reneges. By default the sender then discards all the SACK information at
  * once and retransmits from the left edge, without a timeout; with
  * SackRenegingTimeout, as Linux, its retransmission timer expires half an RTT
- * later, and the timeout discards the SACK information.
+ * later, on the ticks of the retransmission timer if it has some, and the
+ * timeout discards the SACK information. Until then, as Linux
+ * (tcp_check_sack_reneging(), on which tcp_fastretrans_alert() returns), the
+ * ACK that reveals the reneging retransmits nothing, and so does the
+ * application that writes more data then (tcp_push() sends new data only).
  */
 class TcpPruneTest : public TcpGeneralTest
 {
@@ -49,11 +53,17 @@ class TcpPruneTest : public TcpGeneralTest
      * @param renegingTimeout Value of the SackRenegingTimeout attribute of
      * the sender.
      * @param desc The test description.
+     * @param tick Tick of the retransmission timer (RtoTimerGranularity), 0
+     * for none.
      */
-    TcpPruneTest(double overhead, bool renegingTimeout, const std::string& desc)
+    TcpPruneTest(double overhead,
+                 bool renegingTimeout,
+                 const std::string& desc,
+                 Time tick = Time(0))
         : TcpGeneralTest(desc),
           m_overhead(overhead),
-          m_renegingTimeout(renegingTimeout)
+          m_renegingTimeout(renegingTimeout),
+          m_tick(tick)
     {
     }
 
@@ -78,6 +88,7 @@ class TcpPruneTest : public TcpGeneralTest
         Ptr<TcpSocketMsgBase> socket = TcpGeneralTest::CreateSenderSocket(node);
         socket->SetAttribute("Timestamp", BooleanValue(false));
         socket->SetAttribute("SackRenegingTimeout", BooleanValue(m_renegingTimeout));
+        socket->SetAttribute("RtoTimerGranularity", TimeValue(m_tick));
         return socket;
     }
 
@@ -100,6 +111,14 @@ class TcpPruneTest : public TcpGeneralTest
 
     void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override
     {
+        if (who == SENDER && p->GetSize() > 0 && m_detectTime &&
+            Simulator::Now() - *m_detectTime < MicroSeconds(1) &&
+            h.GetSequenceNumber() < m_detectHighTx)
+        {
+            // A retransmission on the ACK that revealed the reneging, or on
+            // the write that follows
+            ++m_earlyRetransmissions;
+        }
         if (who != RECEIVER || !(h.GetFlags() & TcpHeader::ACK) || (h.GetFlags() & TcpHeader::SYN))
         {
             return;
@@ -138,9 +157,26 @@ class TcpPruneTest : public TcpGeneralTest
             NS_TEST_ASSERT_MSG_EQ(m_detectTime.has_value() && m_rtoTime.has_value(),
                                   true,
                                   "No timeout after reneging");
-            NS_TEST_ASSERT_MSG_EQ(*m_rtoTime - *m_detectTime,
-                                  m_detectSrtt / 2,
-                                  "The timeout after reneging is not half the RTT");
+            if (m_tick.IsZero())
+            {
+                NS_TEST_ASSERT_MSG_EQ(*m_rtoTime - *m_detectTime,
+                                      m_detectSrtt / 2,
+                                      "The timeout after reneging is not half the RTT");
+            }
+            else
+            {
+                // On the ticks of the timer, as the retransmission timer
+                // (the jiffies of Linux)
+                NS_TEST_ASSERT_MSG_GT(*m_rtoTime - *m_detectTime,
+                                      m_detectSrtt / 2,
+                                      "The timeout after reneging is not on a tick");
+                NS_TEST_ASSERT_MSG_LT(*m_rtoTime - *m_detectTime,
+                                      m_detectSrtt / 2 + 2 * m_tick,
+                                      "The timeout after reneging is too late");
+            }
+            NS_TEST_ASSERT_MSG_EQ(m_earlyRetransmissions,
+                                  0,
+                                  "Retransmission on the ACK revealing the reneging");
         }
         else
         {
@@ -151,7 +187,7 @@ class TcpPruneTest : public TcpGeneralTest
         }
         // The SYN and the FIN take one sequence number each
         NS_TEST_ASSERT_MSG_EQ(m_lastAck.GetValue() - m_isn.GetValue(),
-                              100 * 500 + 2,
+                              100 * 500 + (m_detectTime ? 1000 : 0) + 2,
                               "The transfer did not complete");
     }
 
@@ -163,6 +199,9 @@ class TcpPruneTest : public TcpGeneralTest
         {
             m_detectTime = Simulator::Now();
             m_detectSrtt = tcb->m_srtt.Get();
+            m_detectHighTx = tcb->m_highTxMark.Get();
+            // The application writes more data at once
+            Simulator::ScheduleNow(&TcpPruneTest::WriteMore, this);
         }
     }
 
@@ -182,16 +221,27 @@ class TcpPruneTest : public TcpGeneralTest
         }
     }
 
+    /**
+     * @brief Write 1000 more bytes.
+     */
+    void WriteMore()
+    {
+        GetSenderSocket()->Send(Create<Packet>(1000), 0);
+    }
+
   private:
-    double m_overhead;                //!< PruneOverhead attribute of the receiver
-    bool m_renegingTimeout;           //!< SackRenegingTimeout attribute of the sender
-    std::optional<Time> m_detectTime; //!< Time the sender detected the reneging
-    std::optional<Time> m_rtoTime;    //!< Time of the first timeout after it
-    Time m_detectSrtt;                //!< Smoothed RTT when the reneging was detected
-    SequenceNumber32 m_highSack{0};   //!< Highest SACKed sequence of the last ACK
-    SequenceNumber32 m_lastAck{0};    //!< Last ACK number of the receiver
-    SequenceNumber32 m_isn{0};        //!< Initial sequence number of the sender
-    bool m_reneged{false};            //!< True if the receiver reneged on its SACKs
+    double m_overhead;                  //!< PruneOverhead attribute of the receiver
+    bool m_renegingTimeout;             //!< SackRenegingTimeout attribute of the sender
+    Time m_tick;                        //!< RtoTimerGranularity attribute of the sender
+    std::optional<Time> m_detectTime;   //!< Time the sender detected the reneging
+    std::optional<Time> m_rtoTime;      //!< Time of the first timeout after it
+    Time m_detectSrtt;                  //!< Smoothed RTT when the reneging was detected
+    SequenceNumber32 m_detectHighTx{0}; //!< Highest data sent when it was detected
+    uint32_t m_earlyRetransmissions{0}; //!< Retransmissions on the ACK that revealed it
+    SequenceNumber32 m_highSack{0};     //!< Highest SACKed sequence of the last ACK
+    SequenceNumber32 m_lastAck{0};      //!< Last ACK number of the receiver
+    SequenceNumber32 m_isn{0};          //!< Initial sequence number of the sender
+    bool m_reneged{false};              //!< True if the receiver reneged on its SACKs
 };
 
 /**
@@ -209,6 +259,11 @@ class TcpPruneTestSuite : public TestSuite
         AddTestCase(new TcpPruneTest(3, false, "Out-of-order queue pruned, SACKs reneged"),
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpPruneTest(3, true, "Timeout on SACK reneging as Linux"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpPruneTest(3,
+                                     true,
+                                     "Timeout on SACK reneging on the timer ticks",
+                                     MilliSeconds(10)),
                     TestCase::Duration::QUICK);
     }
 };

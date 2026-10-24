@@ -203,29 +203,35 @@ class TcpForcedPushTestSuite : public TestSuite
     TcpForcedPushTestSuite()
         : TestSuite("tcp-forced-push", Type::UNIT)
     {
-        // Three writes of 1200 bytes: PSH on the last segment only, or, as
-        // Linux, on the segments ending each write
+        // Three writes of 1200 bytes at once: PSH on the last segment only,
+        // or, as Linux, on the last segment of each GSO packet, two segments
+        // at this rate, and not at the end of the first two writes, whose skb
+        // the next write appends to before it is sent
         AddTestCase(new TcpForcedPushTestCase("PSH on the last segment of the buffer",
                                               false,
                                               65535,
                                               {1200, 1200, 1200},
                                               {3600}),
                     TestCase::Duration::QUICK);
-        AddTestCase(new TcpForcedPushTestCase("PSH on the segment ending each write",
+        AddTestCase(new TcpForcedPushTestCase("PSH on the GSO packets",
                                               true,
                                               65535,
                                               {1200, 1200, 1200},
-                                              {1500, 2500, 3600}),
+                                              {1000, 2000, 3000, 3600}),
                     TestCase::Duration::QUICK);
-        // One write of 5000 bytes into a window of 2000 bytes: as Linux,
-        // PSH once more than half the window was sent since the last one
+        // One write of 5000 bytes into a window of 2000 bytes: as Linux, PSH
+        // on the end of the skbs (of half the window, 1000 bytes) filled more
+        // than half the window past the last PSH (2000, and the skb ending at
+        // 4000, which takes 500 bytes of the next skb when its first segment
+        // is sent alone, tcp_grow_skb(), so 4500), besides the GSO packets
+        // (1000 and 3500)
         AddTestCase(new TcpForcedPushTestCase("No PSH within a write", false, 2000, {5000}, {5000}),
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpForcedPushTestCase("PSH every half window",
                                               true,
                                               2000,
                                               {5000},
-                                              {1500, 3000, 4500, 5000}),
+                                              {1000, 2000, 3500, 4500, 5000}),
                     TestCase::Duration::QUICK);
     }
 };

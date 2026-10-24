@@ -594,6 +594,100 @@ class TcpEcnClockDrivenIsnTest : public TcpEcnTest
 /**
  * @ingroup internet-test
  *
+ * @brief Checks that a fast retransmission is signaled with CWR
+ *
+ * RFC 3168, Section 6.1.2: an ECN-capable sender which reduces its window for
+ * any reason, here a fast retransmission after the loss of a segment, sets
+ * CWR on the first new data segment sent after the reduction (as Linux
+ * tcp_ecn_queue_cwr()). Without ECN, no segment carries CWR.
+ */
+class TcpEcnCwrAfterLossTest : public TcpGeneralTest
+{
+  public:
+    /**
+     * @brief Constructor
+     *
+     * @param ecn Whether both ends use ECN
+     * @param desc Test description
+     */
+    TcpEcnCwrAfterLossTest(bool ecn, const std::string& desc)
+        : TcpGeneralTest(desc),
+          m_ecn(ecn)
+    {
+    }
+
+  protected:
+    void ConfigureProperties() override
+    {
+        TcpGeneralTest::ConfigureProperties();
+        if (m_ecn)
+        {
+            SetUseEcn(SENDER, TcpSocketState::On);
+            SetUseEcn(RECEIVER, TcpSocketState::On);
+        }
+    }
+
+    void ConfigureEnvironment() override
+    {
+        TcpGeneralTest::ConfigureEnvironment();
+        SetAppPktCount(100);
+    }
+
+    Ptr<ErrorModel> CreateReceiverErrorModel() override
+    {
+        Ptr<TcpSeqErrorModel> errorModel = CreateObject<TcpSeqErrorModel>();
+        errorModel->AddSeqToKill(SequenceNumber32(4881));
+        return errorModel;
+    }
+
+    void CongStateTrace(const TcpSocketState::TcpCongState_t oldValue,
+                        const TcpSocketState::TcpCongState_t newValue) override
+    {
+        if (newValue == TcpSocketState::CA_RECOVERY && !m_reduced)
+        {
+            m_reduced = true;
+            m_newDataFrom = GetHighestTxMark(SENDER);
+        }
+    }
+
+    void Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho who) override
+    {
+        if (who != SENDER || p->GetSize() == 0)
+        {
+            return;
+        }
+        if (h.GetFlags() & TcpHeader::CWR)
+        {
+            ++m_cwrSent;
+            NS_TEST_ASSERT_MSG_EQ(m_reduced, true, "CWR before the window reduction");
+            NS_TEST_ASSERT_MSG_EQ(h.GetSequenceNumber(),
+                                  m_newDataFrom,
+                                  "CWR must be on the first new data segment");
+        }
+        else if (m_reduced && m_ecn && m_cwrSent == 0)
+        {
+            NS_TEST_ASSERT_MSG_LT(h.GetSequenceNumber(),
+                                  m_newDataFrom,
+                                  "The first new data segment must carry CWR");
+        }
+    }
+
+    void FinalChecks() override
+    {
+        NS_TEST_ASSERT_MSG_EQ(m_reduced, true, "The window was not reduced");
+        NS_TEST_ASSERT_MSG_EQ(m_cwrSent, (m_ecn ? 1 : 0), "Unexpected number of CWR segments");
+    }
+
+  private:
+    bool m_ecn;                     //!< Whether both ends use ECN
+    bool m_reduced{false};          //!< The sender entered the fast recovery
+    SequenceNumber32 m_newDataFrom; //!< First new data sequence after the reduction
+    uint32_t m_cwrSent{0};          //!< Data segments sent with CWR
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP ECN TestSuite
  */
 class TcpEcnTestSuite : public TestSuite
@@ -626,6 +720,11 @@ class TcpEcnTestSuite : public TestSuite
             new TcpEcnTest(
                 6,
                 "Congestion Window Reduction Test :ECN capable sender and ECN capable receiver"),
+            TestCase::Duration::QUICK);
+        AddTestCase(new TcpEcnCwrAfterLossTest(true, "CWR after a fast retransmission with ECN"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpEcnCwrAfterLossTest(false, "No CWR after a fast retransmission without ECN"),
             TestCase::Duration::QUICK);
         AddTestCase(new TcpEcnClockDrivenIsnTest(
                         4,

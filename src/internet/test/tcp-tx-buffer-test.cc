@@ -52,6 +52,10 @@ class TcpTxBufferTestCase : public TestCase
     /** @brief Test that a cumulative ACK reaching SACKed data (SACK
      * reneging) keeps the scoreboard consistent and is reported */
     void TestSackReneging();
+    /** @brief Test that the lost data retransmitted as one GSO packet ends at
+     * the end of the packet with which it was first sent, and that PSH
+     * stays with the end of a split item */
+    void TestLostPacketBytes();
     /**
      * @brief Callback to provide a value of receiver window
      * @returns the receiver window size
@@ -103,9 +107,45 @@ TcpTxBufferTestCase::DoRun()
 
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestRetransmittedSegmentSacked, this);
     Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestSackReneging, this);
+    Simulator::Schedule(Seconds(0), &TcpTxBufferTestCase::TestLostPacketBytes, this);
 
     Simulator::Run();
     Simulator::Destroy();
+}
+
+void
+TcpTxBufferTestCase::TestLostPacketBytes()
+{
+    Ptr<TcpTxBuffer> txBuf = CreateObject<TcpTxBuffer>();
+    txBuf->SetRWndCallback(MakeCallback(&TcpTxBufferTestCase::GetRWnd, this));
+    txBuf->SetHeadSequence(SequenceNumber32(1));
+    txBuf->SetSegmentSize(1000);
+    txBuf->Add(Create<Packet>(5000));
+    // Two packets first sent: three segments, then two
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+        TcpTxItem* item = txBuf->CopyFromSequence(1000, SequenceNumber32(1 + 1000 * i));
+        item->m_gsoEnd = (i == 2 || i == 4);
+        item->m_pushed = (i == 4);
+    }
+    txBuf->SetSentListLost();
+    NS_TEST_ASSERT_MSG_EQ(txBuf->LostPacketBytes(SequenceNumber32(1), 10000),
+                          3000,
+                          "The first packet is not retransmitted whole");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->LostPacketBytes(SequenceNumber32(1), 2000),
+                          2000,
+                          "The limit is not applied");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->LostPacketBytes(SequenceNumber32(3001), 10000),
+                          2000,
+                          "The second packet is not retransmitted whole");
+    // Retransmitting the first half of the last item: PSH and the end of the
+    // packet stay with the second half
+    TcpTxItem* half = txBuf->CopyFromSequence(500, SequenceNumber32(4001));
+    NS_TEST_ASSERT_MSG_EQ(half->m_pushed, false, "PSH on the first part of a split item");
+    NS_TEST_ASSERT_MSG_EQ(half->m_gsoEnd, false, "Packet end on the first part of a split item");
+    TcpTxItem* rest = txBuf->CopyFromSequence(500, SequenceNumber32(4501));
+    NS_TEST_ASSERT_MSG_EQ(rest->m_pushed, true, "PSH lost by the split");
+    NS_TEST_ASSERT_MSG_EQ(rest->m_gsoEnd, true, "Packet end lost by the split");
 }
 
 void
@@ -610,12 +650,34 @@ TcpTxBufferTestCase::TestSackReneging()
     NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked() + txBuf->GetLost() <= 8 * segmentSize,
                           true,
                           "A segment is both SACKed and lost");
+    // The head, which Linux holds SACKed until the timeout, has left the
+    // network and is not retransmitted
+    NS_TEST_ASSERT_MSG_EQ(txBuf->BytesInFlight(), 0, "The reneged head counted in flight");
+    NS_TEST_ASSERT_MSG_EQ(txBuf->NextSeg(&next, &nextHigh, false), false, "Head retransmitted");
 
     // At the retransmission timeout, the SACK information is discarded
     txBuf->SetSentListLost(true);
     NS_TEST_ASSERT_MSG_EQ(txBuf->GetSacked(), 0, "SACK marks left after the timeout");
     NS_TEST_ASSERT_MSG_EQ(txBuf->GetLost(), 8 * segmentSize, "All segments are to be lost");
     NS_TEST_ASSERT_MSG_EQ(txBuf->IsSackReneged(), false, "Reneging still reported");
+
+    // The first three segments are retransmitted, and the receiver SACKs
+    // the 4th and the 5th: as RFC 6675 (NextSeg() criterion (1.b)), the
+    // lost segments above the highest SACK wait; as Linux, which
+    // retransmits all the data marked lost, the 6th is next
+    for (uint8_t i = 2; i < 5; ++i)
+    {
+        txBuf->CopyFromSequence(segmentSize, SequenceNumber32((i * segmentSize) + 1));
+    }
+    Ptr<TcpOptionSack> sack2 = CreateObject<TcpOptionSack>();
+    sack2->AddSackBlock(TcpOptionSack::SackBlock(SequenceNumber32(5001), SequenceNumber32(7001)));
+    txBuf->Update(sack2->GetSackList());
+    NS_TEST_ASSERT_MSG_EQ(txBuf->NextSeg(&next, &nextHigh, false) && next < SequenceNumber32(10001),
+                          false,
+                          "Lost data above the highest SACK retransmitted");
+    txBuf->SetLinuxLostRetransmit(true);
+    NS_TEST_ASSERT_MSG_EQ(txBuf->NextSeg(&next, &nextHigh, false), true, "Nothing to send");
+    NS_TEST_ASSERT_MSG_EQ(next, SequenceNumber32(7001), "Lost data above the highest SACK");
 }
 
 void

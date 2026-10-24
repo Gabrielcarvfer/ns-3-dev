@@ -45,23 +45,39 @@ but other contemporaneous versions may also work.
 - (internet) Added several RFC 9293 conformance features to TCP: the keep-alives (`KeepAlive`, `KeepAliveTime`, `KeepAliveInterval` and `KeepAliveRetries` attributes), the urgent mechanism (`MSG_FLAG_OOB`, `Socket::SetUrgentDataCallback()` and `Socket::GetUrgentDataSize()`), clock driven initial sequence numbers (`TcpL4Protocol::ClockDrivenIsn` attribute), the completion of a simultaneous open, receiver silly window syndrome avoidance, and the IPv4 loose source route option with `TcpSocketBase::SetIpv4SourceRoute()`. The new tcp-rfc9293 test suite tracks the conformance status requirement by requirement.
 - (internet) The detection of lost retransmissions of the TCP SACK recovery can be disabled with the `TcpTxBuffer::LostRetransmissionDetection` attribute.
 - (internet) Added the `TcpSocketBase::FillReceiveWindow` attribute, with which the TCP sender fills the receive window of the peer with a short segment, as Linux does.
-- (internet) Added the `TcpSocketBase::ForcedPush` attribute, with which the TCP sender sets PSH as Linux does.
+- (internet) Added the `TcpSocketBase::ForcedPush` attribute, with which the TCP sender sets PSH as Linux does, and the `TcpSocketBase::TsoDefer` attribute, with which it defers partial bursts as Linux TSO does.
+- (internet) Added the `TcpSocketBase::LinuxCwndLimited` attribute, with which the TCP congestion window grows only while it limits the transmissions as Linux, and the `TcpSocketBase::SndSkbOverhead` attribute, with which the TCP send buffer is accounted as Linux. With `ForcedPush` or `TsoDefer`, the TCP sender lays out its data in skbs as Linux.
 - (internet) Added the `TcpSocketBase::PruneOverhead` attribute, with which the TCP receiver prunes its out-of-order queue under receive buffer pressure as Linux does.
+- (internet) Added the `TcpSocketBase::ForwardRetransmit` attribute, which can restrict the SACK retransmissions to the segments deemed lost, as Linux.
 - (internet) Added the `TcpSocketBase::SackRenegingTimeout` attribute, with which the TCP sender recovers from SACK reneging after a short timeout as Linux does.
 
 - (internet) Added the `TcpSocketBase::NonSackUndo` attribute, which reproduces the undo by Linux of the window reduction of non-SACK recoveries.
+- (internet) Added the `TcpBbr::LinuxRecovery` and `TcpBbr::LinuxHz` attributes, and the `TcpBbr::ProbeBwStartPhases` attribute to set the phases in which PROBE_BW starts, to reproduce the recovery, the timing and the random phases of Linux BBR.
+- (internet) Added the `TcpBbr::LinuxArithmetic` attribute, which computes the BBR pacing rate, gains and target window in the fixed point arithmetic of Linux.
+- (internet) Added the `TcpSocketBase::RecoveryReentry` attribute, with which the ACK ending a TCP fast recovery starts a new one when data is still deemed lost, as Linux.
+- (internet) Added the `LinuxHz` attribute to `TcpCubic`, `TcpBic` and `TcpHtcp`, which follows the integer arithmetic of their Linux modules.
+- (internet) Added the `TcpScalable::LinuxDecrease` attribute, which computes the decrease of Scalable TCP from cWnd as Linux.
+- (internet) Added the `LinuxArithmetic` attribute of `TcpIllinois`, `TcpVeno`, `TcpYeah` and `TcpDctcp`, which computes their parameters and slow start thresholds in the integer arithmetic of Linux; with `FixedPoint`, `TcpHybla` also halves the window in whole segments as Linux.
+- (internet) Added the `TcpSocketBase::PartialAckInWindow` attribute, with which the TCP sender without SACK retransmits after a partial ACK only when the congestion window allows, as Linux.
+- (internet) Added the `TcpPrrRecovery::LinuxRenoDelivered` attribute, which counts every duplicate ACK of a recovery without SACK as delivered data, as Linux.
 - (internet) Added the `TcpPrrRecovery::SegmentQuota` attribute, which rounds the send quota of PRR up to whole segments as Linux.
 - (internet) A TCP retransmission timeout during a fast recovery can keep the slow start threshold of the recovery, as Linux, with the `TcpSocketBase::KeepRecoverySsThresh` attribute.
 - (internet) The TCP retransmission timer can be restarted by the SACKs of the data sent before the retransmission of the first unacknowledged segment, as Linux, with the `TcpSocketBase::SackRestartsRto` attribute.
 - (internet) TCP can take RTT samples from the ACKs SACKing new data, as Linux, with the `TcpSocketBase::SackRttSamples` attribute.
 - (internet) The TCP retransmission timer can be restarted by a retransmission of the first unacknowledged segment, as Linux, with the `TcpSocketBase::RetransmitRestartsRto` attribute.
-- (internet) The TCP retransmission timer can expire on the ticks of a Linux timer wheel with the `TcpSocketBase::RtoTimerGranularity` attribute.
+- (internet) The TCP retransmission timer, and the adaptive delayed ACK timer, can expire on the ticks of a Linux timer wheel with the `TcpSocketBase::RtoTimerGranularity` attribute.
 - (internet) Added the `TcpSocketBase::LinuxRcvWindow` attribute, which derives the advertised window from the memory left in the receive buffer as Linux.
 - (internet) TCP can add a random per-connection offset to its timestamps (`TcpSocketBase::RandomTimestampOffset` attribute), as RFC 7323 recommends and Linux does.
 
 ### Bugs fixed
 
 - (mesh) #682 Mesh regression tests no longer compare against reference PCAP files; they now check HWMP, peer management and FLAME behavior through trace sources.
+- (tcp) The `TcpBbr::AckEpochAckedResetThresh` attribute counted bytes against a threshold that Linux counts in packets (2^20), so that the ACK aggregation epoch restarted every three segments.
+- (tcp) `TcpBbr` could set its window to 4 GiB at the end of a fast recovery in STARTUP (to the unset slow start threshold); its rate samples reported a loss when the data deemed lost was acknowledged; the retransmission sent before it set its window on entering a recovery let a new segment out with it; and its packet conservation could end before a round trip.
+- (tcp) `TcpBbr` never started PROBE_BW in the third phase of the pacing gain cycle, drawing its start phase among six phases instead of seven.
+- (tcp) An ECN-capable TCP sender did not set CWR after a window reduction due to a loss (RFC 3168, Section 6.1.2).
+- (tcp) `TcpRateLinux` reused the timing of the rate sample of an ACK in the sample of the next ACK when that one delivered packets sent with the same delivery information, overestimating the delivery rate seen by `TcpBbr`.
+- (tcp) With SACK, an ACK advancing SND.UNA and SACKing new data in CA_DISORDER neither grew the congestion window nor restarted the retransmission timer.
 - (tcp) `TcpVeno` (on a random loss) and `TcpIllinois` reduced the data in flight, which excludes the lost and SACKed segments, instead of the congestion window, as their papers and Linux do; `TcpCubic` kept the ACKs counted towards its next window increase across a window reduction.
 - (tcp) `TcpLinuxReno` halved the window in bytes instead of whole segments as Linux, dropped the segments acknowledged beyond the slow start threshold, and kept its count of acknowledged segments across window reductions; `TcpNewReno` with `CountAckedSegments` rounded down its per-segment increase and also kept that count. `TcpYeah` entered its Slow mode on any queueing delay, the 1/Phy threshold of the congestion level being computed in integers; `TcpYeah` with `CountAckedSegments` kept a separate count for its Fast mode, never cleared by a window reduction, unlike Linux.
 - (tcp) `TcpHybla` increased its window once per acknowledged segment in congestion avoidance, instead of once per ACK as in the Hybla paper and in Linux, and its forked instances lost the reference RTT.

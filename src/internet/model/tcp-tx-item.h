@@ -91,6 +91,8 @@ class TcpTxItem
     RateInformation& GetRateInformation();
 
     bool m_retrans{false}; //!< Indicates if the segment is retransmitted
+    bool m_pushed{false};  //!< Its last octet was first sent with PSH, as the end of a Linux skb
+    bool m_gsoEnd{true};   //!< It ended the packet with which it was first sent (a Linux skb)
 
   private:
     // Only TcpTxBuffer is allowed to touch this part of the TcpTxItem, to manage

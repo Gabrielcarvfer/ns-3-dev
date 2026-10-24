@@ -46,6 +46,16 @@ TcpPrrRecovery::GetTypeId()
                           "of RFC 9937",
                           BooleanValue(false),
                           MakeBooleanAccessor(&TcpPrrRecovery::m_priorCwndRecoverFs),
+                          MakeBooleanChecker())
+            .AddAttribute("LinuxRenoDelivered",
+                          "Without SACK, count each duplicate ACK that the "
+                          "sender takes as the SACK of a segment as delivered "
+                          "data, as Linux (tcp_add_reno_sack(), bounded by "
+                          "tcp_limit_reno_sacked() to the segments sent but the "
+                          "first), instead of bounding the delivered data by "
+                          "RecoverFS (RFC 9937, Section 6.2)",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpPrrRecovery::m_linuxRenoDelivered),
                           MakeBooleanChecker());
     return tid;
 }
@@ -62,7 +72,8 @@ TcpPrrRecovery::TcpPrrRecovery(const TcpPrrRecovery& recovery)
       m_prrOut(recovery.m_prrOut),
       m_recoveryFlightSize(recovery.m_recoveryFlightSize),
       m_segmentQuota(recovery.m_segmentQuota),
-      m_priorCwndRecoverFs(recovery.m_priorCwndRecoverFs)
+      m_priorCwndRecoverFs(recovery.m_priorCwndRecoverFs),
+      m_linuxRenoDelivered(recovery.m_linuxRenoDelivered)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -143,7 +154,8 @@ TcpPrrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes, boo
     // disallows incrementing DeliveredData once the total delivered in the
     // episode would exceed RecoverFS.  This bound is spec-mandated, not
     // incidental; do not drop it.
-    if (isDupAck && !tcb->m_sackEnabled && m_prrDelivered < m_recoveryFlightSize)
+    if (isDupAck && !tcb->m_sackEnabled &&
+        (m_linuxRenoDelivered || m_prrDelivered < m_recoveryFlightSize))
     {
         deliveredBytes += tcb->m_segmentSize;
     }

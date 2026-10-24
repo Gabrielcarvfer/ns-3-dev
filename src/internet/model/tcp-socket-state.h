@@ -199,6 +199,7 @@ class TcpSocketState : public Object
     bool m_paceInitialWindow{false};       //!< Enable/Disable pacing for the initial window
 
     Time m_minRtt{Time::Max()}; //!< Minimum RTT observed throughout the connection
+    Time m_pacingDeparture{0};  //!< Departure time of the next packet with the pacing of Linux
 
     TracedValue<uint32_t> m_bytesInFlight{0}; //!< Bytes in flight
     TracedValue<uint32_t> m_fackAwnd{0};      //!< inflight data by FACK

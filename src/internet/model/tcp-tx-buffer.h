@@ -208,6 +208,16 @@ class TcpTxBuffer : public Object
     uint32_t GetLost() const;
 
     /**
+     * @brief Get the number of bytes deemed lost that were then acknowledged
+     * or SACKed, since the start of the connection
+     *
+     * With GetLost(), it gives the bytes newly deemed lost by an ACK, which
+     * may also acknowledge bytes deemed lost before.
+     * @return the number of bytes
+     */
+    uint64_t GetLostDelivered() const;
+
+    /**
      * @brief Get the number of segments that have been explicitly sacked by the receiver.
      * @return the number of sacked segment.
      */
@@ -311,6 +321,20 @@ class TcpTxBuffer : public Object
     bool NextSeg(SequenceNumber32* seq, SequenceNumber32* seqHigh, bool isRecovery) const;
 
     /**
+     * @brief The lost data that Linux retransmits as one GSO packet
+     *
+     * Starting at a lost segment that NextSeg() returned per its rule 1, the
+     * bytes of the segments that follow it, lost, not SACKed and not yet
+     * retransmitted, up to the end of the packet with which they were first
+     * sent (a Linux skb of the retransmission queue).
+     *
+     * @param seq First sequence number of the lost segment
+     * @param maxBytes Maximum number of bytes
+     * @return the number of bytes, at least those of the first segment
+     */
+    uint32_t LostPacketBytes(const SequenceNumber32& seq, uint32_t maxBytes) const;
+
+    /**
      * @brief Return total bytes in flight
      *
      * Counting packets in flight is pretty simple:
@@ -370,6 +394,26 @@ class TcpTxBuffer : public Object
     Time GetOldestNewlySackedSentTime() const;
 
     /**
+     * @brief Get the latest transmission time of the segments newly SACKed by
+     * the last Update() and never retransmitted (Linux last_sackt)
+     *
+     * @return the transmission time, or Time::Min() if there is none
+     */
+    Time GetNewestNewlySackedSentTime() const;
+
+    /**
+     * @brief Get the latest transmission time of the segments cumulatively
+     * acknowledged by the last DiscardUpTo() for the first time (not SACKed
+     * before), as Linux last_ackt
+     *
+     * As Karn's algorithm requires, there is none when the acknowledged
+     * segments include a retransmitted one.
+     *
+     * @return the transmission time, or Time::Min() if there is none
+     */
+    Time GetNewestCumAckedSentTime() const;
+
+    /**
      * @brief Check if the receiver reneged on its SACKs
      *
      * With SACK, a cumulative ACK reaching a SACKed segment shows that the
@@ -392,6 +436,13 @@ class TcpTxBuffer : public Object
      * @param mark true to mark it lost
      */
     void SetMarkRenegedHeadLost(bool mark);
+
+    /**
+     * @brief Set whether NextSeg() returns the data marked lost above the
+     * highest SACK too, as Linux retransmits all the data marked lost
+     * @param enable true to return it
+     */
+    void SetLinuxLostRetransmit(bool enable);
 
     /**
      * @brief DeleteRetransmittedFlagFromHead
@@ -670,20 +721,26 @@ class TcpTxBuffer : public Object
         m_firstByteSeq; //!< Sequence number of the first byte in data (SND.UNA)
     std::pair<PacketList::const_iterator, SequenceNumber32> m_highestSack; //!< Highest SACK byte
 
-    uint32_t m_lostOut{0};   //!< Number of lost bytes
-    uint32_t m_sackedOut{0}; //!< Number of sacked bytes
-    uint32_t m_retrans{0};   //!< Number of retransmitted bytes
+    uint32_t m_lostOut{0};       //!< Number of lost bytes
+    uint64_t m_lostDelivered{0}; //!< Bytes deemed lost then acknowledged or SACKed
+    uint32_t m_sackedOut{0};     //!< Number of sacked bytes
+    uint32_t m_retrans{0};       //!< Number of retransmitted bytes
 
-    uint32_t m_dupAckThresh{0};       //!< Duplicate Ack threshold from TcpSocketBase
-    uint32_t m_segmentSize{0};        //!< Segment size from TcpSocketBase
-    bool m_sackEnabled{true};         //!< Indicates if SACK is enabled on this connection
-    bool m_sackSeen{false};           //!< Indicates if a SACK was received
-    bool m_sackReneged{false};        //!< Indicates if the receiver reneged on its SACKs
-    uint32_t m_renegingEvents{0};     //!< Cumulative ACKs that reached a SACKed segment
-    bool m_markRenegedHeadLost{true}; //!< Mark lost the head the receiver reneged on
+    uint32_t m_dupAckThresh{0}; //!< Duplicate Ack threshold from TcpSocketBase
+    uint32_t m_segmentSize{0};  //!< Segment size from TcpSocketBase
+    bool m_sackEnabled{true};   //!< Indicates if SACK is enabled on this connection
+    bool m_sackSeen{false};     //!< Indicates if a SACK was received
+    bool m_sackReneged{false};  //!< Indicates if the receiver reneged on its SACKs
+    std::optional<SequenceNumber32> m_renegedHead; //!< Head SACKed before reneging, kept out
+    uint32_t m_renegingEvents{0};      //!< Cumulative ACKs that reached a SACKed segment
+    bool m_markRenegedHeadLost{true};  //!< Mark lost the head the receiver reneged on
+    bool m_linuxLostRetransmit{false}; //!< Retransmit lost data above the highest SACK
 
     bool m_lostRetransDetection{true};         //!< Detect lost retransmissions from the SACKs
     Time m_oldestNewlySackedSent{Time::Max()}; //!< See GetOldestNewlySackedSentTime()
+    Time m_newestNewlySackedSent{Time::Min()}; //!< See GetNewestNewlySackedSentTime()
+    Time m_newestCumAckedSent{Time::Min()};    //!< See GetNewestCumAckedSentTime()
+    bool m_retransCumAcked{false}; //!< The last DiscardUpTo() acknowledged a retransmission
 
     INTERNET_EXPORT static inline Callback<void, TcpTxItem*> m_nullCb =
         MakeNullCallback<void, TcpTxItem*>(); //!< Null callback for an item

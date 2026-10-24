@@ -391,24 +391,6 @@ TcpRxBuffer::GetSackList() const
     return m_sackList;
 }
 
-std::vector<std::pair<uint32_t, uint32_t>>
-TcpRxBuffer::GetDataRuns() const
-{
-    std::vector<std::pair<uint32_t, uint32_t>> runs;
-    SequenceNumber32 end;
-    for (const auto& [seq, packet] : m_data)
-    {
-        if (runs.empty() || seq != end)
-        {
-            runs.emplace_back(0, 0);
-        }
-        runs.back().first += packet->GetSize();
-        runs.back().second++;
-        end = seq + packet->GetSize();
-    }
-    return runs;
-}
-
 Ptr<Packet>
 TcpRxBuffer::Extract(uint32_t maxSize)
 {

@@ -118,6 +118,7 @@ TcpSocketState::TcpSocketState(const TcpSocketState& other)
       m_pacingCaRatio(other.m_pacingCaRatio),
       m_paceInitialWindow(other.m_paceInitialWindow),
       m_minRtt(other.m_minRtt),
+      m_pacingDeparture(other.m_pacingDeparture),
       m_bytesInFlight(other.m_bytesInFlight),
       m_isCwndLimited(other.m_isCwndLimited),
       m_srtt(other.m_srtt),

@@ -69,6 +69,12 @@ TcpCongestionOps::HasCongControl() const
     return false;
 }
 
+uint32_t
+TcpCongestionOps::GetMinTsoSegs(Ptr<const TcpSocketState> tcb [[maybe_unused]]) const
+{
+    return 2;
+}
+
 void
 TcpCongestionOps::CongControl(Ptr<TcpSocketState> tcb,
                               const TcpRateOps::TcpRateConnection& /* rc */,
