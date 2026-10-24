@@ -278,6 +278,7 @@ if((applications
   set(ns3tcp_sources
       test/ns3tcp-cubic-test-suite.cc
       test/ns3tcp-loss-test-suite.cc
+      test/ns3tcp-recovery-fsm-test-suite.cc
       test/ns3tcp-socket-writer.cc
       test/ns3tcp-state-test-suite.cc
   )
@@ -373,6 +374,7 @@ set(test_sources
     test/tcp-pkts-acked-test.cc
     test/tcp-prr-recovery-test.cc
     test/tcp-rate-ops-test.cc
+    test/tcp-rfc9293-test.cc
     test/tcp-rto-test.cc
     test/tcp-rtt-estimation.cc
     test/tcp-rx-buffer-test.cc

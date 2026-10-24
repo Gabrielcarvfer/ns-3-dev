@@ -15,6 +15,8 @@
 #include "ns3/tcp-socket-base.h"
 #include "ns3/test.h"
 
+#include <optional>
+
 namespace ns3
 {
 
@@ -255,6 +257,40 @@ class TcpGeneralTest : public TestCase
     ~TcpGeneralTest() override;
 
     /**
+     * @brief Select the initial sequence numbers of both sockets from the
+     * clock (attribute ns3::TcpL4Protocol::ClockDrivenIsn)
+     *
+     * By default the attribute is left untouched, so the initial sequence
+     * numbers are 0 unless the attribute default says otherwise. A test which
+     * expresses its sequence numbers relative to the initial ones (see
+     * GetIsn and ToRelativeSeq) can be run in both ways.
+     *
+     * With a stream, the secrets the initial sequence numbers are derived from
+     * are drawn from streams stream (sender) and stream + 1 (receiver) of the
+     * first run, so that the initial sequence numbers do not depend on the
+     * run number nor on the random variables created before: a test can then
+     * pick the stream which places them where it needs.
+     *
+     * @param clockDrivenIsn true to enable the clock driven initial sequence
+     *                       numbers, false to start them from 0
+     * @param stream first stream of the secrets, or -1 for the automatic
+     *               stream assignment
+     */
+    void SetClockDrivenIsn(bool clockDrivenIsn, int64_t stream = -1)
+    {
+        m_clockDrivenIsn = clockDrivenIsn;
+        m_isnStream = stream;
+    }
+
+    /**
+     * Stream to pass to SetClockDrivenIsn to place the initial sequence number
+     * of the sender in the upper half of the sequence space, where the wrap
+     * aware comparisons with a sequence number left at 0 do not hold. It is
+     * checked at the end of the test case.
+     */
+    static constexpr int64_t UPPER_HALF_ISN_STREAM = 1;
+
+    /**
      * @brief Used as parameter of methods, specifies on what node
      * the caller is interested (e.g. GetSegSize).
      */
@@ -417,6 +453,33 @@ class TcpGeneralTest : public TestCase
      * @return mark of the specified node
      */
     SequenceNumber32 GetHighestTxMark(SocketWho who);
+
+    /**
+     * @brief Get the initial sequence number of the node specified
+     *
+     * It is taken from the SYN (or SYN+ACK) the node sent, and is 0 until then.
+     *
+     * @param who node to get the parameter from
+     *
+     * @return initial sequence number of the specified node
+     */
+    SequenceNumber32 GetIsn(SocketWho who) const;
+
+    /**
+     * @brief Express a sequence number of the stream sent by a node relative
+     * to the initial sequence number of that node
+     *
+     * The result is the sequence number the stream would carry with an
+     * initial sequence number of 0: the first octet of data is numbered 1.
+     * Use it on the sequence numbers sent by the node, and on the
+     * acknowledgment numbers sent by its peer.
+     *
+     * @param who node which sends the stream
+     * @param seq absolute sequence number
+     *
+     * @return the sequence number relative to the initial sequence number
+     */
+    SequenceNumber32 ToRelativeSeq(SocketWho who, SequenceNumber32 seq) const;
 
     /**
      * @brief Get the retransmission threshold
@@ -1143,7 +1206,11 @@ class TcpGeneralTest : public TestCase
      */
     void HandleAccept(Ptr<Socket> socket, const Address& from);
 
-    InetSocketAddress m_remoteAddr; //!< Remote peer address.
+    InetSocketAddress m_remoteAddr;       //!< Remote peer address.
+    std::optional<bool> m_clockDrivenIsn; //!< ClockDrivenIsn to set, if any
+    int64_t m_isnStream{-1};              //!< First stream of the ISN secrets, -1 if automatic
+    SequenceNumber32 m_senderIsn{0};      //!< Initial sequence number of the sender
+    SequenceNumber32 m_receiverIsn{0};    //!< Initial sequence number of the receiver
 };
 
 } // namespace ns3

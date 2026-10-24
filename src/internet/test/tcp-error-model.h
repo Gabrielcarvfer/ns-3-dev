@@ -65,6 +65,12 @@ class TcpGeneralErrorModel : public ErrorModel
  *
  * @brief An error model TCP aware: it drops the sequence number declared.
  *
+ * The sequence numbers to drop are relative to the initial sequence number
+ * of the stream the model observes, taken from the last SYN seen: the first
+ * octet of data is numbered 1, whatever the initial sequence number of the
+ * sender. A model which has not seen any SYN takes the initial sequence
+ * number to be 0.
+ *
  * @see AddSeqToKill
  */
 class TcpSeqErrorModel : public TcpGeneralErrorModel
@@ -87,11 +93,21 @@ class TcpSeqErrorModel : public TcpGeneralErrorModel
      * Calling x times this function indicates that you want to kill
      * the segment x times.
      *
-     * @param seq sequence number to be killed
+     * @param seq sequence number to be killed, relative to the initial
+     *            sequence number
      */
     void AddSeqToKill(const SequenceNumber32& seq)
     {
         m_seqToKill.insert(m_seqToKill.end(), seq);
+    }
+
+    /**
+     * @brief Get the initial sequence number of the observed stream.
+     * @return the sequence number of the last SYN seen, or 0 if none was seen
+     */
+    SequenceNumber32 GetIsn() const
+    {
+        return m_isn;
     }
 
   protected:
@@ -101,6 +117,7 @@ class TcpSeqErrorModel : public TcpGeneralErrorModel
 
   protected:
     std::list<SequenceNumber32> m_seqToKill; //!< List of the sequence numbers to be dropped.
+    SequenceNumber32 m_isn{0};               //!< Initial sequence number of the observed stream.
 
   private:
     void DoReset() override;

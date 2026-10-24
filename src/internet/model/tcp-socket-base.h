@@ -644,7 +644,8 @@ class TcpSocketBase : public TcpSocket
     int Close() override;        // Close by app: Kill socket upon tx buffer emptied
     int ShutdownSend() override; // Assert the m_shutdownSend flag to prevent send to network
     int ShutdownRecv() override; // Assert the m_shutdownRecv flag to prevent forward to app
-    int Send(Ptr<Packet> p, uint32_t flags) override; // Call by app to send data to network
+    int Send(Ptr<Packet> p, uint32_t flags) override;
+    uint32_t GetUrgentDataSize() const override;
     int SendTo(Ptr<Packet> p,
                uint32_t flags,
                const Address& toAddress) override; // Same as Send(), toAddress is insignificant
@@ -732,6 +733,10 @@ class TcpSocketBase : public TcpSocket
     void SetTcpNoDelay(bool noDelay) override;
     bool GetTcpNoDelay() const override;
     void SetPersistTimeout(Time timeout) override;
+    void SetKeepAlive(bool keepAlive) override;
+    bool GetKeepAlive() const override;
+    void SetKeepAliveTime(Time keepAliveTime) override;
+    Time GetKeepAliveTime() const override;
     Time GetPersistTimeout() const override;
     bool SetAllowBroadcast(bool allowBroadcast) override;
     bool GetAllowBroadcast() const override;
@@ -794,14 +799,40 @@ class TcpSocketBase : public TcpSocket
     // Helper functions: Transfer operation
 
     /**
+     * @brief Tell the application the connection was reset by the peer
+     *
+     * The abort is told apart from a normal close (@RFC{9293}, Section 3.6,
+     * MUST-12), unless the application was told of a close already.
+     */
+    void NotifyReset();
+
+    /**
+     * @brief Abort the connection upon a segment with malformed options
+     *
+     * The protocol layer resets the peer of a segment with an illegal
+     * option (@RFC{9293}, Section 3.1, MUST-7) and hands the segment over,
+     * so that this end of the connection is torn down as well and the
+     * application told of the abort.
+     */
+    void AbortOnMalformedSegment();
+
+    /**
      * @brief Checks whether the given TCP segment is valid or not.
      *
+     * A segment lying outside the receive window is acknowledged and dropped
+     * (@RFC{9293}, Section 3.10.7.4), whether it carries data or not: a
+     * segment without data, such as a keep-alive probe, is acceptable only
+     * if its sequence number lies in the window, or equals RCV.NXT while
+     * the window is closed.
+     *
      * @param seq the sequence number of packet's TCP header
+     * @param flags the flags of packet's TCP header
      * @param tcpHeaderSize the size of packet's TCP header
      * @param tcpPayloadSize the size of TCP payload
      * @return true if the TCP segment is valid
      */
     bool IsValidTcpSegment(const SequenceNumber32 seq,
+                           const uint8_t flags,
                            const uint32_t tcpHeaderSize,
                            const uint32_t tcpPayloadSize);
 
@@ -909,6 +940,15 @@ class TcpSocketBase : public TcpSocket
      * @brief Send reset and tear down this socket
      */
     void SendRST();
+
+    /**
+     * @brief Check if the sequence number of a segment without data is within
+     *        the rx window
+     *
+     * @param seq the sequence number of the segment
+     * @return true if the sequence number is out of range
+     */
+    bool ZeroLengthOutOfRange(SequenceNumber32 seq) const;
 
     /**
      * @brief Check if a sequence number range is within the rx window
@@ -1218,6 +1258,31 @@ class TcpSocketBase : public TcpSocket
     virtual void PersistTimeout();
 
     /**
+     * @brief Send a keep-alive, or drop a connection whose peer stopped answering
+     *
+     * @RFC{9293}, Section 3.8.4 allows an implementation to probe an idle
+     * connection, as long as the probes are sent when no data is outstanding
+     * and nothing was received for the configured interval (MUST-26), and as
+     * long as a single probe left unanswered is not read as a dead connection
+     * (MUST-29).
+     */
+    void KeepAliveTimeout();
+
+    /**
+     * @brief Send a keep-alive probe
+     */
+    void SendKeepAlive();
+
+    /**
+     * @brief Restart the keep-alive timer of an active connection
+     *
+     * Called whenever a segment is received, since an incoming segment shows
+     * the peer is alive; outgoing data does not need to restart the timer,
+     * because the timeout skips the probe while sent data is outstanding.
+     */
+    void RearmKeepAlive();
+
+    /**
      * @brief Retransmit the first segment marked as lost, without considering
      * available window nor pacing.
      */
@@ -1232,6 +1297,20 @@ class TcpSocketBase : public TcpSocket
      * @param tcpHeader TcpHeader to add options to
      */
     void AddOptions(TcpHeader& tcpHeader);
+
+    /**
+     * @brief Negotiate the options carried by a SYN or a SYN+ACK
+     *
+     * Window scaling, SACK, the MSS and the timestamps are settled once per
+     * connection from the opening segment; the initial congestion window
+     * follows from the negotiated segment size. A listening socket never
+     * negotiates: the socket forked for each connection does, so that the
+     * connections are independent of each other (RFC 9293, Section 3.9.1.1,
+     * MUST-41).
+     *
+     * @param tcpHeader The header of the opening segment.
+     */
+    void ProcessSynOptions(const TcpHeader& tcpHeader);
 
     /**
      * @brief Read TCP options before Ack processing
@@ -1280,6 +1359,34 @@ class TcpSocketBase : public TcpSocket
     uint8_t CalculateWScale() const;
 
     /**
+     * @brief Process the urgent pointer of an incoming segment
+     *
+     * @param header The TCP header of the segment.
+     */
+    void ProcessUrgentPointer(const TcpHeader& header);
+
+    /**
+     * @brief Check whether urgent data is pending on the connection
+     *
+     * @return true if urgent data has not been consumed yet.
+     */
+    bool HasPendingUrgentData() const;
+
+    /**
+     * @brief Generate the initial sequence number of a connection
+     *
+     * @RFC{9293}, Section 3.4.1 (MUST-8) requires the initial sequence number
+     * to be selected from a clock, so that the sequence numbers of distinct
+     * connections between the same pair of sockets do not overlap. The value
+     * is the 4 microsecond clock plus a hash of the connection identifying
+     * parameters and of a per-node secret, which is not computable from the
+     * outside (MUST-9), following the scheme recommended by @RFC{6528}.
+     *
+     * @return The initial sequence number.
+     */
+    SequenceNumber32 GenerateIsn() const;
+
+    /**
      * @brief Read the MSS option from other side
      *
      * The maximum segment size to use when sending data is set to the
@@ -1291,12 +1398,22 @@ class TcpSocketBase : public TcpSocket
     void ProcessOptionMss(const Ptr<const TcpOption> option);
 
     /**
+     * @brief Get the largest segment the interface of the connection carries
+     *
+     * @return The MTU of the interface minus the base IP and TCP headers, or
+     *         the largest MSS when the socket is not bound to an interface.
+     */
+    uint32_t GetInterfaceMss() const;
+
+    /**
      * @brief Add the MSS option to the header
      *
      * The MSS option should be sent in every SYN segment when the receive
      * MSS differs from the default, and may be sent always (@RFC{9293},
      * Section 3.7.1, SHLD-5 and MAY-3): it is always sent. The advertised
-     * value is our current segment size.
+     * value is the configured segment size, regardless of the one the peer
+     * advertised or of the options in use, bounded by the MTU of the
+     * interface (MUST-67).
      *
      * @param header TcpHeader where the method should add the option
      */
@@ -1436,6 +1553,12 @@ class TcpSocketBase : public TcpSocket
     Time m_clockGranularity{Seconds(0.001)}; //!< Clock Granularity used in RTO calcs
     Time m_delAckTimeout;                    //!< Time to delay an ACK
     Time m_persistTimeout;                   //!< Time between sending 1-byte probes
+    bool m_keepAlive{false};                 //!< Keep-alives are enabled
+    Time m_keepAliveTime;                    //!< Idle time before the first keep-alive
+    Time m_keepAliveInterval;                //!< Time between unanswered keep-alives
+    uint32_t m_keepAliveRetries{0};          //!< Unanswered keep-alives before dropping
+    uint32_t m_keepAlivesSent{0};            //!< Keep-alives sent without an answer
+    EventId m_keepAliveEvent{};              //!< Keep-alive event
     Time m_cnTimeout;                        //!< Timeout for connection retry
 
     // History of RTT
@@ -1473,11 +1596,15 @@ class TcpSocketBase : public TcpSocket
     double m_msl{0.0};           //!< Max segment lifetime
 
     // Window management
-    uint16_t m_maxWinSize{0};                         //!< Maximum window size to advertise
-    uint32_t m_bytesAckedNotProcessed{0};             //!< Bytes acked, but not processed
-    SequenceNumber32 m_highTxAck{0};                  //!< Highest ack sent
-    TracedValue<uint32_t> m_rWnd{0};                  //!< Receiver window (RCV.WND in RFC793)
-    TracedValue<uint32_t> m_advWnd{0};                //!< Advertised Window size
+    uint16_t m_maxWinSize{0};             //!< Maximum window size to advertise
+    uint32_t m_bytesAckedNotProcessed{0}; //!< Bytes acked, but not processed
+    SequenceNumber32 m_highTxAck{0};      //!< Highest ack sent
+    TracedValue<uint32_t> m_rWnd{0};      //!< Receiver window (RCV.WND in RFC793)
+    TracedValue<uint32_t> m_advWnd{0};    //!< Advertised Window size
+    SequenceNumber32 m_advRightEdge{0};   //!< Right edge of the last advertised window
+    bool m_advRightEdgeArmed{false};      //!< True once a window has been advertised, since the
+                                          //!< right edge is only comparable to the live sequence
+                                          //!< numbers after being set from one
     TracedValue<SequenceNumber32> m_highRxMark{0};    //!< Highest seqno received
     TracedValue<SequenceNumber32> m_highRxAckMark{0}; //!< Highest ack received
 
@@ -1509,6 +1636,13 @@ class TcpSocketBase : public TcpSocket
     Ptr<TcpRateOps> m_rateOps;                 //!< Rate operations
 
     // Guesses over the other connection end
+    bool m_activeOpen{false};             //!< True if SYN_RCVD was reached through an active open
+    SequenceNumber32 m_sndUrgentPoint{0}; //!< Sequence number past the urgent data being sent
+    SequenceNumber32 m_rcvUrgentPoint{0}; //!< Sequence number past the urgent data received
+    bool m_sndUrgentArmed{false};         //!< True once urgent data has been sent, since the
+                                          //!< urgent points are only comparable to the live
+                                          //!< sequence numbers after being set from one
+    bool m_rcvUrgentArmed{false};         //!< True once an urgent pointer has been received
     uint32_t m_advertisedMss{0}; //!< MSS advertised in the MSS option (our configured segment size)
     bool m_segmentSizeAdjusted{
         false}; //!< True if the segment size has been reduced by the size of the TCP options

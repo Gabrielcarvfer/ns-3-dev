@@ -377,6 +377,35 @@ callback as well.
   FIN_WAIT_1 or FIN_WAIT_2 the socket receive a in-sequence FIN (that can carry
   data).
 
+-----------------------------------------
+
+**Keep-alives**
+
+An idle connection can be probed with keep-alives (:rfc:`9293`, Section
+3.8.4). They are off by default, and their four attributes are split across
+two classes, which an application has to set on the right one:
+
+* ``ns3::TcpSocket::KeepAlive`` turns them on or off (default off), and
+  ``ns3::TcpSocket::KeepAliveTime`` sets the idle time before the first
+  keep-alive (default two hours). Both belong to the abstract socket API.
+* ``ns3::TcpSocketBase::KeepAliveInterval`` sets the time between the
+  keep-alives which are not answered (default 75 seconds), and
+  ``ns3::TcpSocketBase::KeepAliveRetries`` the number of them after which the
+  connection is dropped (default 9). The retries are at least two, since a
+  single unanswered keep-alive must not be taken for a dead connection
+  (MUST-29).
+
+A keep-alive is an empty segment repeating the last octet acknowledged by the
+peer, which answers it with an acknowledgment. It is sent only once nothing
+was received for the idle time and no data is outstanding or waiting to be
+sent, so that neither the retransmissions nor the zero window probes are
+duplicated. The connections are probed in the ESTABLISHED and the CLOSE_WAIT
+states, the latter for a peer which closed its side and went away while the
+application keeps the connection open. Any segment received starts the idle
+time anew; a connection whose peer answers none of the keep-alives is reset,
+and its application notified through *NotifyErrorClose*. Changing
+``KeepAliveTime`` on an idle connection applies to the idle time under way.
+
 
 Congestion Control Algorithms
 +++++++++++++++++++++++++++++

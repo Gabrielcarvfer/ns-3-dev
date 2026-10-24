@@ -111,6 +111,9 @@ TcpLinuxRenoSSTest::ConfigureEnvironment()
     SetPropagationDelay(MilliSeconds(5));
     SetAppPktCount(m_packets);
     SetAppPktSize(m_packetSize);
+    // The MSS advertised by a peer is bounded by what its interface can
+    // receive, so the MTU has to hold a segment and the IP and TCP headers
+    SetMTU(m_segmentSize + 40);
 }
 
 void
@@ -288,7 +291,9 @@ TcpLinuxRenoCongAvoidTest::ConfigureEnvironment()
 
     SetAppPktSize(m_packetSize);
     SetAppPktCount(m_packets);
-    SetMTU(1500);
+    // The MSS advertised by a peer is bounded by what its interface can
+    // receive, so the MTU has to hold a segment and the IP and TCP headers
+    SetMTU(m_segmentSize + 40);
 }
 
 void

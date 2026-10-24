@@ -7,6 +7,7 @@
 #define __STDC_LIMIT_MACROS
 #include "tcp-general-test.h"
 
+#include "ns3/boolean.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/ipv4-end-point.h"
@@ -14,6 +15,7 @@
 #include "ns3/log.h"
 #include "ns3/node-container.h"
 #include "ns3/queue.h"
+#include "ns3/rng-seed-manager.h"
 #include "ns3/rtt-estimator.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/tcp-header.h"
@@ -86,6 +88,14 @@ TcpGeneralTest::DoTeardown()
 {
     FinalChecks();
 
+    if (m_clockDrivenIsn.value_or(false) && m_isnStream == UPPER_HALF_ISN_STREAM)
+    {
+        NS_TEST_EXPECT_MSG_GT_OR_EQ(GetIsn(SENDER).GetValue(),
+                                    1U << 31,
+                                    "The initial sequence number of the sender is not in the "
+                                    "upper half of the sequence space");
+    }
+
     Simulator::Destroy();
     NS_LOG_INFO("Done.");
 }
@@ -126,6 +136,28 @@ TcpGeneralTest::DoRun()
 
     InternetStackHelper internet;
     internet.Install(nodes);
+
+    if (m_clockDrivenIsn.has_value())
+    {
+        for (auto it = nodes.Begin(); it != nodes.End(); ++it)
+        {
+            (*it)->GetObject<TcpL4Protocol>()->SetAttribute("ClockDrivenIsn",
+                                                            BooleanValue(*m_clockDrivenIsn));
+        }
+        if (*m_clockDrivenIsn && m_isnStream >= 0)
+        {
+            uint32_t seed = RngSeedManager::GetSeed();
+            uint64_t run = RngSeedManager::GetRun();
+            RngSeedManager::SetSeed(1);
+            RngSeedManager::SetRun(1);
+            for (uint32_t i = 0; i < nodes.GetN(); ++i)
+            {
+                nodes.Get(i)->GetObject<TcpL4Protocol>()->AssignStreams(m_isnStream + i);
+            }
+            RngSeedManager::SetSeed(seed);
+            RngSeedManager::SetRun(run);
+        }
+    }
 
     Packet::EnablePrinting();
 
@@ -512,12 +544,21 @@ TcpGeneralTest::TxPacketCb(const Ptr<const Packet> p,
                            const TcpHeader& h,
                            const Ptr<const TcpSocketBase> tcp)
 {
+    bool isSyn = h.GetFlags() & TcpHeader::SYN;
     if (tcp->GetNode() == m_receiverSocket->GetNode())
     {
+        if (isSyn)
+        {
+            m_receiverIsn = h.GetSequenceNumber();
+        }
         Tx(p, h, RECEIVER);
     }
     else if (tcp->GetNode() == m_senderSocket->GetNode())
     {
+        if (isSyn)
+        {
+            m_senderIsn = h.GetSequenceNumber();
+        }
         Tx(p, h, SENDER);
     }
     else
@@ -661,6 +702,18 @@ SequenceNumber32
 TcpGeneralTest::GetHighestTxMark(SocketWho who)
 {
     return GetTcb(who)->m_highTxMark;
+}
+
+SequenceNumber32
+TcpGeneralTest::GetIsn(SocketWho who) const
+{
+    return who == SENDER ? m_senderIsn : m_receiverIsn;
+}
+
+SequenceNumber32
+TcpGeneralTest::ToRelativeSeq(SocketWho who, SequenceNumber32 seq) const
+{
+    return SequenceNumber32(seq.GetValue() - GetIsn(who).GetValue());
 }
 
 uint32_t
@@ -1225,6 +1278,11 @@ TcpSocketSmallAcks::SendEmptyPacket(uint8_t flags)
     if (hasSyn || hasFin)
     {
         header.SetAckNumber(m_tcb->m_rxBuffer->NextRxSequence());
+        if (hasSyn)
+        {
+            // The small ACKs count from the initial sequence number of the peer
+            m_lastAckedSeq = m_tcb->m_rxBuffer->NextRxSequence();
+        }
     }
     else
     {
@@ -1234,8 +1292,7 @@ TcpSocketSmallAcks::SendEmptyPacket(uint8_t flags)
 
         if (m_bytesLeftToBeAcked == 0 && m_tcb->m_rxBuffer->NextRxSequence() > m_lastAckedSeq)
         {
-            m_bytesLeftToBeAcked =
-                m_tcb->m_rxBuffer->NextRxSequence().GetValue() - m_lastAckedSeq.GetValue();
+            m_bytesLeftToBeAcked = m_tcb->m_rxBuffer->NextRxSequence() - m_lastAckedSeq;
             m_bytesLeftToBeAcked -= m_bytesToAck;
             NS_LOG_DEBUG("Setting m_bytesLeftToBeAcked to " << m_bytesLeftToBeAcked);
         }

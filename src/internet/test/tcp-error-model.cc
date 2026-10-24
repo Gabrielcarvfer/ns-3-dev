@@ -78,11 +78,17 @@ TcpSeqErrorModel::ShouldDrop(const Ipv4Header& ipHeader,
 
     bool toDrop = false;
 
+    if (tcpHeader.GetFlags() & TcpHeader::SYN)
+    {
+        m_isn = tcpHeader.GetSequenceNumber();
+    }
+
     if (m_seqToKill.begin() != m_seqToKill.end() && packetSize != 0)
     {
         SequenceNumber32 toKill = m_seqToKill.front();
-        NS_LOG_INFO("Analyzing seq=" << tcpHeader.GetSequenceNumber() << " killing=" << toKill);
-        if (tcpHeader.GetSequenceNumber() == toKill)
+        SequenceNumber32 seq(tcpHeader.GetSequenceNumber().GetValue() - m_isn.GetValue());
+        NS_LOG_INFO("Analyzing seq=" << seq << " killing=" << toKill);
+        if (seq == toKill)
         {
             NS_LOG_INFO("segment " << toKill << " dropped");
             toDrop = true;
@@ -97,6 +103,7 @@ void
 TcpSeqErrorModel::DoReset()
 {
     m_seqToKill.erase(m_seqToKill.begin(), m_seqToKill.end());
+    m_isn = SequenceNumber32(0);
 }
 
 NS_OBJECT_ENSURE_REGISTERED(TcpFlagErrorModel);

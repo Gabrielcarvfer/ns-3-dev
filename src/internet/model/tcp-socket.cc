@@ -116,6 +116,21 @@ TcpSocket::GetTypeId()
                 "Persist timeout to probe for rx window",
                 TimeValue(Seconds(6)),
                 MakeTimeAccessor(&TcpSocket::GetPersistTimeout, &TcpSocket::SetPersistTimeout),
+                MakeTimeChecker())
+            .AddAttribute("KeepAlive",
+                          "Send keep-alives when the connection is idle. The time between the "
+                          "keep-alives which are not answered and their number are set by the "
+                          "KeepAliveInterval and KeepAliveRetries attributes of "
+                          "ns3::TcpSocketBase.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpSocket::GetKeepAlive, &TcpSocket::SetKeepAlive),
+                          MakeBooleanChecker())
+            .AddAttribute(
+                "KeepAliveTime",
+                "Idle time after which the first keep-alive is sent. See also the "
+                "KeepAliveInterval and KeepAliveRetries attributes of ns3::TcpSocketBase.",
+                TimeValue(Seconds(7200)),
+                MakeTimeAccessor(&TcpSocket::GetKeepAliveTime, &TcpSocket::SetKeepAliveTime),
                 MakeTimeChecker());
     return tid;
 }

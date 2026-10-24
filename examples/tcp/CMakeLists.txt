@@ -137,3 +137,11 @@ build_example(
     ${libinternet-apps}
     ${libflow-monitor}
 )
+build_example(
+  NAME tcp-recovery-fsm-trace
+  SOURCE_FILES tcp-recovery-fsm-trace.cc
+  LIBRARIES_TO_LINK
+    ${libpoint-to-point}
+    ${libinternet}
+    ${libapplications}
+)

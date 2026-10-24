@@ -67,6 +67,14 @@ class Ns3TcpStateTestCase : public TestCase
      */
     Ns3TcpStateTestCase(uint32_t testCase);
 
+    /**
+     * Constructor.
+     *
+     * @param testCase Testcase number.
+     * @param clockDrivenIsn Whether the initial sequence numbers are clock driven.
+     */
+    Ns3TcpStateTestCase(uint32_t testCase, bool clockDrivenIsn);
+
     ~Ns3TcpStateTestCase() override
     {
     }
@@ -76,15 +84,16 @@ class Ns3TcpStateTestCase : public TestCase
     void DoRun() override;
     void DoTeardown() override;
 
-    std::string m_pcapFilename; //!< The PCAP filename.
-    PcapFile m_pcapFile;        //!< The PCAP ffile.
-    uint32_t m_testCase;        //!< Testcase number.
-    uint32_t m_totalTxBytes;    //!< Total number of bytes to send.
-    uint32_t m_currentTxBytes;  //!< Current number of bytes sent.
-    bool m_writeVectors;        //!< True if response vectors have to be written (and not read).
-    bool m_writeResults;        //!< True if write PCAP files.
-    bool m_writeLogging;        //!< True if write logging.
-    bool m_needToClose;         //!< Check if the sending socket need to be closed.
+    std::string m_pcapFilename;   //!< The PCAP filename.
+    PcapFile m_pcapFile;          //!< The PCAP ffile.
+    uint32_t m_testCase;          //!< Testcase number.
+    bool m_clockDrivenIsn{false}; //!< True if the initial sequence numbers are clock driven.
+    uint32_t m_totalTxBytes;      //!< Total number of bytes to send.
+    uint32_t m_currentTxBytes;    //!< Current number of bytes sent.
+    bool m_writeVectors;          //!< True if response vectors have to be written (and not read).
+    bool m_writeResults;          //!< True if write PCAP files.
+    bool m_writeLogging;          //!< True if write logging.
+    bool m_needToClose;           //!< Check if the sending socket need to be closed.
 
     /**
      * Check that the transmitted packets are consistent with the trace.
@@ -142,8 +151,14 @@ Ns3TcpStateTestCase::Ns3TcpStateTestCase()
 }
 
 Ns3TcpStateTestCase::Ns3TcpStateTestCase(uint32_t testCase)
+    : Ns3TcpStateTestCase(testCase, false)
+{
+}
+
+Ns3TcpStateTestCase::Ns3TcpStateTestCase(uint32_t testCase, bool clockDrivenIsn)
     : TestCase("Check the operation of the TCP state machine for several cases"),
       m_testCase(testCase),
+      m_clockDrivenIsn(clockDrivenIsn),
       m_totalTxBytes(20000),
       m_currentTxBytes(0),
       m_writeVectors(WRITE_VECTORS),
@@ -160,8 +175,11 @@ Ns3TcpStateTestCase::DoSetup()
     // We expect there to be a file called ns3tcp-state-response-vectors.pcap in
     // the data directory
     //
+    Config::SetDefault("ns3::TcpL4Protocol::ClockDrivenIsn", BooleanValue(m_clockDrivenIsn));
+
     std::ostringstream oss;
-    oss << "ns3tcp-state" << m_testCase << "-response-vectors.pcap";
+    oss << "ns3tcp-state" << m_testCase << (m_clockDrivenIsn ? "-isn" : "")
+        << "-response-vectors.pcap";
     m_pcapFilename = CreateDataDirFilename(oss.str());
     NS_LOG_INFO("m_pcapFilename=" << m_pcapFilename);
 
@@ -535,6 +553,13 @@ Ns3TcpStateTestSuite::Ns3TcpStateTestSuite()
     AddTestCase(new Ns3TcpStateTestCase(6), TestCase::Duration::QUICK);
     AddTestCase(new Ns3TcpStateTestCase(7), TestCase::Duration::QUICK);
     AddTestCase(new Ns3TcpStateTestCase(8), TestCase::Duration::QUICK);
+
+    // The same cases with clock driven initial sequence numbers, whose
+    // response vectors are held apart
+    for (uint32_t i = 0; i <= 8; ++i)
+    {
+        AddTestCase(new Ns3TcpStateTestCase(i, true), TestCase::Duration::QUICK);
+    }
 }
 
 /// Do not forget to allocate an instance of this TestSuite.
