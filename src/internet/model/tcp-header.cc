@@ -423,20 +423,12 @@ TcpHeader::Deserialize(Buffer::Iterator start)
         }
         if (op->GetKind() == TcpOption::END)
         {
-            while (optionLen)
-            {
-                // The content of the header beyond the End of Option List
-                // option must be header padding of zeros (RFC 9293,
-                // Section 3.1, MUST-69)
-                if (i.PeekU8() != 0)
-                {
-                    NS_LOG_ERROR("Non-zero padding after the End of Option List option");
-                    m_malformed = true;
-                }
-                i.Next(1);
-                --optionLen;
-                ++m_optionsLen;
-            }
+            // The bytes beyond the End of Option List option are header
+            // padding, which the sender must zero (RFC 9293, Section 3.1,
+            // MUST-69) but the receiver ignores whatever their content
+            i.Next(optionLen);
+            m_optionsLen += optionLen;
+            optionLen = 0;
         }
     }
 

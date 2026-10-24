@@ -352,6 +352,9 @@ class Socket : public Object
      *
      * @RFC{9293}, Section 3.8.5 (MUST-33) requires a way for the application
      * to learn how much urgent data remains to be read from the connection.
+     * Since stream sockets deliver the urgent data in sequence, this is the
+     * amount of data the application has still to read to reach the urgent
+     * pointer, counted from what it has read so far.
      *
      * @return The number of bytes of pending urgent data, zero for sockets
      *         which do not implement the urgent mechanism.

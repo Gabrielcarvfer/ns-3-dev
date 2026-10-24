@@ -836,23 +836,38 @@ class TcpSocketBase : public TcpSocket
     void NotifyReset();
 
     /**
-     * @brief Abort the connection upon a segment with malformed options
+     * @brief Reset the connection upon a segment with malformed options
      *
-     * The protocol layer resets the peer of a segment with an illegal
-     * option (@RFC{9293}, Section 3.1, MUST-7) and hands the segment over,
-     * so that this end of the connection is torn down as well and the
-     * application told of the abort.
+     * A segment with an illegal option resets the connection (@RFC{9293},
+     * Section 3.1, MUST-7), on both ends, and the application is told of
+     * the abort. The segment has to pass the acceptability test first
+     * (Section 3.10.7.4), so that a segment forged off the path of the
+     * connection cannot tear it down: an unacceptable one is dropped like any
+     * other. A listening socket answers it with a reset and forks nothing.
+     *
+     * @param tcpHeader the header of the segment
+     * @param payloadSize the size of the data of the segment
+     * @param fromAddress the source address of the segment
+     * @param toAddress the destination address of the segment
      */
-    void AbortOnMalformedSegment();
+    void AbortOnMalformedSegment(const TcpHeader& tcpHeader,
+                                 uint32_t payloadSize,
+                                 const Address& fromAddress,
+                                 const Address& toAddress);
 
     /**
      * @brief Checks whether the given TCP segment is valid or not.
      *
      * A segment lying outside the receive window is acknowledged and dropped
      * (@RFC{9293}, Section 3.10.7.4), whether it carries data or not: a
-     * segment without data, such as a keep-alive probe, is acceptable only
-     * if its sequence number lies in the window, or equals RCV.NXT while
-     * the window is closed.
+     * segment without data, such as a keep-alive probe or a FIN, is
+     * acceptable only if its sequence number lies in the window, or equals
+     * RCV.NXT while the window is closed or once the FIN of the peer is in.
+     * A RST is accepted only at RCV.NXT, answered with a challenge ACK
+     * elsewhere in the window and dropped silently outside of it, and a SYN
+     * reaching a synchronized connection is answered with a challenge ACK
+     * (@RFC{5961}, Sections 3.2 and 4.2). A FIN retransmitted to a
+     * connection in TIME-WAIT restarts its timeout.
      *
      * @param seq the sequence number of packet's TCP header
      * @param flags the flags of packet's TCP header
@@ -973,6 +988,10 @@ class TcpSocketBase : public TcpSocket
     /**
      * @brief Check if the sequence number of a segment without data is within
      *        the rx window
+     *
+     * Only the synchronized states, and SYN-RECEIVED, have a window to check
+     * against; once the FIN of the peer is in, RCV.NXT is the only
+     * acceptable sequence number.
      *
      * @param seq the sequence number of the segment
      * @return true if the sequence number is out of range
@@ -1158,6 +1177,19 @@ class TcpSocketBase : public TcpSocket
     virtual uint16_t AdvertisedWindowSize(bool scale = true) const;
 
     /**
+     * @brief Compute the receive window to advertise, before scaling
+     *
+     * The window is the free space of the receive buffer, unless the right
+     * edge of the window advertised last is held, which neither shrinks the
+     * window nor moves its edge by less than the receiver silly window
+     * syndrome avoidance allows (RFC 9293, Section 3.8.6.2.2). Unlike
+     * AdvertisedWindowSize(), it does not record the window as advertised.
+     *
+     * @return The receive window, in bytes.
+     */
+    uint32_t GetReceiveWindow() const;
+
+    /**
      * @brief Update the receiver window (RWND) based on the value of the
      * window field in the header.
      *
@@ -1287,6 +1319,17 @@ class TcpSocketBase : public TcpSocket
     virtual void PersistTimeout();
 
     /**
+     * @brief Set the urgent pointer of an outgoing segment, and compute its
+     * PSH and URG flags
+     *
+     * @param header The header of the segment, whose urgent pointer is set.
+     * @param seq The sequence number of the segment.
+     * @param size The size of the data of the segment.
+     * @return The PSH and URG flags the segment carries.
+     */
+    uint8_t SetPushAndUrgent(TcpHeader& header, SequenceNumber32 seq, uint32_t size);
+
+    /**
      * @brief Send a keep-alive, or drop a connection whose peer stopped answering
      *
      * @RFC{9293}, Section 3.8.4 allows an implementation to probe an idle
@@ -1310,6 +1353,13 @@ class TcpSocketBase : public TcpSocket
      * because the timeout skips the probe while sent data is outstanding.
      */
     void RearmKeepAlive();
+
+    /**
+     * @brief Check whether the connection is in a state probed by the keep-alives
+     *
+     * @return true in ESTABLISHED and CLOSE_WAIT.
+     */
+    bool IsKeepAliveState() const;
 
     /**
      * @brief Retransmit the first segment marked as lost, without considering
@@ -1395,11 +1445,32 @@ class TcpSocketBase : public TcpSocket
     void ProcessUrgentPointer(const TcpHeader& header);
 
     /**
+     * @brief Process the urgent pointer of a segment whose data is dropped
+     *
+     * A zero receive window drops the data of every segment, but not the
+     * urgent field of the segment at RCV.NXT (RFC 9293, Section 3.4, MUST-66).
+     *
+     * @param header The TCP header of the dropped segment.
+     * @param payloadSize The size of the data of the segment.
+     */
+    void ProcessUrgentOfDroppedSegment(const TcpHeader& header, uint32_t payloadSize);
+
+    /**
      * @brief Check whether urgent data is pending on the connection
      *
      * @return true if urgent data has not been consumed yet.
      */
     bool HasPendingUrgentData() const;
+
+    /**
+     * @brief Get the sequence number of the next octet the application reads
+     *
+     * The urgent data is consumed once the application read it, which lags
+     * behind RCV.NXT by the data waiting in the receive buffer.
+     *
+     * @return The sequence number of the first octet not yet read.
+     */
+    SequenceNumber32 GetRxReadPoint() const;
 
     /**
      * @brief Generate the initial sequence number of a connection
@@ -1421,6 +1492,12 @@ class TcpSocketBase : public TcpSocket
      * The maximum segment size to use when sending data is set to the
      * minimum of our configured segment size and the value advertised by
      * the peer (@RFC{9293}, Section 3.7.1).
+     *
+     * An advertised value below 48 bytes is raised to 48, as Linux does
+     * (TCP_MIN_SND_MSS): this deliberately deviates from MUST-16, which
+     * bounds the effective send MSS by the MSS of the peer whatever its
+     * value, since a tiny MSS leaves no room for the options, or for any
+     * data, and stalls the connection.
      *
      * @param option MSS option from the header
      */

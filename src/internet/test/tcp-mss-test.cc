@@ -18,6 +18,7 @@
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/simulator.h"
 #include "ns3/tcp-header.h"
+#include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-option-rfc793.h"
 #include "ns3/tcp-socket-base.h"
 #include "ns3/tcp-socket-factory.h"
@@ -129,8 +130,16 @@ TcpMssOptionTestCase::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWh
 class TcpListenerMssTestCase : public TestCase
 {
   public:
-    TcpListenerMssTestCase()
-        : TestCase("A listener negotiates the MSS of each connection on its own")
+    /**
+     * @brief Constructor.
+     * @param clockDrivenIsn Whether the initial sequence numbers are clock
+     *                       driven, so that the accepted sockets, which send
+     *                       the data, pick them anywhere in the space.
+     */
+    TcpListenerMssTestCase(bool clockDrivenIsn = false)
+        : TestCase(std::string("A listener negotiates the MSS of each connection on its own") +
+                   (clockDrivenIsn ? " (clock driven ISN)" : "")),
+          m_clockDrivenIsn(clockDrivenIsn)
     {
     }
 
@@ -157,6 +166,7 @@ class TcpListenerMssTestCase : public TestCase
                      const TcpHeader& header,
                      Ptr<const TcpSocketBase> socket);
 
+    bool m_clockDrivenIsn;                         //!< Whether the ISNs are clock driven
     std::map<uint16_t, uint32_t> m_largestPayload; //!< Largest payload sent, per peer port
     std::map<uint16_t, uint32_t> m_segmentSize;    //!< Segment size of the accepted socket
 };
@@ -194,6 +204,11 @@ TcpListenerMssTestCase::DoRun()
 
     InternetStackHelper stack;
     stack.Install(nodes);
+    for (uint32_t i = 0; i < nodes.GetN(); ++i)
+    {
+        nodes.Get(i)->GetObject<TcpL4Protocol>()->SetAttribute("ClockDrivenIsn",
+                                                               BooleanValue(m_clockDrivenIsn));
+    }
 
     Ipv4AddressHelper address;
     address.SetBase("10.1.1.0", "255.255.255.0");
@@ -263,6 +278,45 @@ TcpListenerMssTestCase::DoRun()
 /**
  * @ingroup internet-test
  *
+ * @brief The MSS option test with clock driven initial sequence numbers
+ *
+ * The connection is opened with initial sequence numbers which may lie
+ * anywhere in the space (@RFC{9293}, Section 3.4.1), and has to negotiate the
+ * MSS and transfer its data as with the ones starting from zero.
+ */
+class TcpMssOptionClockDrivenIsnTestCase : public TcpMssOptionTestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param senderSegSize Segment size configured on the sender.
+     * @param receiverSegSize Segment size configured on the receiver.
+     * @param name Test description.
+     */
+    TcpMssOptionClockDrivenIsnTestCase(uint32_t senderSegSize,
+                                       uint32_t receiverSegSize,
+                                       std::string name)
+        : TcpMssOptionTestCase(senderSegSize, receiverSegSize, name + " (clock driven ISN)")
+    {
+    }
+
+  protected:
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override
+    {
+        node->GetObject<TcpL4Protocol>()->SetAttribute("ClockDrivenIsn", BooleanValue(true));
+        return TcpMssOptionTestCase::CreateSenderSocket(node);
+    }
+
+    Ptr<TcpSocketMsgBase> CreateReceiverSocket(Ptr<Node> node) override
+    {
+        node->GetObject<TcpL4Protocol>()->SetAttribute("ClockDrivenIsn", BooleanValue(true));
+        return TcpMssOptionTestCase::CreateReceiverSocket(node);
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP MSS option TestSuite
  */
 class TcpMssTestSuite : public TestSuite
@@ -278,6 +332,17 @@ class TcpMssTestSuite : public TestSuite
         AddTestCase(new TcpMssOptionTestCase(536, 536, "MSS option, default segment size"),
                     TestCase::Duration::QUICK);
         AddTestCase(new TcpListenerMssTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpMssOptionClockDrivenIsnTestCase(1400,
+                                                   800,
+                                                   "MSS option, sender larger than receiver"),
+            TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpMssOptionClockDrivenIsnTestCase(800,
+                                                   1400,
+                                                   "MSS option, receiver larger than sender"),
+            TestCase::Duration::QUICK);
+        AddTestCase(new TcpListenerMssTestCase(true), TestCase::Duration::QUICK);
     }
 };
 

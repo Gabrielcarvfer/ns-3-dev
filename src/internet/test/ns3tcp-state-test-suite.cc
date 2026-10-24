@@ -17,13 +17,16 @@
 #include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/log.h"
 #include "ns3/node-container.h"
+#include "ns3/node-list.h"
 #include "ns3/packet-sink-helper.h"
 #include "ns3/pcap-file.h"
 #include "ns3/point-to-point-helper.h"
 #include "ns3/pointer.h"
+#include "ns3/rng-seed-manager.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 #include "ns3/tcp-header.h"
+#include "ns3/tcp-l4-protocol.h"
 #include "ns3/tcp-socket-factory.h"
 #include "ns3/test.h"
 #include "ns3/traffic-control-helper.h"
@@ -378,6 +381,24 @@ Ns3TcpStateTestCase::DoRun()
     // Set up TCP/IP stack to all nodes (and create loopback device at device 0)
     InternetStackHelper internet;
     internet.InstallAll();
+
+    if (m_clockDrivenIsn)
+    {
+        // The secrets of the initial sequence numbers are drawn from streams
+        // of their own, in the first run, so that the response vectors
+        // depend neither on the run number of the simulation nor on the
+        // order the other random variables are created in
+        uint32_t seed = RngSeedManager::GetSeed();
+        uint64_t run = RngSeedManager::GetRun();
+        RngSeedManager::SetSeed(1);
+        RngSeedManager::SetRun(1);
+        for (uint32_t i = 0; i < NodeList::GetNNodes(); ++i)
+        {
+            NodeList::GetNode(i)->GetObject<TcpL4Protocol>()->AssignStreams(i);
+        }
+        RngSeedManager::SetSeed(seed);
+        RngSeedManager::SetRun(run);
+    }
 
     // Connect the nodes
     PointToPointHelper p2p;

@@ -6,9 +6,6 @@
 
 #include "ipv4-queue-disc-item.h"
 
-#include "tcp-header.h"
-#include "udp-header.h"
-
 #include "ns3/log.h"
 
 namespace ns3
@@ -114,22 +111,17 @@ Ipv4QueueDiscItem::Hash(uint32_t perturbation) const
     uint8_t prot = m_header.GetProtocol();
     uint16_t fragOffset = m_header.GetFragmentOffset();
 
-    TcpHeader tcpHdr;
-    UdpHeader udpHdr;
     uint16_t srcPort = 0;
     uint16_t destPort = 0;
 
-    if (prot == 6 && fragOffset == 0) // TCP
+    // The ports lead both the TCP and the UDP headers. They are read as raw
+    // bytes: the whole header of a malformed segment may not be parseable
+    if ((prot == 6 || prot == 17) && fragOffset == 0 && GetPacket()->GetSize() >= 4)
     {
-        GetPacket()->PeekHeader(tcpHdr);
-        srcPort = tcpHdr.GetSourcePort();
-        destPort = tcpHdr.GetDestinationPort();
-    }
-    else if (prot == 17 && fragOffset == 0) // UDP
-    {
-        GetPacket()->PeekHeader(udpHdr);
-        srcPort = udpHdr.GetSourcePort();
-        destPort = udpHdr.GetDestinationPort();
+        uint8_t ports[4];
+        GetPacket()->CopyData(ports, 4);
+        srcPort = (ports[0] << 8) | ports[1];
+        destPort = (ports[2] << 8) | ports[3];
     }
     if (prot != 6 && prot != 17)
     {

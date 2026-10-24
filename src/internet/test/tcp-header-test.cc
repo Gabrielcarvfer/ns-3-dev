@@ -446,10 +446,9 @@ TcpHeaderFlagsToString::DoRun()
  * @brief Test the detection of malformed TCP options
  *
  * @RFC{9293}, Section 3.1 requires implementations to be prepared to handle
- * an illegal option length (MUST-7), and requires the content of the header
- * beyond the End of Option List option to be padding of zeros (MUST-69).
- * Both cases must be flagged as malformed, so that the connection can be
- * reset.
+ * an illegal option length (MUST-7), which must be flagged as malformed so
+ * that the connection can be reset. The content of the header beyond the End
+ * of Option List option is padding, ignored by the receiver.
  */
 class TcpHeaderMalformedOptionsTestCase : public TestCase
 {
@@ -467,10 +466,12 @@ class TcpHeaderMalformedOptionsTestCase : public TestCase
                               false,
                               "A well-formed header was flagged as malformed");
 
-        // Non-zero padding after the End of Option List option (MUST-69)
+        // The bytes after the End of Option List option are ignored by the
+        // receiver whatever their content: zeroing them is a requirement of
+        // the sender (MUST-69)
         NS_TEST_ASSERT_MSG_EQ(Deserialize({0x01, 0x00, 0x00, 0x42}).IsMalformed(),
-                              true,
-                              "Non-zero padding after the End of Option List was accepted");
+                              false,
+                              "Non-zero padding after the End of Option List was rejected");
 
         // Illegal option length: the length field of the timestamp option
         // (kind 8) is zero instead of 10 (MUST-7)

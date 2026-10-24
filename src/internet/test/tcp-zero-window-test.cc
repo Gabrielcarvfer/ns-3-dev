@@ -154,7 +154,13 @@ TcpZeroWindowTest::Tx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho w
         }
         else if (Simulator::Now().GetSeconds() >= 10.0)
         {
-            NS_TEST_ASSERT_MSG_EQ(h.GetWindowSize(), 2500, "Receiver window not updated");
+            // The right edge moves by no less than a segment, so the window
+            // may lag behind the free space by up to a segment (receiver SWS
+            // avoidance, RFC 9293, Section 3.8.6.2.2)
+            NS_TEST_ASSERT_MSG_GT_OR_EQ(h.GetWindowSize(),
+                                        2500 - GetSegSize(RECEIVER),
+                                        "Receiver window not updated");
+            NS_TEST_ASSERT_MSG_LT_OR_EQ(h.GetWindowSize(), 2500, "Receiver window too large");
         }
     }
 
@@ -182,7 +188,10 @@ TcpZeroWindowTest::Rx(const Ptr<const Packet> p, const TcpHeader& h, SocketWho w
 
         if (Simulator::Now().GetSeconds() >= 10.0)
         {
-            NS_TEST_ASSERT_MSG_EQ(h.GetWindowSize(), 2500, "Receiver window not updated");
+            NS_TEST_ASSERT_MSG_GT_OR_EQ(h.GetWindowSize(),
+                                        2500 - GetSegSize(RECEIVER),
+                                        "Receiver window not updated");
+            NS_TEST_ASSERT_MSG_LT_OR_EQ(h.GetWindowSize(), 2500, "Receiver window too large");
             m_windowUpdated = true;
         }
     }

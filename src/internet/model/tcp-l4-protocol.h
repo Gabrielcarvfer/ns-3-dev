@@ -371,17 +371,17 @@ class TcpL4Protocol : public IpL4Protocol
      *
      * TCP runs between a pair of unicast addresses, so a segment addressed to
      * or coming from a broadcast or a multicast address is discarded
-     * (@RFC{9293}, Section 3.10.7.2, MUST-57 and MUST-63). Only the masks of
-     * the arrival interface are known, so a source equal to the directed
-     * broadcast address of a subnet this host is not attached to cannot be
-     * told apart from a unicast address, as on a real host.
+     * (@RFC{9293}, Section 3.10.7.2, MUST-57 and MUST-63). The directed
+     * broadcast addresses are those of the subnets of every interface of the
+     * node, whichever the segment came through. Only the masks of these
+     * subnets are known, so a source equal to the directed broadcast address
+     * of a subnet this host is not attached to cannot be told apart from a
+     * unicast address, as on a real host.
      *
      * @param address The address to check.
-     * @param interface The interface the segment came through, which gives the
-     *                  mask of the subnet directed broadcast.
      * @return true if the address cannot take part in a connection.
      */
-    bool IsUnusableAddress(Ipv4Address address, Ptr<Ipv4Interface> interface) const;
+    bool IsUnusableAddress(Ipv4Address address) const;
 
     Ptr<Node> m_node;             //!< The node this stack is associated with
     bool m_clockDrivenIsn{false}; //!< Select the initial sequence numbers from a clock

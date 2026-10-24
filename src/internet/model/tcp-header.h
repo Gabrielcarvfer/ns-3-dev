@@ -296,9 +296,11 @@ class TcpHeader : public Header
      * @brief Check if the header was malformed
      *
      * A header is malformed when its options cannot be parsed: an illegal
-     * option length, an option exceeding the option space, or a non-zero
-     * padding after the End of Option List option. @RFC{9293}, Section 3.1
-     * (MUST-7 and MUST-69) prescribes resetting the connection in that case.
+     * option length, an option exceeding the option space, or a duplicate
+     * option. @RFC{9293}, Section 3.1 (MUST-7) prescribes resetting the
+     * connection in that case. The bytes following the End of Option List
+     * option are padding, which is ignored whatever its content: MUST-69
+     * only requires the sender to zero it.
      *
      * @returns true if the header was malformed
      */

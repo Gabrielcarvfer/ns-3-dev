@@ -363,6 +363,13 @@ Icmpv4L4Protocol::Receive(Ptr<Packet> p,
     case Icmpv4Header::ICMPV4_TIME_EXCEEDED:
         HandleTimeExceeded(p, icmp, header.GetSource(), header.GetDestination());
         break;
+    case Icmpv4Header::ICMPV4_SOURCE_QUENCH:
+        // Deprecated (RFC 6633), but still handed to the transport protocol,
+        // which decides what to do with it (TCP discards it, RFC 9293,
+        // Section 3.9.2.2, MUST-55). Its body has the layout of the Time
+        // Exceeded one: unused word, IP header and first 8 bytes (RFC 792).
+        HandleTimeExceeded(p, icmp, header.GetSource(), header.GetDestination());
+        break;
     default:
         NS_LOG_DEBUG(icmp << " " << *p);
         break;

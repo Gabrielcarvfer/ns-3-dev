@@ -9,6 +9,7 @@
 #include "tcp-error-model.h"
 #include "tcp-general-test.h"
 
+#include "ns3/boolean.h"
 #include "ns3/ipv4-end-point.h"
 #include "ns3/ipv4-interface-address.h"
 #include "ns3/ipv4-route.h"
@@ -556,6 +557,43 @@ TcpEcnTest::CreateSenderSocket(Ptr<Node> node)
 /**
  * @ingroup internet-test
  *
+ * @brief The ECN test with clock driven initial sequence numbers
+ *
+ * The sequence numbers the ECN marks and echoes are tracked with are compared
+ * in the wrap aware arithmetic, and must work wherever the initial sequence
+ * numbers lie in the space (@RFC{9293}, Section 3.4.1).
+ */
+class TcpEcnClockDrivenIsnTest : public TcpEcnTest
+{
+  public:
+    /**
+     * @brief Constructor
+     *
+     * @param testcase test case number
+     * @param desc Description about the ECN capabilities of sender and receiver
+     */
+    TcpEcnClockDrivenIsnTest(uint32_t testcase, const std::string& desc)
+        : TcpEcnTest(testcase, desc + " (clock driven ISN)")
+    {
+    }
+
+  protected:
+    Ptr<TcpSocketMsgBase> CreateSenderSocket(Ptr<Node> node) override
+    {
+        node->GetObject<TcpL4Protocol>()->SetAttribute("ClockDrivenIsn", BooleanValue(true));
+        return TcpEcnTest::CreateSenderSocket(node);
+    }
+
+    Ptr<TcpSocketMsgBase> CreateReceiverSocket(Ptr<Node> node) override
+    {
+        node->GetObject<TcpL4Protocol>()->SetAttribute("ClockDrivenIsn", BooleanValue(true));
+        return TcpEcnTest::CreateReceiverSocket(node);
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP ECN TestSuite
  */
 class TcpEcnTestSuite : public TestSuite
@@ -586,6 +624,20 @@ class TcpEcnTestSuite : public TestSuite
             TestCase::Duration::QUICK);
         AddTestCase(
             new TcpEcnTest(
+                6,
+                "Congestion Window Reduction Test :ECN capable sender and ECN capable receiver"),
+            TestCase::Duration::QUICK);
+        AddTestCase(new TcpEcnClockDrivenIsnTest(
+                        4,
+                        "ECN Negotiation Test : ECN capable sender and ECN capable receiver"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpEcnClockDrivenIsnTest(
+                5,
+                "ECE and CWR Functionality Test: ECN capable sender and ECN capable receiver"),
+            TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpEcnClockDrivenIsnTest(
                 6,
                 "Congestion Window Reduction Test :ECN capable sender and ECN capable receiver"),
             TestCase::Duration::QUICK);

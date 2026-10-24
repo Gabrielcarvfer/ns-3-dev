@@ -38,6 +38,7 @@ class Icmpv4Header : public Header
     {
         ICMPV4_ECHO_REPLY = 0,
         ICMPV4_DEST_UNREACH = 3,
+        ICMPV4_SOURCE_QUENCH = 4,
         ICMPV4_ECHO = 8,
         ICMPV4_TIME_EXCEEDED = 11
     };

@@ -399,9 +399,9 @@ A keep-alive is an empty segment repeating the last octet acknowledged by the
 peer, which answers it with an acknowledgment. It is sent only once nothing
 was received for the idle time and no data is outstanding or waiting to be
 sent, so that neither the retransmissions nor the zero window probes are
-duplicated. The connections are probed in the ESTABLISHED and the CLOSE_WAIT
-states, the latter for a peer which closed its side and went away while the
-application keeps the connection open. Any segment received starts the idle
+duplicated. The connections are probed in the ESTABLISHED, CLOSE_WAIT and
+FIN_WAIT_2 states, as Linux does: the last two cover a half-closed connection
+whose peer went away, whichever side closed first. Any segment received starts the idle
 time anew; a connection whose peer answers none of the keep-alives is reset,
 and its application notified through *NotifyErrorClose*. Changing
 ``KeepAliveTime`` on an idle connection applies to the idle time under way.
