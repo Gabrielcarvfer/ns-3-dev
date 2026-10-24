@@ -60,6 +60,17 @@ class Ipv4FlowClassifier : public FlowClassifier
     /// @returns the FiveTuple corresponding to flowId
     FiveTuple FindFlow(FlowId flowId) const;
 
+    /// @brief Get the final destination of a datagram
+    ///
+    /// A datagram following a loose source route is addressed to the next
+    /// hop of the route, and each hop addresses it to the following one: the
+    /// final destination is the last address of the option while the route
+    /// is not exhausted, and the destination of the header afterwards.
+    ///
+    /// @param ipHeader the IP header of the datagram
+    /// @return the final destination of the datagram
+    static Ipv4Address GetFinalDestination(const Ipv4Header& ipHeader);
+
     /// Comparator used to sort the vector of DSCP values
     class SortByCount
     {

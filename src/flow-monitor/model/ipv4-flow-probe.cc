@@ -56,7 +56,8 @@ class Ipv4FlowProbeTag : public Tag
      * @param packetId the packet identifier
      * @param packetSize the packet size
      * @param src packet source address
-     * @param dst packet destination address
+     * @param dst packet final destination address (see
+     *            Ipv4FlowClassifier::GetFinalDestination)
      */
     Ipv4FlowProbeTag(uint32_t flowId,
                      uint32_t packetId,
@@ -100,7 +101,7 @@ class Ipv4FlowProbeTag : public Tag
      * This check is important for IP over IP encapsulation.
      *
      * @param src Source address.
-     * @param dst Destination address.
+     * @param dst Final destination address.
      * @returns True if the addresses are matching.
      */
     bool IsSrcDstValid(Ipv4Address src, Ipv4Address dst) const;
@@ -110,7 +111,7 @@ class Ipv4FlowProbeTag : public Tag
     uint32_t m_packetId;   //!< packet identifier
     uint32_t m_packetSize; //!< packet size
     Ipv4Address m_src;     //!< IP source
-    Ipv4Address m_dst;     //!< IP destination
+    Ipv4Address m_dst;     //!< Final IP destination
 };
 
 TypeId
@@ -344,7 +345,7 @@ Ipv4FlowProbe::SendOutgoingLogger(const Ipv4Header& ipHeader,
                               packetId,
                               size,
                               ipHeader.GetSource(),
-                              ipHeader.GetDestination());
+                              Ipv4FlowClassifier::GetFinalDestination(ipHeader));
         ipPayload->AddByteTag(fTag);
     }
 }
@@ -364,7 +365,8 @@ Ipv4FlowProbe::ForwardLogger(const Ipv4Header& ipHeader,
             NS_LOG_WARN("Not counting fragmented packets");
             return;
         }
-        if (!fTag.IsSrcDstValid(ipHeader.GetSource(), ipHeader.GetDestination()))
+        if (!fTag.IsSrcDstValid(ipHeader.GetSource(),
+                                Ipv4FlowClassifier::GetFinalDestination(ipHeader)))
         {
             NS_LOG_LOGIC("Not reporting encapsulated packet");
             return;
@@ -390,7 +392,8 @@ Ipv4FlowProbe::ForwardUpLogger(const Ipv4Header& ipHeader,
 
     if (found)
     {
-        if (!fTag.IsSrcDstValid(ipHeader.GetSource(), ipHeader.GetDestination()))
+        if (!fTag.IsSrcDstValid(ipHeader.GetSource(),
+                                Ipv4FlowClassifier::GetFinalDestination(ipHeader)))
         {
             NS_LOG_LOGIC("Not reporting encapsulated packet");
             return;

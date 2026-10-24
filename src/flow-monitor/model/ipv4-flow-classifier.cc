@@ -81,6 +81,21 @@ Ipv4FlowClassifier::Ipv4FlowClassifier()
 {
 }
 
+Ipv4Address
+Ipv4FlowClassifier::GetFinalDestination(const Ipv4Header& ipHeader)
+{
+    if (ipHeader.HasLooseSourceRoute())
+    {
+        std::vector<Ipv4Address> route = ipHeader.GetLooseSourceRoute();
+        uint8_t pointer = ipHeader.GetSourceRoutePointer();
+        if (!route.empty() && pointer >= 4 && (pointer - 4) / 4U < route.size())
+        {
+            return route.back();
+        }
+    }
+    return ipHeader.GetDestination();
+}
+
 bool
 Ipv4FlowClassifier::Classify(const Ipv4Header& ipHeader,
                              Ptr<const Packet> ipPayload,
@@ -95,7 +110,7 @@ Ipv4FlowClassifier::Classify(const Ipv4Header& ipHeader,
 
     FiveTuple tuple;
     tuple.sourceAddress = ipHeader.GetSource();
-    tuple.destinationAddress = ipHeader.GetDestination();
+    tuple.destinationAddress = GetFinalDestination(ipHeader);
     tuple.protocol = ipHeader.GetProtocol();
 
     if ((tuple.protocol != iana::internetprotocolnumbers::UDP) &&
