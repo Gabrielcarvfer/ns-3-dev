@@ -16,6 +16,13 @@ except ModuleNotFoundError:
         " or your PYTHONPATH might not be properly configured"
     )
 
+import sys
+
+# Parse ns-3 command-line arguments (attributes, global values such as
+# --SimulatorImplementationType=ns3::VisualSimulatorImpl used by --vis).
+cmd = ns.CommandLine(__file__)
+cmd.Parse(sys.argv)
+
 ns.LogComponentEnable("OpenFlowInterface", ns.LOG_LEVEL_ALL)
 ns.LogComponentEnable("OpenFlowSwitchNetDevice", ns.LOG_LEVEL_ALL)
 
