@@ -875,6 +875,27 @@ class TcpSocketBase : public TcpSocket
                                  const Address& toAddress);
 
     /**
+     * @brief Run the checks shared by the IPv4 and IPv6 receive paths
+     *
+     * The segment is counted in the Linux receive buffers, dropped if
+     * IsValidTcpSegment rejects it (its urgent pointer still being
+     * processed), and resets the connection if it carries a malformed option
+     * (see AbortOnMalformedSegment).
+     *
+     * @param tcpHeader the header of the segment
+     * @param tcpHeaderSize the size of the header of the segment
+     * @param payloadSize the size of the data of the segment
+     * @param fromAddress the source address of the segment
+     * @param toAddress the destination address of the segment
+     * @return true if the segment is to be processed further
+     */
+    bool AcceptIncomingSegment(const TcpHeader& tcpHeader,
+                               uint32_t tcpHeaderSize,
+                               uint32_t payloadSize,
+                               const Address& fromAddress,
+                               const Address& toAddress);
+
+    /**
      * @brief Checks whether the given TCP segment is valid or not.
      *
      * A segment lying outside the receive window is acknowledged and dropped
@@ -2085,6 +2106,14 @@ class TcpSocketBase : public TcpSocket
      * @return The initial sequence number.
      */
     SequenceNumber32 GenerateIsn() const;
+
+    /**
+     * @brief Get the connection identifying parameters hashed by GenerateIsn
+     * and GenerateTimestampOffset
+     *
+     * @return the local and peer addresses and ports, separated by colons
+     */
+    std::string ConnectionIdentity() const;
 
     /**
      * @brief Select the initial sequence number of a new connection

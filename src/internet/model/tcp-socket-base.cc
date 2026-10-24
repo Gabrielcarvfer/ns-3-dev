@@ -85,7 +85,7 @@ const std::map<std::pair<ns3::TcpSocketBase::TcpPacketType_t, ns3::TcpSocketStat
         {{ns3::TcpSocketBase::RST, ns3::TcpSocketState::DctcpEcn}, true},
         {{ns3::TcpSocketBase::RE_XMT, ns3::TcpSocketState::DctcpEcn}, true},
         {{ns3::TcpSocketBase::DATA, ns3::TcpSocketState::DctcpEcn}, true},
-};
+    };
 
 /// Memory of the sk_buff structure of Linux 6.12 (SKB_DATA_ALIGN(sizeof(struct sk_buff)))
 constexpr uint32_t LINUX_SKB_STRUCT_SIZE = 224;
@@ -1815,30 +1815,15 @@ TcpSocketBase::ForwardUp(Ptr<Packet> packet,
     Address fromAddress = InetSocketAddress(header.GetSource(), port);
     Address toAddress = InetSocketAddress(header.GetDestination(), m_endPoint->GetLocalPort());
 
-    if (m_linuxRcvWindow)
-    {
-        // Each segment received, even dropped as unacceptable, takes a
-        // receive buffer of the Linux driver
-        ++m_lxRxPackets;
-    }
-
     TcpHeader tcpHeader;
     uint32_t bytesRemoved = packet->PeekHeader(tcpHeader);
 
-    if (!IsValidTcpSegment(tcpHeader, bytesRemoved, packet->GetSize() - bytesRemoved))
+    if (!AcceptIncomingSegment(tcpHeader,
+                               bytesRemoved,
+                               packet->GetSize() - bytesRemoved,
+                               fromAddress,
+                               toAddress))
     {
-        ProcessUrgentOfDroppedSegment(tcpHeader, packet->GetSize() - bytesRemoved);
-        return;
-    }
-
-    if (tcpHeader.IsMalformed() && !(tcpHeader.GetFlags() & TcpHeader::RST))
-    {
-        // Only an acceptable segment resets the connection; a reset needs no
-        // option to be processed
-        AbortOnMalformedSegment(tcpHeader,
-                                packet->GetSize() - bytesRemoved,
-                                fromAddress,
-                                toAddress);
         return;
     }
 
@@ -1880,30 +1865,15 @@ TcpSocketBase::ForwardUp6(Ptr<Packet> packet,
     Address fromAddress = Inet6SocketAddress(header.GetSource(), port);
     Address toAddress = Inet6SocketAddress(header.GetDestination(), m_endPoint6->GetLocalPort());
 
-    if (m_linuxRcvWindow)
-    {
-        // Each segment received, even dropped as unacceptable, takes a
-        // receive buffer of the Linux driver
-        ++m_lxRxPackets;
-    }
-
     TcpHeader tcpHeader;
     uint32_t bytesRemoved = packet->PeekHeader(tcpHeader);
 
-    if (!IsValidTcpSegment(tcpHeader, bytesRemoved, packet->GetSize() - bytesRemoved))
+    if (!AcceptIncomingSegment(tcpHeader,
+                               bytesRemoved,
+                               packet->GetSize() - bytesRemoved,
+                               fromAddress,
+                               toAddress))
     {
-        ProcessUrgentOfDroppedSegment(tcpHeader, packet->GetSize() - bytesRemoved);
-        return;
-    }
-
-    if (tcpHeader.IsMalformed() && !(tcpHeader.GetFlags() & TcpHeader::RST))
-    {
-        // Only an acceptable segment resets the connection; a reset needs no
-        // option to be processed
-        AbortOnMalformedSegment(tcpHeader,
-                                packet->GetSize() - bytesRemoved,
-                                fromAddress,
-                                toAddress);
         return;
     }
 
@@ -1981,6 +1951,38 @@ TcpSocketBase::NotifyReset()
     NS_LOG_DEBUG(TcpStateName[m_state] << " -> CLOSED");
     m_state = CLOSED;
     NotifyErrorClose();
+}
+
+bool
+TcpSocketBase::AcceptIncomingSegment(const TcpHeader& tcpHeader,
+                                     uint32_t tcpHeaderSize,
+                                     uint32_t payloadSize,
+                                     const Address& fromAddress,
+                                     const Address& toAddress)
+{
+    NS_LOG_FUNCTION(this << tcpHeader << tcpHeaderSize << payloadSize);
+
+    if (m_linuxRcvWindow)
+    {
+        // Each segment received, even dropped as unacceptable, takes a
+        // receive buffer of the Linux driver
+        ++m_lxRxPackets;
+    }
+
+    if (!IsValidTcpSegment(tcpHeader, tcpHeaderSize, payloadSize))
+    {
+        ProcessUrgentOfDroppedSegment(tcpHeader, payloadSize);
+        return false;
+    }
+
+    if (tcpHeader.IsMalformed() && !(tcpHeader.GetFlags() & TcpHeader::RST))
+    {
+        // Only an acceptable segment resets the connection; a reset needs no
+        // option to be processed
+        AbortOnMalformedSegment(tcpHeader, payloadSize, fromAddress, toAddress);
+        return false;
+    }
+    return true;
 }
 
 void
@@ -8665,15 +8667,9 @@ TcpSocketBase::SelectIsn()
     m_sndFack = m_tcb->m_nextTxSequence.Get().GetValue();
 }
 
-SequenceNumber32
-TcpSocketBase::GenerateIsn() const
+std::string
+TcpSocketBase::ConnectionIdentity() const
 {
-    NS_LOG_FUNCTION(this);
-
-    // M, the 4 microsecond clock (RFC 9293, Section 3.4.1)
-    uint32_t clock = static_cast<uint32_t>(Simulator::Now().GetMicroSeconds() / 4);
-
-    // F(), a hash of the connection identifying parameters and of a secret key
     std::ostringstream identity;
     if (m_endPoint != nullptr)
     {
@@ -8685,9 +8681,20 @@ TcpSocketBase::GenerateIsn() const
         identity << m_endPoint6->GetLocalAddress() << ":" << m_endPoint6->GetLocalPort() << ":"
                  << m_endPoint6->GetPeerAddress() << ":" << m_endPoint6->GetPeerPort();
     }
-    identity << ":" << m_tcp->GetIsnSecret();
+    return identity.str();
+}
 
-    SequenceNumber32 isn(clock + Hash32(identity.str()));
+SequenceNumber32
+TcpSocketBase::GenerateIsn() const
+{
+    NS_LOG_FUNCTION(this);
+
+    // M, the 4 microsecond clock (RFC 9293, Section 3.4.1)
+    uint32_t clock = static_cast<uint32_t>(Simulator::Now().GetMicroSeconds() / 4);
+
+    // F(), a hash of the connection identifying parameters and of a secret key
+    SequenceNumber32 isn(
+        clock + Hash32(ConnectionIdentity() + ":" + std::to_string(m_tcp->GetIsnSecret())));
     NS_LOG_LOGIC("Generated the initial sequence number " << isn);
     return isn;
 }
@@ -8699,20 +8706,7 @@ TcpSocketBase::GenerateTimestampOffset() const
 
     // The same function as the initial sequence number, with a different key
     // (RFC 7323, Section 5.4)
-    std::ostringstream identity;
-    if (m_endPoint != nullptr)
-    {
-        identity << m_endPoint->GetLocalAddress() << ":" << m_endPoint->GetLocalPort() << ":"
-                 << m_endPoint->GetPeerAddress() << ":" << m_endPoint->GetPeerPort();
-    }
-    else if (m_endPoint6 != nullptr)
-    {
-        identity << m_endPoint6->GetLocalAddress() << ":" << m_endPoint6->GetLocalPort() << ":"
-                 << m_endPoint6->GetPeerAddress() << ":" << m_endPoint6->GetPeerPort();
-    }
-    identity << ":ts:" << m_tcp->GetIsnSecret();
-
-    uint32_t offset = Hash32(identity.str());
+    uint32_t offset = Hash32(ConnectionIdentity() + ":ts:" + std::to_string(m_tcp->GetIsnSecret()));
     NS_LOG_LOGIC("Generated the timestamp offset " << offset);
     return offset;
 }
