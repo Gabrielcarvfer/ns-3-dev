@@ -182,8 +182,9 @@ TcpVenoTest::DoRun()
                                   "multiplicative decrease algo.");
         }
 
-        // Our calculation of cwnd
-        if (cntRtt <= 2)
+        // Our calculation of cwnd. Veno counts the RTT samples since the start
+        // of the connection: the one setting baseRtt, and one per ACK
+        if (cntRtt + 2 <= 2)
         {
             NewReno_IncreaseWindow(&state, 1);
         }
@@ -237,9 +238,8 @@ TcpVenoTest::MultiplicativeDecrease(uint32_t diff,
     uint32_t calculatedSsThresh;
     if (diff < beta.Get())
     {
-        static double tmp = 4.0 / 5.0;
-        calculatedSsThresh =
-            std::max(2 * m_segmentSize, static_cast<uint32_t>(bytesInFlight * tmp));
+        // The window, in segments, is reduced to 4/5
+        calculatedSsThresh = std::max(2U, bytesInFlight / m_segmentSize * 4 / 5) * m_segmentSize;
     }
     else
     {
@@ -289,6 +289,101 @@ TcpVenoTest::NewReno_CongestionAvoidance(Ptr<TcpSocketState> state, uint32_t seg
 /**
  * @ingroup internet-test
  *
+ * @brief Testing the reduction of TcpVeno on a random loss
+ *
+ * On a loss in the non-congestive state, the window of 100 segments is
+ * reduced to 4/5 of it, as in the Veno paper and in Linux
+ * (tcp_veno_ssthresh()), whatever the data in flight, which the lost and
+ * SACKed segments reduce.
+ */
+class TcpVenoRandomLossTest : public TestCase
+{
+  public:
+    TcpVenoRandomLossTest()
+        : TestCase("Random loss reduces the window by a fifth")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 100 * segmentSize + 500;
+        Ptr<TcpVeno> cong = CreateObject<TcpVeno>();
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 90 * segmentSize),
+                              80 * segmentSize,
+                              "The window, in segments, must be reduced to 4/5");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing the Linux arithmetic of TcpVeno
+ *
+ * With the LinuxArithmetic attribute, as Linux tcp_veno_cong_avoid(), a
+ * window of 10 segments whose RTT doubled (a difference of 11 half segments)
+ * is in the congestive state: the window grows by a segment on the ACK which
+ * follows a window of acknowledged segments, and only every other such
+ * window, i.e., after 11 and 35 ACKs of a segment. The window is then
+ * halved in whole segments on a loss (tcp_veno_ssthresh()).
+ */
+class TcpVenoLinuxTest : public TestCase
+{
+  public:
+    TcpVenoLinuxTest()
+        : TestCase("Linux arithmetic in the congestive state")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 10 * segmentSize;
+        state->m_ssThresh = 5 * segmentSize;
+        Ptr<TcpVeno> cong = CreateObject<TcpVeno>();
+        cong->SetAttribute("CountAckedSegments", BooleanValue(true));
+        cong->SetAttribute("LinuxArithmetic", BooleanValue(true));
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            cong->PktsAcked(state, 1, MilliSeconds(100));
+        }
+        auto ack = [&]() {
+            cong->PktsAcked(state, 1, MilliSeconds(200));
+            cong->IncreaseWindow(state, 1);
+        };
+        for (uint32_t i = 0; i < 10; ++i)
+        {
+            ack();
+        }
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 10 * segmentSize, "Unexpected increase");
+        ack();
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              11 * segmentSize,
+                              "The ACK after a window must add a segment");
+        for (uint32_t i = 0; i < 23; ++i)
+        {
+            ack();
+        }
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              11 * segmentSize,
+                              "Only every other window must add a segment");
+        ack();
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 12 * segmentSize, "Unexpected window");
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 11 * segmentSize),
+                              6 * segmentSize,
+                              "The window must be halved in whole segments");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP Veno TestSuite
  */
 class TcpVenoTestSuite : public TestSuite
@@ -297,6 +392,8 @@ class TcpVenoTestSuite : public TestSuite
     TcpVenoTestSuite()
         : TestSuite("tcp-veno-test", Type::UNIT)
     {
+        AddTestCase(new TcpVenoRandomLossTest(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpVenoLinuxTest(), TestCase::Duration::QUICK);
         AddTestCase(new TcpVenoTest(38 * 1446,
                                     1446,
                                     40 * 1446,
@@ -320,6 +417,15 @@ class TcpVenoTestSuite : public TestSuite
                                     1,
                                     3,
                                     "Veno increment test on cWnd with diff > beta"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpVenoTest(60 * 536,
+                                    536,
+                                    40 * 536,
+                                    MilliSeconds(106),
+                                    1,
+                                    8,
+                                    "Veno increment test on cWnd with diff > beta, over "
+                                    "several ACKs"),
                     TestCase::Duration::QUICK);
     }
 };

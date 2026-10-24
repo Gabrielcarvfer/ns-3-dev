@@ -16,6 +16,7 @@
 
 #include "tcp-socket-state.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 
 namespace ns3
@@ -45,7 +46,21 @@ TcpVegas::GetTypeId()
                                           "Limit on increase",
                                           UintegerValue(1),
                                           MakeUintegerAccessor(&TcpVegas::m_gamma),
-                                          MakeUintegerChecker<uint32_t>());
+                                          MakeUintegerChecker<uint32_t>())
+                            .AddAttribute("LinuxCongAvoid",
+                                          "Delimit the RTT cycles and compute Diff as Linux "
+                                          "does: a cycle ends with the first ACK beyond the "
+                                          "data sent when it started, and Diff is "
+                                          "cwnd * (minRtt - baseRtt) / baseRtt",
+                                          BooleanValue(false),
+                                          MakeBooleanAccessor(&TcpVegas::m_linuxCongAvoid),
+                                          MakeBooleanChecker())
+                            .AddAttribute("LinuxIdleRestart",
+                                          "Restart Vegas, BaseRTT included, when data is sent "
+                                          "with none in flight, as Linux does",
+                                          BooleanValue(false),
+                                          MakeBooleanAccessor(&TcpVegas::m_linuxIdleRestart),
+                                          MakeBooleanChecker());
     return tid;
 }
 
@@ -68,6 +83,8 @@ TcpVegas::TcpVegas(const TcpVegas& sock)
       m_alpha(sock.m_alpha),
       m_beta(sock.m_beta),
       m_gamma(sock.m_gamma),
+      m_linuxCongAvoid(sock.m_linuxCongAvoid),
+      m_linuxIdleRestart(sock.m_linuxIdleRestart),
       m_baseRtt(sock.m_baseRtt),
       m_minRtt(sock.m_minRtt),
       m_cntRtt(sock.m_cntRtt),
@@ -132,6 +149,7 @@ void
 TcpVegas::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCongState_t newState)
 {
     NS_LOG_FUNCTION(this << tcb << newState);
+    TcpNewReno::CongestionStateSet(tcb, newState);
     if (newState == TcpSocketState::CA_OPEN)
     {
         EnableVegas(tcb);
@@ -139,6 +157,21 @@ TcpVegas::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpC
     else
     {
         DisableVegas();
+    }
+}
+
+void
+TcpVegas::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event)
+{
+    NS_LOG_FUNCTION(this << tcb << event);
+
+    // tcp_vegas_cwnd_event() of Linux: the RTT samples taken before the
+    // connection went idle are stale, BaseRTT included
+    if (m_linuxIdleRestart && (event == TcpSocketState::CA_EVENT_TX_START ||
+                               event == TcpSocketState::CA_EVENT_CWND_RESTART))
+    {
+        m_baseRtt = Time::Max();
+        EnableVegas(tcb);
     }
 }
 
@@ -155,7 +188,10 @@ TcpVegas::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         return;
     }
 
-    if (tcb->m_lastAckedSeq >= m_begSndNxt)
+    // Linux (tcp_vegas_cong_avoid()) waits for the ACK of data sent in the
+    // next cycle
+    if (tcb->m_lastAckedSeq > m_begSndNxt ||
+        (!m_linuxCongAvoid && tcb->m_lastAckedSeq == m_begSndNxt))
     { // A Vegas cycle has finished, we do Vegas cwnd adjustment every RTT.
 
         NS_LOG_LOGIC("A Vegas cycle has finished, we adjust cwnd once per RTT.");
@@ -204,6 +240,12 @@ TcpVegas::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
              * the actual cWnd
              */
             diff = segCwnd - targetCwnd;
+            if (m_linuxCongAvoid)
+            {
+                // The queued segments relative to the base RTT, rounded down
+                diff = static_cast<uint32_t>(segCwnd * (m_minRtt - m_baseRtt).GetNanoSeconds() /
+                                             m_baseRtt.GetNanoSeconds());
+            }
             NS_LOG_DEBUG("Calculated diff = " << diff);
 
             if (diff > m_gamma && (tcb->m_cWnd < tcb->m_ssThresh))
@@ -217,7 +259,7 @@ TcpVegas::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
                              "change to linear increase/decrease mode.");
                 segCwnd = std::min(segCwnd, targetCwnd + 1);
                 tcb->m_cWnd = segCwnd * tcb->m_segmentSize;
-                tcb->m_ssThresh = GetSsThresh(tcb, 0);
+                tcb->m_ssThresh = VegasSsThresh(tcb);
                 NS_LOG_DEBUG("Updated cwnd = " << tcb->m_cWnd << " ssthresh=" << tcb->m_ssThresh);
             }
             else if (tcb->m_cWnd < tcb->m_ssThresh)
@@ -235,7 +277,7 @@ TcpVegas::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
                     NS_LOG_LOGIC("We are going too fast, so we slow down by decrementing cwnd");
                     segCwnd--;
                     tcb->m_cWnd = segCwnd * tcb->m_segmentSize;
-                    tcb->m_ssThresh = GetSsThresh(tcb, 0);
+                    tcb->m_ssThresh = VegasSsThresh(tcb);
                     NS_LOG_DEBUG("Updated cwnd = " << tcb->m_cWnd
                                                    << " ssthresh=" << tcb->m_ssThresh);
                 }
@@ -279,6 +321,13 @@ uint32_t
 TcpVegas::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
+    return std::max(tcb->m_cWnd.Get() / 2, 2 * tcb->m_segmentSize);
+}
+
+uint32_t
+TcpVegas::VegasSsThresh(Ptr<const TcpSocketState> tcb) const
+{
+    NS_LOG_FUNCTION(this << tcb);
     return std::max(std::min(tcb->m_ssThresh.Get(), tcb->m_cWnd.Get() - tcb->m_segmentSize),
                     2 * tcb->m_segmentSize);
 }

@@ -110,8 +110,14 @@ class TcpVegas : public TcpNewReno
      */
     void IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
 
+    void CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event) override;
+
     /**
-     * @brief Get slow start threshold following Vegas principle
+     * @brief Get the slow start threshold after a loss
+     *
+     * As in Linux (tcp_reno_ssthresh()), a loss halves the congestion window,
+     * like Reno. The reductions of the window decided by Vegas itself, once
+     * per RTT, use VegasSsThresh() instead.
      *
      * @param tcb internal congestion state
      * @param bytesInFlight bytes in flight
@@ -141,10 +147,21 @@ class TcpVegas : public TcpNewReno
      */
     void DisableVegas();
 
+    /**
+     * @brief Get the slow start threshold when Vegas reduces the window
+     *
+     * @param tcb internal congestion state
+     *
+     * @return the slow start threshold value
+     */
+    uint32_t VegasSsThresh(Ptr<const TcpSocketState> tcb) const;
+
   private:
-    uint32_t m_alpha;             //!< Alpha threshold, lower bound of packets in network
-    uint32_t m_beta;              //!< Beta threshold, upper bound of packets in network
-    uint32_t m_gamma;             //!< Gamma threshold, limit on increase
+    uint32_t m_alpha;               //!< Alpha threshold, lower bound of packets in network
+    uint32_t m_beta;                //!< Beta threshold, upper bound of packets in network
+    uint32_t m_gamma;               //!< Gamma threshold, limit on increase
+    bool m_linuxCongAvoid{false};   //!< Delimit the cycles and compute Diff as Linux does
+    bool m_linuxIdleRestart{false}; //!< Restart Vegas when sending with none in flight
     Time m_baseRtt;               //!< Minimum of all Vegas RTT measurements seen during connection
     Time m_minRtt;                //!< Minimum of all RTT measurements within last RTT
     uint32_t m_cntRtt;            //!< Number of RTT measurements during last RTT

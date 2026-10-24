@@ -12,6 +12,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-socket-base.h"
@@ -182,7 +183,7 @@ TcpYeahIncrementTest::IncreaseWindow(Ptr<TcpYeah> cong)
             UintegerValue zeta;
             cong->GetAttribute("Zeta", zeta);
 
-            if (queue > alpha.Get() || L > (1 / phy.Get()))
+            if (queue > alpha.Get() || L > (1.0 / phy.Get()))
             { // Slow mode
                 NS_LOG_INFO("Enter Slow mode");
                 if (queue > alpha.Get() && segCwnd > m_renoCount)
@@ -347,6 +348,187 @@ TcpYeahDecrementTest::CalculateSsThresh(Ptr<TcpYeah> cong)
 /**
  * @ingroup internet-test
  *
+ * @brief Test that a queueing delay below 1/Phy of the base RTT keeps
+ * TcpYeah in its Fast mode
+ *
+ * YeAH enters its Slow mode when the backlog exceeds Alpha or when the
+ * congestion level L = (RTT - BaseRTT) / BaseRTT exceeds 1/Phy (Linux:
+ * rtt - baseRTT > baseRTT / TCP_YEAH_PHY). With a base RTT of 100 ms and a
+ * minimum RTT of 105 ms, L is 0.05, below 1/8, and the backlog of a window of
+ * 200 segments is 9 segments, below 80: YeAH stays in the Fast mode, where
+ * 100 acknowledged segments grow the window by one segment (Scalable rule).
+ */
+class TcpYeahFastModeTest : public TestCase
+{
+  public:
+    TcpYeahFastModeTest()
+        : TestCase("YeAH stays in Fast mode with a small congestion level")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t mss = 1448;
+        auto state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = mss;
+        state->m_cWnd = 200 * mss;
+        state->m_ssThresh = 100 * mss;
+        state->m_nextTxSequence = SequenceNumber32(1);
+        state->m_lastAckedSeq = SequenceNumber32(1);
+
+        auto cong = CreateObject<TcpYeah>();
+        cong->PktsAcked(state, 1, MilliSeconds(100));
+        cong->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            cong->PktsAcked(state, 1, MilliSeconds(105));
+        }
+        // Ends the YeAH cycle, which chooses the mode
+        cong->IncreaseWindow(state, 1);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 200 * mss, "Unexpected window growth");
+
+        cong->IncreaseWindow(state, 100);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              201 * mss,
+                              "YeAH left the Fast mode with a congestion level below 1/Phy");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Test the window growth of TcpYeah with the CountAckedSegments
+ * attribute of TcpNewReno set, against Linux tcp_yeah_cong_avoid()
+ *
+ * Linux grows the window of both modes of YeAH (Scalable and Reno) with
+ * tcp_cong_avoid_ai() on the single count snd_cwnd_cnt, which a window
+ * reduction clears, and passes the segments acknowledged beyond ssThresh
+ * from slow start to the congestion avoidance.
+ */
+class TcpYeahCountedIncreaseTest : public TestCase
+{
+  public:
+    TcpYeahCountedIncreaseTest()
+        : TestCase("YeAH grows the window from the count of TcpNewReno as Linux")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t mss = 1448;
+        auto state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = mss;
+
+        // Fast (Scalable) mode with a window of 200 segments: one segment of
+        // growth per 100 acknowledged segments (StcpAiFactor)
+        auto cong = CreateObject<TcpYeah>();
+        cong->SetAttribute("CountAckedSegments", BooleanValue(true));
+        state->m_cWnd = 200 * mss;
+        state->m_ssThresh = 100 * mss;
+        for (uint32_t i = 0; i < 99; ++i)
+        {
+            cong->IncreaseWindow(state, 1);
+        }
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 200 * mss, "Early window growth");
+
+        // The reduction clears the count of the Scalable mode as well
+        cong->CongestionStateSet(state, TcpSocketState::CA_RECOVERY);
+        state->m_cWnd = 150 * mss;
+        state->m_ssThresh = 150 * mss;
+        cong->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+        cong->IncreaseWindow(state, 1);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              150 * mss,
+                              "The count of acknowledged segments survived the recovery");
+        for (uint32_t i = 0; i < 99; ++i)
+        {
+            cong->IncreaseWindow(state, 1);
+        }
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 151 * mss, "No growth after 100 segments");
+
+        // The segments acknowledged beyond ssThresh go to the congestion
+        // avoidance: 1 completes the slow start, 10 grow a window of 10
+        cong = CreateObject<TcpYeah>();
+        cong->SetAttribute("CountAckedSegments", BooleanValue(true));
+        state->m_cWnd = 9 * mss;
+        state->m_ssThresh = 10 * mss;
+        cong->IncreaseWindow(state, 11);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              11 * mss,
+                              "The segments acknowledged beyond ssThresh were lost");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing the end of the YeAH RTT with the Linux arithmetic
+ *
+ * A window of 200 segments whose minimum RTT doubled holds a queue of 100
+ * segments, more than Alpha (80): the precautionary decongestion removes it
+ * at the end of the RTT (99 segments with the RTT samples of Linux, in
+ * microseconds plus one). By default, the RTT ends with the ACK of its right
+ * edge; with the LinuxArithmetic attribute, as Linux tcp_yeah_cong_avoid()
+ * (after(ack, beg_snd_nxt)), only with an ACK after it.
+ */
+class TcpYeahLinuxRttTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor
+     * @param linuxArithmetic Whether the LinuxArithmetic attribute is set
+     * @param name Test description
+     */
+    TcpYeahLinuxRttTest(bool linuxArithmetic, const std::string& name)
+        : TestCase(name),
+          m_linux(linuxArithmetic)
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 200 * segmentSize;
+        state->m_ssThresh = 100 * segmentSize;
+        state->m_nextTxSequence = SequenceNumber32(1000);
+        state->m_highTxMark = SequenceNumber32(1000);
+        Ptr<TcpYeah> cong = CreateObject<TcpYeah>();
+        cong->SetAttribute("LinuxArithmetic", BooleanValue(m_linux));
+        cong->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+        cong->PktsAcked(state, 1, MilliSeconds(100));
+        // A first RTT, with too few samples
+        state->m_lastAckedSeq = SequenceNumber32(1001);
+        state->m_nextTxSequence = SequenceNumber32(2000);
+        state->m_highTxMark = SequenceNumber32(2000);
+        cong->IncreaseWindow(state, 0);
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            cong->PktsAcked(state, 1, MilliSeconds(200));
+        }
+        state->m_lastAckedSeq = SequenceNumber32(2000);
+        cong->IncreaseWindow(state, 0);
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              (m_linux ? 200 : 100) * segmentSize,
+                              "Unexpected window at the right edge of the RTT");
+        state->m_lastAckedSeq = SequenceNumber32(2001);
+        cong->IncreaseWindow(state, 0);
+        // In Linux, the RTTs of 100.001 and 200.001 ms make a queue of 99 segments
+        NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                              (m_linux ? 101 : 100) * segmentSize,
+                              "The decongestion must remove the queue");
+    }
+
+    bool m_linux; //!< Whether the LinuxArithmetic attribute is set
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP Yeah TestSuite
  */
 class TcpYeahTestSuite : public TestSuite
@@ -355,6 +537,12 @@ class TcpYeahTestSuite : public TestSuite
     TcpYeahTestSuite()
         : TestSuite("tcp-yeah-test", Type::UNIT)
     {
+        AddTestCase(new TcpYeahCountedIncreaseTest(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpYeahLinuxRttTest(false, "RTT ending at its right edge"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpYeahLinuxRttTest(true, "RTT ending after its right edge as Linux"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpYeahFastModeTest(), TestCase::Duration::QUICK);
         AddTestCase(new TcpYeahIncrementTest(20 * 1446,
                                              25 * 1446,
                                              1446,

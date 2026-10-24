@@ -14,6 +14,7 @@
 
 #include "tcp-yeah.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 
 namespace ns3
@@ -69,7 +70,17 @@ TcpYeah::GetTypeId()
                           "STCP additive increase factor",
                           UintegerValue(100),
                           MakeUintegerAccessor(&TcpYeah::m_stcpAiFactor),
-                          MakeUintegerChecker<uint32_t>());
+                          MakeUintegerChecker<uint32_t>())
+            .AddAttribute("LinuxArithmetic",
+                          "Compute as the tcp_yeah.c of Linux does, with the Vegas helpers of "
+                          "tcp_vegas.c: the RTT samples in microseconds plus one, the queue "
+                          "and the congestion level in integers, the RTT ending once the ACK "
+                          "is after the highest sequence number sent when it started, and the "
+                          "restart of the RTT measurements, BaseRTT included, when data is "
+                          "sent with none in flight",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpYeah::m_linuxArithmetic),
+                          MakeBooleanChecker());
     return tid;
 }
 
@@ -117,7 +128,8 @@ TcpYeah::TcpYeah(const TcpYeah& sock)
       m_lastQ(sock.m_lastQ),
       m_doingRenoNow(sock.m_doingRenoNow),
       m_renoCount(sock.m_renoCount),
-      m_fastCount(sock.m_fastCount)
+      m_fastCount(sock.m_fastCount),
+      m_linuxArithmetic(sock.m_linuxArithmetic)
 {
     NS_LOG_FUNCTION(this);
     m_stcp = CopyObject(sock.m_stcp);
@@ -144,10 +156,13 @@ TcpYeah::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& 
         return;
     }
 
-    m_minRtt = std::min(m_minRtt, rtt);
+    // Linux tcp_vegas_pkts_acked(): microseconds, plus one so that no RTT is zero
+    Time sample = m_linuxArithmetic ? MicroSeconds(rtt.GetMicroSeconds() + 1) : rtt;
+
+    m_minRtt = std::min(m_minRtt, sample);
     NS_LOG_DEBUG("Updated m_minRtt = " << m_minRtt.GetMilliSeconds() << " ms");
 
-    m_baseRtt = std::min(m_baseRtt, rtt);
+    m_baseRtt = std::min(m_baseRtt, sample);
     NS_LOG_DEBUG("Updated m_baseRtt = " << m_baseRtt.GetMilliSeconds() << " ms");
 
     // Update RTT counter
@@ -178,10 +193,11 @@ void
 TcpYeah::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCongState_t newState)
 {
     NS_LOG_FUNCTION(this << tcb << newState);
+    TcpNewReno::CongestionStateSet(tcb, newState);
 
     if (newState == TcpSocketState::CA_OPEN)
     {
-        EnableYeah(tcb->m_nextTxSequence);
+        EnableYeah(m_linuxArithmetic ? tcb->m_highTxMark.Get() : tcb->m_nextTxSequence.Get());
     }
     else
     {
@@ -190,11 +206,44 @@ TcpYeah::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCo
 }
 
 void
+TcpYeah::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event)
+{
+    NS_LOG_FUNCTION(this << tcb << event);
+
+    // Linux tcp_vegas_cwnd_event(): tcp_vegas_init() on a (re)start of the
+    // transmissions
+    if (m_linuxArithmetic && (event == TcpSocketState::CA_EVENT_TX_START ||
+                              event == TcpSocketState::CA_EVENT_CWND_RESTART))
+    {
+        m_baseRtt = Time::Max();
+        EnableYeah(tcb->m_highTxMark);
+    }
+}
+
+void
 TcpYeah::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
 
-    if (tcb->m_cWnd < tcb->m_ssThresh)
+    if (CountsAckedSegments())
+    {
+        // Linux tcp_yeah_cong_avoid(): the segments acknowledged beyond
+        // ssThresh go to the congestion avoidance, and the Scalable and Reno
+        // modes grow the window from the same count of acknowledged
+        // segments (snd_cwnd_cnt)
+        if (tcb->m_cWnd < tcb->m_ssThresh)
+        {
+            segmentsAcked = TcpNewReno::SlowStart(tcb, segmentsAcked);
+        }
+        if (segmentsAcked > 0 && tcb->m_cWnd >= tcb->m_ssThresh)
+        {
+            uint32_t segCwnd = tcb->m_cWnd / tcb->m_segmentSize;
+            CountedIncrease(tcb,
+                            segmentsAcked,
+                            m_doingRenoNow ? segCwnd : std::min(segCwnd, m_stcpAiFactor));
+        }
+    }
+    else if (tcb->m_cWnd < tcb->m_ssThresh)
     {
         NS_LOG_LOGIC("In slow start, invoke NewReno slow start.");
         TcpNewReno::SlowStart(tcb, segmentsAcked);
@@ -211,7 +260,7 @@ TcpYeah::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         TcpNewReno::CongestionAvoidance(tcb, segmentsAcked);
     }
 
-    if (tcb->m_lastAckedSeq >= m_begSndNxt)
+    if (m_linuxArithmetic ? tcb->m_lastAckedSeq > m_begSndNxt : tcb->m_lastAckedSeq >= m_begSndNxt)
     { // A YeAH cycle has finished, we do YeAH cwnd adjustment every RTT.
 
         NS_LOG_LOGIC("A YeAH cycle has finished, check if enough RTT samples.");
@@ -237,17 +286,30 @@ TcpYeah::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
             Time rttQueue = m_minRtt - m_baseRtt;
 
             // queue = rttQueue * bw = rttQueue * (cwnd/RTTmin)
-            double bw = segCwnd / m_minRtt.GetSeconds();
-            auto queue = static_cast<uint32_t>(bw * rttQueue.GetSeconds());
+            uint32_t queue;
+            bool congested;
+            if (m_linuxArithmetic)
+            {
+                // In integer microseconds
+                auto minRtt = static_cast<uint64_t>(m_minRtt.GetMicroSeconds());
+                auto baseRtt = static_cast<uint64_t>(m_baseRtt.GetMicroSeconds());
+                queue = static_cast<uint32_t>(segCwnd * (minRtt - baseRtt) / minRtt);
+                congested = minRtt - baseRtt > baseRtt / m_phy;
+            }
+            else
+            {
+                double bw = segCwnd / m_minRtt.GetSeconds();
+                queue = static_cast<uint32_t>(bw * rttQueue.GetSeconds());
+                congested = rttQueue.GetSeconds() / m_baseRtt.GetSeconds() > (1.0 / m_phy);
+            }
             NS_LOG_DEBUG("Queue backlog = " << queue << " given by cwnd = " << segCwnd
                                             << ", minRtt = " << m_minRtt.GetMilliSeconds()
                                             << " ms, baseRtt = " << m_baseRtt.GetMilliSeconds()
                                             << " ms");
 
-            double L = rttQueue.GetSeconds() / m_baseRtt.GetSeconds();
-            NS_LOG_DEBUG("Network congestion level = " << L);
+            NS_LOG_DEBUG("Network congestion level above 1/Phy: " << congested);
 
-            if (queue > m_alpha || L > (1 / m_phy))
+            if (queue > m_alpha || congested)
             { // Slow mode
                 if (queue > m_alpha && segCwnd > m_renoCount)
                 { // Precautionary decongestion
@@ -292,7 +354,7 @@ TcpYeah::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         }
 
         // Save the current right edge for next Yeah cycle
-        m_begSndNxt = tcb->m_nextTxSequence;
+        m_begSndNxt = m_linuxArithmetic ? tcb->m_highTxMark.Get() : tcb->m_nextTxSequence.Get();
 
         // Reset cntRtt & minRtt
         m_cntRtt = 0;

@@ -12,6 +12,8 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
+#include "ns3/boolean.h"
+#include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-illinois.h"
@@ -226,15 +228,19 @@ TcpIllinoisTest::RecalcParam(Ptr<TcpIllinois> cong)
     UintegerValue winThresh;
     cong->GetAttribute("WinThresh", winThresh);
 
-    if (m_cWnd < winThresh.Get())
+    DoubleValue betaBase;
+    cong->GetAttribute("BetaBase", betaBase);
+
+    if (m_cWnd / m_segmentSize < winThresh.Get())
     {
         NS_LOG_INFO("cWnd < winThresh, set alpha & beta to base values");
         m_alpha = alphaBase.Get();
+        m_beta = betaBase.Get();
     }
     else if (m_cntRtt > 0)
     {
-        double dm = (double)CalculateMaxDelay().GetMilliSeconds();
-        double da = (double)CalculateAvgDelay().GetMilliSeconds();
+        double dm = CalculateMaxDelay().GetSeconds() * 1000;
+        double da = CalculateAvgDelay().GetSeconds() * 1000;
 
         NS_LOG_INFO("Updated to dm = " << dm << " da = " << da);
 
@@ -335,6 +341,235 @@ TcpIllinoisTest::GetSsThresh()
 /**
  * @ingroup internet-test
  *
+ * @brief Test that TcpIllinois recalculates its parameters with any ISN.
+ *
+ * The same scenario runs twice, once with sequence numbers near zero and
+ * once with sequence numbers in the upper half of the space, as a clock
+ * driven initial sequence number may give. The congestion window and the
+ * slow start threshold must come out the same.
+ */
+class TcpIllinoisUpperHalfIsnTest : public TestCase
+{
+  public:
+    TcpIllinoisUpperHalfIsnTest()
+        : TestCase("Illinois recalculates its parameters with an upper half ISN")
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Run the scenario with the sequence numbers shifted by an offset.
+     * @param offset Offset added to the sequence numbers.
+     * @return The congestion window and the slow start threshold.
+     */
+    std::pair<uint32_t, uint32_t> Run(uint32_t offset);
+};
+
+std::pair<uint32_t, uint32_t>
+TcpIllinoisUpperHalfIsnTest::Run(uint32_t offset)
+{
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_cWnd = 40 * 1446;
+    state->m_ssThresh = 38 * 1446;
+    state->m_segmentSize = 1446;
+    state->m_nextTxSequence = SequenceNumber32(2893 + offset);
+    state->m_lastAckedSeq = SequenceNumber32(5785 + offset);
+
+    Ptr<TcpIllinois> cong = CreateObject<TcpIllinois>();
+    cong->Init(state);
+    // A queueing delay near its maximum: the recalculation lowers alpha and
+    // raises beta well away from their initial values
+    cong->PktsAcked(state, 10, MilliSeconds(100));
+    for (uint32_t count = 1; count < 5; ++count)
+    {
+        cong->PktsAcked(state, 10, MilliSeconds(110));
+    }
+    cong->IncreaseWindow(state, 10);
+    return {state->m_cWnd.Get(), cong->GetSsThresh(state, state->m_cWnd)};
+}
+
+void
+TcpIllinoisUpperHalfIsnTest::DoRun()
+{
+    auto low = Run(0);
+    auto high = Run(0x90000000);
+    NS_TEST_ASSERT_MSG_EQ(high.first, low.first, "cWnd differs with an upper half ISN");
+    NS_TEST_ASSERT_MSG_EQ(high.second, low.second, "ssThresh differs with an upper half ISN");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing that TcpIllinois reduces the window, not the data in flight
+ *
+ * The window of 100 segments is reduced by beta (0.5 before any adaptation),
+ * as in the Illinois paper and in Linux (tcp_illinois_ssthresh()), whatever
+ * the data in flight, which the lost and SACKed segments reduce.
+ */
+class TcpIllinoisSsThreshWindowTest : public TestCase
+{
+  public:
+    TcpIllinoisSsThreshWindowTest()
+        : TestCase("The window is reduced by beta")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 100 * segmentSize;
+        Ptr<TcpIllinois> cong = CreateObject<TcpIllinois>();
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, 90 * segmentSize),
+                              50 * segmentSize,
+                              "The window must be reduced by beta");
+    }
+};
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing the congestion avoidance count of TcpIllinois
+ *
+ * By default, each acknowledged segment adds alpha / cwnd segments, the
+ * fractions carried to the next ACKs: with alpha = 1.5 (the AlphaBase after a
+ * timeout) and a window of 100 segments, the 67th ACK of a segment completes
+ * a segment. With CountAckedSegments, as Linux tcp_illinois_cong_avoid(),
+ * the count is the segments the ACK removed from the retransmission queue
+ * (PktsAcked), including those SACKed before: the ACK which ends a recovery
+ * and acknowledges 100 segments grows a window of 100 segments by alpha (10)
+ * segments at once.
+ */
+class TcpIllinoisCountTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param linuxCount Whether the CountAckedSegments attribute is set.
+     * @param name Test description.
+     */
+    TcpIllinoisCountTest(bool linuxCount, const std::string& name)
+        : TestCase(name),
+          m_linuxCount(linuxCount)
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 100 * segmentSize;
+        state->m_ssThresh = 50 * segmentSize;
+        state->m_nextTxSequence = SequenceNumber32(1000000);
+        state->m_lastAckedSeq = SequenceNumber32(1);
+
+        Ptr<TcpIllinois> cong = CreateObject<TcpIllinois>();
+        cong->SetAttribute("CountAckedSegments", BooleanValue(m_linuxCount));
+        cong->Init(state);
+
+        if (m_linuxCount)
+        {
+            cong->PktsAcked(state, 100, MilliSeconds(100));
+            cong->IncreaseWindow(state, 1);
+            NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                                  110 * segmentSize,
+                                  "The segments removed by the ACK must count");
+        }
+        else
+        {
+            cong->SetAttribute("AlphaBase", DoubleValue(1.5));
+            cong->CongestionStateSet(state, TcpSocketState::CA_LOSS);
+            for (uint32_t i = 0; i < 66; ++i)
+            {
+                cong->IncreaseWindow(state, 1);
+            }
+            NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                                  100 * segmentSize,
+                                  "Unexpected window increase");
+            cong->IncreaseWindow(state, 1);
+            NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                                  101 * segmentSize,
+                                  "The fractions of segment must be carried");
+        }
+    }
+
+    bool m_linuxCount; //!< Whether the CountAckedSegments attribute is set
+};
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Testing the Linux arithmetic of TcpIllinois
+ *
+ * RTT samples of 100, 200 and 130 ms give a maximum queueing delay of 100 ms
+ * and an average one of 43.333 ms. With the LinuxArithmetic attribute, as
+ * Linux tcp_illinois.c, beta is 19/64 (0.297, instead of 0.304), and the
+ * decrease of a window of 100 segments is rounded down: the slow start
+ * threshold is 71 segments, instead of 69. The parameters are updated only
+ * once the ACK is after the right edge of the RTT.
+ */
+class TcpIllinoisLinuxTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param linuxArithmetic Whether the LinuxArithmetic attribute is set.
+     * @param name Test description.
+     */
+    TcpIllinoisLinuxTest(bool linuxArithmetic, const std::string& name)
+        : TestCase(name),
+          m_linux(linuxArithmetic)
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const uint32_t segmentSize = 1000;
+        Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+        state->m_segmentSize = segmentSize;
+        state->m_cWnd = 100 * segmentSize;
+        state->m_ssThresh = 50 * segmentSize;
+        state->m_nextTxSequence = SequenceNumber32(1000000);
+        state->m_highTxMark = SequenceNumber32(1000000);
+        state->m_lastAckedSeq = SequenceNumber32(1);
+
+        Ptr<TcpIllinois> cong = CreateObject<TcpIllinois>();
+        cong->SetAttribute("LinuxArithmetic", BooleanValue(m_linux));
+        cong->Init(state);
+        for (auto rtt : {100, 200, 130})
+        {
+            cong->PktsAcked(state, 1, MilliSeconds(rtt));
+        }
+        state->m_lastAckedSeq = SequenceNumber32(1000000);
+        cong->IncreaseWindow(state, 1);
+        if (m_linux)
+        {
+            NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, state->m_cWnd),
+                                  50 * segmentSize,
+                                  "The parameters must not be updated at the edge of the RTT");
+        }
+        state->m_lastAckedSeq = SequenceNumber32(1000001);
+        state->m_cWnd = 100 * segmentSize;
+        cong->IncreaseWindow(state, 1);
+        state->m_cWnd = 100 * segmentSize;
+        NS_TEST_ASSERT_MSG_EQ(cong->GetSsThresh(state, state->m_cWnd),
+                              (m_linux ? 71 : 69) * segmentSize,
+                              "Unexpected slow start threshold");
+    }
+
+    bool m_linux; //!< Whether the LinuxArithmetic attribute is set
+};
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP Illinois TestSuite
  */
 class TcpIllinoisTestSuite : public TestSuite
@@ -386,6 +621,37 @@ class TcpIllinoisTestSuite : public TestSuite
                                         "Illinois test on cWnd and ssThresh when avg queueing "
                                         "delay is in between its min & max"),
                     TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisTest(10 * 1446,
+                                        5 * 1446,
+                                        1446,
+                                        2,
+                                        MilliSeconds(110),
+                                        2,
+                                        SequenceNumber32(2893),
+                                        SequenceNumber32(5785),
+                                        "Illinois test on cWnd and ssThresh when cWnd (in "
+                                        "segments) is below winThresh"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisTest(40 * 1446,
+                                        38 * 1446,
+                                        1446,
+                                        2,
+                                        MicroSeconds(100900),
+                                        3,
+                                        SequenceNumber32(2893),
+                                        SequenceNumber32(5785),
+                                        "Illinois test on cWnd and ssThresh with sub-millisecond "
+                                        "queueing delays"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisUpperHalfIsnTest(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisSsThreshWindowTest(), TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisCountTest(false, "Fractions of the increase carried"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisCountTest(true, "Linux count of the removed segments"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisLinuxTest(false, "Default arithmetic"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpIllinoisLinuxTest(true, "Linux arithmetic"), TestCase::Duration::QUICK);
     }
 };
 

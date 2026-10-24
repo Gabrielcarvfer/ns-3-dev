@@ -35,7 +35,19 @@ TcpVeno::GetTypeId()
                                           "Threshold for congestion detection",
                                           UintegerValue(3),
                                           MakeUintegerAccessor(&TcpVeno::m_beta),
-                                          MakeUintegerChecker<uint32_t>());
+                                          MakeUintegerChecker<uint32_t>())
+                            .AddAttribute("LinuxArithmetic",
+                                          "Compute as the tcp_veno.c of Linux does: the RTT "
+                                          "samples in microseconds plus one, the difference in "
+                                          "half segments, computed only while Veno is on with "
+                                          "enough samples, the slow start leftover given to the "
+                                          "congestion avoidance, the congestive increase of a "
+                                          "segment every other window of acknowledged segments, "
+                                          "the halving of the window in whole segments, and the "
+                                          "restart of Veno on the first transmission",
+                                          BooleanValue(false),
+                                          MakeBooleanAccessor(&TcpVeno::m_linuxArithmetic),
+                                          MakeBooleanChecker());
     return tid;
 }
 
@@ -62,7 +74,8 @@ TcpVeno::TcpVeno(const TcpVeno& sock)
       m_diff(0),
       m_inc(true),
       m_ackCnt(sock.m_ackCnt),
-      m_beta(sock.m_beta)
+      m_beta(sock.m_beta),
+      m_linuxArithmetic(sock.m_linuxArithmetic)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -88,10 +101,13 @@ TcpVeno::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& 
         return;
     }
 
-    m_minRtt = std::min(m_minRtt, rtt);
+    // Linux tcp_veno_pkts_acked(): microseconds, plus one so that no RTT is zero
+    Time sample = m_linuxArithmetic ? MicroSeconds(rtt.GetMicroSeconds() + 1) : rtt;
+
+    m_minRtt = std::min(m_minRtt, sample);
     NS_LOG_DEBUG("Updated m_minRtt= " << m_minRtt);
 
-    m_baseRtt = std::min(m_baseRtt, rtt);
+    m_baseRtt = std::min(m_baseRtt, sample);
     NS_LOG_DEBUG("Updated m_baseRtt= " << m_baseRtt);
 
     // Update RTT counter
@@ -120,6 +136,7 @@ void
 TcpVeno::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCongState_t newState)
 {
     NS_LOG_FUNCTION(this << tcb << newState);
+    TcpNewReno::CongestionStateSet(tcb, newState);
     if (newState == TcpSocketState::CA_OPEN)
     {
         EnableVeno();
@@ -133,9 +150,99 @@ TcpVeno::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCo
 }
 
 void
+TcpVeno::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event)
+{
+    NS_LOG_FUNCTION(this << tcb << event);
+
+    // Linux tcp_veno_cwnd_event(): tcp_veno_init() on a (re)start of the
+    // transmissions
+    if (m_linuxArithmetic && (event == TcpSocketState::CA_EVENT_TX_START ||
+                              event == TcpSocketState::CA_EVENT_CWND_RESTART))
+    {
+        m_baseRtt = Time::Max();
+        m_inc = true;
+        EnableVeno();
+    }
+}
+
+void
+TcpVeno::LinuxIncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
+{
+    NS_LOG_FUNCTION(this << tcb << segmentsAcked);
+
+    if (!m_doingVenoNow)
+    {
+        TcpNewReno::IncreaseWindow(tcb, segmentsAcked);
+        return;
+    }
+
+    if (m_cntRtt <= 2)
+    {
+        TcpNewReno::IncreaseWindow(tcb, segmentsAcked);
+    }
+    else
+    {
+        // The difference is in half segments (V_PARAM_SHIFT)
+        uint32_t segCwnd = tcb->GetCwndInSegments();
+        uint64_t targetCwnd =
+            (static_cast<uint64_t>(segCwnd) * static_cast<uint64_t>(m_baseRtt.GetMicroSeconds()))
+            << 1;
+        targetCwnd /= static_cast<uint64_t>(m_minRtt.GetMicroSeconds());
+        m_diff = (segCwnd << 1) - static_cast<uint32_t>(targetCwnd);
+        NS_LOG_DEBUG("Calculated m_diff = " << m_diff << " half segments");
+
+        uint32_t acked = segmentsAcked;
+        bool done = false;
+        if (tcb->m_cWnd < tcb->m_ssThresh)
+        {
+            acked = TcpNewReno::SlowStart(tcb, acked);
+            done = (acked == 0);
+        }
+        if (!done)
+        {
+            if (m_diff < (m_beta << 1))
+            {
+                TcpNewReno::CongestionAvoidance(tcb, acked);
+            }
+            else
+            {
+                // A segment every other window of acknowledged segments,
+                // the ACK which completes the window being not counted
+                segCwnd = tcb->GetCwndInSegments();
+                if (GetCwndCount() >= segCwnd)
+                {
+                    if (m_inc)
+                    {
+                        tcb->m_cWnd += tcb->m_segmentSize;
+                        m_inc = false;
+                    }
+                    else
+                    {
+                        m_inc = true;
+                    }
+                    SetCwndCount(0);
+                }
+                else
+                {
+                    SetCwndCount(GetCwndCount() + acked);
+                }
+            }
+        }
+        tcb->m_cWnd = std::max(tcb->m_cWnd.Get(), 2 * tcb->m_segmentSize);
+    }
+    m_minRtt = Time::Max();
+}
+
+void
 TcpVeno::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
+
+    if (m_linuxArithmetic)
+    {
+        LinuxIncreaseWindow(tcb, segmentsAcked);
+        return;
+    }
 
     // Always calculate m_diff, even if we are not doing Veno now
     uint32_t targetCwnd;
@@ -214,8 +321,10 @@ TcpVeno::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         }
     }
 
-    // Reset cntRtt & minRtt every RTT
-    m_cntRtt = 0;
+    // As in Linux tcp_veno_cong_avoid(), minRtt restarts with every ACK, while
+    // cntRtt keeps counting the samples taken since the start of the
+    // connection: resetting it here would leave it below the three samples
+    // Veno needs, so that the window would always grow as in NewReno
     m_minRtt = Time::Max();
 }
 
@@ -230,14 +339,23 @@ TcpVeno::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
 
+    if (m_linuxArithmetic)
+    {
+        // tcp_veno_ssthresh(): the window in whole segments
+        uint32_t segCwnd = tcb->GetCwndInSegments();
+        uint32_t ssThresh = m_diff < (m_beta << 1) ? segCwnd * 4 / 5 : segCwnd >> 1;
+        return std::max(ssThresh, 2U) * tcb->m_segmentSize;
+    }
+
     if (m_diff < m_beta)
     {
         // random loss due to bit errors is most likely to have occurred,
-        // we cut cwnd by 1/5
+        // we cut cwnd by 1/5: the window, in segments, as in the Veno paper
+        // and in Linux, not the data in flight, which the lost and SACKed
+        // segments reduce
         NS_LOG_LOGIC("Random loss is most likely to have occurred, "
                      "cwnd is reduced by 1/5");
-        static double tmp = 4.0 / 5.0;
-        return std::max(static_cast<uint32_t>(bytesInFlight * tmp), 2 * tcb->m_segmentSize);
+        return std::max(tcb->GetCwndInSegments() * 4 / 5, 2U) * tcb->m_segmentSize;
     }
     else
     {

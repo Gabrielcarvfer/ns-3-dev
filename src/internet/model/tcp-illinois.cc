@@ -71,7 +71,18 @@ TcpIllinois::GetTypeId()
                                           "Theta threshold",
                                           UintegerValue(5),
                                           MakeUintegerAccessor(&TcpIllinois::m_theta),
-                                          MakeUintegerChecker<uint32_t>());
+                                          MakeUintegerChecker<uint32_t>())
+                            .AddAttribute("LinuxArithmetic",
+                                          "Compute alpha, beta and the slow start threshold "
+                                          "as the tcp_illinois.c of Linux does: from RTT "
+                                          "samples in microseconds, in integer arithmetic "
+                                          "(alpha in 1/128, beta in 1/64), updating them once "
+                                          "the ACK passes the right edge of the RTT, and "
+                                          "keeping alpha below its maximum for Theta RTTs "
+                                          "only once the delay rose above d1",
+                                          BooleanValue(false),
+                                          MakeBooleanAccessor(&TcpIllinois::m_linuxArithmetic),
+                                          MakeBooleanChecker());
     return tid;
 }
 
@@ -118,7 +129,10 @@ TcpIllinois::TcpIllinois(const TcpIllinois& sock)
       m_beta(sock.m_beta),
       m_winThresh(sock.m_winThresh),
       m_theta(sock.m_theta),
-      m_ackCnt(sock.m_ackCnt)
+      m_ackCnt(sock.m_ackCnt),
+      m_linuxCnt(sock.m_linuxCnt),
+      m_pktsAcked(sock.m_pktsAcked),
+      m_linuxArithmetic(sock.m_linuxArithmetic)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -140,10 +154,21 @@ TcpIllinois::RecalcParam(uint32_t cWnd)
         m_alpha = m_alphaBase;
         m_beta = m_betaBase;
     }
+    else if (m_cntRtt > 0 && m_linuxArithmetic)
+    {
+        // update_params(), with the delays in microseconds
+        auto base = static_cast<uint32_t>(m_baseRtt.GetMicroSeconds());
+        auto dm = static_cast<uint32_t>(m_maxRtt.GetMicroSeconds()) - base;
+        auto da = static_cast<uint32_t>(m_sumRtt.GetMicroSeconds() / m_cntRtt) - base;
+        m_alpha = LinuxAlpha(da, dm) / 128.0;
+        m_beta = LinuxBeta(da, dm) / 64.0;
+        NS_LOG_INFO("Updated to dm = " << dm << "us da = " << da << "us alpha = " << m_alpha
+                                       << " beta = " << m_beta);
+    }
     else if (m_cntRtt > 0)
     {
-        double dm = static_cast<double>(CalculateMaxDelay().GetMilliSeconds());
-        double da = static_cast<double>(CalculateAvgDelay().GetMilliSeconds());
+        double dm = CalculateMaxDelay().GetSeconds() * 1000;
+        double da = CalculateAvgDelay().GetSeconds() * 1000;
 
         NS_LOG_INFO("Updated to dm = " << dm << " da = " << da);
 
@@ -157,6 +182,15 @@ TcpIllinois::CongestionStateSet(Ptr<TcpSocketState> tcb,
                                 const TcpSocketState::TcpCongState_t newState)
 {
     NS_LOG_FUNCTION(this << tcb << newState);
+    TcpNewReno::CongestionStateSet(tcb, newState);
+
+    // As tp->snd_cwnd_cnt, which tcp_init_cwnd_reduction() and
+    // tcp_enter_loss() clear in Linux
+    if (newState == TcpSocketState::CA_RECOVERY || newState == TcpSocketState::CA_CWR ||
+        newState == TcpSocketState::CA_LOSS)
+    {
+        m_linuxCnt = 0;
+    }
 
     if (newState == TcpSocketState::CA_LOSS)
     {
@@ -164,7 +198,7 @@ TcpIllinois::CongestionStateSet(Ptr<TcpSocketState> tcb,
         m_beta = m_betaBase;
         m_rttLow = 0;
         m_rttAbove = false;
-        Reset(tcb->m_nextTxSequence);
+        Reset(m_linuxArithmetic ? tcb->m_highTxMark.Get() : tcb->m_nextTxSequence.Get());
     }
 }
 
@@ -173,10 +207,12 @@ TcpIllinois::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << segmentsAcked);
 
-    if (tcb->m_lastAckedSeq >= m_endSeq)
+    // Linux updates the parameters once the ACK is after the right edge of
+    // the RTT, snd_nxt when it was set
+    if (m_linuxArithmetic ? tcb->m_lastAckedSeq > m_endSeq : tcb->m_lastAckedSeq >= m_endSeq)
     {
-        RecalcParam(tcb->m_cWnd);
-        Reset(tcb->m_nextTxSequence);
+        RecalcParam(tcb->GetCwndInSegments());
+        Reset(m_linuxArithmetic ? tcb->m_highTxMark.Get() : tcb->m_nextTxSequence.Get());
     }
 
     if (tcb->m_cWnd < tcb->m_ssThresh)
@@ -190,15 +226,33 @@ TcpIllinois::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         uint32_t segCwnd = tcb->GetCwndInSegments();
         uint32_t oldCwnd = segCwnd;
 
-        if (segmentsAcked > 0)
+        if (CountsAckedSegments())
         {
-            m_ackCnt += segmentsAcked * m_alpha;
+            // Linux tcp_illinois_cong_avoid(): the count is the segments the
+            // ACK removed from the retransmission queue (ca->acked, set by
+            // pkts_acked), including those SACKed before, as on the ACK which
+            // ends a recovery; alpha is in 1/128, and the increase leaves no
+            // remainder
+            m_linuxCnt += m_pktsAcked;
+            m_pktsAcked = 1;
+            auto alpha = static_cast<uint64_t>(m_alpha * 128);
+            uint64_t delta = (static_cast<uint64_t>(m_linuxCnt) * alpha) >> 7;
+            if (delta >= segCwnd)
+            {
+                segCwnd += static_cast<uint32_t>(delta / segCwnd);
+                m_linuxCnt = 0;
+            }
         }
-
-        while (m_ackCnt >= segCwnd)
+        else
         {
-            m_ackCnt -= segCwnd;
-            segCwnd += 1;
+            // alpha / cwnd segments per acknowledged segment, the fractions
+            // of segment carried to the next ACKs
+            m_ackCnt += segmentsAcked * m_alpha;
+            while (m_ackCnt >= segCwnd)
+            {
+                m_ackCnt -= segCwnd;
+                segCwnd += 1;
+            }
         }
 
         if (segCwnd != oldCwnd)
@@ -215,19 +269,28 @@ TcpIllinois::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t packetsAcked, const Tim
 {
     NS_LOG_FUNCTION(this << tcb << packetsAcked << rtt);
 
+    m_pktsAcked = packetsAcked;
+
     if (rtt.IsZero())
     {
         return;
     }
 
+    Time sample = rtt;
+    if (m_linuxArithmetic)
+    {
+        // tcp_illinois_acked(): microseconds, at most RTT_MAX (U32_MAX / ALPHA_MAX)
+        sample = MicroSeconds(std::min<int64_t>(rtt.GetMicroSeconds(), UINT32_MAX / (10 * 128)));
+    }
+
     // Keep track of minimum RTT
-    m_baseRtt = std::min(m_baseRtt, rtt);
+    m_baseRtt = std::min(m_baseRtt, sample);
 
     // Keep track of maximum RTT
-    m_maxRtt = std::max(rtt, m_maxRtt);
+    m_maxRtt = std::max(sample, m_maxRtt);
 
     ++m_cntRtt;
-    m_sumRtt += rtt;
+    m_sumRtt += sample;
 
     NS_LOG_INFO("Updated baseRtt = " << m_baseRtt << " maxRtt = " << m_maxRtt
                                      << " cntRtt = " << m_cntRtt << " sumRtt = " << m_sumRtt);
@@ -238,8 +301,22 @@ TcpIllinois::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
 
-    uint32_t segBytesInFlight = bytesInFlight / tcb->m_segmentSize;
-    uint32_t ssThresh = static_cast<uint32_t>(std::max(2.0, (1.0 - m_beta) * segBytesInFlight));
+    // The window, in segments, is reduced by beta, as in the Illinois paper
+    // and in Linux, not the data in flight, which the lost and SACKed
+    // segments reduce
+    uint32_t segCwnd = tcb->GetCwndInSegments();
+    uint32_t ssThresh;
+    if (m_linuxArithmetic)
+    {
+        // tcp_illinois_ssthresh(): the decrease is rounded down
+        auto decr = static_cast<uint32_t>(
+            (static_cast<uint64_t>(segCwnd) * static_cast<uint32_t>(m_beta * 64)) >> 6);
+        ssThresh = std::max(segCwnd - decr, 2U);
+    }
+    else
+    {
+        ssThresh = static_cast<uint32_t>(std::max(2.0, (1.0 - m_beta) * segCwnd));
+    }
 
     NS_LOG_DEBUG("Calculated ssThresh (in segments) = " << ssThresh);
 
@@ -333,6 +410,58 @@ TcpIllinois::CalculateBeta(double da, double dm)
     NS_LOG_INFO("Updated to beta = " << m_beta);
 }
 
+uint32_t
+TcpIllinois::LinuxAlpha(uint32_t da, uint32_t dm)
+{
+    NS_LOG_FUNCTION(this << da << dm);
+
+    const auto alphaMax = static_cast<uint32_t>(m_alphaMax * 128);
+    const auto alphaMin = static_cast<uint32_t>(m_alphaMin * 128);
+    const auto alpha = static_cast<uint32_t>(m_alpha * 128);
+    uint32_t d1 = dm / 100;
+
+    if (da <= d1)
+    {
+        // The count of low delay RTTs starts only once the delay was above d1
+        if (!m_rttAbove)
+        {
+            return alphaMax;
+        }
+        if (++m_rttLow < m_theta)
+        {
+            return alpha;
+        }
+        m_rttLow = 0;
+        m_rttAbove = false;
+        return alphaMax;
+    }
+
+    m_rttAbove = true;
+    dm -= d1;
+    da -= d1;
+    return (dm * alphaMax) / (dm + (da * (alphaMax - alphaMin)) / alphaMin);
+}
+
+uint32_t
+TcpIllinois::LinuxBeta(uint32_t da, uint32_t dm) const
+{
+    NS_LOG_FUNCTION(this << da << dm);
+
+    const auto betaMin = static_cast<uint32_t>(m_betaMin * 64);
+    const auto betaMax = static_cast<uint32_t>(m_betaMax * 64);
+    uint32_t d2 = dm / 10;
+    if (da <= d2)
+    {
+        return betaMin;
+    }
+    uint32_t d3 = (8 * dm) / 10;
+    if (da >= d3 || d3 <= d2)
+    {
+        return betaMax;
+    }
+    return (betaMin * d3 - betaMax * d2 + (betaMax - betaMin) * da) / (d3 - d2);
+}
+
 Time
 TcpIllinois::CalculateAvgDelay() const
 {
@@ -347,6 +476,13 @@ TcpIllinois::CalculateMaxDelay() const
     NS_LOG_FUNCTION(this);
 
     return (m_maxRtt - m_baseRtt);
+}
+
+void
+TcpIllinois::Init(Ptr<TcpSocketState> tcb)
+{
+    NS_LOG_FUNCTION(this << tcb);
+    Reset(tcb->m_nextTxSequence);
 }
 
 void

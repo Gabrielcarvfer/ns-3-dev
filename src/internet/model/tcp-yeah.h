@@ -127,6 +127,8 @@ class TcpYeah : public TcpNewReno
      */
     uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
 
+    void CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event) override;
+
     Ptr<TcpCongestionOps> Fork() override;
 
   private:
@@ -159,17 +161,18 @@ class TcpYeah : public TcpNewReno
                      //!< on loss
     uint32_t m_zeta; //!< Minimum number of state switches to reset m_renoCount
 
-    uint32_t m_stcpAiFactor;      //!< STCP additive increase parameter
-    Ptr<TcpScalable> m_stcp;      //!< TcpScalable object
-    Time m_baseRtt;               //!< Minimum of all YeAH RTT measurements seen during connection
-    Time m_minRtt;                //!< Minimum of all RTTs measured within last RTT
-    uint32_t m_cntRtt;            //!< Number of RTT measurements during last RTT
-    bool m_doingYeahNow;          //!< If true, do YeAH for this RTT
-    SequenceNumber32 m_begSndNxt; //!< Right edge during last RTT
-    uint32_t m_lastQ;             //!< Last number of packets in the bottleneck queue
-    uint32_t m_doingRenoNow;      //!< Number of RTTs in "Slow" mode
-    uint32_t m_renoCount;         //!< Estimated cwnd of competing Reno flow
-    uint32_t m_fastCount;         //!< Number of RTTs in "Fast" mode
+    uint32_t m_stcpAiFactor;       //!< STCP additive increase parameter
+    Ptr<TcpScalable> m_stcp;       //!< TcpScalable object
+    Time m_baseRtt;                //!< Minimum of all YeAH RTT measurements seen during connection
+    Time m_minRtt;                 //!< Minimum of all RTTs measured within last RTT
+    uint32_t m_cntRtt;             //!< Number of RTT measurements during last RTT
+    bool m_doingYeahNow;           //!< If true, do YeAH for this RTT
+    SequenceNumber32 m_begSndNxt;  //!< Right edge during last RTT
+    uint32_t m_lastQ;              //!< Last number of packets in the bottleneck queue
+    uint32_t m_doingRenoNow;       //!< Number of RTTs in "Slow" mode
+    uint32_t m_renoCount;          //!< Estimated cwnd of competing Reno flow
+    uint32_t m_fastCount;          //!< Number of RTTs in "Fast" mode
+    bool m_linuxArithmetic{false}; //!< Compute as the tcp_yeah.c of Linux does
 };
 
 } // namespace ns3

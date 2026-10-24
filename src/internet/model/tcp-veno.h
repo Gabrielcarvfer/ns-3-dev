@@ -126,6 +126,8 @@ class TcpVeno : public TcpNewReno
      */
     uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
 
+    void CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event) override;
+
     Ptr<TcpCongestionOps> Fork() override;
 
   private:
@@ -146,15 +148,24 @@ class TcpVeno : public TcpNewReno
      */
     void DisableVeno();
 
+    /**
+     * @brief Increase the window as the tcp_veno.c of Linux does
+     *
+     * @param tcb internal congestion state
+     * @param segmentsAcked count of segments acked
+     */
+    void LinuxIncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
+
   private:
-    Time m_baseRtt;      //!< Minimum of all RTT measurements seen during connection
-    Time m_minRtt;       //!< Minimum of RTTs measured within last RTT
-    uint32_t m_cntRtt;   //!< Number of RTT measurements during last RTT
-    bool m_doingVenoNow; //!< If true, do Veno for this RTT
-    uint32_t m_diff;     //!< Difference between expected and actual throughput
-    bool m_inc;          //!< If true, cwnd needs to be incremented
-    uint32_t m_ackCnt;   //!< Number of received ACK
-    uint32_t m_beta;     //!< Threshold for congestion detection
+    Time m_baseRtt;                //!< Minimum of all RTT measurements seen during connection
+    Time m_minRtt;                 //!< Minimum of RTTs measured within last RTT
+    uint32_t m_cntRtt;             //!< Number of RTT measurements during last RTT
+    bool m_doingVenoNow;           //!< If true, do Veno for this RTT
+    uint32_t m_diff;               //!< Difference between expected and actual throughput
+    bool m_inc;                    //!< If true, cwnd needs to be incremented
+    uint32_t m_ackCnt;             //!< Number of received ACK
+    uint32_t m_beta;               //!< Threshold for congestion detection
+    bool m_linuxArithmetic{false}; //!< Compute as the tcp_veno.c of Linux does
 };
 
 } // namespace ns3

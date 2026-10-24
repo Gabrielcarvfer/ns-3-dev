@@ -12,6 +12,7 @@
  * The University of Kansas Lawrence, KS USA.
  */
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-socket-base.h"
@@ -192,6 +193,186 @@ TcpVegasTest::GetSsThresh(Ptr<TcpVegas> cong)
 /**
  * @ingroup internet-test
  *
+ * @brief Check that Vegas halves the window on a loss.
+ *
+ * Linux Vegas reacts to a loss as Reno does (tcp_reno_ssthresh()): the slow
+ * start threshold becomes half the congestion window, whatever the slow start
+ * threshold Vegas keeps when it adjusts the window by itself.
+ */
+class TcpVegasLossTest : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor.
+     * @param cWnd Congestion window.
+     * @param segmentSize Segment size.
+     * @param ssThresh Slow Start Threshold before the loss.
+     * @param name Test description.
+     */
+    TcpVegasLossTest(uint32_t cWnd,
+                     uint32_t segmentSize,
+                     uint32_t ssThresh,
+                     const std::string& name)
+        : TestCase(name),
+          m_cWnd(cWnd),
+          m_segmentSize(segmentSize),
+          m_ssThresh(ssThresh)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    uint32_t m_cWnd;        //!< Congestion window.
+    uint32_t m_segmentSize; //!< Segment size.
+    uint32_t m_ssThresh;    //!< Slow Start Threshold before the loss.
+};
+
+void
+TcpVegasLossTest::DoRun()
+{
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_cWnd = m_cWnd;
+    state->m_segmentSize = m_segmentSize;
+    state->m_ssThresh = m_ssThresh;
+
+    Ptr<TcpVegas> cong = CreateObject<TcpVegas>();
+    uint32_t ssThresh = cong->GetSsThresh(state, m_cWnd);
+
+    NS_TEST_ASSERT_MSG_EQ(ssThresh,
+                          std::max(m_cWnd / 2, 2 * m_segmentSize),
+                          "A loss did not halve the window");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Test the LinuxCongAvoid attribute of TcpVegas
+ *
+ * With a base RTT of 100 ms, an RTT of 103 ms in the cycle and a window of 50
+ * segments, Diff is 2 by default (50 minus the target window of 48), so the
+ * window does not change, and 1 (50 * 3 / 100, rounded down) with the attribute
+ * set, so the window grows by a segment. The ACK of the data sent up to the
+ * start of the cycle ends it by default; with the attribute set, the cycle
+ * ends only with the ACK of data sent after its start.
+ */
+class TcpVegasLinuxCongAvoidTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     * @param linuxMode whether the LinuxCongAvoid attribute is set
+     * @param name the test name
+     */
+    TcpVegasLinuxCongAvoidTest(bool linuxMode, const std::string& name)
+        : TestCase(name),
+          m_linux(linuxMode)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    bool m_linux; //!< LinuxCongAvoid attribute value
+};
+
+void
+TcpVegasLinuxCongAvoidTest::DoRun()
+{
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = 1000;
+    state->m_cWnd = 50000;
+    state->m_ssThresh = 10000;
+    state->m_nextTxSequence = SequenceNumber32(100000);
+
+    Ptr<TcpVegas> cong = CreateObject<TcpVegas>();
+    cong->SetAttribute("LinuxCongAvoid", BooleanValue(m_linux));
+
+    cong->PktsAcked(state, 1, MilliSeconds(100));
+    cong->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        cong->PktsAcked(state, 1, MilliSeconds(103));
+    }
+
+    // ACK of the data sent up to the start of the cycle
+    state->m_lastAckedSeq = SequenceNumber32(100000);
+    cong->IncreaseWindow(state, 1);
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(), 50000, "Window changed at the cycle end");
+    NS_TEST_ASSERT_MSG_EQ(state->m_ssThresh.Get(),
+                          m_linux ? 10000 : 37500,
+                          "Cycle end not detected as expected");
+
+    // ACK of data sent after the start of the cycle
+    state->m_lastAckedSeq = SequenceNumber32(101000);
+    cong->IncreaseWindow(state, 1);
+    // By default, this is the first ACK of a cycle without enough RTT
+    // samples: NewReno adds 1000 * 1000 / 50000 bytes
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                          m_linux ? 51000 : 50020,
+                          "Window not updated as expected");
+}
+
+/**
+ * @ingroup internet-test
+ *
+ * @brief Test the LinuxIdleRestart attribute of TcpVegas
+ *
+ * The BaseRTT is 100 ms before the connection goes idle, and the RTT is 120 ms
+ * once it sends again. With the attribute set, sending with no data in flight
+ * restarts Vegas, BaseRTT included: the new BaseRTT is 120 ms, Diff is 0, and
+ * the window grows by a segment. Without it, Diff is 50 minus 41 (the expected
+ * window), above beta, and the window shrinks by a segment.
+ */
+class TcpVegasIdleRestartTest : public TestCase
+{
+  public:
+    /**
+     * Constructor
+     * @param restart whether the LinuxIdleRestart attribute is set
+     * @param name the test name
+     */
+    TcpVegasIdleRestartTest(bool restart, const std::string& name)
+        : TestCase(name),
+          m_restart(restart)
+    {
+    }
+
+  private:
+    void DoRun() override;
+
+    bool m_restart; //!< LinuxIdleRestart attribute value
+};
+
+void
+TcpVegasIdleRestartTest::DoRun()
+{
+    Ptr<TcpSocketState> state = CreateObject<TcpSocketState>();
+    state->m_segmentSize = 1000;
+    state->m_cWnd = 50000;
+    state->m_ssThresh = 10000;
+    state->m_nextTxSequence = SequenceNumber32(100000);
+
+    Ptr<TcpVegas> cong = CreateObject<TcpVegas>();
+    cong->SetAttribute("LinuxIdleRestart", BooleanValue(m_restart));
+
+    cong->PktsAcked(state, 1, MilliSeconds(100));
+    cong->CongestionStateSet(state, TcpSocketState::CA_OPEN);
+    cong->CwndEvent(state, TcpSocketState::CA_EVENT_TX_START);
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        cong->PktsAcked(state, 1, MilliSeconds(120));
+    }
+    state->m_lastAckedSeq = SequenceNumber32(100000);
+    cong->IncreaseWindow(state, 1);
+    NS_TEST_ASSERT_MSG_EQ(state->m_cWnd.Get(),
+                          m_restart ? 51000 : 49000,
+                          "BaseRTT not handled as expected on the restart");
+}
+
+/**
+ * @ingroup internet-test
+ *
  * @brief TCP Vegas TestSuite
  */
 class TcpVegasTestSuite : public TestSuite
@@ -247,6 +428,23 @@ class TcpVegasTestSuite : public TestSuite
                                      SequenceNumber32(15667),
                                      "Vegas test on cWnd and ssThresh when alpha <= diff <= beta"),
                     TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpVegasLossTest(70 * 1448, 1448, 68 * 1448, "Vegas halves the window on a loss"),
+            TestCase::Duration::QUICK);
+        AddTestCase(new TcpVegasLossTest(3 * 1448,
+                                         1448,
+                                         2 * 1448,
+                                         "Vegas halves the window on a loss, small window"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpVegasLinuxCongAvoidTest(false, "Vegas cycle and Diff, default"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpVegasLinuxCongAvoidTest(true, "Vegas cycle and Diff, LinuxCongAvoid"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new TcpVegasIdleRestartTest(false, "Vegas BaseRTT on a restart, default"),
+                    TestCase::Duration::QUICK);
+        AddTestCase(
+            new TcpVegasIdleRestartTest(true, "Vegas BaseRTT on a restart, LinuxIdleRestart"),
+            TestCase::Duration::QUICK);
     }
 };
 

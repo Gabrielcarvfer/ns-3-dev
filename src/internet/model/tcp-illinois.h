@@ -130,6 +130,16 @@ class TcpIllinois : public TcpNewReno
     Ptr<TcpCongestionOps> Fork() override;
 
     /**
+     * @brief Start the first RTT round at the next sequence number to send.
+     *
+     * The round marker would otherwise stay at zero, which never compares
+     * below an initial sequence number in the upper half of the space.
+     *
+     * @param tcb Internal congestion state.
+     */
+    void Init(Ptr<TcpSocketState> tcb) override;
+
+    /**
      * @brief Reset Illinois parameters to default values upon a loss
      *
      * @param tcb internal congestion state
@@ -160,7 +170,7 @@ class TcpIllinois : public TcpNewReno
     /**
      * @brief Recalculate alpha and beta every RTT
      *
-     * @param cWnd current Cwnd (in bytes)
+     * @param cWnd current Cwnd (in segments)
      */
     void RecalcParam(uint32_t cWnd);
 
@@ -190,6 +200,24 @@ class TcpIllinois : public TcpNewReno
      *
      */
     void CalculateBeta(double da, double dm);
+
+    /**
+     * @brief Calculate alpha as Linux alpha(), in integer arithmetic
+     *
+     * @param da current average queueing delay (microseconds)
+     * @param dm maximum queueing delay (microseconds)
+     * @return alpha, in 1/128
+     */
+    uint32_t LinuxAlpha(uint32_t da, uint32_t dm);
+
+    /**
+     * @brief Calculate beta as Linux beta(), in integer arithmetic
+     *
+     * @param da current average queueing delay (microseconds)
+     * @param dm maximum queueing delay (microseconds)
+     * @return beta, in 1/64
+     */
+    uint32_t LinuxBeta(uint32_t da, uint32_t dm) const;
 
     /**
      * @brief Calculate average queueing delay
@@ -230,7 +258,10 @@ class TcpIllinois : public TcpNewReno
     double m_beta;             //!< Multiplicative decrease factor
     uint32_t m_winThresh;      //!< Window threshold for adaptive sizing
     uint32_t m_theta;          //!< Number of RTTs required before setting alpha to its max
-    uint32_t m_ackCnt;         //!< Number of received ACK
+    double m_ackCnt;           //!< Window increase accumulated, times cwnd (segments)
+    uint32_t m_linuxCnt{0}; //!< Segments counted towards the next increase, with CountAckedSegments
+    uint32_t m_pktsAcked{1};       //!< Segments removed by the last ACK (Linux ca->acked)
+    bool m_linuxArithmetic{false}; //!< Compute as the tcp_illinois.c of Linux does
 };
 
 } // namespace ns3
