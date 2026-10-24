@@ -376,6 +376,19 @@ class Ipv4L3Protocol : public Ipv4
     void SendIcmpNoRoute(const Ipv4Header& ipHeader, Ptr<const Packet> packet);
 
     /**
+     * @brief Return an ICMP Destination Unreachable (source route failed) to
+     * the source of a datagram whose source route this node does not follow.
+     *
+     * No message is generated about a datagram addressed to, or coming from,
+     * a broadcast or multicast address, about a fragment but the first, nor
+     * about an ICMP error message (@RFC{1122}, Section 3.2.2).
+     *
+     * @param ipHeader IPv4 header of the datagram, as received
+     * @param packet the datagram payload
+     */
+    void SendIcmpSourceRouteFailed(const Ipv4Header& ipHeader, Ptr<const Packet> packet);
+
+    /**
      * @brief Add an IPv4 interface to the stack.
      * @param interface interface to add
      * @return index of newly added interface
@@ -634,6 +647,8 @@ class Ipv4L3Protocol : public Ipv4
      * Remove expired duplicates packet entry
      */
     void RemoveDuplicates();
+
+    bool m_sourceRouteForwarding{false}; //!< Act as a hop of the received source routes
 
     bool m_enableDpd;   //!< Enable multicast duplicate packet detection
     DupMap_t m_dups;    //!< map of packet duplicate tuples to expiry event

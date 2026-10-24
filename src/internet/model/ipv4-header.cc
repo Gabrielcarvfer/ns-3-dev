@@ -13,6 +13,8 @@
 #include "ns3/header.h"
 #include "ns3/log.h"
 
+#include <algorithm>
+
 namespace ns3
 {
 
@@ -30,8 +32,7 @@ Ipv4Header::Ipv4Header()
       m_flags(0),
       m_fragmentOffset(0),
       m_checksum(0),
-      m_goodChecksum(true),
-      m_headerSize(5 * 4)
+      m_goodChecksum(true)
 {
 }
 
@@ -280,6 +281,130 @@ Ipv4Header::SetProtocol(uint8_t protocol)
     m_protocol = protocol;
 }
 
+namespace
+{
+/// Type of the loose source route option, from the IANA IP option numbers
+constexpr uint8_t IPV4_OPTION_LSRR = 131;
+/// Type of the strict source route option, from the IANA IP option numbers
+constexpr uint8_t IPV4_OPTION_SSRR = 137;
+/// Type of the end of option list
+constexpr uint8_t IPV4_OPTION_END = 0;
+/// Type of the no operation option, used as padding
+constexpr uint8_t IPV4_OPTION_NOP = 1;
+/// Largest option space the IHL field can express (RFC 791)
+constexpr uint16_t IPV4_MAX_OPTIONS_LENGTH = 40;
+} // namespace
+
+void
+Ipv4Header::SetLooseSourceRoute(const std::vector<Ipv4Address>& route)
+{
+    NS_LOG_FUNCTION(this << route.size());
+    if (route.empty())
+    {
+        m_hasSourceRoute = false;
+        m_sourceRoute.clear();
+        m_sourceRoutePointer = 4;
+        return;
+    }
+    NS_ABORT_MSG_IF(m_options.size() + 3 + 4 * route.size() > IPV4_MAX_OPTIONS_LENGTH,
+                    "A loose source route of " << route.size()
+                                               << " addresses does not fit in the options");
+    if (!m_hasSourceRoute)
+    {
+        m_sourceRouteOffset = 0;
+    }
+    m_hasSourceRoute = true;
+    m_sourceRoute = route;
+    m_sourceRoutePointer = 4;
+}
+
+bool
+Ipv4Header::HasLooseSourceRoute() const
+{
+    return m_hasSourceRoute;
+}
+
+std::vector<Ipv4Address>
+Ipv4Header::GetLooseSourceRoute() const
+{
+    return m_sourceRoute;
+}
+
+uint8_t
+Ipv4Header::GetSourceRoutePointer() const
+{
+    return m_sourceRoutePointer;
+}
+
+void
+Ipv4Header::SetSourceRoutePointer(uint8_t pointer)
+{
+    m_sourceRoutePointer = pointer;
+}
+
+uint16_t
+Ipv4Header::OptionsLength() const
+{
+    uint16_t length = m_options.size();
+    if (m_hasSourceRoute)
+    {
+        // Type, length and pointer, then the addresses
+        length += 3 + 4 * m_sourceRoute.size();
+    }
+    // Padded to a word
+    return (length + 3) & ~0x3;
+}
+
+bool
+Ipv4Header::IsMalformed() const
+{
+    return m_malformed;
+}
+
+void
+Ipv4Header::RemoveOptionsNotCopied()
+{
+    NS_LOG_FUNCTION(this);
+    std::vector<uint8_t> kept;
+    uint16_t sourceRouteOffset = 0;
+    std::size_t pos = 0;
+    while (pos < m_options.size())
+    {
+        if (pos == m_sourceRouteOffset)
+        {
+            sourceRouteOffset = kept.size();
+        }
+        uint8_t type = m_options[pos];
+        if (type == IPV4_OPTION_END)
+        {
+            break;
+        }
+        std::size_t length = 1;
+        if (type != IPV4_OPTION_NOP)
+        {
+            if (pos + 1 >= m_options.size() || m_options[pos + 1] < 2 ||
+                pos + m_options[pos + 1] > m_options.size())
+            {
+                // Bytes which do not parse: nothing past them can be told apart
+                break;
+            }
+            length = m_options[pos + 1];
+        }
+        // The copied flag is the most significant bit of the type (RFC 791)
+        if (type & 0x80)
+        {
+            kept.insert(kept.end(), m_options.begin() + pos, m_options.begin() + pos + length);
+        }
+        pos += length;
+    }
+    if (m_sourceRouteOffset >= pos)
+    {
+        sourceRouteOffset = kept.size();
+    }
+    m_options = kept;
+    m_sourceRouteOffset = sourceRouteOffset;
+}
+
 void
 Ipv4Header::SetSource(Ipv4Address source)
 {
@@ -366,15 +491,32 @@ Ipv4Header::Print(std::ostream& os) const
        << "protocol " << m_protocol << " "
        << "offset (bytes) " << m_fragmentOffset << " "
        << "flags [" << flags << "] "
-       << "length: " << (m_payloadSize + 5 * 4) << " " << m_source << " > " << m_destination;
+       << "length: " << (m_payloadSize + GetSerializedSize()) << " " << m_source << " > "
+       << m_destination;
+    if (m_hasSourceRoute)
+    {
+        os << " lsrr [";
+        for (const auto& hop : m_sourceRoute)
+        {
+            os << " " << hop;
+        }
+        os << " ] pointer " << static_cast<uint16_t>(m_sourceRoutePointer);
+    }
+    if (!m_options.empty())
+    {
+        os << " other options " << m_options.size() << " bytes";
+    }
+    if (m_malformed)
+    {
+        os << " malformed";
+    }
 }
 
 uint32_t
 Ipv4Header::GetSerializedSize() const
 {
     NS_LOG_FUNCTION(this);
-    // return 5 * 4;
-    return m_headerSize;
+    return 20 + OptionsLength();
 }
 
 void
@@ -383,10 +525,12 @@ Ipv4Header::Serialize(Buffer::Iterator start) const
     NS_LOG_FUNCTION(this << &start);
     Buffer::Iterator i = start;
 
-    uint8_t verIhl = (4 << 4) | (5);
+    uint16_t optionsLength = OptionsLength();
+    uint16_t headerLength = 20 + optionsLength;
+    uint8_t verIhl = (4 << 4) | (headerLength / 4);
     i.WriteU8(verIhl);
     i.WriteU8(m_tos);
-    i.WriteHtonU16(m_payloadSize + 5 * 4);
+    i.WriteHtonU16(m_payloadSize + headerLength);
     i.WriteHtonU16(m_identification);
     uint32_t fragmentOffset = m_fragmentOffset / 8;
     uint8_t flagsFrag = (fragmentOffset >> 8) & 0x1f;
@@ -407,10 +551,40 @@ Ipv4Header::Serialize(Buffer::Iterator start) const
     i.WriteHtonU32(m_source.Get());
     i.WriteHtonU32(m_destination.Get());
 
+    // The options the header does not model are written back as they were
+    // received, so that a forwarded datagram carries them unchanged (RFC
+    // 1812, Section 5.3.13), with the loose source route in its place
+    uint16_t written = 0;
+    for (std::size_t pos = 0; pos <= m_options.size(); ++pos)
+    {
+        if (m_hasSourceRoute && pos == m_sourceRouteOffset)
+        {
+            i.WriteU8(IPV4_OPTION_LSRR);
+            i.WriteU8(3 + 4 * m_sourceRoute.size());
+            i.WriteU8(m_sourceRoutePointer);
+            for (const auto& address : m_sourceRoute)
+            {
+                i.WriteHtonU32(address.Get());
+            }
+            written += 3 + 4 * m_sourceRoute.size();
+        }
+        if (pos < m_options.size())
+        {
+            i.WriteU8(m_options[pos]);
+            ++written;
+        }
+    }
+    // End of Option List octets bring the options to a word boundary
+    for (; written < optionsLength; ++written)
+    {
+        i.WriteU8(IPV4_OPTION_END);
+    }
+
     if (m_calcChecksum)
     {
+        // The checksum covers the options as well as the fixed fields
         i = start;
-        uint16_t checksum = i.CalculateIpChecksum(20);
+        uint16_t checksum = i.CalculateIpChecksum(headerLength);
         NS_LOG_LOGIC("checksum=" << checksum);
         i = start;
         i.Next(10);
@@ -424,19 +598,54 @@ Ipv4Header::Deserialize(Buffer::Iterator start)
     NS_LOG_FUNCTION(this << &start);
     Buffer::Iterator i = start;
 
+    m_malformed = false;
+    m_options.clear();
+    m_hasSourceRoute = false;
+    m_sourceRoute.clear();
+    m_sourceRoutePointer = 4;
+    m_sourceRouteOffset = 0;
+
+    // Nothing beyond the bytes at hand is read, whatever the header claims
+    uint32_t available = i.GetRemainingSize();
+    if (available < 20)
+    {
+        NS_LOG_WARN("Truncated IPv4 header of " << available << " bytes");
+        m_malformed = true;
+        m_goodChecksum = false;
+        return 0;
+    }
+
     uint8_t verIhl = i.ReadU8();
-    uint8_t ihl = verIhl & 0x0f;
-    uint16_t headerSize = ihl * 4;
+    uint32_t claimedHeaderSize = (verIhl & 0x0f) * 4;
 
     if ((verIhl >> 4) != 4)
     {
         NS_LOG_WARN("Trying to decode a non-IPv4 header, refusing to do it.");
+        m_malformed = true;
         return 0;
     }
 
+    if (claimedHeaderSize < 20 || claimedHeaderSize > available)
+    {
+        NS_LOG_WARN("IPv4 header length " << claimedHeaderSize << " out of the range [20:"
+                                          << available << "] of the bytes received");
+        m_malformed = true;
+    }
+    uint32_t headerSize = std::clamp<uint32_t>(claimedHeaderSize, 20, available);
+
     m_tos = i.ReadU8();
     uint16_t size = i.ReadNtohU16();
-    m_payloadSize = size - headerSize;
+    if (size < claimedHeaderSize || size < headerSize)
+    {
+        NS_LOG_WARN("IPv4 total length " << size << " below the header length "
+                                         << claimedHeaderSize);
+        m_malformed = true;
+        m_payloadSize = 0;
+    }
+    else
+    {
+        m_payloadSize = size - headerSize;
+    }
     m_identification = i.ReadNtohU16();
     uint8_t flags = i.ReadU8();
     m_flags = 0;
@@ -459,7 +668,81 @@ Ipv4Header::Deserialize(Buffer::Iterator start)
     /* i.Next (2); // checksum */
     m_source.Set(i.ReadNtohU32());
     m_destination.Set(i.ReadNtohU32());
-    m_headerSize = headerSize;
+
+    std::vector<uint8_t> raw(headerSize - 20);
+    i.Read(raw.data(), raw.size());
+    std::size_t pos = 0;
+    while (pos < raw.size())
+    {
+        uint8_t type = raw[pos];
+        if (type == IPV4_OPTION_END)
+        {
+            // What follows is padding
+            break;
+        }
+        if (type == IPV4_OPTION_NOP)
+        {
+            m_options.push_back(type);
+            ++pos;
+            continue;
+        }
+        if (pos + 1 >= raw.size() || raw[pos + 1] < 2 || pos + raw[pos + 1] > raw.size())
+        {
+            NS_LOG_WARN("Illegal length of the IPv4 option of type " << +type);
+            m_malformed = true;
+            break;
+        }
+        uint8_t length = raw[pos + 1];
+
+        // A malformed option is kept as received, like the unknown ones
+        bool isSourceRoute = false;
+        if (type == IPV4_OPTION_SSRR)
+        {
+            // The strict source route is not supported, and is never mixed
+            // with a loose one (RFC 1812, Section 5.2.4.1)
+            NS_LOG_WARN("Unsupported strict source route option");
+            m_malformed = true;
+        }
+        else if (type == IPV4_OPTION_LSRR && m_hasSourceRoute)
+        {
+            // Never concatenated with the first (RFC 1812, Section 5.2.4.1)
+            NS_LOG_WARN("Second loose source route option");
+            m_malformed = true;
+        }
+        else if (type == IPV4_OPTION_LSRR && (length < 3 || (length - 3) % 4 != 0))
+        {
+            NS_LOG_WARN("Illegal length " << +length << " of a loose source route option");
+            m_malformed = true;
+        }
+        else if (type == IPV4_OPTION_LSRR && (raw[pos + 2] < 4 || raw[pos + 2] % 4 != 0))
+        {
+            // The pointer designates the first octet of an address, the
+            // smallest legal value being 4 (RFC 791); one past the option
+            // means that the route is exhausted
+            NS_LOG_WARN("Illegal pointer " << +raw[pos + 2] << " of a loose source route option");
+            m_malformed = true;
+        }
+        else if (type == IPV4_OPTION_LSRR)
+        {
+            isSourceRoute = true;
+            m_hasSourceRoute = true;
+            m_sourceRouteOffset = m_options.size();
+            m_sourceRoutePointer = raw[pos + 2];
+            for (std::size_t address = pos + 3; address < pos + length; address += 4)
+            {
+                m_sourceRoute.emplace_back(
+                    (uint32_t(raw[address]) << 24) | (uint32_t(raw[address + 1]) << 16) |
+                    (uint32_t(raw[address + 2]) << 8) | uint32_t(raw[address + 3]));
+            }
+        }
+        if (!isSourceRoute)
+        {
+            m_options.insert(m_options.end(), raw.begin() + pos, raw.begin() + pos + length);
+        }
+        pos += length;
+    }
+    // The padding, and whatever could not be parsed, is kept as received
+    m_options.insert(m_options.end(), raw.begin() + pos, raw.end());
 
     if (m_calcChecksum)
     {
@@ -469,7 +752,7 @@ Ipv4Header::Deserialize(Buffer::Iterator start)
 
         m_goodChecksum = (checksum == 0);
     }
-    return GetSerializedSize();
+    return headerSize;
 }
 
 } // namespace ns3

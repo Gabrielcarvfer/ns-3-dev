@@ -17,6 +17,10 @@ This file is a best-effort approach to solving this issue; we will do our best b
 ### New API
 
 * (mesh) Added the `PreqReceived`, `PrepReceived` and `PerrReceived` trace sources to `dot11s::HwmpProtocol`, fired when a PREQ, PREP or PERR element is received from a neighbor, and `flame::FlameProtocol::GetRoutingTable()`.
+* (internet) `TcpL4Protocol` gained the `ClockDrivenIsn` attribute (default false), selecting the initial sequence numbers of the connections from a clock and a per-node secret, following RFC 9293 (Section 3.4.1) and RFC 6528.
+* (internet) `TcpSocket` gained the `KeepAlive` (default false) and `KeepAliveTime` attributes, and `TcpSocketBase` the `KeepAliveInterval` and `KeepAliveRetries` attributes, implementing the TCP keep-alives of RFC 9293 (Section 3.8.4).
+* (network, internet) `Socket` gained `SetUrgentDataCallback()`, `GetUrgentDataSize()` and the `MSG_FLAG_OOB` send flag, which `TcpSocketBase` implements as the TCP urgent mechanism of RFC 9293 (Section 3.8.5); the urgent data is delivered in the ordinary sequence order.
+* (internet) `Ipv4Header` can now carry the loose source route option of RFC 791 (`SetLooseSourceRoute()` and related accessors), `Ipv4L3Protocol` builds, follows and records it, and `TcpSocketBase::SetIpv4SourceRoute()` lets an application route the segments of a connection along one (RFC 9293, Section 3.9.2.1); the new `Ipv4SourceRouteTag` carries the route between the socket and the IP layer.
 
 ### Changes to existing API
 
@@ -26,6 +30,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 ### Changes to build system
 
 ### Changed behavior
+
+* (tcp) The TCP implementation was aligned with several RFC 9293 requirements, which changes the segments of existing simulations: every SYN and SYN+ACK now carries the MSS option, and the advertised MSS reflects the local configuration bounded by the interface MTU rather than the peer's value; with the timestamp option enabled (the default), the segment payload shrinks by the size of the option (12 bytes), since the MSS counts only data octets; the last segment of the buffered data carries PSH; the receiver holds the right edge of its window against silly window syndrome; a `Connect()` towards a broadcast or multicast address now fails with `ERROR_INVAL`; segments to or from a broadcast or multicast address, and ICMP Source Quench messages, are discarded; segments with malformed options reset the connection on both ends; a connection reset by the peer now invokes the error close callback of the socket rather than the normal close one, and a refused simultaneous open the connection failure callback; a socket bound to a specific local address keeps it upon `Connect()` instead of taking the one of the output route; a simultaneous open now completes; a listening socket no longer negotiates the options of the SYNs it receives, so that the connections it accepts are independent of each other; segments without data lying outside the receive window are acknowledged and dropped, and zero window probes carry the ACK flag; and the RTO is reset on every partial ACK, during a fast recovery as after a timeout (RFC 6298) (see issues #78, #248, #940, #946, #988, #996).
 
 ## Changes from ns-3.48 to ns-3.49
 

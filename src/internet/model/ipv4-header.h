@@ -12,6 +12,8 @@
 #include "ns3/header.h"
 #include "ns3/ipv4-address.h"
 
+#include <vector>
+
 namespace ns3
 {
 /**
@@ -148,6 +150,78 @@ class Ipv4Header : public Header
      * @param source the source of this packet
      */
     void SetSource(Ipv4Address source);
+
+    /**
+     * @brief Set the loose source route option of the header
+     *
+     * The option holds the addresses the datagram is routed through, the last
+     * of which is its final destination, as @RFC{791} describes. The pointer
+     * of the option is left at the first of them. An empty route removes the
+     * option. The route must fit in the 40 bytes of the option space, i.e.,
+     * hold at most 9 addresses.
+     *
+     * @param route The addresses of the route.
+     */
+    void SetLooseSourceRoute(const std::vector<Ipv4Address>& route);
+
+    /**
+     * @brief Check whether the header carries a loose source route option
+     * @returns true if the header carries the option.
+     */
+    bool HasLooseSourceRoute() const;
+
+    /**
+     * @brief Get the addresses of the loose source route option
+     * @returns The addresses of the option, empty if it is not present.
+     */
+    std::vector<Ipv4Address> GetLooseSourceRoute() const;
+
+    /**
+     * @brief Get the offset of the next address of the route
+     * @returns The pointer field of the option.
+     */
+    uint8_t GetSourceRoutePointer() const;
+
+    /**
+     * @brief Set the offset of the next address of the route
+     * @param pointer The pointer field of the option.
+     */
+    void SetSourceRoutePointer(uint8_t pointer);
+
+    /**
+     * @brief Get the length of the options, padding included
+     *
+     * The options are the loose source route, if any, and the options the
+     * class does not model, which a received header keeps as they arrived so
+     * that a forwarded datagram carries them unchanged.
+     *
+     * @returns The length of the options in bytes.
+     */
+    uint16_t OptionsLength() const;
+
+    /**
+     * @brief Check whether the received header failed the format checks
+     *
+     * A header is malformed when it is shorter than the 20 bytes of the fixed
+     * fields, when its IHL field is below 5 or beyond the bytes received,
+     * when its total length is below its header length, when an option
+     * has an illegal length, when it holds a strict source route option or
+     * more than one loose source route option, or when the pointer of its
+     * loose source route option is below 4 or not on an address boundary
+     * (@RFC{791}, @RFC{1812} Section 5.2.4.1). Deserialize never reads beyond
+     * the bytes it is given, and the IP layer discards a malformed header.
+     *
+     * @returns true if the last Deserialize found the header malformed.
+     */
+    bool IsMalformed() const;
+
+    /**
+     * @brief Remove the options which are not copied on fragmentation
+     *
+     * Only the options whose copied flag is set appear in the fragments
+     * but the first (@RFC{791}, Section 3.1).
+     */
+    void RemoveOptionsNotCopied();
     /**
      * @param destination the destination of this packet.
      */
@@ -241,18 +315,23 @@ class Ipv4Header : public Header
 
     bool m_calcChecksum; //!< true if the checksum must be calculated
 
-    uint16_t m_payloadSize;    //!< payload size
-    uint16_t m_identification; //!< identification
-    uint32_t m_tos : 8;        //!< TOS, also used as DSCP + ECN value
-    uint32_t m_ttl : 8;        //!< TTL
-    uint32_t m_protocol : 8;   //!< Protocol
-    uint32_t m_flags : 3;      //!< flags
-    uint16_t m_fragmentOffset; //!< Fragment offset
-    Ipv4Address m_source;      //!< source address
-    Ipv4Address m_destination; //!< destination address
-    uint16_t m_checksum;       //!< checksum
-    bool m_goodChecksum;       //!< true if checksum is correct
-    uint16_t m_headerSize;     //!< IP header size
+    uint16_t m_payloadSize;                 //!< payload size
+    uint16_t m_identification;              //!< identification
+    uint32_t m_tos : 8;                     //!< TOS, also used as DSCP + ECN value
+    uint32_t m_ttl : 8;                     //!< TTL
+    uint32_t m_protocol : 8;                //!< Protocol
+    uint32_t m_flags : 3;                   //!< flags
+    uint16_t m_fragmentOffset;              //!< Fragment offset
+    Ipv4Address m_source;                   //!< source address
+    Ipv4Address m_destination;              //!< destination address
+    uint16_t m_checksum;                    //!< checksum
+    bool m_goodChecksum;                    //!< true if checksum is correct
+    bool m_malformed{false};                //!< The received header failed the format checks
+    bool m_hasSourceRoute{false};           //!< The header carries a loose source route option
+    std::vector<Ipv4Address> m_sourceRoute; //!< Addresses of the loose source route option
+    uint8_t m_sourceRoutePointer{4};        //!< Offset of the next address of the route
+    std::vector<uint8_t> m_options;         //!< Raw bytes of the other options, as received
+    uint16_t m_sourceRouteOffset{0};        //!< Position of the loose source route in m_options
 };
 
 } // namespace ns3

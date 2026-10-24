@@ -12,6 +12,7 @@
 #include "ipv4-end-point.h"
 #include "ipv4-route.h"
 #include "ipv4-routing-protocol.h"
+#include "ipv4-source-route-tag.h"
 #include "ipv6-end-point-demux.h"
 #include "ipv6-end-point.h"
 #include "ipv6-l3-protocol.h"
@@ -502,7 +503,8 @@ TcpL4Protocol::IsUnusableAddress(Ipv4Address address, Ptr<Ipv4Interface> interfa
 void
 TcpL4Protocol::NoEndPointsFound(const TcpHeader& incomingHeader,
                                 const Address& incomingSAddr,
-                                const Address& incomingDAddr)
+                                const Address& incomingDAddr,
+                                Ptr<const Packet> incomingPacket)
 {
     NS_LOG_FUNCTION(this << incomingHeader << incomingSAddr << incomingDAddr);
 
@@ -510,6 +512,13 @@ TcpL4Protocol::NoEndPointsFound(const TcpHeader& incomingHeader,
     {
         // build a RST packet and send
         Ptr<Packet> rstPacket = Create<Packet>();
+        // The RST follows the way back of a source routed segment (RFC 9293,
+        // Section 3.9.2.1, MUST-53)
+        Ipv4SourceRouteTag returnRoute;
+        if (incomingPacket && incomingPacket->PeekPacketTag(returnRoute))
+        {
+            rstPacket->AddPacketTag(returnRoute);
+        }
         TcpHeader outgoingTcpHeader;
 
         if (incomingHeader.GetFlags() & TcpHeader::ACK)
@@ -597,7 +606,8 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
         }
         NoEndPointsFound(incomingTcpHeader,
                          incomingIpHeader.GetSource(),
-                         incomingIpHeader.GetDestination());
+                         incomingIpHeader.GetDestination(),
+                         packet);
         return IpL4Protocol::RX_ENDPOINT_CLOSED;
     }
 
@@ -636,7 +646,8 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
 
         NoEndPointsFound(incomingTcpHeader,
                          incomingIpHeader.GetSource(),
-                         incomingIpHeader.GetDestination());
+                         incomingIpHeader.GetDestination(),
+                         packet);
 
         return IpL4Protocol::RX_ENDPOINT_CLOSED;
     }
@@ -706,7 +717,8 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
         }
         NoEndPointsFound(incomingTcpHeader,
                          incomingIpHeader.GetSource(),
-                         incomingIpHeader.GetDestination());
+                         incomingIpHeader.GetDestination(),
+                         packet);
         return IpL4Protocol::RX_ENDPOINT_CLOSED;
     }
 
@@ -729,7 +741,8 @@ TcpL4Protocol::Receive(Ptr<Packet> packet,
 
         NoEndPointsFound(incomingTcpHeader,
                          incomingIpHeader.GetSource(),
-                         incomingIpHeader.GetDestination());
+                         incomingIpHeader.GetDestination(),
+                         packet);
 
         return IpL4Protocol::RX_ENDPOINT_CLOSED;
     }

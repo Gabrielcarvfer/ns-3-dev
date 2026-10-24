@@ -3,6 +3,7 @@
 #include "icmpv4.h"
 #include "ipv4-packet-info-tag.h"
 #include "ipv4-routing-protocol.h"
+#include "ipv4-source-route-tag.h"
 
 #include "ns3/boolean.h"
 #include "ns3/inet-socket-address.h"
@@ -471,6 +472,10 @@ Ipv4RawSocketImpl::ForwardUp(Ptr<const Packet> p,
         ipHeader.GetProtocol() == m_protocol)
     {
         Ptr<Packet> copy = p->Copy();
+        // The header carries the route, which the application is to reverse
+        // itself (see Ipv4SourceRouteTag)
+        Ipv4SourceRouteTag returnRoute;
+        copy->RemovePacketTag(returnRoute);
         // Should check via getsockopt ()..
         if (IsRecvPktInfo())
         {

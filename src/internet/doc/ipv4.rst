@@ -210,6 +210,68 @@ Explicit Congestion Notification (ECN) bits
   in RFC 3168, and also a setter and getter method to handle ECN values in
   the TOS field.
 
+IPv4 options and loose source routing
+*************************************
+
+The ``Ipv4Header`` class models one option, the Loose Source and Record Route
+(LSRR) of :rfc:`791`. The other options of a received header are kept as raw
+bytes, in their place, so that a header serializes back to the bytes it was
+read from: a forwarded datagram carries them unchanged (:rfc:`1812`, Section
+5.3.13), and an ICMP error quotes them whole. When a datagram is fragmented,
+only the options whose copied flag is set, the LSRR among them, appear in the
+fragments but the first.
+
+A received header which does not hold together is discarded by the IP layer,
+with the ``DROP_BAD_CHECKSUM`` reason of the "Drop" trace, whether or not the
+checksums are enabled: a datagram shorter than the 20 bytes of the fixed
+fields or than its header length, an IHL field below 5, a total length below
+the header length or beyond the bytes received, an option with an illegal
+length, an LSRR whose pointer is below 4 or not on an address boundary, a
+second LSRR, or a Strict Source and Record Route, which is not supported
+(:rfc:`1812`, Section 5.2.4.1). The ``Ipv4Header::IsMalformed ()`` method
+tells whether a header failed these checks. A pointer past the end of the
+option means that the route is exhausted.
+
+An application asks a datagram to follow a route by attaching an
+``Ipv4SourceRouteTag`` holding the addresses of the route to it; the
+destination is appended to a route which stops short of it. The first hop
+travels in the destination field of the header and the others in the option,
+which holds at most 9 addresses, so a route holds at most
+``Ipv4SourceRouteTag::MAX_HOPS`` (10) hops, the destination included: the IP
+layer drops a datagram whose route does not fit, with the ``DROP_ROUTE_ERROR``
+reason. The route of a datagram sent to a broadcast or a multicast address is
+ignored. A TCP socket follows a route of the application through
+``TcpSocketBase::SetIpv4SourceRoute ()``, which refuses a route which cannot
+fit or which holds an address which is not a unicast one, and its segment
+size leaves room for the option, so that its full sized segments are not
+fragmented (:rfc:`9293`, Section 3.7.1).
+
+A node which receives a datagram whose route is not exhausted acts as a hop of
+the route only if its ``SourceRouteForwarding`` attribute is set; the
+attribute is false by default, and independent of ``IpForward``, like the
+``accept_source_route`` setting of Linux (:rfc:`1122`, Section 3.3.5;
+:rfc:`7126`, Section 4.3.5). A hop passes over the next addresses of the
+route which are its own, then sends the datagram on towards the next one,
+recording in its slot the address it forwards the datagram from. A node
+which does not follow the route, or which has no route towards the next hop
+or finds it is not a unicast address, discards the datagram and returns an
+ICMP Destination Unreachable, Source Route Failed, unless the datagram is
+itself an ICMP error message, a fragment but the first, or was addressed to
+or sent from a broadcast or a multicast address. A datagram which reached a
+hop as a broadcast or a multicast is never relayed. A hop decrements the TTL
+like a router, and returns an ICMP Time Exceeded when it runs out.
+
+At the final destination, the addresses the option recorded, reversed and
+followed by the sender, are the way back, which the IP layer attaches to the
+datagram as an ``Ipv4SourceRouteTag``. TCP sends the segments of a passively
+opened connection along it, as well as the RSTs answering segments which
+reach no connection, unless the application set a route of its own (:rfc:`9293`,
+Section 3.9.2.1); a later acceptable segment recording a different route
+updates it. The ICMP Echo Reply follows it too (:rfc:`1122`, Section
+3.2.2.6). The UDP and raw sockets remove it from the datagrams they deliver:
+the application which answers a datagram is the one to reverse its route,
+which the raw sockets find in the header (:rfc:`1122`, Section 4.1.3.2).
+
 Ipv4QueueDiscItem
 *****************
 

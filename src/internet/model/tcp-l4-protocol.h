@@ -357,11 +357,13 @@ class TcpL4Protocol : public IpL4Protocol
      * @param incomingHeader TCP header of the incoming packet
      * @param incomingSAddr Source address of the incoming packet
      * @param incomingDAddr Destination address of the incoming packet
-     *
+     * @param incomingPacket The incoming packet, whose way back, if any, the
+     *                       RST follows
      */
     void NoEndPointsFound(const TcpHeader& incomingHeader,
                           const Address& incomingSAddr,
-                          const Address& incomingDAddr);
+                          const Address& incomingDAddr,
+                          Ptr<const Packet> incomingPacket);
 
   private:
     /**

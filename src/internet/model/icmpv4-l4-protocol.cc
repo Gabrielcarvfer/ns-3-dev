@@ -12,6 +12,7 @@
 #include "ipv4-raw-socket-factory-impl.h"
 #include "ipv4-route.h"
 #include "ipv4-routing-protocol.h"
+#include "ipv4-source-route-tag.h"
 #include "ipv4.h"
 #include "ipv6-interface.h"
 
@@ -172,6 +173,13 @@ Icmpv4L4Protocol::SendDestUnreachNetwork(Ipv4Header header, Ptr<const Packet> or
 }
 
 void
+Icmpv4L4Protocol::SendDestUnreachSourceRouteFailed(Ipv4Header header, Ptr<const Packet> orgData)
+{
+    NS_LOG_FUNCTION(this << header << *orgData);
+    SendDestUnreach(header, orgData, Icmpv4DestinationUnreachable::ICMPV4_SOURCE_ROUTE_FAILED, 0);
+}
+
+void
 Icmpv4L4Protocol::SendDestUnreach(Ipv4Header header,
                                   Ptr<const Packet> orgData,
                                   uint8_t code,
@@ -228,6 +236,13 @@ Icmpv4L4Protocol::HandleEcho(Ptr<Packet> p,
     SocketIpTosTag ipTosTag;
     ipTosTag.SetTos(tos);
     reply->ReplacePacketTag(ipTosTag);
+    // The reply follows the way back of a source routed request (RFC 1122,
+    // Section 3.2.2.6)
+    Ipv4SourceRouteTag returnRoute;
+    if (p->PeekPacketTag(returnRoute))
+    {
+        reply->AddPacketTag(returnRoute);
+    }
     SendMessage(reply, destination, source, Icmpv4Header::ICMPV4_ECHO_REPLY, 0, nullptr);
 }
 

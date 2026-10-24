@@ -42,9 +42,12 @@ but other contemporaneous versions may also work.
 
 ### New user-visible features
 
+- (internet) Added several RFC 9293 conformance features to TCP: the keep-alives (`KeepAlive`, `KeepAliveTime`, `KeepAliveInterval` and `KeepAliveRetries` attributes), the urgent mechanism (`MSG_FLAG_OOB`, `Socket::SetUrgentDataCallback()` and `Socket::GetUrgentDataSize()`), clock driven initial sequence numbers (`TcpL4Protocol::ClockDrivenIsn` attribute), the completion of a simultaneous open, receiver silly window syndrome avoidance, and the IPv4 loose source route option with `TcpSocketBase::SetIpv4SourceRoute()`. The new tcp-rfc9293 test suite tracks the conformance status requirement by requirement.
+
 ### Bugs fixed
 
 - (mesh) #682 Mesh regression tests no longer compare against reference PCAP files; they now check HWMP, peer management and FLAME behavior through trace sources.
+- (tcp) #78, #248, #940, #946, #979, #988, #996 Fixed several TCP conformance defects: the RTO reset on partial ACKs, dupack guesses with a single segment in flight, duplicate TCP options, the MSS option in every SYN, forced retransmissions on SACK partial ACKs, the segment size accounting for the TCP options, the advertised MSS bound by the interface MTU, invalid remote addresses on `Connect()`, discarding segments to or from broadcast or multicast addresses, resetting on malformed options, keeping the bound local address, PSH on the last segment of the buffered data, and the detection of a lost retransmission.
 
 ## Release 3.49
 

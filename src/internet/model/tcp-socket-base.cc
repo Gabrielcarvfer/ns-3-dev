@@ -18,6 +18,7 @@
 #include "ipv4-end-point.h"
 #include "ipv4-route.h"
 #include "ipv4-routing-protocol.h"
+#include "ipv4-source-route-tag.h"
 #include "ipv4.h"
 #include "ipv6-end-point.h"
 #include "ipv6-l3-protocol.h"
@@ -417,6 +418,8 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
       m_clockGranularity(sock.m_clockGranularity),
       m_delAckTimeout(sock.m_delAckTimeout),
       m_persistTimeout(sock.m_persistTimeout),
+      m_sourceRoute(sock.m_sourceRoute),
+      m_appSourceRoute(sock.m_appSourceRoute),
       m_keepAlive(sock.m_keepAlive),
       m_keepAliveTime(sock.m_keepAliveTime),
       m_keepAliveInterval(sock.m_keepAliveInterval),
@@ -1621,6 +1624,11 @@ TcpSocketBase::ProcessSynOptions(const TcpHeader& tcpHeader)
     // whole as well as by what the peer receives (RFC 9293, Section 3.7.1,
     // MUST-16)
     m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, GetInterfaceMss());
+    if (!m_ipOptionsAccounted)
+    {
+        m_ipOptionsAccounted = true;
+        UpdateSegmentSizeForIpOptions();
+    }
 
     // When receiving a <SYN> or <SYN-ACK> we should adapt TS to the other end
     if (tcpHeader.HasOption(TcpOption::TS) && m_timestampEnabled)
@@ -1702,6 +1710,9 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
 
     m_rxTrace(packet, tcpHeader, this);
 
+    Ipv4SourceRouteTag returnRoute;
+    bool hasReturnRoute = packet->RemovePacketTag(returnRoute);
+
     // Something came in, so the connection is not idle
     RearmKeepAlive();
 
@@ -1779,6 +1790,19 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         NS_ASSERT(m_persistTimeout == Simulator::GetDelayLeft(m_persistEvent));
     }
 
+    if (hasReturnRoute && !m_appSourceRoute && m_endPoint != nullptr &&
+        IsAcceptableForReturnRoute(tcpHeader, packet->GetSize()))
+    {
+        // The way back recorded by the datagram which arrived, which the
+        // segments of this connection follow unless the application asked for
+        // a route of its own (RFC 9293, Section 3.9.2.1, MUST-52 and MUST-53).
+        // A listener keeps it only for the connection it forks for the SYN
+        // (see ProcessListen).
+        m_sourceRoute = returnRoute.GetRoute();
+        NS_LOG_LOGIC("Saved a return route of " << m_sourceRoute.size() << " hops");
+        UpdateSegmentSizeForIpOptions();
+    }
+
     // TCP state machine code in different process functions
     // C.f.: tcp_rcv_state_process() in tcp_input.c in Linux kernel
     switch (m_state)
@@ -1805,6 +1829,14 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
             h.SetDestinationPort(tcpHeader.GetSourcePort());
             h.SetWindowSize(AdvertisedWindowSize());
             AddOptions(h);
+            // The route of the application, else the way back of the segment
+            Ipv4SourceRouteTag routeTag;
+            routeTag.SetRoute(m_appSourceRoute && m_endPoint != nullptr ? m_sourceRoute
+                                                                        : returnRoute.GetRoute());
+            if (!routeTag.GetRoute().empty())
+            {
+                p->AddPacketTag(routeTag);
+            }
             m_txTrace(p, h, this);
             m_tcp->SendPacket(p, h, toAddress, fromAddress, m_boundnetdevice);
         }
@@ -2671,6 +2703,15 @@ TcpSocketBase::ProcessListen(Ptr<Packet> packet,
 
     // Fork a socket if received a SYN. Do nothing otherwise.
     // C.f.: the LISTEN part in tcp_v4_do_rcv() in tcp_ipv4.c in Linux kernel
+    // The way back recorded by the segment which arrived belongs to the
+    // connection forked for it alone, never to the listener, whatever
+    // becomes of the segment
+    std::vector<Ipv4Address> returnRoute;
+    if (!m_appSourceRoute)
+    {
+        returnRoute.swap(m_sourceRoute);
+    }
+
     if (tcpflags != TcpHeader::SYN)
     {
         return;
@@ -2685,6 +2726,10 @@ TcpSocketBase::ProcessListen(Ptr<Packet> packet,
     // Clone the socket, simulate fork
     Ptr<TcpSocketBase> newSock = Fork();
     NS_LOG_LOGIC("Cloned a TcpSocketBase " << newSock);
+    if (!m_appSourceRoute)
+    {
+        newSock->m_sourceRoute = returnRoute;
+    }
     Simulator::ScheduleNow(&TcpSocketBase::CompleteFork,
                            newSock,
                            packet,
@@ -3560,6 +3605,17 @@ TcpSocketBase::ConnectionSucceeded()
 void
 TcpSocketBase::AddSocketTags(const Ptr<Packet>& p, bool isEct) const
 {
+    if (!m_sourceRoute.empty() && m_endPoint != nullptr)
+    {
+        // The route the application asked for, or the one the opening segment
+        // of a passively opened connection recorded (RFC 9293, Section
+        // 3.9.2.1, MUST-51 and MUST-53). The segment size leaves room for the
+        // option (see UpdateSegmentSizeForIpOptions).
+        Ipv4SourceRouteTag routeTag;
+        routeTag.SetRoute(m_sourceRoute);
+        p->AddPacketTag(routeTag);
+    }
+
     /*
      * Add tags for each socket option.
      * Note that currently the socket adds both IPv4 tag and IPv6 tag
@@ -4611,11 +4667,9 @@ TcpSocketBase::PersistTimeout()
         tcpHeader.SetDestinationPort(m_endPoint6->GetPeerPort());
     }
     AddOptions(tcpHeader);
-    // Send a packet tag for setting ECT bits in IP header
-    if (m_tcb->m_ecnState != TcpSocketState::ECN_DISABLED)
-    {
-        AddSocketTags(p, IsEct(TcpPacketType_t::WINDOW_PROBE));
-    }
+    // The probe follows the source route of the connection, and carries the
+    // IP settings of the socket, like the other segments
+    AddSocketTags(p, IsEct(TcpPacketType_t::WINDOW_PROBE));
     m_txTrace(p, tcpHeader, this);
 
     if (m_endPoint != nullptr)
@@ -4869,6 +4923,46 @@ TcpSocketBase::SetPersistTimeout(Time timeout)
 {
     NS_LOG_FUNCTION(this << timeout);
     m_persistTimeout = timeout;
+}
+
+bool
+TcpSocketBase::SetIpv4SourceRoute(const std::vector<Ipv4Address>& route)
+{
+    NS_LOG_FUNCTION(this << route.size());
+    for (const auto& hop : route)
+    {
+        if (hop.IsAny() || hop.IsBroadcast() || hop.IsMulticast() || hop.IsLocalhost())
+        {
+            NS_LOG_WARN("Refusing a source route through " << hop);
+            return false;
+        }
+    }
+    // The peer is appended to a route which stops short of it
+    uint32_t hops = route.size();
+    if (!route.empty() && m_endPoint != nullptr && !m_endPoint->GetPeerAddress().IsAny() &&
+        route.back() != m_endPoint->GetPeerAddress())
+    {
+        ++hops;
+    }
+    if (hops > Ipv4SourceRouteTag::MAX_HOPS)
+    {
+        NS_LOG_WARN("Refusing a source route of " << hops << " hops, beyond the "
+                                                  << +Ipv4SourceRouteTag::MAX_HOPS
+                                                  << " the option holds");
+        return false;
+    }
+    m_sourceRoute = route;
+    // A route the application specified takes precedence over the one a
+    // received datagram recorded (RFC 9293, Section 3.9.2.1, MUST-52)
+    m_appSourceRoute = !route.empty();
+    UpdateSegmentSizeForIpOptions();
+    return true;
+}
+
+std::vector<Ipv4Address>
+TcpSocketBase::GetIpv4SourceRoute() const
+{
+    return m_sourceRoute;
 }
 
 void
@@ -5220,6 +5314,97 @@ TcpSocketBase::ProcessOptionMss(const Ptr<const TcpOption> option)
     constexpr uint32_t MIN_PEER_MSS = 48;
     uint32_t peerMss = std::max(static_cast<uint32_t>(mss->GetMSS()), MIN_PEER_MSS);
     m_tcb->m_segmentSize = std::min(m_tcb->m_segmentSize, peerMss);
+}
+
+bool
+TcpSocketBase::IsAcceptableForReturnRoute(const TcpHeader& tcpHeader, uint32_t payloadSize) const
+{
+    uint8_t flags =
+        tcpHeader.GetFlags() & ~(TcpHeader::PSH | TcpHeader::URG | TcpHeader::CWR | TcpHeader::ECE);
+    bool acksSyn = (flags & TcpHeader::ACK) &&
+                   tcpHeader.GetAckNumber() == m_tcb->m_nextTxSequence + SequenceNumber32(1);
+    if (flags & TcpHeader::RST)
+    {
+        return false;
+    }
+
+    switch (m_state)
+    {
+    case LISTEN:
+        return flags == TcpHeader::SYN;
+    case SYN_SENT:
+        return (flags & TcpHeader::SYN) && (!(flags & TcpHeader::ACK) || acksSyn);
+    case SYN_RCVD:
+        return (flags & TcpHeader::ACK) ? acksSyn : flags == TcpHeader::SYN;
+    case CLOSED:
+    case TIME_WAIT:
+        return false;
+    default:
+        break;
+    }
+
+    if ((flags & TcpHeader::SYN) || !(flags & TcpHeader::ACK))
+    {
+        return false;
+    }
+    // An ACK older than SND.UNA comes from a segment sent before the last one
+    // received, whose way back is the more recent
+    if (tcpHeader.GetAckNumber() > m_tcb->m_highTxMark ||
+        tcpHeader.GetAckNumber() < m_txBuffer->HeadSequence())
+    {
+        return false;
+    }
+    // ForwardUp discarded the data lying beyond the window, but not the data
+    // received already which ends right at RCV.NXT
+    SequenceNumber32 seq = tcpHeader.GetSequenceNumber();
+    if (payloadSize > 0)
+    {
+        return seq + SequenceNumber32(payloadSize) > m_tcb->m_rxBuffer->NextRxSequence();
+    }
+    return !ZeroLengthOutOfRange(seq);
+}
+
+uint32_t
+TcpSocketBase::GetIpv4SourceRouteOptionSize() const
+{
+    if (m_sourceRoute.empty() || m_endPoint == nullptr)
+    {
+        return 0;
+    }
+    // The first hop travels in the destination field, and the peer is
+    // appended to a route which stops short of it
+    uint32_t addresses = m_sourceRoute.size();
+    if (m_sourceRoute.back() == m_endPoint->GetPeerAddress())
+    {
+        --addresses;
+    }
+    if (addresses == 0)
+    {
+        return 0;
+    }
+    // Type, length and pointer, then the addresses, padded to a word
+    return (3 + 4 * addresses + 3) & ~3U;
+}
+
+void
+TcpSocketBase::UpdateSegmentSizeForIpOptions()
+{
+    NS_LOG_FUNCTION(this);
+    if (!m_ipOptionsAccounted)
+    {
+        return;
+    }
+    uint32_t optionsSize = GetIpv4SourceRouteOptionSize();
+    if (optionsSize == m_ipOptionsSize)
+    {
+        return;
+    }
+    uint32_t fullSize = m_tcb->m_segmentSize + m_ipOptionsSize;
+    m_tcb->m_segmentSize = fullSize > optionsSize ? fullSize - optionsSize : 1;
+    m_ipOptionsSize = fullSize - m_tcb->m_segmentSize;
+    m_txBuffer->SetSegmentSize(m_tcb->m_segmentSize);
+    NS_LOG_INFO("Segment size " << m_tcb->m_segmentSize << " with " << m_ipOptionsSize
+                                << " bytes of IP options");
 }
 
 uint32_t

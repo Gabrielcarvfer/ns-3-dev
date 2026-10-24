@@ -210,6 +210,35 @@ class TcpSocketBase : public TcpSocket
 {
   public:
     /**
+     * @brief Specify the source route the segments of this connection follow
+     *
+     * @RFC{9293}, Section 3.9.2.1 requires an application to be able to
+     * specify a source route when it opens a connection (MUST-51), and that
+     * route to take precedence over the one a received datagram recorded
+     * (MUST-52). The route is followed by the segments of an IPv4 connection
+     * only, and one set on a listening socket is inherited by every
+     * connection it accepts, in place of the way back those recorded. An
+     * empty route restores the default, i.e. the recorded way back if any.
+     *
+     * A route is refused when one of its addresses is not a unicast address,
+     * or when it holds more than Ipv4SourceRouteTag::MAX_HOPS hops once the
+     * peer, if known, is appended. A route of Ipv4SourceRouteTag::MAX_HOPS
+     * hops set before the peer is known must end at the peer: the IP layer
+     * drops the segments of a route which does not fit in the option.
+     *
+     * @param route The addresses of the route, up to Ipv4SourceRouteTag::MAX_HOPS;
+     *              the peer is appended when the route stops short of it.
+     * @return true if the route was set, false if it was refused.
+     */
+    bool SetIpv4SourceRoute(const std::vector<Ipv4Address>& route);
+
+    /**
+     * @brief Get the source route the segments of this connection follow
+     * @return The addresses of the route.
+     */
+    std::vector<Ipv4Address> GetIpv4SourceRoute() const;
+
+    /**
      * Get the type ID.
      * @brief Get the type ID.
      * @return the object TypeId
@@ -1406,6 +1435,42 @@ class TcpSocketBase : public TcpSocket
     uint32_t GetInterfaceMss() const;
 
     /**
+     * @brief Check whether a segment may update the way back of the connection
+     *
+     * Only a segment which the connection accepts updates the way back, so
+     * that a stale or forged segment cannot divert the connection (RFC 9293,
+     * Section 3.10.7): never a RST; on a listener, a SYN alone; in SYN-SENT,
+     * a SYN, acknowledging ours if it holds an ACK; in SYN-RECEIVED, a SYN
+     * sent again or an ACK of ours; on a synchronized connection, a segment
+     * holding an ACK, neither of data never sent nor older than the last one
+     * received, holding no SYN, and holding a sequence number or data not
+     * received yet within the window.
+     *
+     * @param tcpHeader The header of the segment.
+     * @param payloadSize The size of the data of the segment.
+     * @return true if the way back the segment recorded may be saved.
+     */
+    bool IsAcceptableForReturnRoute(const TcpHeader& tcpHeader, uint32_t payloadSize) const;
+
+    /**
+     * @brief Get the size of the IP option the segments of the connection carry
+     *
+     * @return The size of the loose source route option of an IPv4
+     *         connection, padding included, 0 without a source route.
+     */
+    uint32_t GetIpv4SourceRouteOptionSize() const;
+
+    /**
+     * @brief Reduce the segment size by the size of the IP option in use
+     *
+     * The effective send MSS leaves room for the IP options (@RFC{9293},
+     * Section 3.7.1), so that a full sized segment of a source routed
+     * connection is not fragmented. Nothing is done before the segment size
+     * is negotiated, which accounts for the option in use then.
+     */
+    void UpdateSegmentSizeForIpOptions();
+
+    /**
      * @brief Add the MSS option to the header
      *
      * The MSS option should be sent in every SYN segment when the receive
@@ -1553,6 +1618,10 @@ class TcpSocketBase : public TcpSocket
     Time m_clockGranularity{Seconds(0.001)}; //!< Clock Granularity used in RTO calcs
     Time m_delAckTimeout;                    //!< Time to delay an ACK
     Time m_persistTimeout;                   //!< Time between sending 1-byte probes
+    std::vector<Ipv4Address> m_sourceRoute;  //!< Source route of the segments sent
+    bool m_appSourceRoute{false};            //!< The application specified the source route
+    bool m_ipOptionsAccounted{false};        //!< The segment size accounts for the IP options
+    uint32_t m_ipOptionsSize{0};             //!< Bytes of IP options taken off the segment size
     bool m_keepAlive{false};                 //!< Keep-alives are enabled
     Time m_keepAliveTime;                    //!< Idle time before the first keep-alive
     Time m_keepAliveInterval;                //!< Time between unanswered keep-alives
