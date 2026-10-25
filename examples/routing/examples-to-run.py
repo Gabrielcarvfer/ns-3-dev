@@ -15,6 +15,24 @@ cpp_examples = [
     ("simple-global-routing", "True", "True"),
     ("simple-routing-ping6", "True", "True"),
     ("static-routing-slash32", "True", "True"),
+    (
+        "dense-routing-scaling --protocol=aodv --nodes=300 --flows=300 --simTime=10s",
+        "NS_PERFORMANCE == True",
+        "False",
+        "TAKES_FOREVER",
+    ),
+    (
+        "dense-routing-scaling --protocol=dsr --nodes=80 --flows=80 --simTime=10s",
+        "NS_PERFORMANCE == True",
+        "False",
+        "TAKES_FOREVER",
+    ),
+    (
+        "dense-routing-scaling --protocol=olsr --nodes=150 --flows=0 --simTime=20s",
+        "NS_PERFORMANCE == True",
+        "False",
+        "TAKES_FOREVER",
+    ),
 ]
 
 # A list of Python examples to run in order to ensure that they remain
