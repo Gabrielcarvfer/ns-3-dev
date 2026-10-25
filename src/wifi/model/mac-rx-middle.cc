@@ -192,6 +192,16 @@ MacRxMiddle::Lookup(Ptr<const WifiMpdu> mpdu)
     return it->second;
 }
 
+OriginatorRxStatus&
+MacRxMiddle::LookupOverheard(Ptr<const WifiMpdu> mpdu)
+{
+    NS_LOG_FUNCTION(*mpdu);
+    const auto& hdr = mpdu->GetOriginal()->GetHeader();
+    const uint8_t tid = hdr.IsQosData() ? hdr.GetQosTid() : 16;
+    auto [it, inserted] = m_overheardStatus.try_emplace({hdr.GetAddr2(), hdr.GetAddr1(), tid});
+    return it->second;
+}
+
 bool
 MacRxMiddle::IsDuplicate(const WifiMacHeader& hdr, const OriginatorRxStatus& originator) const
 {
@@ -260,14 +270,14 @@ MacRxMiddle::HandleFragments(Ptr<const Packet> packet,
 }
 
 void
-MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
+MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId, bool overheard)
 {
-    NS_LOG_FUNCTION(*mpdu << +linkId);
+    NS_LOG_FUNCTION(*mpdu << +linkId << overheard);
     // consider the MAC header of the original MPDU (makes a difference for data frames only)
     const auto& hdr = mpdu->GetOriginal()->GetHeader();
     NS_ASSERT(hdr.IsData() || hdr.IsMgt());
 
-    auto& originator = Lookup(mpdu);
+    auto& originator = overheard ? LookupOverheard(mpdu) : Lookup(mpdu);
     /**
      * The check below is really unneeded because it can fail in a lot of
      * normal cases. Specifically, it is possible for sequence numbers to

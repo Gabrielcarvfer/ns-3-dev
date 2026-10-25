@@ -21,6 +21,7 @@
 #include "ns3/header-serialization-test.h"
 #include "ns3/ht-configuration.h"
 #include "ns3/interference-helper.h"
+#include "ns3/mac-rx-middle.h"
 #include "ns3/mgt-headers.h"
 #include "ns3/mobility-helper.h"
 #include "ns3/multi-model-spectrum-channel.h"
@@ -3965,6 +3966,89 @@ DsssModulationTest::DoRun()
  * @ingroup wifi-test
  * @ingroup tests
  *
+ * @brief Test that the frames overheard in promiscuous mode do not make the MPDUs addressed to
+ * this station look like duplicates.
+ *
+ * A transmitter numbers the frames it sends to each receiver separately, hence an overheard frame
+ * may carry the same TID and sequence number as a frame later addressed to this station. If the
+ * latter is a retransmission (Retry bit set), it must still be forwarded up.
+ */
+class OverheardFrameDuplicateTest : public TestCase
+{
+  public:
+    OverheardFrameDuplicateTest();
+
+  private:
+    void DoRun() override;
+
+    /**
+     * Callback invoked when the MAC RX middle forwards an MPDU up
+     *
+     * @param mpdu the MPDU
+     * @param linkId the ID of the link the MPDU was received on
+     */
+    void ForwardUp(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
+
+    uint32_t m_forwarded{0}; ///< number of MPDUs forwarded up
+};
+
+OverheardFrameDuplicateTest::OverheardFrameDuplicateTest()
+    : TestCase("Overheard frames do not cause MPDUs addressed to us to be dropped as duplicates")
+{
+}
+
+void
+OverheardFrameDuplicateTest::ForwardUp(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
+{
+    m_forwarded++;
+}
+
+void
+OverheardFrameDuplicateTest::DoRun()
+{
+    auto rxMiddle = Create<MacRxMiddle>();
+    rxMiddle->SetForwardCallback(MakeCallback(&OverheardFrameDuplicateTest::ForwardUp, this));
+
+    const auto transmitter = Mac48Address::Allocate();
+    const auto self = Mac48Address::Allocate();
+    const auto other = Mac48Address::Allocate();
+
+    auto makeMpdu = [&](Mac48Address receiver, bool retry) {
+        WifiMacHeader hdr;
+        hdr.SetType(WIFI_MAC_QOSDATA);
+        hdr.SetAddr1(receiver);
+        hdr.SetAddr2(transmitter);
+        hdr.SetQosTid(0);
+        hdr.SetSequenceNumber(4);
+        if (retry)
+        {
+            hdr.SetRetry();
+        }
+        return Create<WifiMpdu>(Create<Packet>(100), hdr);
+    };
+
+    rxMiddle->Receive(makeMpdu(other, false), SINGLE_LINK_OP_ID, true);
+    NS_TEST_EXPECT_MSG_EQ(m_forwarded, 1, "The overheard frame should be forwarded up");
+
+    rxMiddle->Receive(makeMpdu(self, true), SINGLE_LINK_OP_ID);
+    NS_TEST_EXPECT_MSG_EQ(m_forwarded,
+                          2,
+                          "A retransmission addressed to us should not be a duplicate of an "
+                          "overheard frame with the same sequence number");
+
+    rxMiddle->Receive(makeMpdu(self, true), SINGLE_LINK_OP_ID);
+    NS_TEST_EXPECT_MSG_EQ(m_forwarded, 2, "A repeated retransmission should be a duplicate");
+
+    rxMiddle->Receive(makeMpdu(other, true), SINGLE_LINK_OP_ID, true);
+    NS_TEST_EXPECT_MSG_EQ(m_forwarded,
+                          2,
+                          "A repeated retransmission of the overheard frame should be a duplicate");
+}
+
+/**
+ * @ingroup wifi-test
+ * @ingroup tests
+ *
  * @brief Wifi Test Suite
  */
 class WifiTestSuite : public TestSuite
@@ -3995,6 +4079,7 @@ WifiTestSuite::WifiTestSuite()
     AddTestCase(new HeRuMcsDataRateTestCase, TestCase::Duration::QUICK);
     AddTestCase(new WifiMgtHeaderTest, TestCase::Duration::QUICK);
     AddTestCase(new DsssModulationTest, TestCase::Duration::QUICK);
+    AddTestCase(new OverheardFrameDuplicateTest, TestCase::Duration::QUICK);
 }
 
 static WifiTestSuite g_wifiTestSuite; ///< the test suite

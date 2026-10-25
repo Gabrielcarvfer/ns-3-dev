@@ -14,6 +14,7 @@
 #include "ns3/wifi-export.h"
 
 #include <map>
+#include <tuple>
 
 namespace ns3
 {
@@ -52,8 +53,10 @@ class WIFI_EXPORT MacRxMiddle : public SimpleRefCount<MacRxMiddle>
      *
      * @param mpdu the MPDU
      * @param linkId the ID of the given link
+     * @param overheard whether the MPDU is individually addressed to another station and was
+     *                  received in promiscuous mode
      */
-    void Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
+    void Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId, bool overheard = false);
 
   private:
     /// allow MacRxMiddleTest associated class access
@@ -69,6 +72,18 @@ class WIFI_EXPORT MacRxMiddle : public SimpleRefCount<MacRxMiddle>
      * @return OriginatorRxStatus
      */
     OriginatorRxStatus& Lookup(Ptr<const WifiMpdu> mpdu);
+    /**
+     * Look up for the OriginatorRxStatus of an MPDU individually addressed to another station.
+     * A transmitter numbers the frames it sends to each receiver separately, hence the status
+     * is kept per transmitter, receiver and TID, apart from the status of the MPDUs addressed
+     * to this station. The method creates a new OriginatorRxStatus if one is not already
+     * present.
+     *
+     * @param mpdu the received MPDU
+     *
+     * @return OriginatorRxStatus
+     */
+    OriginatorRxStatus& LookupOverheard(Ptr<const WifiMpdu> mpdu);
     /**
      * Check if we have already received the packet from the sender before
      * (by looking at the sequence control field).
@@ -123,7 +138,11 @@ class WIFI_EXPORT MacRxMiddle : public SimpleRefCount<MacRxMiddle>
 
     Originators m_originatorStatus;       ///< originator status
     QosOriginators m_qosOriginatorStatus; ///< QOS originator status
-    ForwardUpCallback m_callback;         ///< forward up callback
+    /// originator status of the MPDUs addressed to other stations, by transmitter, receiver and
+    /// TID (non-QoS frames use an invalid TID)
+    std::map<std::tuple<Mac48Address, Mac48Address, uint8_t>, OriginatorRxStatus, std::less<>>
+        m_overheardStatus;
+    ForwardUpCallback m_callback; ///< forward up callback
 };
 
 } // namespace ns3
