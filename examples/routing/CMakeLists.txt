@@ -132,3 +132,15 @@ build_example(
     ${libapplications}
     ${libinternet}
 )
+build_example(
+  NAME dense-routing-scaling
+  SOURCE_FILES dense-routing-scaling.cc
+  LIBRARIES_TO_LINK
+    ${libaodv}
+    ${libdsdv}
+    ${libdsr}
+    ${libolsr}
+    ${libcsma}
+    ${libinternet}
+    ${libapplications}
+)
