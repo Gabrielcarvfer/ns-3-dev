@@ -2268,7 +2268,6 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             }
             else if (channelCondition->IsNlos())
             {
-                NS_LOG_UNCOND("Dense Urban NLOS");
                 table3gpp->m_uLgDS = NTNDenseUrbanNLOS.at(freqBand).at(elevAngleQuantized)[uLgDS];
                 table3gpp->m_sigLgDS =
                     NTNDenseUrbanNLOS.at(freqBand).at(elevAngleQuantized)[sigLgDS];
