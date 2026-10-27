@@ -22,7 +22,7 @@ Dot11sMeshCapability::Dot11sMeshCapability()
       MCCAEnabled(false),
       forwarding(true),
       beaconTimingReport(true),
-      TBTTAdjustment(true),
+      TBTTAdjustment(false), // set only while adjusting the TBTT (IEEE 802.11-2012, 8.4.2.100.8)
       powerSaveLevel(false)
 {
 }
