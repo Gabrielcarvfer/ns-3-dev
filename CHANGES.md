@@ -43,6 +43,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (spectrum) `ThreeGppChannelModel` offsets the ray ZODs of the V2V scenarios from their cluster ZOD with the cluster ZSD of 7 degrees of TR 37.885 Table 6.2.3-1, instead of the 3/8 10^(mu lgZSD) of TR 38.901, so V2V channel realizations change.
 * (spectrum) With the `InterUeSpatialConsistency` attribute of the channel condition model enabled, the V2V scenarios of `ThreeGppChannelModel` correlate the LSPs of nearby terminals over the correlation distances of TR 37.885 Table 6.2.3-1 instead of the UMa ones of TR 38.901, so spatially consistent V2V channel realizations change.
 * (propagation) The V2V propagation loss models draw the blocker and the vehicle blockage loss of a NLOSv link once and keep them across the evaluations of the link, so the path loss of NLOSv links changes.
+* (spectrum) `ThreeGppChannelModel` now uses the S band parameters of TR 38.811 Tables 6.7.2-4a and 6.7.2-6a for the NLOS links of the `NTN-Urban` and `NTN-Suburban` scenarios below 13 GHz, including the cross-correlations of Table 6.7.2-4a for `NTN-Urban`. It used the Ka band tables, so channel realizations of these links change.
 
 ## Changes from ns-3.48 to ns-3.49
 

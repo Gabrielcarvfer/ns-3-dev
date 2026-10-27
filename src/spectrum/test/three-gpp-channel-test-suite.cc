@@ -12,6 +12,7 @@
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/constant-velocity-mobility-model.h"
 #include "ns3/double.h"
+#include "ns3/geocentric-constant-position-mobility-model.h"
 #include "ns3/ism-spectrum-value-helper.h"
 #include "ns3/isotropic-antenna-model.h"
 #include "ns3/log.h"
@@ -4217,6 +4218,106 @@ ThreeGppUpdateContinuityTest::DoRun()
                               << " times the change of a step without one");
 }
 
+namespace
+{
+
+/**
+ * @brief Place a ground terminal and an NTN platform seen at a given elevation.
+ * @param elevationDeg the elevation angle of the platform seen from the terminal, in degrees
+ * @param altitude the altitude of the platform, in meters
+ * @return the mobility models of the terminal and of the platform
+ */
+std::pair<Ptr<GeocentricConstantPositionMobilityModel>,
+          Ptr<GeocentricConstantPositionMobilityModel>>
+MakeNtnLink(double elevationDeg, double altitude)
+{
+    // central angle between the terminal and the sub-platform point on a
+    // spherical Earth; the elevation of the geodetic model differs slightly,
+    // which does not change the 10 degree reference angle it is rounded to
+    const double re = 6371e3;
+    const double el = elevationDeg * M_PI / 180;
+    const double psi = std::acos(re / (re + altitude) * std::cos(el)) - el;
+    auto ut = CreateObject<GeocentricConstantPositionMobilityModel>();
+    ut->SetGeographicPosition(Vector(45, 10, 0));
+    auto platform = CreateObject<GeocentricConstantPositionMobilityModel>();
+    platform->SetGeographicPosition(Vector(45 + psi * 180 / M_PI, 10, altitude));
+    return {ut, platform};
+}
+
+} // namespace
+
+/**
+ * @ingroup spectrum-tests
+ *
+ * Test the S band NLOS parameters of the NTN Urban and Suburban scenarios,
+ * which must be the ones of TR 38.811 Tables 6.7.2-4a and 6.7.2-6a (typed from
+ * the TR), and not those of the Ka band tables 6.7.2-4b and 6.7.2-6b, with the
+ * cross-correlations of the S band table, and the cluster ASA of the Urban LOS
+ * Ka band table 6.7.2-3b at 10 degrees.
+ */
+class ThreeGppNtnSBandNlosTableTest : public TestCase
+{
+  public:
+    ThreeGppNtnSBandNlosTableTest()
+        : TestCase("Check the S band NLOS tables of the NTN Urban and Suburban scenarios")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        // a HAPS, so that the departure spreads are the ones of the tables
+        auto [ut, haps] = MakeNtnLink(50, 20e3);
+        NodeContainer nodes(2);
+        nodes.Get(0)->AggregateObject(ut);
+        nodes.Get(1)->AggregateObject(haps);
+        auto cond = CreateObject<ChannelCondition>(ChannelCondition::NLOS, ChannelCondition::O2O);
+
+        auto channelModel = CreateObject<ThreeGppChannelModel>();
+        channelModel->SetAttribute("Frequency", DoubleValue(2e9));
+        channelModel->SetAttribute("ChannelConditionModel",
+                                   PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+
+        channelModel->SetAttribute("Scenario", StringValue("NTN-Urban"));
+        auto urban = channelModel->GetThreeGppTable(ut, haps, cond);
+        // Table 6.7.2-4a, 50 degrees
+        NS_TEST_EXPECT_MSG_EQ_TOL(urban->m_uLgDS, -7.99, 1e-6, "Urban NLOS S lgDS mean");
+        NS_TEST_EXPECT_MSG_EQ_TOL(urban->m_sigLgZSA, 1.07, 1e-6, "Urban NLOS S lgZSA std");
+        NS_TEST_EXPECT_MSG_EQ_TOL(urban->m_cDS, 3.9e-9, 1e-15, "Urban NLOS S cluster DS");
+        NS_TEST_EXPECT_MSG_EQ_TOL(urban->m_cASA, 21.53, 1e-5, "Urban NLOS S cluster ASA");
+        // ZSD vs ASD 0.62 (0.54 in the Ka band table), in the [SF, K, DS, ASD,
+        // ASA, ZSD, ZSA] order of the square root matrix
+        double zsdAsd = 0;
+        for (uint8_t k = 0; k < 7; k++)
+        {
+            zsdAsd += urban->m_sqrtC[5][k] * urban->m_sqrtC[3][k];
+        }
+        NS_TEST_EXPECT_MSG_EQ_TOL(zsdAsd, 0.62, 1e-4, "Urban NLOS S ZSD-ASD correlation");
+
+        channelModel->SetAttribute("Scenario", StringValue("NTN-Suburban"));
+        auto suburban = channelModel->GetThreeGppTable(ut, haps, cond);
+        // Table 6.7.2-6a, 50 degrees
+        NS_TEST_EXPECT_MSG_EQ_TOL(suburban->m_uLgDS, -8.64, 1e-6, "Suburban NLOS S lgDS mean");
+        NS_TEST_EXPECT_MSG_EQ_TOL(suburban->m_uLgZSA, -1.8, 1e-6, "Suburban NLOS S lgZSA mean");
+        NS_TEST_EXPECT_MSG_EQ_TOL(suburban->m_rTau, 2.71, 1e-6, "Suburban NLOS S delay scaling");
+        NS_TEST_EXPECT_MSG_EQ_TOL(suburban->m_uXpr, 9.6, 1e-5, "Suburban NLOS S XPR mean");
+
+        // Table 6.7.2-3b, 10 degrees: a cluster ASA of 11.78 degrees
+        auto [ut10, haps10] = MakeNtnLink(10, 20e3);
+        NodeContainer nodes10(2);
+        nodes10.Get(0)->AggregateObject(ut10);
+        nodes10.Get(1)->AggregateObject(haps10);
+        channelModel->SetAttribute("Frequency", DoubleValue(20e9));
+        channelModel->SetAttribute("Scenario", StringValue("NTN-Urban"));
+        auto urbanLos = channelModel->GetThreeGppTable(
+            ut10,
+            haps10,
+            CreateObject<ChannelCondition>(ChannelCondition::LOS, ChannelCondition::O2O));
+        NS_TEST_EXPECT_MSG_EQ_TOL(urbanLos->m_cASA, 11.78, 1e-5, "Urban LOS Ka cluster ASA");
+        Simulator::Destroy();
+    }
+};
+
 /**
  * @ingroup spectrum-tests
  *
@@ -4320,6 +4421,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(new ThreeGppFloorSpatialConsistencyTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppIndoorLosLspOrderingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRmaZodOffsetTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppNtnSBandNlosTableTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppSubClusterMappingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppLosBlockageAttenuationTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppXprDistributionTest(), TestCase::Duration::QUICK);
