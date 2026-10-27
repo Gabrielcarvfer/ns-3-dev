@@ -424,6 +424,63 @@ BeaconContentTest::DoRun()
 /**
  * @ingroup dot11s-test
  *
+ * @brief PREP element format
+ *
+ * A PREP carries the Target Mesh STA, which sends it in reply to a PREQ, with its HWMP sequence
+ * number, then the Lifetime and Metric, then the Originator Mesh STA, which sent the PREQ, with
+ * its HWMP sequence number (IEEE 802.11-2012, 8.4.2.114). IePrep calls the mesh STA that sends
+ * the PREP its originator, and the one it is sent to its destination. The expected octets are
+ * those of a PREP sent by Linux's mac80211 (Linux 6.12).
+ */
+class PrepElementTest : public TestCase
+{
+  public:
+    PrepElementTest()
+        : TestCase("PREP element format")
+    {
+    }
+
+    void DoRun() override;
+};
+
+void
+PrepElementTest::DoRun()
+{
+    // From 00:00:00:00:00:01 (SN 2) to 00:00:00:00:00:03 (SN 2), lifetime 5000 TUs, metric 863
+    const std::vector<uint8_t> prep{0x83, 0x1f, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00, 0x00,
+                                    0x00, 0x01, 0x02, 0x00, 0x00, 0x00, 0x88, 0x13, 0x00,
+                                    0x00, 0x5f, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                    0x00, 0x03, 0x02, 0x00, 0x00, 0x00};
+
+    IePrep received;
+    Deserialize(received, prep);
+    NS_TEST_EXPECT_MSG_EQ(received.GetOriginatorAddress(),
+                          Mac48Address("00:00:00:00:00:01"),
+                          "The Target Mesh STA sends the PREP");
+    NS_TEST_EXPECT_MSG_EQ(received.GetDestinationAddress(),
+                          Mac48Address("00:00:00:00:00:03"),
+                          "The PREP is sent to the Originator Mesh STA");
+    NS_TEST_EXPECT_MSG_EQ(received.GetDestinationSeqNumber(), 2, "Wrong Target HWMP SN");
+    NS_TEST_EXPECT_MSG_EQ(received.GetOriginatorSeqNumber(), 2, "Wrong Originator HWMP SN");
+    NS_TEST_EXPECT_MSG_EQ(received.GetLifetime(), 5000, "Wrong lifetime");
+    NS_TEST_EXPECT_MSG_EQ(received.GetMetric(), 863, "Wrong metric");
+    NS_TEST_EXPECT_MSG_EQ(received.GetTtl(), 31, "Wrong TTL");
+
+    IePrep sent;
+    sent.SetHopcount(0);
+    sent.SetTtl(31);
+    sent.SetOriginatorAddress(Mac48Address("00:00:00:00:00:01"));
+    sent.SetDestinationSeqNumber(2);
+    sent.SetLifetime(5000);
+    sent.SetMetric(863);
+    sent.SetDestinationAddress(Mac48Address("00:00:00:00:00:03"));
+    sent.SetOriginatorSeqNumber(2);
+    NS_TEST_EXPECT_MSG_EQ((Serialize(sent) == prep), true, "Wrong PREP element");
+}
+
+/**
+ * @ingroup dot11s-test
+ *
  * @brief Peering conformance test suite
  */
 class MeshPeeringConformanceSuite : public TestSuite
@@ -436,6 +493,7 @@ class MeshPeeringConformanceSuite : public TestSuite
         AddTestCase(new PeeringManagementElementTest, TestCase::Duration::QUICK);
         AddTestCase(new PeeringFrameTest, TestCase::Duration::QUICK);
         AddTestCase(new BeaconContentTest, TestCase::Duration::QUICK);
+        AddTestCase(new PrepElementTest, TestCase::Duration::QUICK);
     }
 };
 

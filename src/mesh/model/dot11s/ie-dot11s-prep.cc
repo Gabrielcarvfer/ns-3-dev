@@ -169,11 +169,13 @@ IePrep::SerializeInformationField(Buffer::Iterator i) const
     i.WriteU8(m_flags);
     i.WriteU8(m_hopcount);
     i.WriteU8(m_ttl);
-    WriteTo(i, m_destinationAddress);
+    // The Target Mesh STA is the one that sends the PREP (its originator here), the Originator
+    // Mesh STA the one it is sent to, which originated the PREQ (IEEE 802.11-2012, 8.4.2.114)
+    WriteTo(i, m_originatorAddress);
     i.WriteU32(m_destSeqNumber);
     i.WriteU32(m_lifetime);
     i.WriteU32(m_metric);
-    WriteTo(i, m_originatorAddress);
+    WriteTo(i, m_destinationAddress);
     i.WriteU32(m_originatorSeqNumber);
 }
 
@@ -184,11 +186,11 @@ IePrep::DeserializeInformationField(Buffer::Iterator start, uint16_t length)
     m_flags = i.ReadU8();
     m_hopcount = i.ReadU8();
     m_ttl = i.ReadU8();
-    ReadFrom(i, m_destinationAddress);
+    ReadFrom(i, m_originatorAddress);
     m_destSeqNumber = i.ReadU32();
     m_lifetime = i.ReadU32();
     m_metric = i.ReadU32();
-    ReadFrom(i, m_originatorAddress);
+    ReadFrom(i, m_destinationAddress);
     m_originatorSeqNumber = i.ReadU32();
     return i.GetDistanceFrom(start);
 }
