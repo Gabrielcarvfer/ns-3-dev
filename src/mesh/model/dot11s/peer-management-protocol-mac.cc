@@ -262,12 +262,16 @@ PeerManagementProtocolMac::UpdateOutcomingFrame(Ptr<Packet> packet,
 void
 PeerManagementProtocolMac::UpdateBeacon(MeshWifiBeacon& beacon) const
 {
+    // In the order of IEEE 802.11-2012, Table 8-20
+    beacon.AddInformationElement(m_protocol->GetMeshId());
+    Ptr<IeConfiguration> config = Create<IeConfiguration>();
+    config->SetNeighborCount(m_protocol->GetNumberOfLinks());
+    beacon.AddInformationElement(config);
     if (m_protocol->GetBeaconCollisionAvoidance())
     {
         Ptr<IeBeaconTiming> beaconTiming = m_protocol->GetBeaconTimingElement(m_ifIndex);
         beacon.AddInformationElement(beaconTiming);
     }
-    beacon.AddInformationElement(m_protocol->GetMeshId());
     m_protocol->NotifyBeaconSent(m_ifIndex, beacon.GetBeaconInterval());
 }
 

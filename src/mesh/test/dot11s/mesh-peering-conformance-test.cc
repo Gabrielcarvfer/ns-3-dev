@@ -215,6 +215,134 @@ BeaconWithoutTimingTest::DoRun()
 /**
  * @ingroup dot11s-test
  *
+ * @brief Mesh beacon contents
+ *
+ * A mesh STA peers only with mesh STAs whose beacons carry a Mesh ID and a Mesh Configuration
+ * element matching its own, and the same BSS basic rate set (IEEE 802.11-2012, 13.2.4); Linux's
+ * mac80211 ignores the beacons of the others. The test checks that the beacons of a mesh STA carry
+ * the Mesh ID, then the Mesh Configuration element (Table 8-20), and that 802.11a's mandatory rates
+ * (6, 12 and 24 Mb/s) are marked basic in its Supported Rates element.
+ */
+class BeaconContentTest : public TestCase
+{
+  public:
+    BeaconContentTest()
+        : TestCase("Mesh beacons carry the Mesh Configuration element and the basic rates")
+    {
+    }
+
+    void DoRun() override;
+
+  private:
+    /**
+     * MonitorSnifferTx trace sink: keep the first beacon.
+     *
+     * @param packet the frame
+     * @param channelFreqMhz the frequency
+     * @param txVector the TX vector
+     * @param aMpdu the A-MPDU information
+     * @param staId the station ID
+     */
+    void Sniff(Ptr<const Packet> packet,
+               uint16_t channelFreqMhz,
+               WifiTxVector txVector,
+               MpduInfo aMpdu,
+               uint16_t staId);
+
+    std::vector<uint8_t> m_beacon; ///< body of the first beacon sent
+};
+
+void
+BeaconContentTest::Sniff(Ptr<const Packet> packet,
+                         uint16_t channelFreqMhz,
+                         WifiTxVector txVector,
+                         MpduInfo aMpdu,
+                         uint16_t staId)
+{
+    Ptr<Packet> frame = packet->Copy();
+    WifiMacHeader header;
+    frame->RemoveHeader(header);
+    if (!header.IsBeacon() || !m_beacon.empty())
+    {
+        return;
+    }
+    WifiMacTrailer fcs;
+    frame->RemoveTrailer(fcs);
+    m_beacon.resize(frame->GetSize());
+    frame->CopyData(m_beacon.data(), m_beacon.size());
+}
+
+void
+BeaconContentTest::DoRun()
+{
+    NodeContainer nodes;
+    nodes.Create(2);
+    MobilityHelper mobility;
+    mobility.SetPositionAllocator("ns3::GridPositionAllocator",
+                                  "DeltaX",
+                                  DoubleValue(50),
+                                  "GridWidth",
+                                  UintegerValue(2));
+    mobility.Install(nodes);
+
+    YansWifiPhyHelper phy;
+    phy.SetChannel(YansWifiChannelHelper::Default().Create());
+    MeshHelper mesh = MeshHelper::Default();
+    mesh.SetStackInstaller("ns3::Dot11sStack");
+    NetDeviceContainer devices = mesh.Install(phy, nodes);
+    mesh.AssignStreams(devices, 1);
+
+    auto mp = DynamicCast<MeshPointDevice>(devices.Get(0));
+    auto iface = DynamicCast<WifiNetDevice>(mp->GetInterfaces().at(0));
+    iface->GetPhy()->TraceConnectWithoutContext("MonitorSnifferTx",
+                                                MakeCallback(&BeaconContentTest::Sniff, this));
+
+    Simulator::Stop(Seconds(3));
+    Simulator::Run();
+    Simulator::Destroy();
+
+    NS_TEST_ASSERT_MSG_EQ(m_beacon.empty(), false, "No beacon sent");
+    // Timestamp, Beacon Interval and Capability, then the elements
+    std::vector<std::pair<uint8_t, std::vector<uint8_t>>> elements;
+    for (std::size_t i = 12; i + 2 <= m_beacon.size(); i += 2 + m_beacon[i + 1])
+    {
+        elements.emplace_back(m_beacon[i],
+                              std::vector<uint8_t>(m_beacon.begin() + i + 2,
+                                                   m_beacon.begin() + i + 2 + m_beacon[i + 1]));
+    }
+    auto find = [&elements](uint8_t id) {
+        return std::find_if(elements.begin(), elements.end(), [id](const auto& e) {
+            return e.first == id;
+        });
+    };
+
+    auto rates = find(IE_SUPPORTED_RATES);
+    NS_TEST_ASSERT_MSG_EQ((rates != elements.end()), true, "No Supported Rates element");
+    const std::vector<uint8_t> expectedRates{0x8c, 0x12, 0x98, 0x24, 0xb0, 0x48, 0x60, 0x6c};
+    NS_TEST_EXPECT_MSG_EQ((rates->second == expectedRates),
+                          true,
+                          "6, 12 and 24 Mb/s should be the basic rates");
+
+    auto meshId = find(IE_MESH_ID);
+    auto config = find(IE_MESH_CONFIGURATION);
+    NS_TEST_ASSERT_MSG_EQ((meshId != elements.end()), true, "No Mesh ID element");
+    NS_TEST_ASSERT_MSG_EQ((config != elements.end()), true, "No Mesh Configuration element");
+    NS_TEST_EXPECT_MSG_LT(meshId - elements.begin(),
+                          config - elements.begin(),
+                          "The Mesh ID element should precede the Mesh Configuration element");
+    // HWMP, airtime metric, no congestion control, neighbor offset synchronization, no
+    // authentication (Table 8-174 to 8-178)
+    NS_TEST_ASSERT_MSG_EQ(config->second.size(), 7, "Wrong Mesh Configuration element length");
+    const std::vector<uint8_t> expectedIds{0x01, 0x01, 0x00, 0x01, 0x00};
+    NS_TEST_EXPECT_MSG_EQ(
+        (std::vector<uint8_t>(config->second.begin(), config->second.begin() + 5) == expectedIds),
+        true,
+        "Wrong protocol identifiers in the Mesh Configuration element");
+}
+
+/**
+ * @ingroup dot11s-test
+ *
  * @brief Peering conformance test suite
  */
 class MeshPeeringConformanceSuite : public TestSuite
@@ -225,6 +353,7 @@ class MeshPeeringConformanceSuite : public TestSuite
     {
         AddTestCase(new BeaconWithoutTimingTest, TestCase::Duration::QUICK);
         AddTestCase(new PeeringManagementElementTest, TestCase::Duration::QUICK);
+        AddTestCase(new BeaconContentTest, TestCase::Duration::QUICK);
     }
 };
 
