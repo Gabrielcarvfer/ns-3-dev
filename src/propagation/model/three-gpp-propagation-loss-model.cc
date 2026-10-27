@@ -684,7 +684,8 @@ ThreeGppPropagationLossModel::GetO2iLowPenetrationLoss(
     {
         // found the o2iLoss value in the map
         it = m_o2iLossMap.find(key);
-        newCondition = (it->second.m_condition != cond); // true if the condition changed
+        // true if the LOS/NLOS condition or the building type changed
+        newCondition = (it->second.m_condition != cond || !it->second.m_lowLoss);
     }
     else
     {
@@ -715,6 +716,7 @@ ThreeGppPropagationLossModel::GetO2iLowPenetrationLoss(
         // update the entry in the map
         it->second.m_o2iLoss = o2iLossValue;
         it->second.m_condition = cond;
+        it->second.m_lowLoss = true;
     }
     else
     {
@@ -762,7 +764,8 @@ ThreeGppPropagationLossModel::GetO2iHighPenetrationLoss(
     {
         // found the o2iLoss value in the map
         it = m_o2iLossMap.find(key);
-        newCondition = (it->second.m_condition != cond); // true if the condition changed
+        // true if the LOS/NLOS condition or the building type changed
+        newCondition = (it->second.m_condition != cond || it->second.m_lowLoss);
     }
     else
     {
@@ -795,6 +798,7 @@ ThreeGppPropagationLossModel::GetO2iHighPenetrationLoss(
         // update the entry in the map
         it->second.m_o2iLoss = o2iLossValue;
         it->second.m_condition = cond;
+        it->second.m_lowLoss = false;
     }
     else
     {

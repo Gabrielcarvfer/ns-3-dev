@@ -1479,6 +1479,109 @@ ThreeGppShadowingStdTestCase::DoRun()
 /**
  * @ingroup propagation-tests
  *
+ * Channel condition model returning the same condition for every link, so that
+ * tests can set the state of their links and change it between evaluations.
+ */
+class FixedConditionModel : public ChannelConditionModel
+{
+  public:
+    Ptr<ChannelCondition> m_cond{CreateObject<ChannelCondition>()}; ///< the condition
+
+    Ptr<ChannelCondition> GetChannelCondition(Ptr<const MobilityModel> a,
+                                              Ptr<const MobilityModel> b) const override
+    {
+        return m_cond;
+    }
+
+    int64_t AssignStreams(int64_t stream) override
+    {
+        return 0;
+    }
+};
+
+/**
+ * @ingroup propagation-tests
+ *
+ * Test case for the O2I penetration loss of a static link whose building type
+ * changes with the same LOS state, as when the channel condition model redraws
+ * the condition of a link. The link must take the loss of its new building
+ * type, instead of keeping the one drawn with the low-loss (or high-loss)
+ * model of TR 38.901 Table 7.4.3-2.
+ */
+class ThreeGppO2iBuildingTypeChangeTestCase : public TestCase
+{
+  public:
+    ThreeGppO2iBuildingTypeChangeTestCase()
+        : TestCase("Test the O2I penetration loss of a link whose building type changes")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+ThreeGppO2iBuildingTypeChangeTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    const uint32_t numLinks = 1000;
+    auto condModel = CreateObject<FixedConditionModel>();
+    condModel->m_cond->SetLosCondition(ChannelCondition::NLOS);
+    condModel->m_cond->SetO2iCondition(ChannelCondition::O2I);
+    ObjectFactory lossFactory("ns3::ThreeGppUmaPropagationLossModel");
+    lossFactory.Set("Frequency", DoubleValue(28e9));
+    lossFactory.Set("ShadowingEnabled", BooleanValue(false));
+    lossFactory.Set("ChannelConditionModel", PointerValue(condModel));
+    auto lossOn = lossFactory.Create<ThreeGppPropagationLossModel>();
+    lossFactory.Set("BuildingPenetrationLossesEnabled", BooleanValue(false));
+    auto lossOff = lossFactory.Create<ThreeGppPropagationLossModel>();
+
+    // mean O2I penetration loss of new links, and of the same links after
+    // their building type changed
+    auto run = [&](ChannelCondition::O2iLowHighConditionValue first,
+                   ChannelCondition::O2iLowHighConditionValue second) {
+        NodeContainer nodes;
+        nodes.Create(2 * numLinks);
+        double meanFirst = 0;
+        double meanSecond = 0;
+        for (uint32_t i = 0; i < numLinks; i++)
+        {
+            auto bsMob = CreateObject<ConstantPositionMobilityModel>();
+            auto utMob = CreateObject<ConstantPositionMobilityModel>();
+            nodes.Get(2 * i)->AggregateObject(bsMob);
+            nodes.Get(2 * i + 1)->AggregateObject(utMob);
+            bsMob->SetPosition(Vector(0, 0, 25));
+            utMob->SetPosition(Vector(200, 0, 1.5));
+            condModel->m_cond->SetO2iLowHighCondition(first);
+            meanFirst +=
+                (lossOff->CalcRxPower(0, bsMob, utMob) - lossOn->CalcRxPower(0, bsMob, utMob)) /
+                numLinks;
+            condModel->m_cond->SetO2iLowHighCondition(second);
+            meanSecond +=
+                (lossOff->CalcRxPower(0, bsMob, utMob) - lossOn->CalcRxPower(0, bsMob, utMob)) /
+                numLinks;
+        }
+        return std::make_pair(meanFirst, meanSecond);
+    };
+
+    const auto [lowFresh, lowToHigh] = run(ChannelCondition::O2iLowHighConditionValue::LOW,
+                                           ChannelCondition::O2iLowHighConditionValue::HIGH);
+    const auto [highFresh, highToLow] = run(ChannelCondition::O2iLowHighConditionValue::HIGH,
+                                            ChannelCondition::O2iLowHighConditionValue::LOW);
+    // At 28 GHz the mean losses differ by about 24 dB; the standard error of
+    // the means is below 0.3 dB (6.5 dB deviation and 25 m indoor distance).
+    NS_TEST_ASSERT_MSG_GT(highFresh - lowFresh, 15, "Low and high loss models not distinct");
+    NS_TEST_EXPECT_MSG_EQ_TOL(lowToHigh, highFresh, 1.5, "Link from low to high loss");
+    NS_TEST_EXPECT_MSG_EQ_TOL(highToLow, lowFresh, 1.5, "Link from high to low loss");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-tests
+ *
  * Test case for the shadowing of O2I links with the inter-UE spatial consistency
  * disabled, where each link correlates its shadowing with its previous
  * evaluation. A moving O2I link must decorrelate with the O2I correlation
@@ -1494,26 +1597,6 @@ class ThreeGppO2iShadowingMapTestCase : public TestCase
 
   private:
     void DoRun() override;
-
-    /**
-     * Channel condition model returning the same condition for every link.
-     */
-    class FixedConditionModel : public ChannelConditionModel
-    {
-      public:
-        Ptr<ChannelCondition> m_cond{CreateObject<ChannelCondition>()}; ///< the condition
-
-        Ptr<ChannelCondition> GetChannelCondition(Ptr<const MobilityModel> a,
-                                                  Ptr<const MobilityModel> b) const override
-        {
-            return m_cond;
-        }
-
-        int64_t AssignStreams(int64_t stream) override
-        {
-            return 0;
-        }
-    };
 };
 
 ThreeGppO2iShadowingMapTestCase::ThreeGppO2iShadowingMapTestCase()
@@ -1912,6 +1995,7 @@ ThreeGppPropagationLossModelsTestSuite::ThreeGppPropagationLossModelsTestSuite()
     AddTestCase(new ThreeGppShadowingTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingStdTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppO2iShadowingMapTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppO2iBuildingTypeChangeTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingFirstEvaluationTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppColocatedSpatialConsistencyTestCase, TestCase::Duration::QUICK);
 }

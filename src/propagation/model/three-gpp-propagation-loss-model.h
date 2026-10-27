@@ -399,6 +399,7 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     {
         double m_o2iLoss;                                //!< the o2i loss in dB
         ChannelCondition::LosConditionValue m_condition; //!< the LOS/NLOS condition
+        bool m_lowLoss;                                  //!< whether the low-loss model was used
     };
 
     mutable std::unordered_map<uint32_t, O2iLossMapItem>
