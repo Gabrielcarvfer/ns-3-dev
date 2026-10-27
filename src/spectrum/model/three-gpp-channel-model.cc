@@ -2834,8 +2834,9 @@ ThreeGppChannelModel::GetLspCorrelationDistances(std::array<double, 7>& los,
     // (meters), in canonical parameter order [SF,K,DS,ASD,ASA,ZSD,ZSA]. The
     // NLOS/O2I columns have no K entry, so theirs is a 0 placeholder.
     // The V2V distances of TR 37.885 Table 6.2.3-1 are those of UMi; NLOSv
-    // links take the NLOS ones, as in that table. Scenarios without a column
-    // (NTN) fall back to the UMa distances.
+    // links take the NLOS ones, as in that table. The TR 38.811 Tables
+    // 6.7.2-1a to 6.7.2-8b of the NTN scenarios take the UMa distances, and
+    // the RMa ones for NTN-Rural.
     los = {37, 12, 30, 18, 15, 15, 15};
     nlos = {50, 0, 40, 50, 50, 50, 50};
     o2i = {7, 0, 10, 11, 17, 25, 25};
@@ -2846,7 +2847,7 @@ ThreeGppChannelModel::GetLspCorrelationDistances(std::array<double, 7>& los,
         nlos = {13, 0, 10, 10, 9, 10, 10};
         o2i = {7, 0, 10, 11, 17, 25, 25};
     }
-    else if (m_scenario == "RMa")
+    else if (m_scenario == "RMa" || m_scenario == "NTN-Rural")
     {
         los = {37, 40, 50, 25, 35, 15, 15};
         nlos = {120, 0, 36, 30, 40, 50, 50};

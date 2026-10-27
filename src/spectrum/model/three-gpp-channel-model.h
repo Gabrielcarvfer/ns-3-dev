@@ -471,7 +471,8 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
      * [SF, K, DS, ASD, ASA, ZSD, ZSA]. The NLOS and O2I columns of the table
      * have no K-factor, so their K entry (index 1) is a 0 placeholder, never
      * read. The V2V scenarios use the distances of TR 37.885 Table 6.2.3-1,
-     * and the NTN ones, without such a table, fall back to the UMa distances.
+     * and the NTN ones those of TR 38.811 Tables 6.7.2-1a to 6.7.2-8b, which
+     * are the UMa ones (the RMa ones for NTN-Rural).
      *
      * @param los Output array of LOS correlation distances in meters.
      * @param nlos Output array of NLOS correlation distances in meters.

@@ -4464,6 +4464,66 @@ class ThreeGppLargeBandwidthZeroSpreadTest : public TestCase
 /**
  * @ingroup spectrum-tests
  *
+ * Test the LSP correlation distances of the NTN scenarios, used by the inter-UE
+ * spatial consistency: TR 38.811 Tables 6.7.2-1a to 6.7.2-8b take the UMa
+ * distances of TR 38.901 Table 7.5-6 for the Dense Urban, Urban and Suburban
+ * scenarios, and the RMa ones for the Rural scenario, whose NLOS SF distance
+ * of 120 m is also the one of ThreeGppNTNRuralPropagationLossModel.
+ */
+class ThreeGppNtnLspCorrelationDistanceTest : public TestCase
+{
+  public:
+    ThreeGppNtnLspCorrelationDistanceTest()
+        : TestCase("Check the LSP correlation distances of the NTN scenarios")
+    {
+    }
+
+  private:
+    /**
+     * Channel model exposing its LSP correlation distances.
+     */
+    class Probe : public ThreeGppChannelModel
+    {
+      public:
+        using ThreeGppChannelModel::GetLspCorrelationDistances;
+    };
+
+    void DoRun() override
+    {
+        // [SF, K, DS, ASD, ASA, ZSD, ZSA], typed from TR 38.811
+        const std::array<double, 7> urbanLos{37, 12, 30, 18, 15, 15, 15};
+        const std::array<double, 7> urbanNlos{50, 0, 40, 50, 50, 50, 50};
+        const std::array<double, 7> ruralLos{37, 40, 50, 25, 35, 15, 15};
+        const std::array<double, 7> ruralNlos{120, 0, 36, 30, 40, 50, 50};
+        for (const std::string scenario :
+             {"NTN-DenseUrban", "NTN-Urban", "NTN-Suburban", "NTN-Rural"})
+        {
+            auto probe = CreateObject<Probe>();
+            probe->SetAttribute("Scenario", StringValue(scenario));
+            std::array<double, 7> los;
+            std::array<double, 7> nlos;
+            std::array<double, 7> o2i;
+            probe->GetLspCorrelationDistances(los, nlos, o2i);
+            const bool rural = scenario == "NTN-Rural";
+            for (uint8_t i = 0; i < 7; i++)
+            {
+                NS_TEST_EXPECT_MSG_EQ(los[i],
+                                      (rural ? ruralLos : urbanLos)[i],
+                                      scenario << " LOS correlation distance " << +i);
+                if (i != 1)
+                {
+                    NS_TEST_EXPECT_MSG_EQ(nlos[i],
+                                          (rural ? ruralNlos : urbanNlos)[i],
+                                          scenario << " NLOS correlation distance " << +i);
+                }
+            }
+        }
+    }
+};
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test suite for the ThreeGppChannelModel class
  */
 class ThreeGppChannelTestSuite : public TestSuite
@@ -4567,6 +4627,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(new ThreeGppNtnSBandNlosTableTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppNtnSatelliteDepartureSpreadTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppLargeBandwidthZeroSpreadTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppNtnLspCorrelationDistanceTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppSubClusterMappingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppLosBlockageAttenuationTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppXprDistributionTest(), TestCase::Duration::QUICK);
