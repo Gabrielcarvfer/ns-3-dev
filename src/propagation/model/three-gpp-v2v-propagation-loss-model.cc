@@ -42,7 +42,7 @@ ThreeGppV2vUrbanPropagationLossModel::ThreeGppV2vUrbanPropagationLossModel()
 {
     NS_LOG_FUNCTION(this);
     m_uniformVar = CreateObject<UniformRandomVariable>();
-    m_logNorVar = CreateObject<LogNormalRandomVariable>();
+    m_normalVar = CreateObject<NormalRandomVariable>();
 
     // set a default channel condition model
     // TODO the default ccm needs buildings, how to do this?
@@ -101,12 +101,20 @@ ThreeGppV2vUrbanPropagationLossModel::GetAdditionalNlosvLoss(Ptr<MobilityModel> 
     // 1. The blocker height is the vehicle height which is randomly selected
     // out of the three vehicle types according to the portion of the vehicle
     // types in the simulated scenario.
+    // The blocker and the blockage realization of a link are drawn once and
+    // kept, so that the loss of the link does not change between evaluations;
+    // the log-normal parameters still follow its current distance.
+    auto [it, inserted] = m_nlosvBlockageMap.try_emplace(GetKey(a, b), NlosvBlockageItem{});
+    if (inserted)
+    {
+        it->second.m_blockerDraw = m_uniformVar->GetValue() * 100.0;
+        it->second.m_normalDraw = m_normalVar->GetValue();
+    }
     double additionalLoss = 0;
     double blockerHeight = 0;
     double mu_a = 0;
     double sigma_a = 0;
-    double randomValue = m_uniformVar->GetValue() * 100.0;
-    if (randomValue < m_percType3Vehicles)
+    if (it->second.m_blockerDraw < m_percType3Vehicles)
     {
         // vehicles of type 3 have height 3 meters
         blockerHeight = 3.0;
@@ -121,33 +129,24 @@ ThreeGppV2vUrbanPropagationLossModel::GetAdditionalNlosvLoss(Ptr<MobilityModel> 
     if (std::min(hUt, hBs) > blockerHeight)
     {
         // Case 1: Minimum antenna height value of TX and RX > Blocker height
-        additionalLoss = 0;
+        return 0;
     }
     else if (std::max(hUt, hBs) < blockerHeight)
     {
         // Case 2: Maximum antenna height value of TX and RX < Blocker height
         mu_a = 9.0 + std::max(0.0, 15 * log10(distance3D) - 41.0);
         sigma_a = 4.5;
-        m_logNorVar->SetAttribute(
-            "Mu",
-            DoubleValue(log(pow(mu_a, 2) / sqrt(pow(sigma_a, 2) + pow(mu_a, 2)))));
-        m_logNorVar->SetAttribute("Sigma",
-                                  DoubleValue(sqrt(log(pow(sigma_a, 2) / pow(mu_a, 2) + 1))));
-        additionalLoss = std::max(0.0, m_logNorVar->GetValue());
     }
     else
     {
         // Case 3: Otherwise
         mu_a = 5.0 + std::max(0.0, 15 * log10(distance3D) - 41.0);
         sigma_a = 4.0;
-
-        m_logNorVar->SetAttribute(
-            "Mu",
-            DoubleValue(log(pow(mu_a, 2) / sqrt(pow(sigma_a, 2) + pow(mu_a, 2)))));
-        m_logNorVar->SetAttribute("Sigma",
-                                  DoubleValue(sqrt(log(pow(sigma_a, 2) / pow(mu_a, 2) + 1))));
-        additionalLoss = std::max(0.0, m_logNorVar->GetValue());
     }
+    // log-normal variable with mean mu_a and standard deviation sigma_a
+    const double mu = log(pow(mu_a, 2) / sqrt(pow(sigma_a, 2) + pow(mu_a, 2)));
+    const double sigma = sqrt(log(pow(sigma_a, 2) / pow(mu_a, 2) + 1));
+    additionalLoss = std::max(0.0, exp(mu + sigma * it->second.m_normalDraw));
 
     return additionalLoss;
 }
@@ -222,7 +221,7 @@ ThreeGppV2vUrbanPropagationLossModel::DoAssignStreams(int64_t stream)
 
     m_normRandomVariable->SetStream(stream);
     m_uniformVar->SetStream(stream + 1);
-    m_logNorVar->SetStream(stream + 2);
+    m_normalVar->SetStream(stream + 2);
     return 3;
 }
 

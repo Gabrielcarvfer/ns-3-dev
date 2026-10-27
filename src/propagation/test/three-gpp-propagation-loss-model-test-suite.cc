@@ -24,6 +24,8 @@
 #include "ns3/three-gpp-propagation-loss-model.h"
 #include "ns3/three-gpp-v2v-propagation-loss-model.h"
 
+#include <set>
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("ThreeGppPropagationLossModelsTest");
@@ -1582,6 +1584,77 @@ ThreeGppO2iBuildingTypeChangeTestCase::DoRun()
 /**
  * @ingroup propagation-tests
  *
+ * Test case for the vehicle blockage loss of NLOSv links of TR 37.885 Sec.
+ * 6.2.1: the blocker and the blockage loss of a link are drawn once, so the
+ * loss of a static NLOSv link must not change between evaluations, while it
+ * differs between links.
+ */
+class ThreeGppV2vNlosvBlockageTestCase : public TestCase
+{
+  public:
+    ThreeGppV2vNlosvBlockageTestCase()
+        : TestCase("Test that the NLOSv blockage loss of a static V2V link is kept")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+ThreeGppV2vNlosvBlockageTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    auto condModel = CreateObject<FixedConditionModel>();
+    condModel->m_cond->SetLosCondition(ChannelCondition::NLOSv);
+    condModel->m_cond->SetO2iCondition(ChannelCondition::O2O);
+    for (const std::string model : {"ns3::ThreeGppV2vUrbanPropagationLossModel",
+                                    "ns3::ThreeGppV2vHighwayPropagationLossModel"})
+    {
+        ObjectFactory factory(model);
+        factory.Set("Frequency", DoubleValue(5.9e9));
+        factory.Set("ShadowingEnabled", BooleanValue(false));
+        factory.Set("ChannelConditionModel", PointerValue(condModel));
+        auto lossModel = factory.Create<ThreeGppPropagationLossModel>();
+
+        std::set<double> losses;
+        const uint32_t numLinks = 50;
+        for (uint32_t i = 0; i < numLinks; i++)
+        {
+            Ptr<Node> a = CreateObject<Node>();
+            auto aMob = CreateObject<ConstantPositionMobilityModel>();
+            aMob->SetPosition(Vector(0, 0, 1.5));
+            a->AggregateObject(aMob);
+            Ptr<Node> b = CreateObject<Node>();
+            auto bMob = CreateObject<ConstantPositionMobilityModel>();
+            bMob->SetPosition(Vector(100, 0, 1.5));
+            b->AggregateObject(bMob);
+
+            const double first = lossModel->CalcRxPower(0, aMob, bMob);
+            const double second = lossModel->CalcRxPower(0, aMob, bMob);
+            const double reverse = lossModel->CalcRxPower(0, bMob, aMob);
+            NS_TEST_EXPECT_MSG_EQ_TOL(second,
+                                      first,
+                                      1e-9,
+                                      model << ": blockage loss changed, link " << i);
+            NS_TEST_EXPECT_MSG_EQ_TOL(reverse,
+                                      first,
+                                      1e-9,
+                                      model << ": blockage loss not reciprocal, link " << i);
+            losses.insert(first);
+        }
+        // both antennas below the blocker: a N(9, 4.5) dB-like loss per link
+        NS_TEST_EXPECT_MSG_GT(losses.size(), numLinks / 2, model << ": too few distinct losses");
+    }
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-tests
+ *
  * Test case for the O2I vehicular penetration loss of TR 38.901 Sec. 7.4.3.2:
  * the loss drawn for a UT moving at vehicular speed must be kept after the UT
  * slows down below 30 km/h and speeds up again, instead of dropping to 0 dB.
@@ -2059,6 +2132,7 @@ ThreeGppPropagationLossModelsTestSuite::ThreeGppPropagationLossModelsTestSuite()
     AddTestCase(new ThreeGppO2iShadowingMapTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppO2iBuildingTypeChangeTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppO2iVehicularLossTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppV2vNlosvBlockageTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingFirstEvaluationTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppColocatedSpatialConsistencyTestCase, TestCase::Duration::QUICK);
 }

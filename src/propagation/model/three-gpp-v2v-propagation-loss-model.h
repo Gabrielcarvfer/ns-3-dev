@@ -13,6 +13,8 @@
 #include "ns3/deprecated.h"
 #include "ns3/mobility-model.h"
 
+#include <unordered_map>
+
 namespace ns3
 {
 
@@ -118,9 +120,18 @@ class ThreeGppV2vUrbanPropagationLossModel : public ThreeGppPropagationLossModel
 
     int64_t DoAssignStreams(int64_t stream) override;
 
+    /** The random draws of the vehicle blockage of a NLOSv link */
+    struct NlosvBlockageItem
+    {
+        double m_blockerDraw; //!< uniform draw in [0, 100) selecting the blocker type
+        double m_normalDraw;  //!< standard normal draw of the log-normal blockage loss
+    };
+
     double m_percType3Vehicles; //!< percentage of Type 3 vehicles in the scenario (i.e., trucks)
-    Ptr<UniformRandomVariable> m_uniformVar;  //!< uniform random variable
-    Ptr<LogNormalRandomVariable> m_logNorVar; //!< log normal random variable
+    Ptr<UniformRandomVariable> m_uniformVar; //!< uniform random variable
+    Ptr<NormalRandomVariable> m_normalVar;   //!< standard normal random variable
+    mutable std::unordered_map<uint32_t, NlosvBlockageItem>
+        m_nlosvBlockageMap; //!< the blockage draws of each NLOSv link, kept across evaluations
 };
 
 /**

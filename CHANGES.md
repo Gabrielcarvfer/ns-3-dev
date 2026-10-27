@@ -42,6 +42,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (spectrum) Without a precoding matrix, the received PSD that `ThreeGppSpectrumPropagationLossModel` computes for a transmitter with several antenna ports is now the mean over the transmit ports of the power each port delivers, `sum |H|^2 / numTxPorts` per RB, instead of the power of the co-phased sum of the ports, `sum_rx |sum_tx H|^2 / numTxPorts`, which formed a fixed beam. Results change for multi-port transmitters whose signals carry no precoding matrix, such as control channels and reference signals.
 * (spectrum) `ThreeGppChannelModel` offsets the ray ZODs of the V2V scenarios from their cluster ZOD with the cluster ZSD of 7 degrees of TR 37.885 Table 6.2.3-1, instead of the 3/8 10^(mu lgZSD) of TR 38.901, so V2V channel realizations change.
 * (spectrum) With the `InterUeSpatialConsistency` attribute of the channel condition model enabled, the V2V scenarios of `ThreeGppChannelModel` correlate the LSPs of nearby terminals over the correlation distances of TR 37.885 Table 6.2.3-1 instead of the UMa ones of TR 38.901, so spatially consistent V2V channel realizations change.
+* (propagation) The V2V propagation loss models draw the blocker and the vehicle blockage loss of a NLOSv link once and keep them across the evaluations of the link, so the path loss of NLOSv links changes.
 
 ## Changes from ns-3.48 to ns-3.49
 
