@@ -173,6 +173,7 @@ build_lib(
     test/spectrum-waveform-generator-test.cc
     test/three-gpp-channel-calibration-test-suite.cc
     test/three-gpp-channel-test-suite.cc
+    test/three-gpp-v2v-channel-calibration-test-suite.cc
     test/tv-helper-distribution-test.cc
     test/tv-spectrum-transmitter-test.cc
     test/two-ray-splm-test-suite.cc
