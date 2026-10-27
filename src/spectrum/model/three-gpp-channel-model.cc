@@ -3882,18 +3882,21 @@ ThreeGppChannelModel::ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> 
     }
 
     // Unequal ray powers, Equation (7.6-6), normalized so the rays of cluster n
-    // sum to the cluster power.
+    // sum to the cluster power. With a zero intra-cluster spread, as in some
+    // TR 38.811 NTN tables, the rays share the angle or delay of their cluster
+    // in that dimension, which then does not weight their powers.
+    auto weight = [](double x, double spread) { return spread > 0 ? std::exp(-x / spread) : 1.0; };
     Double2DVector rayPower(nClusters, DoubleVector(numRays));
     for (uint16_t n = 0; n < nClusters; n++)
     {
         double sum = 0;
         for (uint8_t m = 0; m < numRays; m++)
         {
-            rayPower[n][m] = std::exp(-rayDelay[n][m] / table3gpp->m_cDS) *
-                             std::exp(-M_SQRT2 * std::abs(alphaAoa[n][m]) / table3gpp->m_cASA) *
-                             std::exp(-M_SQRT2 * std::abs(alphaAod[n][m]) / table3gpp->m_cASD) *
-                             std::exp(-M_SQRT2 * std::abs(alphaZoa[n][m]) / table3gpp->m_cZSA) *
-                             std::exp(-M_SQRT2 * std::abs(alphaZod[n][m]) / cZSD);
+            rayPower[n][m] = weight(rayDelay[n][m], table3gpp->m_cDS) *
+                             weight(M_SQRT2 * std::abs(alphaAoa[n][m]), table3gpp->m_cASA) *
+                             weight(M_SQRT2 * std::abs(alphaAod[n][m]), table3gpp->m_cASD) *
+                             weight(M_SQRT2 * std::abs(alphaZoa[n][m]), table3gpp->m_cZSA) *
+                             weight(M_SQRT2 * std::abs(alphaZod[n][m]), cZSD);
             sum += rayPower[n][m];
         }
         for (uint8_t m = 0; m < numRays; m++)

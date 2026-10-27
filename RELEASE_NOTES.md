@@ -55,6 +55,7 @@ but other contemporaneous versions may also work.
 - (propagation) The additional vehicle blockage loss of NLOSv links of `ThreeGppV2vUrbanPropagationLossModel` and `ThreeGppV2vHighwayPropagationLossModel` (TR 37.885 Sec. 6.2.1) is now drawn once per link; it was redrawn, with its blocker, at every evaluation, so the loss of a static link changed between packets.
 - (spectrum) The NLOS links of the `NTN-Urban` and `NTN-Suburban` scenarios of `ThreeGppChannelModel` in the S band now use the parameters of TR 38.811 Tables 6.7.2-4a and 6.7.2-6a, instead of those of the Ka band tables.
 - (spectrum) The departure angle spreads of the satellite links of the NTN scenarios of `ThreeGppChannelModel` are now zero (TR 38.811 Table 6.7.2 NOTE 8), instead of 1 degree.
+- (spectrum) With `LargeBandwidthArrayModeling` enabled, `ThreeGppChannelModel` no longer produces a non-finite channel when an intra-cluster spread is zero, as the cluster ASD of the NTN Dense Urban and Suburban scenarios and the departure spreads of a satellite: such a spread no longer weights the ray powers of TR 38.901 Equation 7.6-6, instead of dividing by zero.
 
 ## Release 3.49
 

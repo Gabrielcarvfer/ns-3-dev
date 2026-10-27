@@ -4393,6 +4393,77 @@ class ThreeGppNtnSatelliteDepartureSpreadTest : public TestCase
 /**
  * @ingroup spectrum-tests
  *
+ * Test the large bandwidth ray powers of TR 38.901 Equation 7.6-6 with an
+ * intra-cluster spread of zero, as the cluster ASD of the NTN Dense Urban and
+ * Suburban tables of TR 38.811 and the departure spreads of a satellite: the
+ * rays then share the angle or delay of their cluster in that dimension, which
+ * must not weight their powers (instead of dividing by zero), so that the
+ * channel is finite.
+ */
+class ThreeGppLargeBandwidthZeroSpreadTest : public TestCase
+{
+  public:
+    ThreeGppLargeBandwidthZeroSpreadTest()
+        : TestCase("Check the large bandwidth ray powers with zero intra-cluster spreads")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        // a HAPS (cluster ASD 0) and a LEO satellite (also no departure spreads)
+        for (double altitude : {20e3, 600e3})
+        {
+            auto [ut, platform] = MakeNtnLink(50, altitude);
+            NodeContainer nodes(2);
+            nodes.Get(0)->AggregateObject(ut);
+            nodes.Get(1)->AggregateObject(platform);
+
+            auto channelModel = CreateObject<ThreeGppChannelModel>();
+            channelModel->SetAttribute("Frequency", DoubleValue(20e9));
+            channelModel->SetAttribute("Scenario", StringValue("NTN-DenseUrban"));
+            channelModel->SetAttribute("LargeBandwidthArrayModeling", BooleanValue(true));
+            channelModel->SetAttribute("ChannelBandwidth", DoubleValue(400e6));
+            channelModel->SetAttribute(
+                "ChannelConditionModel",
+                PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+            auto makeArray = []() {
+                return CreateObjectWithAttributes<UniformPlanarArray>(
+                    "NumColumns",
+                    UintegerValue(8),
+                    "NumRows",
+                    UintegerValue(8),
+                    "AntennaElement",
+                    PointerValue(CreateObject<IsotropicAntennaModel>()));
+            };
+            auto channel = channelModel->GetChannel(platform, ut, makeArray(), makeArray());
+            const auto& h = channel->m_channel;
+            double power = 0;
+            for (size_t p = 0; p < h.GetNumPages(); p++)
+            {
+                for (size_t r = 0; r < h.GetNumRows(); r++)
+                {
+                    for (size_t c = 0; c < h.GetNumCols(); c++)
+                    {
+                        NS_TEST_ASSERT_MSG_EQ(std::isfinite(std::abs(h(r, c, p))),
+                                              true,
+                                              "Non-finite channel coefficient, platform at "
+                                                  << altitude / 1e3 << " km");
+                        power += std::norm(h(r, c, p));
+                    }
+                }
+            }
+            NS_TEST_EXPECT_MSG_GT(power,
+                                  0,
+                                  "Channel without power, platform at " << altitude / 1e3 << " km");
+        }
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test suite for the ThreeGppChannelModel class
  */
 class ThreeGppChannelTestSuite : public TestSuite
@@ -4495,6 +4566,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(new ThreeGppRmaZodOffsetTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppNtnSBandNlosTableTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppNtnSatelliteDepartureSpreadTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppLargeBandwidthZeroSpreadTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppSubClusterMappingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppLosBlockageAttenuationTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppXprDistributionTest(), TestCase::Duration::QUICK);
