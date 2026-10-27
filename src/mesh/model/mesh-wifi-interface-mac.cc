@@ -119,6 +119,15 @@ void
 MeshWifiInterfaceMac::DoInitialize()
 {
     NS_LOG_FUNCTION(this);
+    // The mesh BSS basic rate set, as for an AP: the mandatory non-HT rates, but the HR-DSSS ones
+    for (const auto& mode : GetWifiPhy()->GetModeList())
+    {
+        if (mode.IsMandatory() && (mode.GetModulationClass() < WIFI_MOD_CLASS_HT) &&
+            (mode.GetModulationClass() != WIFI_MOD_CLASS_HR_DSSS))
+        {
+            GetWifiRemoteStationManager()->AddBasicMode(mode);
+        }
+    }
     m_coefficient->SetAttribute("Max", DoubleValue(m_randomStart.GetSeconds()));
     if (m_beaconEnable)
     {
