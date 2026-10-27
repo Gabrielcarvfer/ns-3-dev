@@ -190,7 +190,8 @@ PeerManagementProtocol::ReceiveBeacon(uint32_t interface,
         }
     }
     peerLink->SetBeaconInformation(Simulator::Now(), beaconInterval);
-    if (GetBeaconCollisionAvoidance())
+    // The Beacon Timing element is optional: peers may not send it
+    if (GetBeaconCollisionAvoidance() && timingElement)
     {
         peerLink->SetBeaconTimingElement(*PeekPointer(timingElement));
     }
