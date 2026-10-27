@@ -17,9 +17,18 @@ namespace ns3
 namespace dot11s
 {
 
+namespace
+{
+/// Mesh Peering Protocol Identifier of the Mesh Peering Management protocol (Table 8-178)
+constexpr uint16_t MESH_PEERING_MANAGEMENT_PROTOCOL = 0;
+/// Size of the Chosen PMK field (AMPE only)
+constexpr uint16_t CHOSEN_PMK_SIZE = 16;
+} // namespace
+
 IePeerManagement::IePeerManagement()
-    : m_length(3),
+    : m_length(4),
       m_subtype(PEER_OPEN),
+      m_protocolId(MESH_PEERING_MANAGEMENT_PROTOCOL),
       m_localLinkId(0),
       m_peerLinkId(0),
       m_reasonCode(REASON11S_RESERVED)
@@ -35,7 +44,7 @@ IePeerManagement::ElementId() const
 void
 IePeerManagement::SetPeerOpen(uint16_t localLinkId)
 {
-    m_length = 3;
+    m_length = 4;
     m_subtype = PEER_OPEN;
     m_localLinkId = localLinkId;
 }
@@ -43,7 +52,7 @@ IePeerManagement::SetPeerOpen(uint16_t localLinkId)
 void
 IePeerManagement::SetPeerClose(uint16_t localLinkId, uint16_t peerLinkId, PmpReasonCode reasonCode)
 {
-    m_length = 7;
+    m_length = 8;
     m_subtype = PEER_CLOSE;
     m_localLinkId = localLinkId;
     m_peerLinkId = peerLinkId;
@@ -53,7 +62,7 @@ IePeerManagement::SetPeerClose(uint16_t localLinkId, uint16_t peerLinkId, PmpRea
 void
 IePeerManagement::SetPeerConfirm(uint16_t localLinkId, uint16_t peerLinkId)
 {
-    m_length = 5;
+    m_length = 6;
     m_subtype = PEER_CONFIRM;
     m_localLinkId = localLinkId;
     m_peerLinkId = peerLinkId;
@@ -108,17 +117,34 @@ IePeerManagement::SubtypeIsConfirm() const
 }
 
 void
+IePeerManagement::SetSubtype(Subtype subtype)
+{
+    m_subtype = subtype;
+    if (m_subtype == PEER_CLOSE && m_length == 6)
+    {
+        // A Close without peer link ID: the field after the local link ID is the reason code
+        m_reasonCode = static_cast<PmpReasonCode>(m_peerLinkId);
+        m_peerLinkId = 0;
+    }
+}
+
+void
 IePeerManagement::SerializeInformationField(Buffer::Iterator i) const
 {
-    i.WriteU8(m_subtype);
-    i.WriteU16(m_localLinkId);
-    if (m_length > 3)
+    i.WriteHtolsbU16(m_protocolId);
+    i.WriteHtolsbU16(m_localLinkId);
+    if (m_length == 6 && m_subtype == PEER_CLOSE)
     {
-        i.WriteU16(m_peerLinkId);
+        i.WriteHtolsbU16(m_reasonCode);
+        return;
     }
-    if (m_length > 5)
+    if (m_length >= 6)
     {
-        i.WriteU16(m_reasonCode);
+        i.WriteHtolsbU16(m_peerLinkId);
+    }
+    if (m_length >= 8)
+    {
+        i.WriteHtolsbU16(m_reasonCode);
     }
 }
 
@@ -126,29 +152,22 @@ uint16_t
 IePeerManagement::DeserializeInformationField(Buffer::Iterator start, uint16_t length)
 {
     Buffer::Iterator i = start;
-    m_subtype = i.ReadU8();
     m_length = length;
-    if (m_subtype == PEER_OPEN)
+    m_protocolId = i.ReadLsbtohU16();
+    m_localLinkId = i.ReadLsbtohU16();
+    m_peerLinkId = 0;
+    m_reasonCode = REASON11S_RESERVED;
+    // A trailing Chosen PMK (AMPE) is skipped: only open peering is supported
+    uint16_t fields = length >= 4 + CHOSEN_PMK_SIZE ? length - CHOSEN_PMK_SIZE : length;
+    if (fields >= 6)
     {
-        NS_ASSERT(length == 3);
+        m_peerLinkId = i.ReadLsbtohU16();
     }
-    if (m_subtype == PEER_CONFIRM)
+    if (fields >= 8)
     {
-        NS_ASSERT(length == 5);
+        m_reasonCode = static_cast<PmpReasonCode>(i.ReadLsbtohU16());
     }
-    if (m_subtype == PEER_CLOSE)
-    {
-        NS_ASSERT(length == 7);
-    }
-    m_localLinkId = i.ReadU16();
-    if (m_length > 3)
-    {
-        m_peerLinkId = i.ReadU16();
-    }
-    if (m_length > 5)
-    {
-        m_reasonCode = (PmpReasonCode)i.ReadU16();
-    }
+    i.Next(length - i.GetDistanceFrom(start));
     return i.GetDistanceFrom(start);
 }
 
@@ -156,14 +175,15 @@ void
 IePeerManagement::Print(std::ostream& os) const
 {
     os << "PeerMgmt=(Subtype=" << (uint16_t)m_subtype << ", Length=" << (uint16_t)m_length
-       << ", LocalLinkId=" << m_localLinkId << ", PeerLinkId=" << m_peerLinkId
-       << ", ReasonCode=" << m_reasonCode << ")";
+       << ", ProtocolId=" << m_protocolId << ", LocalLinkId=" << m_localLinkId
+       << ", PeerLinkId=" << m_peerLinkId << ", ReasonCode=" << m_reasonCode << ")";
 }
 
 bool
 operator==(const IePeerManagement& a, const IePeerManagement& b)
 {
-    return ((a.m_length == b.m_length) && (a.m_subtype == b.m_subtype) &&
+    // The subtype is not part of the element
+    return ((a.m_length == b.m_length) && (a.m_protocolId == b.m_protocolId) &&
             (a.m_localLinkId == b.m_localLinkId) && (a.m_peerLinkId == b.m_peerLinkId) &&
             (a.m_reasonCode == b.m_reasonCode));
 }

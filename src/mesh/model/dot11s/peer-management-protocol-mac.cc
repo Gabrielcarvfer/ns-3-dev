@@ -187,7 +187,15 @@ PeerManagementProtocolMac::Receive(Ptr<Packet> const_packet, const WifiMacHeader
         packet->RemoveHeader(elements, packet->GetSize());
         peerElement = DynamicCast<IePeerManagement>(elements.FindFirst(IE_MESH_PEERING_MANAGEMENT));
 
-        NS_ASSERT(peerElement);
+        if (!peerElement)
+        {
+            NS_LOG_DEBUG("Mesh Peering frame without Mesh Peering Management element");
+            m_stats.brokenMgt++;
+            return false;
+        }
+        // The element does not say which frame carries it
+        peerElement->SetSubtype(
+            static_cast<IePeerManagement::Subtype>(actionValue.selfProtectedAction));
         // Check that frame subtype corresponds to peer link subtype
         if (peerElement->SubtypeIsOpen())
         {

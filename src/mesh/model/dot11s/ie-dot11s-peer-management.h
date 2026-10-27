@@ -35,7 +35,14 @@ enum PmpReasonCode
     REASON11S_RESERVED = 67,
 };
 
-/// according to IEEE 802.11 - 2012
+/**
+ * Mesh Peering Management element (IEEE 802.11-2012, 8.4.2.104).
+ *
+ * The element does not say which frame carries it: the subtype (Open, Confirm or Close) is that
+ * of the Mesh Peering frame, which the receiver sets with SetSubtype once the element is
+ * deserialized. Until then, an element of 6 octets may carry either the peer link ID (Confirm)
+ * or the reason code (Close), and is held as a peer link ID.
+ */
 class IePeerManagement : public WifiInformationElement
 {
   public:
@@ -103,6 +110,12 @@ class IePeerManagement : public WifiInformationElement
      * @returns the subtype
      */
     uint8_t GetSubtype() const;
+    /**
+     * Set the subtype, that of the Mesh Peering frame carrying a received element.
+     *
+     * @param subtype the subtype
+     */
+    void SetSubtype(Subtype subtype);
 
     // Inherited from WifiInformationElement
     WifiInformationElementId ElementId() const override;
@@ -112,8 +125,9 @@ class IePeerManagement : public WifiInformationElement
     void Print(std::ostream& os) const override;
 
   private:
-    uint8_t m_length;       ///< length
-    uint8_t m_subtype;      ///< subtype
+    uint8_t m_length;       ///< length of the information field
+    uint8_t m_subtype;      ///< subtype of the frame carrying the element (not in the element)
+    uint16_t m_protocolId;  ///< Mesh Peering Protocol Identifier
     uint16_t m_localLinkId; ///< local link ID
     /**
      * Present within confirm and may be present in close

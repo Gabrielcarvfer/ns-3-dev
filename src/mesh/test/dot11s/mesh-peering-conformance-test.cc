@@ -33,6 +33,111 @@
 using namespace ns3;
 using namespace ns3::dot11s;
 
+namespace
+{
+
+/**
+ * Serialize an information element.
+ *
+ * @param element the element
+ * @return its octets, Element ID and Length included
+ */
+std::vector<uint8_t>
+Serialize(const WifiInformationElement& element)
+{
+    Buffer buffer;
+    buffer.AddAtStart(element.GetSerializedSize());
+    element.Serialize(buffer.Begin());
+    std::vector<uint8_t> octets(buffer.GetSize());
+    buffer.CopyData(octets.data(), octets.size());
+    return octets;
+}
+
+/**
+ * Deserialize an information element.
+ *
+ * @param element the element
+ * @param octets its octets, Element ID and Length included
+ */
+void
+Deserialize(WifiInformationElement& element, const std::vector<uint8_t>& octets)
+{
+    Buffer buffer;
+    buffer.AddAtStart(octets.size());
+    buffer.Begin().Write(octets.data(), octets.size());
+    element.Deserialize(buffer.Begin());
+}
+
+} // namespace
+
+/**
+ * @ingroup dot11s-test
+ *
+ * @brief Mesh Peering Management element format
+ *
+ * The element carries the Mesh Peering Protocol Identifier, the Local Link ID, then the Peer Link
+ * ID in Confirm frames, and the Peer Link ID (if known) and the Reason Code in Close frames, all
+ * little endian (IEEE 802.11-2012, 8.4.2.104); it has no subtype, which is the frame's. The
+ * expected octets are those of the elements sent by Linux's mac80211 (Linux 6.12).
+ */
+class PeeringManagementElementTest : public TestCase
+{
+  public:
+    PeeringManagementElementTest()
+        : TestCase("Mesh Peering Management element format")
+    {
+    }
+
+    void DoRun() override;
+};
+
+void
+PeeringManagementElementTest::DoRun()
+{
+    // Open from a mesh STA with local link ID 0xa99f
+    const std::vector<uint8_t> open{0x75, 0x04, 0x00, 0x00, 0x9f, 0xa9};
+    // Confirm from a mesh STA with local link ID 0xc373, peering with link ID 0xa99f
+    const std::vector<uint8_t> confirm{0x75, 0x06, 0x00, 0x00, 0x73, 0xc3, 0x9f, 0xa9};
+    // Close, with and without the peer link ID, for MESH-CLOSE-RCVD (55)
+    const std::vector<uint8_t> close{0x75, 0x08, 0x00, 0x00, 0x73, 0xc3, 0x9f, 0xa9, 0x37, 0x00};
+    const std::vector<uint8_t> closeNoPeer{0x75, 0x06, 0x00, 0x00, 0x73, 0xc3, 0x37, 0x00};
+
+    IePeerManagement element;
+    element.SetPeerOpen(0xa99f);
+    NS_TEST_EXPECT_MSG_EQ((Serialize(element) == open), true, "Wrong Open element");
+    element.SetPeerConfirm(0xc373, 0xa99f);
+    NS_TEST_EXPECT_MSG_EQ((Serialize(element) == confirm), true, "Wrong Confirm element");
+    element.SetPeerClose(0xc373, 0xa99f, REASON11S_MESH_CLOSE_RCVD);
+    NS_TEST_EXPECT_MSG_EQ((Serialize(element) == close), true, "Wrong Close element");
+
+    IePeerManagement received;
+    Deserialize(received, open);
+    received.SetSubtype(IePeerManagement::PEER_OPEN);
+    NS_TEST_EXPECT_MSG_EQ(received.GetLocalLinkId(), 0xa99f, "Wrong local link ID of Open");
+
+    Deserialize(received, confirm);
+    received.SetSubtype(IePeerManagement::PEER_CONFIRM);
+    NS_TEST_EXPECT_MSG_EQ(received.GetLocalLinkId(), 0xc373, "Wrong local link ID of Confirm");
+    NS_TEST_EXPECT_MSG_EQ(received.GetPeerLinkId(), 0xa99f, "Wrong peer link ID of Confirm");
+
+    Deserialize(received, close);
+    received.SetSubtype(IePeerManagement::PEER_CLOSE);
+    NS_TEST_EXPECT_MSG_EQ(received.GetPeerLinkId(), 0xa99f, "Wrong peer link ID of Close");
+    NS_TEST_EXPECT_MSG_EQ(received.GetReasonCode(),
+                          REASON11S_MESH_CLOSE_RCVD,
+                          "Wrong reason code of Close");
+
+    Deserialize(received, closeNoPeer);
+    received.SetSubtype(IePeerManagement::PEER_CLOSE);
+    NS_TEST_EXPECT_MSG_EQ(received.GetLocalLinkId(), 0xc373, "Wrong local link ID of Close");
+    NS_TEST_EXPECT_MSG_EQ(received.GetReasonCode(),
+                          REASON11S_MESH_CLOSE_RCVD,
+                          "Wrong reason code of Close without peer link ID");
+    NS_TEST_EXPECT_MSG_EQ((Serialize(received) == closeNoPeer),
+                          true,
+                          "Close without peer link ID not serialized back as received");
+}
+
 /**
  * @ingroup dot11s-test
  *
@@ -119,6 +224,7 @@ class MeshPeeringConformanceSuite : public TestSuite
         : TestSuite("devices-mesh-dot11s-peering-conformance", Type::UNIT)
     {
         AddTestCase(new BeaconWithoutTimingTest, TestCase::Duration::QUICK);
+        AddTestCase(new PeeringManagementElementTest, TestCase::Duration::QUICK);
     }
 };
 
