@@ -309,19 +309,6 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     virtual double GetO2iShadowingCorrelationDistance() const;
 
     /**
-     * @brief Returns an unique key for the channel between a and b.
-     *
-     * The key is the value of the Cantor function calculated by using as
-     * first parameter the lowest node ID, and as a second parameter the highest
-     * node ID.
-     *
-     * @param a tx mobility model
-     * @param b rx mobility model
-     * @return channel key
-     */
-    static uint32_t GetKey(Ptr<MobilityModel> a, Ptr<MobilityModel> b);
-
-    /**
      * @brief Get the difference between the node position
      *
      * The difference is calculated as (b-a) if Id(a) < Id (b), or
@@ -334,6 +321,19 @@ class ThreeGppPropagationLossModel : public PropagationLossModel
     static Vector GetVectorDifference(Ptr<MobilityModel> a, Ptr<MobilityModel> b);
 
   protected:
+    /**
+     * @brief Returns an unique key for the channel between a and b.
+     *
+     * The key is the value of the Cantor function calculated by using as
+     * first parameter the lowest node ID, and as a second parameter the highest
+     * node ID.
+     *
+     * @param a tx mobility model
+     * @param b rx mobility model
+     * @return channel key
+     */
+    static uint32_t GetKey(Ptr<MobilityModel> a, Ptr<MobilityModel> b);
+
     void DoDispose() override;
     void NotifyConstructionCompleted() override;
     /**
