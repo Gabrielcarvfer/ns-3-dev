@@ -68,6 +68,19 @@ constexpr double kMaxConsistencyStepMeters = 1.0;
  */
 static constexpr double kNoDisplacementEpsMeters = 1e-6;
 
+/**
+ * Weight of a ray power in one dimension, Equation (7.6-6) of TR 38.901.
+ *
+ * @param x The ray delay, or the scaled absolute offset angle of the ray.
+ * @param spread The intra-cluster spread in that dimension.
+ * @return exp(-x / spread), or 1 if the spread is zero.
+ */
+static double
+RayPowerWeight(double x, double spread)
+{
+    return spread > 0 ? std::exp(-x / spread) : 1.0;
+}
+
 /// The ray offset angles within a cluster, given for rms angle spread normalized to 1.
 /// (Table 7.5-3)
 static constexpr std::array offSetAlpha = {
@@ -3882,18 +3895,20 @@ ThreeGppChannelModel::ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> 
     }
 
     // Unequal ray powers, Equation (7.6-6), normalized so the rays of cluster n
-    // sum to the cluster power.
+    // sum to the cluster power. With a zero intra-cluster spread, as in some
+    // TR 38.811 NTN tables, the rays share the angle or delay of their cluster
+    // in that dimension, which then does not weight their powers.
     Double2DVector rayPower(nClusters, DoubleVector(numRays));
     for (uint16_t n = 0; n < nClusters; n++)
     {
         double sum = 0;
         for (uint8_t m = 0; m < numRays; m++)
         {
-            rayPower[n][m] = std::exp(-rayDelay[n][m] / table3gpp->m_cDS) *
-                             std::exp(-M_SQRT2 * std::abs(alphaAoa[n][m]) / table3gpp->m_cASA) *
-                             std::exp(-M_SQRT2 * std::abs(alphaAod[n][m]) / table3gpp->m_cASD) *
-                             std::exp(-M_SQRT2 * std::abs(alphaZoa[n][m]) / table3gpp->m_cZSA) *
-                             std::exp(-M_SQRT2 * std::abs(alphaZod[n][m]) / cZSD);
+            rayPower[n][m] = RayPowerWeight(rayDelay[n][m], table3gpp->m_cDS) *
+                             RayPowerWeight(M_SQRT2 * std::abs(alphaAoa[n][m]), table3gpp->m_cASA) *
+                             RayPowerWeight(M_SQRT2 * std::abs(alphaAod[n][m]), table3gpp->m_cASD) *
+                             RayPowerWeight(M_SQRT2 * std::abs(alphaZoa[n][m]), table3gpp->m_cZSA) *
+                             RayPowerWeight(M_SQRT2 * std::abs(alphaZod[n][m]), cZSD);
             sum += rayPower[n][m];
         }
         for (uint8_t m = 0; m < numRays; m++)
