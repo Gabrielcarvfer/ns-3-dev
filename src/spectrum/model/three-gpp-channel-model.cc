@@ -2227,9 +2227,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
                 table3gpp->m_sigLgDS =
                     NTNDenseUrbanLOS.at(freqBand).at(elevAngleQuantized)[sigLgDS];
 
-                // table3gpp->m_uLgASD=-1.79769e+308;  //FOR SATELLITES
                 table3gpp->m_uLgASD = NTNDenseUrbanLOS.at(freqBand).at(elevAngleQuantized)[uLgASD];
-                // table3gpp->m_sigLgASD=0; //FOR SATELLITES
                 table3gpp->m_sigLgASD =
                     NTNDenseUrbanLOS.at(freqBand).at(elevAngleQuantized)[sigLgASD];
 
@@ -2240,9 +2238,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
                 table3gpp->m_sigLgZSA =
                     NTNDenseUrbanLOS.at(freqBand).at(elevAngleQuantized)[sigLgZSA];
 
-                // table3gpp->m_uLgZSD=-1.79769e+308;  //FOR SATELLITES
                 table3gpp->m_uLgZSD = NTNDenseUrbanLOS.at(freqBand).at(elevAngleQuantized)[uLgZSD];
-                // table3gpp->m_sigLgZSD= 0; //FOR SATELLITES
                 table3gpp->m_sigLgZSD =
                     NTNDenseUrbanLOS.at(freqBand).at(elevAngleQuantized)[sigLgZSD];
 
@@ -2562,13 +2558,13 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
                 }
             }
         }
-        // Parameters that should be set to -inf are instead set to the minimum
-        // value of double
+        // NOTE 8: the departure angle spreads of a satellite are zero, that is
+        // lgASD and lgZSD are -inf with zero standard deviations
         if (isSatellite)
         {
-            table3gpp->m_uLgASD = std::numeric_limits<double>::min();
+            table3gpp->m_uLgASD = -std::numeric_limits<double>::infinity();
             table3gpp->m_sigLgASD = 0;
-            table3gpp->m_uLgZSD = std::numeric_limits<double>::min();
+            table3gpp->m_uLgZSD = -std::numeric_limits<double>::infinity();
             table3gpp->m_sigLgZSD = 0;
         }
     }
