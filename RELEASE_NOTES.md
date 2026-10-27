@@ -51,6 +51,7 @@ but other contemporaneous versions may also work.
 - (propagation) The O2I penetration loss of `ThreeGppPropagationLossModel` above 6 GHz is now redrawn when the building type (low or high loss) of a link changes with the same LOS state, for example when the channel condition is updated. The link used to keep the loss drawn with its previous building type.
 - (propagation) The O2I vehicular penetration loss of `ThreeGppPropagationLossModel` drawn for a UT is now kept after the UT moves slower than 30 km/h or faster than 120 km/h. It used to be reset to 0 dB for the rest of the simulation.
 - (spectrum) The intra-cluster ZOD spread of the `ThreeGppChannelModel` V2V scenarios now uses the cluster ZSD of 7 degrees of TR 37.885 Table 6.2.3-1; it used the 3/8 10^(mu lgZSD) of TR 38.901, between 1.3 and 2.9 degrees from 5.9 to 63 GHz.
+- (spectrum) The spatially consistent LSPs of the `ThreeGppChannelModel` V2V scenarios now use the correlation distances of TR 37.885 Table 6.2.3-1 (e.g., 7 m for the LOS DS) instead of the UMa ones (30 m); the SF entry of the LSP vector now samples the same field as the shadowing applied by the V2V propagation loss models.
 
 ## Release 3.49
 

@@ -1005,7 +1005,8 @@ evaluated at the terminal position (TR 38.901 Sec. 7.6.3.1), one field per
 site, channel condition (LOS/NLOS/O2I), spatial region (the floor of an indoor
 UT, as the parameters of UTs on different floors are uncorrelated) and LSP,
 with the correlation
-distances of Table 7.5-6 (V2V and NTN fall back to the UMa distances). The
+distances of Table 7.5-6 (of TR 37.885 Table 6.2.3-1 for V2V; NTN falls back to the UMa
+distances). The
 fields are pure functions of position, identical across model instances, so
 links from the same site to nearby terminals obtain correlated LSPs, a channel
 re-generated at the same location reproduces them, and the LSPs of a moving UE

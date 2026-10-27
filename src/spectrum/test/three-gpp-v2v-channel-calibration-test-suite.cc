@@ -931,6 +931,142 @@ ThreeGppV2vClusterZsdTestCase::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * Test the inter-UE correlation of the LSPs of V2V links with the inter-UE
+ * spatial consistency enabled, against the correlation distances of TR 37.885
+ * Table 6.2.3-1. As in TR 38.901 Sec. 7.5 step 4, one field per LSP with its
+ * correlation distance d_j is mixed with the Cholesky factor L of the
+ * cross-correlation matrix, so the correlation of LSP i between two terminals
+ * d apart is sum_j L_ij^2 exp(-d / d_j).
+ */
+class ThreeGppV2vLspCorrelationDistanceTestCase : public TestCase
+{
+  public:
+    ThreeGppV2vLspCorrelationDistanceTestCase()
+        : TestCase("TR 37.885 V2V LSP correlation distances")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+ThreeGppV2vLspCorrelationDistanceTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    const uint32_t numPairs = 3000;
+    const double fcGHz = 5.9;
+    NodeContainer sites;
+    sites.Create(numPairs);
+    for (auto it = sites.Begin(); it != sites.End(); ++it)
+    {
+        auto mob = CreateObject<ConstantPositionMobilityModel>();
+        mob->SetPosition(Vector(0, 0, 1.6));
+        (*it)->AggregateObject(mob);
+    }
+    NodeContainer terminals;
+    terminals.Create(2);
+    std::array<Ptr<MobilityModel>, 2> termMob;
+    for (uint32_t t = 0; t < 2; t++)
+    {
+        termMob[t] = CreateObject<ConstantPositionMobilityModel>();
+        terminals.Get(t)->AggregateObject(termMob[t]);
+    }
+
+    for (const std::string scenario : {"V2V-Urban", "V2V-Highway"})
+    {
+        for (auto state : States(scenario))
+        {
+            const LspReference ref = GetSpecLsps(scenario, state, fcGHz);
+            // Cholesky factor of the cross-correlation matrix of the table
+            std::array<std::array<double, NUM_LSPS>, NUM_LSPS> c{};
+            for (uint8_t i = 0; i < NUM_LSPS; i++)
+            {
+                c[i][i] = 1;
+            }
+            for (const auto& [a, b, rho] : ref.corr)
+            {
+                c[a][b] = rho;
+                c[b][a] = rho;
+            }
+            std::array<std::array<double, NUM_LSPS>, NUM_LSPS> l{};
+            for (uint8_t i = 0; i < NUM_LSPS; i++)
+            {
+                for (uint8_t j = 0; j <= i; j++)
+                {
+                    double sum = c[i][j];
+                    for (uint8_t k = 0; k < j; k++)
+                    {
+                        sum -= l[i][k] * l[j][k];
+                    }
+                    l[i][j] = i == j ? std::sqrt(sum) : sum / l[j][j];
+                }
+            }
+
+            Ptr<ChannelConditionModel> condModel = CreateObject<AlwaysLosChannelConditionModel>();
+            condModel->SetAttribute("InterUeSpatialConsistency", BooleanValue(true));
+            auto model = CreateObject<LspProbeChannelModel>();
+            model->SetAttribute("Scenario", StringValue(scenario));
+            model->SetAttribute("Frequency", DoubleValue(fcGHz * 1e9));
+            model->SetAttribute("ChannelConditionModel", PointerValue(condModel));
+            model->AssignStreams(1);
+            auto cond = CreateObject<ChannelCondition>(LosValue(state), ChannelCondition::O2O);
+
+            for (double d : {4.0, 12.0})
+            {
+                termMob[0]->SetPosition(Vector(100, 0, 1.6));
+                termMob[1]->SetPosition(Vector(100, d, 1.6));
+                const auto table = model->GetThreeGppTable(sites.Get(0)->GetObject<MobilityModel>(),
+                                                           termMob[0],
+                                                           cond);
+                std::array<std::array<std::vector<double>, NUM_LSPS>, 2> x;
+                for (uint32_t p = 0; p < numPairs; p++)
+                {
+                    const auto site = sites.Get(p)->GetObject<MobilityModel>();
+                    for (uint32_t t = 0; t < 2; t++)
+                    {
+                        const auto lsps = model->Draw(cond, table, site, termMob[t]);
+                        x[t][K].push_back(lsps.kFactor);
+                        x[t][DS].push_back(std::log10(lsps.DS));
+                        x[t][ASD].push_back(std::log10(lsps.ASD));
+                        x[t][ASA].push_back(std::log10(lsps.ASA));
+                    }
+                }
+                for (Lsp lsp : {K, DS, ASD, ASA})
+                {
+                    if (lsp == K && !ref.hasK)
+                    {
+                        continue;
+                    }
+                    double expected = 0;
+                    for (uint8_t j = 0; j <= lsp; j++)
+                    {
+                        // the K-factor field always has the LOS distance
+                        const double dj = j == K ? 15 : ref.corrDist[j];
+                        if (l[lsp][j] != 0)
+                        {
+                            expected += l[lsp][j] * l[lsp][j] * std::exp(-d / dj);
+                        }
+                    }
+                    const double r = Correlation(x[0][lsp], x[1][lsp]);
+                    NS_TEST_EXPECT_MSG_EQ_TOL(r,
+                                              expected,
+                                              5 * (1 - expected * expected) / std::sqrt(numPairs) +
+                                                  0.01,
+                                              scenario << " " << StateName(state) << " "
+                                                       << kLspNames[lsp] << " at " << d << " m");
+                }
+            }
+        }
+    }
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * TR 37.885 V2V channel calibration test suite.
  */
 class ThreeGppV2vChannelCalibrationTestSuite : public TestSuite
@@ -945,6 +1081,7 @@ ThreeGppV2vChannelCalibrationTestSuite::ThreeGppV2vChannelCalibrationTestSuite()
     AddTestCase(new ThreeGppV2vLosProbabilityTestCase, Duration::QUICK);
     AddTestCase(new ThreeGppV2vPathlossTestCase, Duration::QUICK);
     AddTestCase(new ThreeGppV2vClusterZsdTestCase, Duration::QUICK);
+    AddTestCase(new ThreeGppV2vLspCorrelationDistanceTestCase, Duration::QUICK);
     AddTestCase(new ThreeGppV2vLspDistributionTestCase, Duration::EXTENSIVE);
 }
 
