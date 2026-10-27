@@ -76,7 +76,7 @@ PeerManagementProtocol::GetTypeId()
 }
 
 PeerManagementProtocol::PeerManagementProtocol()
-    : m_lastAssocId(0),
+    : m_lastAssocId(1), // AIDs are 1 to 2007 (IEEE 802.11-2012, 8.4.1.8)
       m_lastLocalLinkId(1),
       m_enableBca(true),
       m_maxBeaconShift(15)
