@@ -1053,29 +1053,28 @@ ThreeGppPropagationLossModel::GetO2iVehicularLoss(Ptr<MobilityModel> a,
             // Slow nodes are considered as pedestrians (no loss)
             if (velocityKmH < 30)
             {
-                m_o2iVehicularUtLossMap[idNode] = 0.0;
-            }
-            // Fast nodes are considered vehicles.
-            // Create one loss per terminal, and reuse throughout simulation.
-            else if (velocityKmH >= 30 && velocityKmH <= 120)
-            {
-                if (m_o2iVehicularUtLossMap.find(idNode) == m_o2iVehicularUtLossMap.end())
-                {
-                    m_o2iVehicularUtLossMap[idNode] = m_normalO2iVehicularLossVar->GetValue();
-                }
+                continue;
             }
             // Very fast nodes are not modeled
-            else
+            if (velocityKmH > 120)
             {
-                m_o2iVehicularUtLossMap[idNode] = 0.0;
                 NS_LOG_WARN(
                     "O2I loss for high-speed (>120 km/h) transit and satellites not implemented");
+                continue;
+            }
+            // Fast nodes are considered vehicles.
+            // Create one loss per terminal, and reuse throughout simulation,
+            // also after periods in which the terminal is slow or very fast.
+            auto [it, inserted] = m_o2iVehicularUtLossMap.try_emplace(idNode, 0.0);
+            if (inserted)
+            {
+                it->second = m_normalO2iVehicularLossVar->GetValue();
             }
 
             // Sum vehicle individual losses
             if (cond == ChannelCondition::O2iConditionValue::O2O)
             {
-                o2iVehicularLoss += m_o2iVehicularUtLossMap.at(idNode);
+                o2iVehicularLoss += it->second;
             }
         }
     }
