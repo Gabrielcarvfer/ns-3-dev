@@ -64,6 +64,21 @@ These changes include:
 
 With these changes the messages of the Peering Management Protocol and Hybrid Wireless Mesh Protocol will be transmitted compliant to IEEE802.11-2012 and the resulting pcap trace files can be analyzed by Wireshark.
 
+The frames were later compared, octet by octet, with those of the 802.11s implementation of
+Linux's mac80211, with ns-3 and Linux mesh STAs sharing a channel (Linux 6.12, run in the
+simulation with ns-3-dce). The following were then aligned with IEEE 802.11-2012, after which
+ns-3 and Linux mesh STAs peer and forward each other's traffic:
+
+* The Mesh Peering Management element carries the Mesh Peering Protocol Identifier, and no
+  subtype, which is that of the frame carrying it (8.4.2.104).
+* Beacons carry the Mesh Configuration element after the Mesh ID element (Table 8-20), and the
+  mandatory rates as the BSS basic rate set, which a mesh STA must share with its peers (13.2.4).
+* Mesh Peering Confirm frames carry the Mesh ID element (8.6.16.3.2), and an AID of 1 or more.
+* The PREP element carries the Target Mesh STA, which replies to a PREQ, before the Originator
+  Mesh STA, which sent the PREQ (8.4.2.114).
+* The PERR element carries an element TTL and a Reason Code (8.4.2.115).
+* The Beacon Timing element is optional: beacons without it are received.
+
 The multi-interface mesh points are supported as an extension of IEEE draft version 3.0. Note that corresponding |ns3| mesh device helper creates a single interface station by default.
 
 Overview of IEEE 802.11s
@@ -157,7 +172,9 @@ Verification
 ############
 
 * Comes with the custom Wireshark dissector.
-* Linux kernel mac80211 layer compatible message formats.
+* Peering and path selection with Linux kernel mac80211 mesh STAs (open mesh, legacy rates),
+  checked by the ``devices-mesh-dot11s-peering-conformance`` test suite against frames sent by
+  Linux.
 
 Unsupported features
 ####################
