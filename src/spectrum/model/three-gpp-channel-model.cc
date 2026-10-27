@@ -1865,6 +1865,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_cASD = 17;
             table3gpp->m_cASA = 17;
             table3gpp->m_cZSA = 7;
+            table3gpp->m_cZSD = 7;
             table3gpp->m_uK = 3.48;
             table3gpp->m_sigK = 2;
             table3gpp->m_rTau = 3;
@@ -1899,6 +1900,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_cASD = 22;
             table3gpp->m_cASA = 22;
             table3gpp->m_cZSA = 7;
+            table3gpp->m_cZSD = 7;
             table3gpp->m_uK = 0;   // N/A
             table3gpp->m_sigK = 0; // N/A
             table3gpp->m_rTau = 2.1;
@@ -1933,6 +1935,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_cASD = 22;
             table3gpp->m_cASA = 22;
             table3gpp->m_cZSA = 7;
+            table3gpp->m_cZSD = 7;
             table3gpp->m_uK = 0;
             table3gpp->m_sigK = 4.5;
             table3gpp->m_rTau = 2.1;
@@ -1974,6 +1977,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_cASD = 17;
             table3gpp->m_cASA = 17;
             table3gpp->m_cZSA = 7;
+            table3gpp->m_cZSD = 7;
             table3gpp->m_uK = 9;
             table3gpp->m_sigK = 3.5;
             table3gpp->m_rTau = 3;
@@ -2008,6 +2012,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_cASD = 22;
             table3gpp->m_cASA = 22;
             table3gpp->m_cZSA = 7;
+            table3gpp->m_cZSD = 7;
             table3gpp->m_uK = 0;
             table3gpp->m_sigK = 4.5;
             table3gpp->m_rTau = 2.1;
@@ -2046,6 +2051,7 @@ ThreeGppChannelModel::GetThreeGppTable(Ptr<const MobilityModel> aMob,
             table3gpp->m_cASD = 22;
             table3gpp->m_cASA = 22;
             table3gpp->m_cZSA = 7;
+            table3gpp->m_cZSD = 7;
             table3gpp->m_uK = 0;   // N/A
             table3gpp->m_sigK = 0; // N/A
             table3gpp->m_rTau = 2.1;
@@ -3596,7 +3602,10 @@ ThreeGppChannelModel::ComputeRayAngles(Ptr<const ThreeGppChannelParams> channelP
     *rayZodRadian = Double2DVector(channelParams->m_reducedClusterNumber,
                                    DoubleVector(table3gpp->m_raysPerCluster, 0));
 
-    const double pow10_uLgZSD = std::pow(10.0, table3gpp->m_uLgZSD);
+    // TR 38.901 Eq. (7.5-20), unless the scenario tabulates the cluster ZSD
+    // (TR 37.885 Table 6.2.3-1)
+    const double cZSD =
+        table3gpp->m_cZSD > 0 ? table3gpp->m_cZSD : 0.375 * std::pow(10.0, table3gpp->m_uLgZSD);
 
     // NOTE: offSetAlpha[m] must be available in scope (same as previous implementation)
     for (uint16_t nInd = 0; nInd < channelParams->m_reducedClusterNumber; nInd++)
@@ -3612,7 +3621,7 @@ ThreeGppChannelModel::ComputeRayAngles(Ptr<const ThreeGppChannelParams> channelP
 
             const double tempAod =
                 clusterAod[nInd] + table3gpp->m_cASD * offSetAlpha[mInd]; // (7.5-13)
-            const double tempZod = clusterZod[nInd] + 0.375 * pow10_uLgZSD * offSetAlpha[mInd];
+            const double tempZod = clusterZod[nInd] + cZSD * offSetAlpha[mInd];
             // (7.5-20)
             std::tie((*rayAodRadian)[nInd][mInd], (*rayZodRadian)[nInd][mInd]) =
                 WrapAngles(DegreesToRadians(tempAod), DegreesToRadians(tempZod));
@@ -3723,7 +3732,8 @@ ThreeGppChannelModel::ApplyLargeBandwidthRayModeling(Ptr<ThreeGppChannelParams> 
     const uint16_t nClusters = channelParams->m_reducedClusterNumber;
     const double lambda = 3e8 / m_frequency;
     // Intra-cluster zenith spread of departure, Equation (7.6-7).
-    const double cZSD = 0.375 * std::pow(10.0, table3gpp->m_uLgZSD);
+    const double cZSD =
+        table3gpp->m_cZSD > 0 ? table3gpp->m_cZSD : 0.375 * std::pow(10.0, table3gpp->m_uLgZSD);
 
     // Equation (7.6-8): number of rays per cluster resolvable with the simulated
     // bandwidth (delay resolution) and the array aperture (angle resolution). One
