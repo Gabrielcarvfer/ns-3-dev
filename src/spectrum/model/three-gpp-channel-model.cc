@@ -2738,12 +2738,14 @@ ThreeGppChannelModel::GetLspCorrelationDistances(std::array<double, 7>& los,
     // TR 38.901 Table 7.5-6 correlation distances in the horizontal plane
     // (meters), in canonical parameter order [SF,K,DS,ASD,ASA,ZSD,ZSA]. The
     // NLOS/O2I columns have no K entry, so theirs is a 0 placeholder.
-    // Scenarios without a Table 7.5-6 column (V2V, NTN) fall back to the UMa
-    // distances.
+    // The V2V distances of TR 37.885 Table 6.2.3-1 are those of UMi; NLOSv
+    // links take the NLOS ones, as in that table. Scenarios without a column
+    // (NTN) fall back to the UMa distances.
     los = {37, 12, 30, 18, 15, 15, 15};
     nlos = {50, 0, 40, 50, 50, 50, 50};
     o2i = {7, 0, 10, 11, 17, 25, 25};
-    if (m_scenario == "UMi-StreetCanyon")
+    if (m_scenario == "UMi-StreetCanyon" || m_scenario == "V2V-Urban" ||
+        m_scenario == "V2V-Highway")
     {
         los = {10, 15, 7, 8, 8, 12, 12};
         nlos = {13, 0, 10, 10, 9, 10, 10};
