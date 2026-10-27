@@ -156,6 +156,17 @@ else()
 
 endif()
 
+# The NTN calibration test uses CircularApertureAntennaModel, which the antenna
+# module only builds when a Bessel function implementation is available
+set(ntn_calibration_test_sources)
+if(HAVE_STD_BESSEL_FUNC
+   OR HAVE_BOOST_BESSEL_FUNC
+)
+  set(ntn_calibration_test_sources
+      test/three-gpp-ntn-channel-calibration-test-suite.cc
+  )
+endif()
+
 build_lib(
   LIBNAME spectrum
   SOURCE_FILES ${source_files}
@@ -178,5 +189,6 @@ build_lib(
     test/tv-spectrum-transmitter-test.cc
     test/two-ray-splm-test-suite.cc
     test/wraparound-model-test.cc
+    ${ntn_calibration_test_sources}
     ${sionna_test_sources}
 )
