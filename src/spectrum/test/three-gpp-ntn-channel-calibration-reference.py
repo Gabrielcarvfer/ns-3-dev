@@ -16,17 +16,22 @@ The values are read from the tables of 3GPP TR 38.811 V15.4.0, not from ns-3:
   band and elevation: the means and standard deviations of the LSPs and their
   cross-correlations.
 
+and, when 3GPP TR 38.821 V16.2.0 is also given, from its Tables 6.1.1.2-1 and
+6.1.1.2-2: the 5%, 50% and 95% percentiles of the coupling loss, geometry SIR
+and geometry SINR of the system level calibration, averaged over the companies.
+
 The TR is distributed as a .doc file, which must first be saved as .docx (for
 example with Word or LibreOffice):
 
     https://www.3gpp.org/ftp/Specs/archive/38_series/38.811/38811-f40.zip
+    https://www.3gpp.org/ftp/Specs/archive/38_series/38.821/38821-g20.zip
 
 Some symbols of the parameter names use a symbol font, which the text of the
 .docx does not carry; the rows of Tables 6.7.2-1a to 6.7.2-8b are therefore read
 by position, in the row order of TR 38.901 Table 7.5-6.
 
 Usage:
-    three-gpp-ntn-channel-calibration-reference.py 38811-f40.docx > three-gpp-ntn-channel-calibration-reference.h
+    three-gpp-ntn-channel-calibration-reference.py 38811-f40.docx 38821-g20.docx > three-gpp-ntn-channel-calibration-reference.h
 """
 
 import argparse
@@ -151,6 +156,21 @@ def troposphere(path):
             return [(int(r[0]), float(r[1].split()[0])) for r in rows[1:]]
 
 
+def sls_calibration(path):
+    """Rows (case, DL, CL, SIR, SINR percentiles) of TR 38.821 Tables 6.1.1.2-1 and 6.1.1.2-2."""
+    res = []
+    for caption, rows in tables(path):
+        m = re.match(r"Table 6\.1\.1\.2-([12])", caption)
+        if not m:
+            continue
+        for r in rows[2:]:
+            if not r[0].startswith("SC"):
+                continue
+            v = [float(x) for x in r[1:10]]
+            res.append((int(r[0][2:]), m.group(1) == "1", v[0:3], v[3:6], v[6:9]))
+    return res
+
+
 def fmt(v):
     return repr(round(v, 6))
 
@@ -158,7 +178,9 @@ def fmt(v):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("docx", help="TR 38.811 V15.4.0 saved as .docx")
-    path = parser.parse_args().docx
+    parser.add_argument("tr38821", help="TR 38.821 V16.2.0 saved as .docx")
+    args = parser.parse_args()
+    path = args.docx
 
     print("""/*
  * Copyright (c) 2026, Centre Tecnologic de Telecomunicacions de Catalunya (CTTC)
@@ -220,6 +242,17 @@ struct TroposphereReference
     int elevation; ///< reference elevation in degrees
     double loss;   ///< loss in dB
 };
+
+/// System level calibration result of TR 38.821 Tables 6.1.1.2-1 (DL) and 6.1.1.2-2 (UL):
+/// 5%, 50% and 95% percentiles, averaged over the companies, in dB
+struct SlsReference
+{
+    int sc;                     ///< calibration study case of TR 38.821 Table 6.1.1.1-9
+    bool dl;                    ///< DL (Table 6.1.1.2-1) or UL (Table 6.1.1.2-2)
+    std::array<double, 3> cl;   ///< coupling loss
+    std::array<double, 3> sir;  ///< geometry SIR
+    std::array<double, 3> sinr; ///< geometry SINR
+};
 """)
     ff = fast_fading(path)
     print("/// TR 38.811 Tables 6.7.2-1a to 6.7.2-8b")
@@ -267,6 +300,21 @@ struct TroposphereReference
     print("inline constexpr std::array<TroposphereReference, %d> kTroposphere{{" % len(tr))
     for e, v in tr:
         print("    {%d, %s}," % (e, fmt(v)))
+    print("}};\n")
+    sls = sls_calibration(args.tr38821)
+    print("/// TR 38.821 Tables 6.1.1.2-1 and 6.1.1.2-2")
+    print("inline constexpr std::array<SlsReference, %d> kSls{{" % len(sls))
+    for sc, dl, cl, sir, sinr in sls:
+        print(
+            "    {%d, %s, {%s}, {%s}, {%s}},"
+            % (
+                sc,
+                "true" if dl else "false",
+                ", ".join(fmt(x) for x in cl),
+                ", ".join(fmt(x) for x in sir),
+                ", ".join(fmt(x) for x in sinr),
+            )
+        )
     print("}};")
     print("""// clang-format on
 
