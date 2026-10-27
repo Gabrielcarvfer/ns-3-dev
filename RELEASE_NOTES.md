@@ -54,6 +54,7 @@ but other contemporaneous versions may also work.
 - (spectrum) The spatially consistent LSPs of the `ThreeGppChannelModel` V2V scenarios now use the correlation distances of TR 37.885 Table 6.2.3-1 (e.g., 7 m for the LOS DS) instead of the UMa ones (30 m); the SF entry of the LSP vector now samples the same field as the shadowing applied by the V2V propagation loss models.
 - (propagation) The additional vehicle blockage loss of NLOSv links of `ThreeGppV2vUrbanPropagationLossModel` and `ThreeGppV2vHighwayPropagationLossModel` (TR 37.885 Sec. 6.2.1) is now drawn once per link; it was redrawn, with its blocker, at every evaluation, so the loss of a static link changed between packets.
 - (spectrum) The NLOS links of the `NTN-Urban` and `NTN-Suburban` scenarios of `ThreeGppChannelModel` in the S band now use the parameters of TR 38.811 Tables 6.7.2-4a and 6.7.2-6a, instead of those of the Ka band tables.
+- (spectrum) The departure angle spreads of the satellite links of the NTN scenarios of `ThreeGppChannelModel` are now zero (TR 38.811 Table 6.7.2 NOTE 8), instead of 1 degree.
 
 ## Release 3.49
 

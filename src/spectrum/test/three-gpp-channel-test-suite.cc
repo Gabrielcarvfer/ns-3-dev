@@ -4321,6 +4321,78 @@ class ThreeGppNtnSBandNlosTableTest : public TestCase
 /**
  * @ingroup spectrum-tests
  *
+ * Test the departure angle spreads of a satellite link, which TR 38.811
+ * NOTE 8 of Tables 6.7.2-1a to 6.7.2-8b sets to zero (lgASD and lgZSD are
+ * -inf with zero standard deviations), and that the channel of such a link is
+ * finite.
+ */
+class ThreeGppNtnSatelliteDepartureSpreadTest : public TestCase
+{
+  public:
+    ThreeGppNtnSatelliteDepartureSpreadTest()
+        : TestCase("Check the zero departure angle spreads of a satellite link")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        // a LEO satellite at 600 km
+        auto [ut, sat] = MakeNtnLink(50, 600e3);
+        NodeContainer nodes(2);
+        nodes.Get(0)->AggregateObject(ut);
+        nodes.Get(1)->AggregateObject(sat);
+
+        auto channelModel = CreateObject<ThreeGppChannelModel>();
+        channelModel->SetAttribute("Frequency", DoubleValue(2e9));
+        channelModel->SetAttribute("Scenario", StringValue("NTN-DenseUrban"));
+        channelModel->SetAttribute("ChannelConditionModel",
+                                   PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+        auto table = channelModel->GetThreeGppTable(
+            ut,
+            sat,
+            CreateObject<ChannelCondition>(ChannelCondition::LOS, ChannelCondition::O2O));
+        // the spreads 10^(mu + sigma x) of any realization x
+        for (double x : {-3.0, 0.0, 3.0})
+        {
+            NS_TEST_EXPECT_MSG_EQ(std::pow(10, table->m_uLgASD + table->m_sigLgASD * x),
+                                  0,
+                                  "The ASD of a satellite should be zero");
+            NS_TEST_EXPECT_MSG_EQ(std::pow(10, table->m_uLgZSD + table->m_sigLgZSD * x),
+                                  0,
+                                  "The ZSD of a satellite should be zero");
+        }
+
+        auto makeArray = []() {
+            return CreateObjectWithAttributes<UniformPlanarArray>(
+                "NumColumns",
+                UintegerValue(2),
+                "NumRows",
+                UintegerValue(2),
+                "AntennaElement",
+                PointerValue(CreateObject<IsotropicAntennaModel>()));
+        };
+        auto channel = channelModel->GetChannel(sat, ut, makeArray(), makeArray());
+        const auto& h = channel->m_channel;
+        for (size_t p = 0; p < h.GetNumPages(); p++)
+        {
+            for (size_t r = 0; r < h.GetNumRows(); r++)
+            {
+                for (size_t c = 0; c < h.GetNumCols(); c++)
+                {
+                    NS_TEST_ASSERT_MSG_EQ(std::isfinite(std::abs(h(r, c, p))),
+                                          true,
+                                          "Non-finite channel coefficient of a satellite link");
+                }
+            }
+        }
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup spectrum-tests
+ *
  * Test suite for the ThreeGppChannelModel class
  */
 class ThreeGppChannelTestSuite : public TestSuite
@@ -4422,6 +4494,7 @@ ThreeGppChannelTestSuite::ThreeGppChannelTestSuite()
     AddTestCase(new ThreeGppIndoorLosLspOrderingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppRmaZodOffsetTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppNtnSBandNlosTableTest(), TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppNtnSatelliteDepartureSpreadTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppSubClusterMappingTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppLosBlockageAttenuationTest(), TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppXprDistributionTest(), TestCase::Duration::QUICK);
