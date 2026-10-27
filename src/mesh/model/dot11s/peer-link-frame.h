@@ -184,6 +184,7 @@ class PeerLinkConfirmStart : public Header
         uint16_t aid;               ///< confirm only
         SupportedRates rates;       ///< open and confirm
         std::optional<ExtendedSupportedRatesIE> extendedRates; ///< open and confirm
+        IeMeshId meshId;                                       ///< open, confirm and close
         IeConfiguration config;                                ///< open and confirm
     };
 
@@ -215,6 +216,7 @@ class PeerLinkConfirmStart : public Header
     uint16_t m_aid;                                          ///< aid
     SupportedRates m_rates;                                  ///< rates
     std::optional<ExtendedSupportedRatesIE> m_extendedRates; ///< extended rates
+    IeMeshId m_meshId;                                       ///< mesh ID
     IeConfiguration m_config;                                ///< config
 
     /**

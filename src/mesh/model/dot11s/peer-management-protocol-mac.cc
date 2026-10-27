@@ -147,6 +147,14 @@ PeerManagementProtocolMac::Receive(Ptr<Packet> const_packet, const WifiMacHeader
             PeerLinkConfirmStart peerFrame;
             packet->RemoveHeader(peerFrame);
             fields = peerFrame.GetFields();
+            if (!fields.meshId.IsEqual(*(m_protocol->GetMeshId())))
+            {
+                NS_LOG_DEBUG("PEER_LINK_CONFIRM:  MeshId mismatch");
+                m_protocol->ConfigurationMismatch(m_ifIndex, peerAddress);
+                // Broken peer link frame - drop it
+                m_stats.brokenMgt++;
+                return false;
+            }
             if (!(m_parent->CheckSupportedRates(
                     AllSupportedRates{fields.rates, fields.extendedRates})))
             {
@@ -317,6 +325,7 @@ PeerManagementProtocolMac::SendPeerLinkManagementFrame(Mac48Address peerAddress,
         fields.rates = allSupportedRates.rates;
         fields.extendedRates = allSupportedRates.extendedRates;
         fields.capability = 0;
+        fields.meshId = *(m_protocol->GetMeshId());
         fields.config = meshConfig;
         PeerLinkConfirmStart plinkConfirm;
         WifiActionHeader actionHdr;

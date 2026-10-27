@@ -251,6 +251,8 @@ PeerLinkConfirmStart::SetPlinkConfirmStart(PeerLinkConfirmStart::PlinkConfirmSta
     m_capability = fields.capability;
     m_aid = fields.aid;
     m_rates = fields.rates;
+    m_extendedRates = fields.extendedRates;
+    m_meshId = fields.meshId;
     m_config = fields.config;
 }
 
@@ -262,6 +264,8 @@ PeerLinkConfirmStart::GetFields() const
     retval.capability = m_capability;
     retval.aid = m_aid;
     retval.rates = m_rates;
+    retval.extendedRates = m_extendedRates;
+    retval.meshId = m_meshId;
     retval.config = m_config;
 
     return retval;
@@ -302,6 +306,7 @@ PeerLinkConfirmStart::GetSerializedSize() const
     {
         size += m_extendedRates->GetSerializedSize();
     }
+    size += m_meshId.GetInformationFieldSize() + 2;
     size += m_config.GetInformationFieldSize() + 2;
     return size;
 }
@@ -318,6 +323,7 @@ PeerLinkConfirmStart::Serialize(Buffer::Iterator start) const
     {
         i = m_extendedRates->Serialize(i);
     }
+    i = m_meshId.Serialize(i);
     i = m_config.Serialize(i);
 }
 
@@ -338,6 +344,15 @@ PeerLinkConfirmStart::Deserialize(Buffer::Iterator start)
     i = tmp;
     uint8_t id = i.ReadU8();
     uint8_t length = i.ReadU8();
+    m_meshId.DeserializeInformationField(i, length);
+    if ((m_meshId.ElementId() != (WifiInformationElementId)id) ||
+        (m_meshId.GetInformationFieldSize() != length))
+    {
+        NS_FATAL_ERROR("Broken frame: Element ID does not match IE itself!");
+    }
+    i.Next(m_meshId.GetInformationFieldSize());
+    id = i.ReadU8();
+    length = i.ReadU8();
     m_config.DeserializeInformationField(i, length);
     if ((m_config.ElementId() != (WifiInformationElementId)id) ||
         (m_config.GetInformationFieldSize() != length))
@@ -352,7 +367,7 @@ bool
 operator==(const PeerLinkConfirmStart& a, const PeerLinkConfirmStart& b)
 {
     return ((a.m_capability == b.m_capability) && (a.m_aid == b.m_aid) &&
-            (a.m_config == b.m_config));
+            (a.m_meshId.IsEqual(b.m_meshId)) && (a.m_config == b.m_config));
 }
 } // namespace dot11s
 } // namespace ns3

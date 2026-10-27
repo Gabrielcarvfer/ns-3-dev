@@ -215,6 +215,87 @@ BeaconWithoutTimingTest::DoRun()
 /**
  * @ingroup dot11s-test
  *
+ * @brief Mesh Peering Open and Confirm frame bodies
+ *
+ * The bodies of Mesh Peering Open and Confirm frames sent by Linux's mac80211 (Linux 6.12),
+ * after the Category and Self-protected Action fields, up to the Mesh Configuration element
+ * (IEEE 802.11-2012, 8.6.16.2.2 and 8.6.16.3.2). They are deserialized, checked and serialized
+ * back to the same octets. Unlike the Open frame, the Confirm frame carries an AID, and both carry
+ * a Mesh ID element before the Mesh Configuration element.
+ */
+class PeeringFrameTest : public TestCase
+{
+  public:
+    PeeringFrameTest()
+        : TestCase("Mesh Peering Open and Confirm frame bodies")
+    {
+    }
+
+    void DoRun() override;
+
+  private:
+    /**
+     * Deserialize a frame body, check it is all read, and serialize it back.
+     *
+     * @tparam T the frame body header type
+     * @param octets the frame body
+     * @param frame the deserialized frame body
+     * @return the octets of the frame body serialized back
+     */
+    template <typename T>
+    std::vector<uint8_t> RoundTrip(const std::vector<uint8_t>& octets, T& frame);
+};
+
+template <typename T>
+std::vector<uint8_t>
+PeeringFrameTest::RoundTrip(const std::vector<uint8_t>& octets, T& frame)
+{
+    Ptr<Packet> packet = Create<Packet>(octets.data(), octets.size());
+    uint32_t read = packet->RemoveHeader(frame);
+    NS_TEST_EXPECT_MSG_EQ(read, octets.size(), "Frame body not read entirely");
+    Ptr<Packet> back = Create<Packet>();
+    back->AddHeader(frame);
+    std::vector<uint8_t> serialized(back->GetSize());
+    back->CopyData(serialized.data(), serialized.size());
+    return serialized;
+}
+
+void
+PeeringFrameTest::DoRun()
+{
+    // Capability, Supported Rates (6, 12 and 24 Mb/s basic), Mesh ID "mesh", Mesh Configuration
+    const std::vector<uint8_t> open{0x00, 0x00, 0x01, 0x08, 0x8c, 0x12, 0x98, 0x24, 0xb0,
+                                    0x48, 0x60, 0x6c, 0x72, 0x04, 0x6d, 0x65, 0x73, 0x68,
+                                    0x71, 0x07, 0x01, 0x01, 0x00, 0x01, 0x00, 0x00, 0x09};
+    // Capability, AID 1, then as the Open frame
+    const std::vector<uint8_t> confirm{0x00, 0x00, 0x01, 0x00, 0x01, 0x08, 0x8c, 0x12, 0x98, 0x24,
+                                       0xb0, 0x48, 0x60, 0x6c, 0x72, 0x04, 0x6d, 0x65, 0x73, 0x68,
+                                       0x71, 0x07, 0x01, 0x01, 0x00, 0x01, 0x00, 0x00, 0x09};
+
+    PeerLinkOpenStart openFrame;
+    NS_TEST_EXPECT_MSG_EQ((RoundTrip(open, openFrame) == open),
+                          true,
+                          "Open frame body not serialized back as received");
+    NS_TEST_EXPECT_MSG_EQ(openFrame.GetFields().meshId.IsEqual(IeMeshId("mesh")),
+                          true,
+                          "Wrong Mesh ID of Open frame");
+
+    PeerLinkConfirmStart confirmFrame;
+    NS_TEST_EXPECT_MSG_EQ((RoundTrip(confirm, confirmFrame) == confirm),
+                          true,
+                          "Confirm frame body not serialized back as received");
+    auto fields = confirmFrame.GetFields();
+    NS_TEST_EXPECT_MSG_EQ(fields.aid, 1, "Wrong AID of Confirm frame");
+    NS_TEST_EXPECT_MSG_EQ(fields.meshId.IsEqual(IeMeshId("mesh")),
+                          true,
+                          "Wrong Mesh ID of Confirm frame");
+    NS_TEST_EXPECT_MSG_EQ(fields.config.IsHWMP(), true, "Wrong path selection protocol");
+    NS_TEST_EXPECT_MSG_EQ(fields.config.IsAirtime(), true, "Wrong path selection metric");
+}
+
+/**
+ * @ingroup dot11s-test
+ *
  * @brief Mesh beacon contents
  *
  * A mesh STA peers only with mesh STAs whose beacons carry a Mesh ID and a Mesh Configuration
@@ -353,6 +434,7 @@ class MeshPeeringConformanceSuite : public TestSuite
     {
         AddTestCase(new BeaconWithoutTimingTest, TestCase::Duration::QUICK);
         AddTestCase(new PeeringManagementElementTest, TestCase::Duration::QUICK);
+        AddTestCase(new PeeringFrameTest, TestCase::Duration::QUICK);
         AddTestCase(new BeaconContentTest, TestCase::Duration::QUICK);
     }
 };
