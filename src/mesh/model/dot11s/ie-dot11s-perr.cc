@@ -15,6 +15,17 @@ namespace ns3
 {
 namespace dot11s
 {
+
+namespace
+{
+/// Initial element TTL of the PERRs sent (dot11MeshElementTTL default, IEEE 802.11-2012, C.3)
+constexpr uint8_t PERR_TTL = 31;
+/// AE subfield of the per-destination Flags field (IEEE 802.11-2012, 8.4.2.115)
+constexpr uint8_t PERR_FLAG_AE = 1 << 6;
+/// MESH-PATH-ERROR-DESTINATION-UNREACHABLE (IEEE 802.11-2012, Table 8-36)
+constexpr uint16_t PERR_REASON_DESTINATION_UNREACHABLE = 63;
+} // namespace
+
 IePerr::IePerr()
 {
 }
@@ -50,16 +61,16 @@ IePerr::GetNumOfDest() const
 void
 IePerr::SerializeInformationField(Buffer::Iterator i) const
 {
-    i.WriteU8(0);                     // TTL
+    // Each mesh STA sends its own PERR rather than forwarding the one it received: the element
+    // TTL is always the initial one. Receivers drop PERRs with a TTL of 1 or less.
+    i.WriteU8(PERR_TTL);
     i.WriteU8(m_addressUnits.size()); // number of Destinations
     for (unsigned int j = 0; j < m_addressUnits.size(); j++)
     {
-        i.WriteU8(0); // not used // Bit 6: AE (Address Extension) subfield (1 = destination
-                      // external address is present, 0 = otherwise).
+        i.WriteU8(0); // Flags: no destination external address (AE subfield, bit 6)
         WriteTo(i, m_addressUnits[j].destination);
         i.WriteU32(m_addressUnits[j].seqnum);
-        i.WriteU8(0);
-        i.WriteU8(0);
+        i.WriteHtolsbU16(PERR_REASON_DESTINATION_UNREACHABLE);
     }
 }
 
@@ -67,19 +78,22 @@ uint16_t
 IePerr::DeserializeInformationField(Buffer::Iterator start, uint16_t length)
 {
     Buffer::Iterator i = start;
-    i.Next(1); // TTL //Mode flags is not used now
+    i.Next(1); // TTL: not used
     uint8_t numOfDest = i.ReadU8();
-    NS_ABORT_UNLESS((2 + 13 * numOfDest) == length);
-
-    for (unsigned int j = 0; j < numOfDest; j++)
+    for (unsigned int j = 0; j < numOfDest && i.GetDistanceFrom(start) + 13 <= length; j++)
     {
-        i.Next(1); // flags is not used now
+        uint8_t flags = i.ReadU8();
         HwmpProtocol::FailedDestination unit;
         ReadFrom(i, unit.destination);
         unit.seqnum = i.ReadU32();
+        if (flags & PERR_FLAG_AE)
+        {
+            i.Next(6); // Destination External Address: not used
+        }
         m_addressUnits.push_back(unit);
-        i.Next(2); // Reason
+        i.Next(2); // Reason Code: not used
     }
+    i.Next(length - i.GetDistanceFrom(start));
     return i.GetDistanceFrom(start);
 }
 

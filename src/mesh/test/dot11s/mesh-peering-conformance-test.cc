@@ -481,6 +481,74 @@ PrepElementTest::DoRun()
 /**
  * @ingroup dot11s-test
  *
+ * @brief PERR element format
+ *
+ * A PERR carries an element TTL, which receivers such as Linux's mac80211 require to be above 1,
+ * then, for each destination, the Flags, the Destination Address, its HWMP sequence number, the
+ * Destination External Address if the AE subfield (bit 6) of the Flags is set, and a Reason Code
+ * (IEEE 802.11-2012, 8.4.2.115).
+ */
+class PerrElementTest : public TestCase
+{
+  public:
+    PerrElementTest()
+        : TestCase("PERR element format")
+    {
+    }
+
+    void DoRun() override;
+};
+
+void
+PerrElementTest::DoRun()
+{
+    IePerr sent;
+    HwmpProtocol::FailedDestination unit;
+    unit.destination = Mac48Address("00:00:00:00:00:01");
+    unit.seqnum = 7;
+    sent.AddAddressUnit(unit);
+    // TTL 31, one destination, no external address, MESH-PATH-ERROR-DESTINATION-UNREACHABLE
+    const std::vector<uint8_t> perr{0x84,
+                                    0x0f,
+                                    0x1f,
+                                    0x01,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x01,
+                                    0x07,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x3f,
+                                    0x00};
+    NS_TEST_EXPECT_MSG_EQ((Serialize(sent) == perr), true, "Wrong PERR element");
+
+    // Two destinations, the first with an external address (proxied station)
+    const std::vector<uint8_t> received{0x84, 0x22, 0x1f, 0x02, 0x40, 0x00, 0x00, 0x00, 0x00,
+                                        0x00, 0x01, 0x07, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+                                        0x00, 0x00, 0x99, 0x3e, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                        0x00, 0x00, 0x02, 0x09, 0x00, 0x00, 0x00, 0x3f, 0x00};
+    IePerr parsed;
+    Deserialize(parsed, received);
+    auto units = parsed.GetAddressUnitVector();
+    NS_TEST_ASSERT_MSG_EQ(units.size(), 2, "Wrong number of destinations");
+    NS_TEST_EXPECT_MSG_EQ(units[0].destination,
+                          Mac48Address("00:00:00:00:00:01"),
+                          "Wrong first destination");
+    NS_TEST_EXPECT_MSG_EQ(units[0].seqnum, 7, "Wrong first sequence number");
+    NS_TEST_EXPECT_MSG_EQ(units[1].destination,
+                          Mac48Address("00:00:00:00:00:02"),
+                          "Wrong second destination");
+    NS_TEST_EXPECT_MSG_EQ(units[1].seqnum, 9, "Wrong second sequence number");
+}
+
+/**
+ * @ingroup dot11s-test
+ *
  * @brief Peering conformance test suite
  */
 class MeshPeeringConformanceSuite : public TestSuite
@@ -494,6 +562,7 @@ class MeshPeeringConformanceSuite : public TestSuite
         AddTestCase(new PeeringFrameTest, TestCase::Duration::QUICK);
         AddTestCase(new BeaconContentTest, TestCase::Duration::QUICK);
         AddTestCase(new PrepElementTest, TestCase::Duration::QUICK);
+        AddTestCase(new PerrElementTest, TestCase::Duration::QUICK);
     }
 };
 
