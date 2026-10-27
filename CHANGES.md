@@ -40,6 +40,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (propagation) `ThreeGppPropagationLossModel` redraws the O2I penetration loss of a link above 6 GHz when its building type changes with the same LOS state, so results change for simulations whose channel condition model updates O2I link conditions.
 * (propagation) The O2I vehicular penetration loss that `ThreeGppPropagationLossModel` draws for a UT moving between 30 and 120 km/h is now applied again when the UT returns to that speed range, instead of staying at 0 dB after the UT moved slower or faster.
 * (spectrum) Without a precoding matrix, the received PSD that `ThreeGppSpectrumPropagationLossModel` computes for a transmitter with several antenna ports is now the mean over the transmit ports of the power each port delivers, `sum |H|^2 / numTxPorts` per RB, instead of the power of the co-phased sum of the ports, `sum_rx |sum_tx H|^2 / numTxPorts`, which formed a fixed beam. Results change for multi-port transmitters whose signals carry no precoding matrix, such as control channels and reference signals.
+* (spectrum) `ThreeGppChannelModel` offsets the ray ZODs of the V2V scenarios from their cluster ZOD with the cluster ZSD of 7 degrees of TR 37.885 Table 6.2.3-1, instead of the 3/8 10^(mu lgZSD) of TR 38.901, so V2V channel realizations change.
 
 ## Changes from ns-3.48 to ns-3.49
 

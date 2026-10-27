@@ -269,11 +269,14 @@ class ThreeGppChannelModel : public MatrixBasedChannelModel
         double m_uLgZSD = 0;
         //! Standard deviation of 10-base logarithm of zenith angle spread of departure
         double m_sigLgZSD = 0;
-        double m_offsetZOD = 0;              //!< Offset of a zenith angle of departure [deg]
-        double m_cDS = 0;                    //!< Cluster DS
-        double m_cASD = 0;                   //!< Cluster ASD (Azimuth angle Spread of Departure)
-        double m_cASA = 0;                   //!< Cluster ASA (Azimuth angle Spread of Arrival)
-        double m_cZSA = 0;                   //!< Cluster ZSA (Zenith angle Spread of Arrival)
+        double m_offsetZOD = 0; //!< Offset of a zenith angle of departure [deg]
+        double m_cDS = 0;       //!< Cluster DS
+        double m_cASD = 0;      //!< Cluster ASD (Azimuth angle Spread of Departure)
+        double m_cASA = 0;      //!< Cluster ASA (Azimuth angle Spread of Arrival)
+        double m_cZSA = 0;      //!< Cluster ZSA (Zenith angle Spread of Arrival)
+        //! Cluster ZSD (Zenith angle Spread of Departure) [deg], for the scenarios that
+        //! tabulate it; 0 selects the 3/8 10^(mu lgZSD) of TR 38.901 Eq. (7.5-20)
+        double m_cZSD = 0;
         double m_uK = 0;                     //!< Mean of K-factor
         double m_sigK = 0;                   //!< Standard deviation of K-factor
         double m_rTau = 0;                   //!< Delay scaling parameter

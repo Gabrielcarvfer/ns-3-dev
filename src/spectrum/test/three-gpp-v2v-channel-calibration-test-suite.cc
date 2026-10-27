@@ -6,6 +6,8 @@
  * Author: Gabriel Ferreira <gabrielcarvfer@gmail.com>
  */
 
+#include "ns3/abort.h"
+#include "ns3/angles.h"
 #include "ns3/boolean.h"
 #include "ns3/channel-condition-model.h"
 #include "ns3/constant-position-mobility-model.h"
@@ -388,6 +390,23 @@ class LspProbeChannelModel : public ThreeGppChannelModel
                               Ptr<const MobilityModel> terminal) const
     {
         return GenerateLSPs(cond, table, site, terminal);
+    }
+
+    /**
+     * @brief Compute the ray angles of the clusters of a link.
+     * @param params the channel parameters holding the cluster angles
+     * @param table the parameter table of the link
+     * @param rayZoa the ray ZOAs in radians
+     * @param rayZod the ray ZODs in radians
+     */
+    void RayZenithAngles(Ptr<const ThreeGppChannelParams> params,
+                         Ptr<const ParamsTable> table,
+                         Double2DVector* rayZoa,
+                         Double2DVector* rayZod) const
+    {
+        Double2DVector rayAoa;
+        Double2DVector rayAod;
+        ComputeRayAngles(params, table, &rayAoa, &rayAod, rayZoa, rayZod);
     }
 };
 
@@ -836,6 +855,82 @@ ThreeGppV2vLosProbabilityTestCase::DoRun()
 /**
  * @ingroup spectrum-tests
  *
+ * Test the intra-cluster zenith spread of departure of V2V links: TR 37.885
+ * Table 6.2.3-1 tabulates a cluster ZSD of 7 degrees for every state, and Sec.
+ * 6.2.3 generates the ZODs with the ZOA procedure, so the ray ZODs of a
+ * cluster are offset from its ZOD by 7 alpha_m degrees, as its ray ZOAs are,
+ * instead of the 3/8 10^(mu lgZSD) of TR 38.901 Eq. (7.5-20).
+ */
+class ThreeGppV2vClusterZsdTestCase : public TestCase
+{
+  public:
+    ThreeGppV2vClusterZsdTestCase()
+        : TestCase("TR 37.885 V2V cluster ZSD")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+ThreeGppV2vClusterZsdTestCase::DoRun()
+{
+    // largest ray offset alpha_m of TR 38.901 Table 7.5-3
+    const double maxAlpha = 2.1551;
+    auto model = CreateObject<LspProbeChannelModel>();
+    model->SetAttribute("ChannelConditionModel",
+                        PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
+    auto a = CreateObject<ConstantPositionMobilityModel>();
+    auto b = CreateObject<ConstantPositionMobilityModel>();
+    a->SetPosition(Vector(0, 0, 1.6));
+    b->SetPosition(Vector(100, 0, 1.6));
+    for (const std::string scenario : {"V2V-Urban", "V2V-Highway"})
+    {
+        for (double fcGHz : {5.9, 63.0})
+        {
+            model->SetAttribute("Scenario", StringValue(scenario));
+            model->SetAttribute("Frequency", DoubleValue(fcGHz * 1e9));
+            for (auto state : States(scenario))
+            {
+                auto cond = CreateObject<ChannelCondition>(LosValue(state), ChannelCondition::O2O);
+                const auto table = model->GetThreeGppTable(a, b, cond);
+                auto params = Create<ThreeGppChannelModel::ThreeGppChannelParams>();
+                params->m_reducedClusterNumber = 1;
+                params->m_angle = MatrixBasedChannelModel::Double2DVector(
+                    4,
+                    MatrixBasedChannelModel::DoubleVector(1, 0));
+                params->m_angle[MatrixBasedChannelModel::ZOA_INDEX][0] = 90;
+                params->m_angle[MatrixBasedChannelModel::ZOD_INDEX][0] = 90;
+                MatrixBasedChannelModel::Double2DVector rayZoa;
+                MatrixBasedChannelModel::Double2DVector rayZod;
+                model->RayZenithAngles(params, table, &rayZoa, &rayZod);
+                double maxOffset = 0;
+                for (size_t m = 0; m < rayZod[0].size(); m++)
+                {
+                    const double zodOffset = RadiansToDegrees(rayZod[0][m]) - 90;
+                    const double zoaOffset = RadiansToDegrees(rayZoa[0][m]) - 90;
+                    NS_TEST_EXPECT_MSG_EQ_TOL(zodOffset,
+                                              zoaOffset,
+                                              1e-9,
+                                              scenario << " " << fcGHz << " GHz "
+                                                       << StateName(state) << ": ray " << m);
+                    maxOffset = std::max(maxOffset, std::abs(zodOffset));
+                }
+                NS_TEST_EXPECT_MSG_EQ_TOL(maxOffset,
+                                          7 * maxAlpha,
+                                          1e-6,
+                                          scenario << " " << fcGHz << " GHz " << StateName(state)
+                                                   << ": largest ray ZOD offset");
+            }
+        }
+    }
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup spectrum-tests
+ *
  * TR 37.885 V2V channel calibration test suite.
  */
 class ThreeGppV2vChannelCalibrationTestSuite : public TestSuite
@@ -849,6 +944,7 @@ ThreeGppV2vChannelCalibrationTestSuite::ThreeGppV2vChannelCalibrationTestSuite()
 {
     AddTestCase(new ThreeGppV2vLosProbabilityTestCase, Duration::QUICK);
     AddTestCase(new ThreeGppV2vPathlossTestCase, Duration::QUICK);
+    AddTestCase(new ThreeGppV2vClusterZsdTestCase, Duration::QUICK);
     AddTestCase(new ThreeGppV2vLspDistributionTestCase, Duration::EXTENSIVE);
 }
 
