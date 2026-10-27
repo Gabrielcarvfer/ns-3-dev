@@ -1582,6 +1582,68 @@ ThreeGppO2iBuildingTypeChangeTestCase::DoRun()
 /**
  * @ingroup propagation-tests
  *
+ * Test case for the O2I vehicular penetration loss of TR 38.901 Sec. 7.4.3.2:
+ * the loss drawn for a UT moving at vehicular speed must be kept after the UT
+ * slows down below 30 km/h and speeds up again, instead of dropping to 0 dB.
+ */
+class ThreeGppO2iVehicularLossTestCase : public TestCase
+{
+  public:
+    ThreeGppO2iVehicularLossTestCase()
+        : TestCase("Test that the vehicular loss of a UT is kept across speed changes")
+    {
+    }
+
+  private:
+    void DoRun() override;
+};
+
+void
+ThreeGppO2iVehicularLossTestCase::DoRun()
+{
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
+    auto condModel = CreateObject<FixedConditionModel>();
+    condModel->m_cond->SetLosCondition(ChannelCondition::NLOS);
+    condModel->m_cond->SetO2iCondition(ChannelCondition::O2O);
+    auto lossModel = CreateObject<ThreeGppUmaPropagationLossModel>();
+    lossModel->SetAttribute("Frequency", DoubleValue(3.5e9));
+    lossModel->SetAttribute("ShadowingEnabled", BooleanValue(false));
+    lossModel->SetChannelConditionModel(condModel);
+
+    uint32_t lost = 0;
+    const uint32_t numUts = 100;
+    for (uint32_t i = 0; i < numUts; i++)
+    {
+        Ptr<Node> bs = CreateObject<Node>();
+        auto bsMob = CreateObject<ConstantPositionMobilityModel>();
+        bsMob->SetPosition(Vector(0, 0, 25));
+        bs->AggregateObject(bsMob);
+        Ptr<Node> ut = CreateObject<Node>();
+        auto utMob = CreateObject<ConstantVelocityMobilityModel>();
+        utMob->SetPosition(Vector(200, 0, 1.5));
+        ut->AggregateObject(utMob);
+
+        // 15 m/s = 54 km/h, then 5 m/s = 18 km/h; the time does not advance
+        utMob->SetVelocity(Vector(0, 15, 0));
+        const double fast = lossModel->CalcRxPower(0, bsMob, utMob);
+        utMob->SetVelocity(Vector(0, 5, 0));
+        const double slow = lossModel->CalcRxPower(0, bsMob, utMob);
+        utMob->SetVelocity(Vector(0, 15, 0));
+        const double fastAgain = lossModel->CalcRxPower(0, bsMob, utMob);
+        NS_TEST_EXPECT_MSG_EQ_TOL(fastAgain, fast, 1e-9, "Vehicular loss changed, UT " << i);
+        lost += (std::abs(fastAgain - slow) < 1e-9);
+    }
+    // the loss is N(9, 5) dB, so it is never 0 for a UT
+    NS_TEST_EXPECT_MSG_EQ(lost, 0, "UTs lost their vehicular loss after slowing down");
+
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup propagation-tests
+ *
  * Test case for the shadowing of O2I links with the inter-UE spatial consistency
  * disabled, where each link correlates its shadowing with its previous
  * evaluation. A moving O2I link must decorrelate with the O2I correlation
@@ -1996,6 +2058,7 @@ ThreeGppPropagationLossModelsTestSuite::ThreeGppPropagationLossModelsTestSuite()
     AddTestCase(new ThreeGppShadowingStdTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppO2iShadowingMapTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppO2iBuildingTypeChangeTestCase, TestCase::Duration::QUICK);
+    AddTestCase(new ThreeGppO2iVehicularLossTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppShadowingFirstEvaluationTestCase, TestCase::Duration::QUICK);
     AddTestCase(new ThreeGppColocatedSpatialConsistencyTestCase, TestCase::Duration::QUICK);
 }

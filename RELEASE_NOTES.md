@@ -49,6 +49,7 @@ but other contemporaneous versions may also work.
 - (spectrum) The received PSD of a signal without precoding matrix from a transmitter with several antenna ports, computed by `ThreeGppSpectrumPropagationLossModel`, now splits the transmit power evenly across the ports without a common phase. It used to sum the ports co-phased, which formed a fixed beam whose nulls depend on the port layout of the array: with 8 horizontal ports, many receivers lost 20 to 30 dB.
 - (propagation) #1393 The shadowing that `ThreeGppPropagationLossModel` draws on the first evaluation of a link is now kept by the following evaluations of a static link. The first evaluation stored a zero distance vector with its realization, so the second evaluation saw a displacement as long as the link and drew an almost independent realization: the first path loss of every link, which cell selection procedures rely on, did not match the rest of the simulation, by up to 10 dB and more.
 - (propagation) The O2I penetration loss of `ThreeGppPropagationLossModel` above 6 GHz is now redrawn when the building type (low or high loss) of a link changes with the same LOS state, for example when the channel condition is updated. The link used to keep the loss drawn with its previous building type.
+- (propagation) The O2I vehicular penetration loss of `ThreeGppPropagationLossModel` drawn for a UT is now kept after the UT moves slower than 30 km/h or faster than 120 km/h. It used to be reset to 0 dB for the rest of the simulation.
 
 ## Release 3.49
 
