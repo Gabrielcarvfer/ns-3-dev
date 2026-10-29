@@ -109,8 +109,6 @@ HeCapabilities::HeCapabilities()
       m_highestNssSupportedM1(0),
       m_highestMcsSupported(0)
 {
-    m_txBwMap.resize(8, 0);
-    m_rxBwMap.resize(8, 0);
 }
 
 WifiInformationElementId
@@ -137,10 +135,9 @@ HeCapabilities::GetInformationFieldSize() const
 {
     // IEEE 802.11ax-2021 9.4.2.248 HE Capabilities element
     // Element ID Extension (1) + HE MAC Capabilities Information (6)
-    // + HE PHY Capabilities Information (11) + Supported HE-MCS And NSS Set (4)
-    // TODO: Supported HE-MCS And NSS Set field has variable length (4, 8 or 12)
+    // + HE PHY Capabilities Information (11) + Supported HE-MCS And NSS Set (4, 8 or 12)
     // TODO: PPE Thresholds field (optional) is not implemented
-    return 22;
+    return 18 + GetSupportedMcsAndNssSetSize(m_channelWidthSet);
 }
 
 void
@@ -152,8 +149,13 @@ HeCapabilities::SerializeInformationField(Buffer::Iterator start) const
     start.WriteU64(GetHePhyCapabilitiesInfo1());
     start.WriteU16(GetHePhyCapabilitiesInfo2());
     start.WriteU8(GetHePhyCapabilitiesInfo3());
-    start.WriteU32(GetSupportedMcsAndNss());
-    // TODO: add another 32-bits field if 160 MHz channel is supported (variable length)
+    // Rx and Tx HE-MCS Map subfields for <= 80 MHz, then for 160 MHz and 80+80 MHz,
+    // if supported
+    for (uint8_t n = 0; n < GetSupportedMcsAndNssSetSize(m_channelWidthSet) / 4; ++n)
+    {
+        start.WriteHtolsbU16(GetSupportedMcsAndNss());
+        start.WriteHtolsbU16(GetSupportedMcsAndNss());
+    }
     // TODO: optional PPE Threshold field (variable length)
 }
 
@@ -166,11 +168,11 @@ HeCapabilities::DeserializeInformationField(Buffer::Iterator start, uint16_t len
     uint64_t phyCapabilities1 = i.ReadU64();
     uint64_t phyCapabilities2 = i.ReadU16();
     uint8_t phyCapabilities3 = i.ReadU8();
-    uint32_t mcsset = i.ReadU32();
     SetHeMacCapabilitiesInfo(macCapabilities1, macCapabilities2);
     SetHePhyCapabilitiesInfo(phyCapabilities1, phyCapabilities2, phyCapabilities3);
-    SetSupportedMcsAndNss(mcsset);
-    // TODO: add another 32-bits field if 160 MHz channel is supported (variable length)
+    // the Rx HE-MCS Map for <= 80 MHz, then the Tx one, and the maps for 160 MHz
+    // and 80+80 MHz, if supported, which are not stored
+    SetSupportedMcsAndNss(i.ReadLsbtohU16());
     // TODO: optional PPE Threshold field (variable length)
     return length;
 }
@@ -417,41 +419,46 @@ HeCapabilities::GetHePhyCapabilitiesInfo3() const
     return val;
 }
 
-void
-HeCapabilities::SetSupportedMcsAndNss(uint16_t ctrl)
+uint8_t
+HeCapabilities::GetSupportedMcsAndNssSetSize(uint8_t channelWidthSet)
 {
-    m_highestNssSupportedM1 = ctrl & 0x07;
-    m_highestMcsSupported = (ctrl >> 3) & 0x07;
-    NS_ASSERT(m_highestMcsSupported <= 4);
-    uint8_t i;
-    for (i = 0; i < 5; i++)
+    // IEEE 802.11ax-2021 9.4.2.248.4: the HE-MCS Maps for 160 MHz and 80+80 MHz are
+    // present if B2 and B3 of the Channel Width Set subfield are set, respectively
+    return 4 + ((channelWidthSet & 0x04) ? 4 : 0) + ((channelWidthSet & 0x08) ? 4 : 0);
+}
+
+void
+HeCapabilities::SetSupportedMcsAndNss(uint16_t map)
+{
+    // the highest MCS of each number of spatial streams, as an offset from MCS 7
+    // (0: HE-MCS 0-7, 1: 0-9, 2: 0-11, 3: not supported)
+    uint8_t highestMcs = 4;
+    m_highestNssSupportedM1 = 0;
+    for (uint8_t nss = 1; nss <= 8; ++nss)
     {
-        m_txBwMap[i] = (ctrl >> (6 + i)) & 0x01;
+        const uint8_t value = (map >> (2 * (nss - 1))) & 0x03;
+        if (value == 3)
+        {
+            continue;
+        }
+        m_highestNssSupportedM1 = nss - 1;
+        highestMcs = std::min<uint8_t>(highestMcs, 2 * value);
     }
-    for (i = 0; i < 5; i++)
-    {
-        m_rxBwMap[i] = (ctrl >> (11 + i)) & 0x01;
-    }
-    // TODO: MCS NSS Descriptors
+    m_highestMcsSupported = highestMcs;
 }
 
 uint16_t
 HeCapabilities::GetSupportedMcsAndNss() const
 {
-    uint16_t val = 0;
-    val |= m_highestNssSupportedM1 & 0x07;
-    val |= (m_highestMcsSupported & 0x07) << 3;
-    uint8_t i;
-    for (i = 0; i < 5; i++)
+    // MCS 7 or 8: HE-MCS 0-7, 9 or 10: HE-MCS 0-9, 11: HE-MCS 0-11
+    const uint8_t value = m_highestMcsSupported / 2;
+    uint16_t map = 0xffff;
+    for (uint8_t nss = 1; nss <= m_highestNssSupportedM1 + 1; ++nss)
     {
-        val |= (m_txBwMap[i] & 0x01) << (6 + 1);
+        map &= ~(0x03 << (2 * (nss - 1)));
+        map |= value << (2 * (nss - 1));
     }
-    for (i = 0; i < 5; i++)
-    {
-        val |= (m_rxBwMap[i] & 0x01) << (11 + 1);
-    }
-    // TODO: MCS NSS Descriptors
-    return val;
+    return map;
 }
 
 // TODO: PPE threshold

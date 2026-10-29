@@ -45,11 +45,15 @@ class HeCapabilities : public WifiInformationElement
      */
     void SetHePhyCapabilitiesInfo(uint64_t ctrl1, uint16_t ctrl2, uint8_t ctrl3);
     /**
-     * Set the MCS and NSS field in the HE Capabilities information element.
+     * Set the highest supported MCS and NSS from an HE-MCS Map subfield of the
+     * Supported HE-MCS And NSS Set field (IEEE 802.11ax-2021 9.4.2.248.4): two bits
+     * per number of spatial streams, 0 for HE-MCS 0-7, 1 for 0-9, 2 for 0-11 and 3
+     * if not supported. The highest MCS is the lowest of those of the supported
+     * numbers of spatial streams.
      *
-     * @param ctrl the MCS and NSS field in the HE Capabilities information element
+     * @param map the HE-MCS Map subfield
      */
-    void SetSupportedMcsAndNss(uint16_t ctrl);
+    void SetSupportedMcsAndNss(uint16_t map);
 
     /**
      * Return the 4 first octets of the HE MAC Capabilities Info field in the HE Capabilities
@@ -92,9 +96,12 @@ class HeCapabilities : public WifiInformationElement
      */
     uint8_t GetHePhyCapabilitiesInfo3() const;
     /**
-     * Return the MCS and NSS field in the HE Capabilities information element.
+     * Return the HE-MCS Map subfield of the Supported HE-MCS And NSS Set field
+     * (IEEE 802.11ax-2021 9.4.2.248.4) for the highest supported MCS and NSS, used
+     * for reception and transmission at all the supported channel widths. Highest
+     * MCSs that cannot be encoded (8 and 10) are rounded down (to 7 and 9).
      *
-     * @return the MCS and NSS field in the HE Capabilities information element
+     * @return the HE-MCS Map subfield
      */
     uint16_t GetSupportedMcsAndNss() const;
 
@@ -316,11 +323,15 @@ class HeCapabilities : public WifiInformationElement
     uint8_t m_maxHeLtfRxInHeMuMoreThanOneRu; ///< max HE-LTF symbols STA can Rx in HE MU PPDU with
                                              ///< more than one RU
 
+    /**
+     * @param channelWidthSet the Channel Width Set subfield
+     * @return the size of the Supported HE-MCS And NSS Set field (4, 8 or 12 octets)
+     */
+    static uint8_t GetSupportedMcsAndNssSetSize(uint8_t channelWidthSet);
+
     // MCS and NSS field information
     uint8_t m_highestNssSupportedM1; //!< highest NSS support M1
     uint8_t m_highestMcsSupported;   //!< highest MCS support
-    std::vector<uint8_t> m_txBwMap;  //!< transmit BW map
-    std::vector<uint8_t> m_rxBwMap;  //!< receive BW map
 };
 
 } // namespace ns3
