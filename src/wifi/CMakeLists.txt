@@ -439,6 +439,7 @@ build_lib(
     test/wifi-he-capabilities-test.cc
     test/wifi-monitor-test-suite.cc
     test/wifi-promisc-receive-test-suite.cc
+    test/wifi-thompson-sampling-test.cc
     test/wifi-protection-test.cc
     test/wifi-queue-scheduler-test.cc
     test/wifi-retransmit-test.cc
