@@ -198,6 +198,8 @@ set(source_files
     model/wifi-tx-vector.cc
     model/wifi-types.cc
     model/wifi-utils.cc
+    model/wifi-radiotap.cc
+    model/wifi-monitor-net-device.cc
     model/yans-error-rate-model.cc
     model/yans-wifi-channel.cc
     model/yans-wifi-phy.cc
@@ -384,6 +386,8 @@ set(header_files
     model/wifi-types.h
     model/wifi-units.h
     model/wifi-utils.h
+    model/wifi-radiotap.h
+    model/wifi-monitor-net-device.h
     model/yans-error-rate-model.h
     model/yans-wifi-channel.h
     model/yans-wifi-phy.h
