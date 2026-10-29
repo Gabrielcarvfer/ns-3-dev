@@ -14,6 +14,7 @@
 #include "ns3/wifi-phy.h"
 
 #include <cstdint>
+#include <optional>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -103,9 +104,20 @@ void
 ThompsonSamplingWifiManager::InitializeStation(WifiRemoteStation* st) const
 {
     auto station = static_cast<ThompsonSamplingWifiRemoteStation*>(st);
+    std::optional<WifiMode> lastMode;
     if (!station->m_mcsStats.empty())
     {
-        return;
+        // The non-HT modes are those supported by the station, which are only known
+        // once it associates: start over if they changed, e.g. for a station whose
+        // Probe Request was answered before it associated
+        const auto modClass = station->m_mcsStats.front().mode.GetModulationClass();
+        if (modClass >= WIFI_MOD_CLASS_HT || station->m_mcsStats.size() == GetNSupported(station))
+        {
+            return;
+        }
+        NS_LOG_DEBUG("Supported modes changed: start over");
+        lastMode = station->m_mcsStats.at(station->m_lastMode).mode;
+        station->m_mcsStats.clear();
     }
 
     // Add HT, VHT or HE MCSes
@@ -162,6 +174,16 @@ ThompsonSamplingWifiManager::InitializeStation(WifiRemoteStation* st) const
     }
 
     NS_ASSERT_MSG(!station->m_mcsStats.empty(), "No usable MCS found");
+
+    // the statistics of the mode used last go to that mode in the new list
+    station->m_lastMode = 0;
+    for (std::size_t i = 0; lastMode && i < station->m_mcsStats.size(); ++i)
+    {
+        if (station->m_mcsStats[i].mode == *lastMode)
+        {
+            station->m_lastMode = i;
+        }
+    }
 
     UpdateNextMode(st);
 }
