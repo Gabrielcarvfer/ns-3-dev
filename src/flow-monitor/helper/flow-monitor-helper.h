@@ -37,6 +37,17 @@ class FlowMonitorHelper
     FlowMonitorHelper& operator=(const FlowMonitorHelper&) = delete;
 
     /**
+     * @brief Whether a FlowMonitorHelper created a FlowMonitor in this simulation
+     *
+     * All FlowMonitorHelpers of a simulation share one FlowMonitor, created by
+     * the first one; GetMonitor() and GetClassifier() of a new helper return it.
+     * It is released by Simulator::Destroy().
+     *
+     * @return true if the FlowMonitor exists
+     */
+    static bool HasMonitor();
+
+    /**
      * @brief Set an attribute for the to-be-created FlowMonitor object
      * @param n1 attribute name
      * @param v1 attribute value
@@ -113,6 +124,7 @@ class FlowMonitorHelper
     Ptr<FlowMonitor> m_flowMonitor;        //!< the FlowMonitor object
     Ptr<FlowClassifier> m_flowClassifier4; //!< the FlowClassifier object for IPv4
     Ptr<FlowClassifier> m_flowClassifier6; //!< the FlowClassifier object for IPv6
+    bool m_ownsMonitor{false};             //!< whether this helper created the FlowMonitor
 };
 
 } // namespace ns3

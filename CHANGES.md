@@ -18,6 +18,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 * (mesh) Added the `PreqReceived`, `PrepReceived` and `PerrReceived` trace sources to `dot11s::HwmpProtocol`, fired when a PREQ, PREP or PERR element is received from a neighbor, and `flame::FlameProtocol::GetRoutingTable()`.
 * (sixlowpan) Added `SixLowPanAdaptiveFlooding`, a mesh-under forwarding policy that adapts the re-broadcast rate to the observed network activity using the Trickle algorithm (RFC 6206), with per-packet forwarding deadlines and redundancy-based discarding.
+* (flow-monitor) Added `FlowMonitorHelper::HasMonitor()`, which tells whether a FlowMonitor was created in the current simulation.
 
 ### Changes to existing API
 
@@ -30,6 +31,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 ### Changes to build system
 
 ### Changed behavior
+
+* (flow-monitor) All `FlowMonitorHelper` objects of a simulation now share one FlowMonitor, created by the first helper and released by `Simulator::Destroy()`. Further helpers return it from `GetMonitor()` and `GetClassifier()`, ignore their own `SetMonitorAttribute()` values, and do not install a second probe on a node that already has one. FlowMonitors on the same nodes used to interfere: the first one to tag a packet hid it from the others.
 
 ## Changes from ns-3.48 to ns-3.49
 
