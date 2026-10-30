@@ -69,6 +69,17 @@ class IePeerManagement : public WifiInformationElement
     void SetPeerConfirm(uint16_t localLinkID, uint16_t peerLinkId);
 
     /**
+     * Set the frame type, given by the Self-protected Action frame carrying the
+     * element: the element does not tell a Confirm from a Close without Peer Link ID.
+     *
+     * @param subtype the frame type
+     */
+    void SetSubtype(Subtype subtype);
+
+    /// Mesh Peering Protocol Identifier of the Mesh Peering Management protocol
+    static constexpr uint16_t MESH_PEERING_PROTOCOL = 0;
+
+    /**
      * Get reason code function
      * @returns the reason code
      */

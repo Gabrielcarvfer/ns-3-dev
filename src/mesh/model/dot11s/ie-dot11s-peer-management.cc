@@ -10,15 +10,19 @@
 #include "ie-dot11s-peer-management.h"
 
 #include "ns3/assert.h"
+#include "ns3/log.h"
 #include "ns3/packet.h"
 
 namespace ns3
 {
+
+NS_LOG_COMPONENT_DEFINE("IePeerManagement");
+
 namespace dot11s
 {
 
 IePeerManagement::IePeerManagement()
-    : m_length(3),
+    : m_length(4),
       m_subtype(PEER_OPEN),
       m_localLinkId(0),
       m_peerLinkId(0),
@@ -35,7 +39,7 @@ IePeerManagement::ElementId() const
 void
 IePeerManagement::SetPeerOpen(uint16_t localLinkId)
 {
-    m_length = 3;
+    m_length = 4;
     m_subtype = PEER_OPEN;
     m_localLinkId = localLinkId;
 }
@@ -43,7 +47,7 @@ IePeerManagement::SetPeerOpen(uint16_t localLinkId)
 void
 IePeerManagement::SetPeerClose(uint16_t localLinkId, uint16_t peerLinkId, PmpReasonCode reasonCode)
 {
-    m_length = 7;
+    m_length = 8;
     m_subtype = PEER_CLOSE;
     m_localLinkId = localLinkId;
     m_peerLinkId = peerLinkId;
@@ -53,7 +57,7 @@ IePeerManagement::SetPeerClose(uint16_t localLinkId, uint16_t peerLinkId, PmpRea
 void
 IePeerManagement::SetPeerConfirm(uint16_t localLinkId, uint16_t peerLinkId)
 {
-    m_length = 5;
+    m_length = 6;
     m_subtype = PEER_CONFIRM;
     m_localLinkId = localLinkId;
     m_peerLinkId = peerLinkId;
@@ -110,15 +114,19 @@ IePeerManagement::SubtypeIsConfirm() const
 void
 IePeerManagement::SerializeInformationField(Buffer::Iterator i) const
 {
-    i.WriteU8(m_subtype);
-    i.WriteU16(m_localLinkId);
-    if (m_length > 3)
+    // IEEE 802.11-2020 9.4.2.102 Mesh Peering Management element: Mesh Peering
+    // Protocol Identifier, Local Link ID, Peer Link ID (Confirm, and Close if known)
+    // and Reason Code (Close). The frame type is that of the Self-protected Action
+    // frame carrying the element.
+    i.WriteHtolsbU16(MESH_PEERING_PROTOCOL);
+    i.WriteHtolsbU16(m_localLinkId);
+    if (m_subtype == PEER_CONFIRM || (m_subtype == PEER_CLOSE && m_length == 8))
     {
-        i.WriteU16(m_peerLinkId);
+        i.WriteHtolsbU16(m_peerLinkId);
     }
-    if (m_length > 5)
+    if (m_subtype == PEER_CLOSE)
     {
-        i.WriteU16(m_reasonCode);
+        i.WriteHtolsbU16(m_reasonCode);
     }
 }
 
@@ -126,30 +134,43 @@ uint16_t
 IePeerManagement::DeserializeInformationField(Buffer::Iterator start, uint16_t length)
 {
     Buffer::Iterator i = start;
-    m_subtype = i.ReadU8();
     m_length = length;
-    if (m_subtype == PEER_OPEN)
+    i.ReadLsbtohU16(); // Mesh Peering Protocol Identifier
+    m_localLinkId = i.ReadLsbtohU16();
+    m_peerLinkId = 0;
+    m_reasonCode = REASON11S_RESERVED;
+    // The frame type is that of the frame carrying the element (see SetSubtype):
+    // 4 octets for Open, 6 for Confirm (or Close without Peer Link ID), 8 for Close
+    switch (length)
     {
-        NS_ASSERT(length == 3);
+    case 4:
+        m_subtype = PEER_OPEN;
+        break;
+    case 6:
+        m_subtype = PEER_CONFIRM;
+        m_peerLinkId = i.ReadLsbtohU16();
+        break;
+    case 8:
+        m_subtype = PEER_CLOSE;
+        m_peerLinkId = i.ReadLsbtohU16();
+        m_reasonCode = (PmpReasonCode)i.ReadLsbtohU16();
+        break;
+    default:
+        NS_LOG_WARN("Unexpected length of the Mesh Peering Management element: " << length);
     }
-    if (m_subtype == PEER_CONFIRM)
+    return length;
+}
+
+void
+IePeerManagement::SetSubtype(Subtype subtype)
+{
+    if (subtype == PEER_CLOSE && m_length == 6)
     {
-        NS_ASSERT(length == 5);
+        // a Close without Peer Link ID: the last field is the Reason Code
+        m_reasonCode = static_cast<PmpReasonCode>(m_peerLinkId);
+        m_peerLinkId = 0;
     }
-    if (m_subtype == PEER_CLOSE)
-    {
-        NS_ASSERT(length == 7);
-    }
-    m_localLinkId = i.ReadU16();
-    if (m_length > 3)
-    {
-        m_peerLinkId = i.ReadU16();
-    }
-    if (m_length > 5)
-    {
-        m_reasonCode = (PmpReasonCode)i.ReadU16();
-    }
-    return i.GetDistanceFrom(start);
+    m_subtype = subtype;
 }
 
 void

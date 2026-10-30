@@ -187,22 +187,26 @@ PeerManagementProtocolMac::Receive(Ptr<Packet> const_packet, const WifiMacHeader
         packet->RemoveHeader(elements, packet->GetSize());
         peerElement = DynamicCast<IePeerManagement>(elements.FindFirst(IE_MESH_PEERING_MANAGEMENT));
 
-        NS_ASSERT(peerElement);
-        // Check that frame subtype corresponds to peer link subtype
-        if (peerElement->SubtypeIsOpen())
+        if (!peerElement)
         {
+            NS_LOG_DEBUG("No Mesh Peering Management element");
+            m_stats.brokenMgt++;
+            return false;
+        }
+        // the frame type is that of the Self-protected Action frame
+        switch (actionValue.selfProtectedAction)
+        {
+        case WifiActionHeader::PEER_LINK_OPEN:
+            peerElement->SetSubtype(IePeerManagement::PEER_OPEN);
             m_stats.rxOpen++;
-            NS_ASSERT(actionValue.selfProtectedAction == WifiActionHeader::PEER_LINK_OPEN);
-        }
-        if (peerElement->SubtypeIsConfirm())
-        {
+            break;
+        case WifiActionHeader::PEER_LINK_CONFIRM:
+            peerElement->SetSubtype(IePeerManagement::PEER_CONFIRM);
             m_stats.rxConfirm++;
-            NS_ASSERT(actionValue.selfProtectedAction == WifiActionHeader::PEER_LINK_CONFIRM);
-        }
-        if (peerElement->SubtypeIsClose())
-        {
+            break;
+        default:
+            peerElement->SetSubtype(IePeerManagement::PEER_CLOSE);
             m_stats.rxClose++;
-            NS_ASSERT(actionValue.selfProtectedAction == WifiActionHeader::PEER_LINK_CLOSE);
         }
         // Deliver Peer link management frame to protocol:
         m_protocol->ReceivePeerLinkFrame(m_ifIndex,
@@ -305,6 +309,7 @@ PeerManagementProtocolMac::SendPeerLinkManagementFrame(Mac48Address peerAddress,
         fields.rates = allSupportedRates.rates;
         fields.extendedRates = allSupportedRates.extendedRates;
         fields.capability = 0;
+        fields.meshId = *(m_protocol->GetMeshId());
         fields.config = meshConfig;
         PeerLinkConfirmStart plinkConfirm;
         WifiActionHeader actionHdr;

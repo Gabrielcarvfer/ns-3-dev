@@ -251,6 +251,8 @@ PeerLinkConfirmStart::SetPlinkConfirmStart(PeerLinkConfirmStart::PlinkConfirmSta
     m_capability = fields.capability;
     m_aid = fields.aid;
     m_rates = fields.rates;
+    m_extendedRates = fields.extendedRates;
+    m_meshId = fields.meshId;
     m_config = fields.config;
 }
 
@@ -262,6 +264,11 @@ PeerLinkConfirmStart::GetFields() const
     retval.capability = m_capability;
     retval.aid = m_aid;
     retval.rates = m_rates;
+    retval.extendedRates = m_extendedRates;
+    if (m_meshId)
+    {
+        retval.meshId = *m_meshId;
+    }
     retval.config = m_config;
 
     return retval;
@@ -302,6 +309,10 @@ PeerLinkConfirmStart::GetSerializedSize() const
     {
         size += m_extendedRates->GetSerializedSize();
     }
+    if (m_meshId)
+    {
+        size += m_meshId->GetInformationFieldSize() + 2;
+    }
     size += m_config.GetInformationFieldSize() + 2;
     return size;
 }
@@ -317,6 +328,11 @@ PeerLinkConfirmStart::Serialize(Buffer::Iterator start) const
     if (m_extendedRates)
     {
         i = m_extendedRates->Serialize(i);
+    }
+    // IEEE 802.11-2020 9.6.15.3: the Mesh ID element precedes the Mesh Configuration
+    if (m_meshId)
+    {
+        i = m_meshId->Serialize(i);
     }
     i = m_config.Serialize(i);
 }
@@ -334,6 +350,13 @@ PeerLinkConfirmStart::Deserialize(Buffer::Iterator start)
     if (tmp.GetDistanceFrom(i) == 0)
     {
         m_extendedRates.reset();
+    }
+    i = tmp;
+    m_meshId.emplace();
+    tmp = m_meshId->DeserializeIfPresent(i);
+    if (tmp.GetDistanceFrom(i) == 0)
+    {
+        m_meshId.reset();
     }
     i = tmp;
     uint8_t id = i.ReadU8();
