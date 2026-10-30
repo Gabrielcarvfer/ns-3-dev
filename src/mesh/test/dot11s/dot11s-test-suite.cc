@@ -9,13 +9,17 @@
 #include "ns3/hwmp-rtable.h"
 #include "ns3/ie-dot11s-id.h"
 #include "ns3/ie-dot11s-peer-management.h"
+#include "ns3/mesh-helper.h"
 #include "ns3/mesh-information-element-vector.h"
 #include "ns3/mgt-action-headers.h"
 #include "ns3/mgt-headers.h"
+#include "ns3/mobility-helper.h"
 #include "ns3/packet.h"
 #include "ns3/peer-link-frame.h"
+#include "ns3/peer-management-protocol.h"
 #include "ns3/simulator.h"
 #include "ns3/test.h"
+#include "ns3/yans-wifi-helper.h"
 
 #include <iomanip>
 #include <sstream>
@@ -374,6 +378,41 @@ struct PeerLinkFrameLinuxTest : public TestCase
 /**
  * @ingroup mesh-test
  *
+ * @brief A mesh point receives beacons without Beacon Timing element, which is
+ * optional (e.g., Linux does not send it): those of a mesh point whose beacon
+ * collision avoidance is disabled.
+ */
+struct BeaconWithoutTimingTest : public TestCase
+{
+    BeaconWithoutTimingTest()
+        : TestCase("Beacons without Beacon Timing element")
+    {
+    }
+
+    void DoRun() override
+    {
+        NodeContainer nodes(2);
+        MobilityHelper mobility;
+        mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+        mobility.Install(nodes);
+        YansWifiPhyHelper phy;
+        phy.SetChannel(YansWifiChannelHelper::Default().Create());
+        MeshHelper mesh = MeshHelper::Default();
+        mesh.SetStackInstaller("ns3::Dot11sStack");
+        NetDeviceContainer devices = mesh.Install(phy, nodes);
+        devices.Get(0)->GetObject<PeerManagementProtocol>()->SetBeaconCollisionAvoidance(false);
+        auto pmp = devices.Get(1)->GetObject<PeerManagementProtocol>();
+        NS_TEST_ASSERT_MSG_EQ(pmp->GetBeaconCollisionAvoidance(), true, "Wrong configuration");
+        Simulator::Stop(Seconds(2));
+        Simulator::Run();
+        NS_TEST_EXPECT_MSG_EQ(pmp->GetNumberOfLinks(), 1, "The mesh points did not peer");
+        Simulator::Destroy();
+    }
+};
+
+/**
+ * @ingroup mesh-test
+ *
  * @brief Dot11s Test Suite
  */
 class Dot11sTestSuite : public TestSuite
@@ -389,6 +428,7 @@ Dot11sTestSuite::Dot11sTestSuite()
     AddTestCase(new HwmpRtableTest, TestCase::Duration::QUICK);
     AddTestCase(new PeerLinkFrameStartTest, TestCase::Duration::QUICK);
     AddTestCase(new PeerLinkFrameLinuxTest, TestCase::Duration::QUICK);
+    AddTestCase(new BeaconWithoutTimingTest, TestCase::Duration::QUICK);
 }
 
 static Dot11sTestSuite g_dot11sTestSuite; ///< the test suite
