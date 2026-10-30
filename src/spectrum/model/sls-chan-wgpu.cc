@@ -395,9 +395,23 @@ SlsChanWgpu::makePipeline(const char* entryPoint)
     return pipe;
 }
 
+std::vector<std::pair<uint32_t, SlsChanWgpu::BufferSiteStat>>
+SlsChanWgpu::bufferSiteStats() const
+{
+    std::vector<std::pair<uint32_t, BufferSiteStat>> v(bufferSiteStats_.begin(),
+                                                       bufferSiteStats_.end());
+    std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) {
+        return a.second.bytes > b.second.bytes;
+    });
+    return v;
+}
+
 // ── Buffer helper ─────────────────────────────────────────────────────────────
 wgpu::Buffer
-SlsChanWgpu::makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data)
+SlsChanWgpu::makeBuffer(uint64_t size,
+                        wgpu::BufferUsage usage,
+                        const void* data,
+                        std::source_location loc)
 {
     const uint64_t alignedSize = (size + 3) & ~uint64_t(3);
 
@@ -407,6 +421,11 @@ SlsChanWgpu::makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data
     desc.mappedAtCreation = false; // no longer needed
 
     wgpu::Buffer buf = device_.createBuffer(desc);
+    gpuBytesAllocated_ += alignedSize;
+    ++gpuBuffersAllocated_;
+    auto& site = bufferSiteStats_[loc.line()];
+    site.bytes += alignedSize;
+    ++site.count;
 
     if (data)
     {
@@ -967,6 +986,12 @@ SlsChanWgpu::generateCRN(float maxX,
             maxCorr,
             (unsigned long long)tempBufBytes(maxCorr));
 
+    // NOTE: deliberately NOT persistent. A freshly created WebGPU buffer is
+    // zero-initialised, and the correlation passes below rely on that; reusing
+    // one across generateCRN calls leaves stale data that changes the drawn
+    // fields (verified: it perturbs slotStats / rbStats / ueTxPower). Only the
+    // fixed-size uniforms, which are fully rewritten every dispatch, are
+    // hoisted -- and those were the allocation problem, not these.
     wgpu::Buffer tempBuf =
         makeBuffer(tempBufBytes(maxCorr), WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
     SLS_LOG("[DEBUG] generateCRN: tempBuf created\n");
@@ -1066,17 +1091,39 @@ SlsChanWgpu::generateCRN(float maxX,
                               boundY_val,
                               rowOffset,
                               chunkY};
-        wgpu::Buffer genUniBuf =
-            makeBuffer(sizeof(genUni), WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage, &genUni);
+        // Fixed-size uniforms, rewritten rather than recreated. dispatchGrid
+        // runs once per (site, LSP-column) grid -- 22 columns x nSite per
+        // generateCRN -- so creating these two here cost over a million device
+        // buffers on a 3-ring attachment sweep, dwarfing every other
+        // allocation site in the back-end.
+        if (!crnGenUniBuf_)
+        {
+            crnGenUniBuf_ = makeBuffer(sizeof(genUni),
+                                       WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage,
+                                       &genUni);
+        }
+        else
+        {
+            queue_.writeBuffer(crnGenUniBuf_, 0, &genUni, sizeof(genUni));
+        }
+        wgpu::Buffer& genUniBuf = crnGenUniBuf_;
 
         struct NormUniforms
         {
             uint32_t totalElements, gridOffset, _p0, _p1;
         };
         NormUniforms normUni{(uint32_t)gridSz, 0u, 0u, 0u};
-        wgpu::Buffer normUniBuf = makeBuffer(sizeof(normUni),
-                                             WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage,
-                                             &normUni);
+        if (!crnNormUniBuf_)
+        {
+            crnNormUniBuf_ = makeBuffer(sizeof(normUni),
+                                        WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage,
+                                        &normUni);
+        }
+        else
+        {
+            queue_.writeBuffer(crnNormUniBuf_, 0, &normUni, sizeof(normUni));
+        }
+        wgpu::Buffer& normUniBuf = crnNormUniBuf_;
 
         // ── Fill bind group ──
         SLS_LOG("[DEBUG] dispatchGrid: corrDist=%.1f, curTempBytes=%llu, actualTempBytes=%llu, "
@@ -2385,26 +2432,18 @@ SlsChanWgpu::invalidateOutputBuffers()
 void
 SlsChanWgpu::resetBatchScratchCapacities()
 {
-    // Zeroing the trackers makes every "cfg < n" / "cfg != dim" realloc guard
-    // fire on the next dispatch, so the scratch buffers are rebuilt to that
-    // dispatch's true byte size regardless of what the previous (uncached batch)
-    // dispatch sized them to. See the header for the underlying hazard.
-    matFieldPreCfgNLinks_ = 0;
-    channelMatrixCfgUSize_ = 0;
-    channelMatrixCfgSSize_ = 0;
-    channelMatrixCfgNLinks_ = 0;
-    longTermCfgNLinks_ = 0;
-    longTermCfgSPorts_ = 0;
-    longTermCfgUPorts_ = 0;
+    // The matFieldPre / channelMatrix / longTermOut / reduceBatch buffers are no
+    // longer listed here: they now grow on byte capacity, which cannot under-size
+    // them, so resetting would only force needless reallocation. That was the
+    // model's dominant source of device-memory churn, because the uncached
+    // attachment sweep calls this once per batch -- and under wraparound that is
+    // once per UE.
     longTermCfgSPortElems_ = 0;
     longTermCfgUPortElems_ = 0;
     specChanCfgNumRxPorts_ = 0;
     specChanCfgNumTxPorts_ = 0;
     specChanCfgNumRb_ = 0;
     specBatchCfgNumRb_ = 0;
-    reduceBatchCfgNLinks_ = 0;
-    reduceBatchCfgNumRb_ = 0;
-    reduceBatchCfgNSlots_ = 0;
 }
 
 wgpu::BindGroup
@@ -2685,10 +2724,12 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     // Field-precompute buffer: 481 cluster-ray slots x MAT_FIELD_PRE_STRIDE(=11)
     // vec2f per link (4 field components + 7 ray-invariant geometry/polarisation).
     const uint64_t fpBytes = uint64_t(nActiveLinks) * 481u * 11u * sizeof(float) * 2;
-    if (!matFieldPreBuf_ || matFieldPreCfgNLinks_ < nActiveLinks)
+    // Grow-only on BYTES: a link-count tracker cannot tell that the same
+    // count needs more room at a different per-link size -- the hazard that
+    // used to require an explicit capacity reset between dispatches.
+    if (!matFieldPreBuf_ || matFieldPreBuf_.getSize() < fpBytes)
     {
         matFieldPreBuf_ = makeBuffer(fpBytes, WGPUBufferUsage_Storage);
-        matFieldPreCfgNLinks_ = nActiveLinks;
     }
 
     // (Re)alloc output buffer if shape changed. Sized for the maximum page
@@ -2696,14 +2737,13 @@ SlsChanWgpu::genChannelMatrix(const std::vector<ActiveLink>& activeLinks,
     // strongest-2 subcluster split.
     const uint64_t perLink = uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
     const uint64_t totalBytes = perLink * nActiveLinks;
-    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize || channelMatrixCfgSSize_ != sSize ||
-        channelMatrixCfgNLinks_ < nActiveLinks)
+    // Grow-only on BYTES rather than on (uSize, sSize, nLinks): byte size is
+    // the only thing correctness depends on, and comparing shapes reallocated
+    // on every bucket whose geometry differed from the previous one.
+    if (!channelMatrixBuf_ || channelMatrixBuf_.getSize() < totalBytes)
     {
         channelMatrixBuf_ =
             makeBuffer(totalBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-        channelMatrixCfgUSize_ = uSize;
-        channelMatrixCfgSSize_ = sSize;
-        channelMatrixCfgNLinks_ = nActiveLinks;
     }
 
     struct MatDispUni
@@ -2918,17 +2958,13 @@ SlsChanWgpu::genLongTerm(uint32_t nActiveLinks,
     // (Re)alloc output buffer if shape changed.
     const uint64_t outBytes =
         uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages * sizeof(float) * 2;
-    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks || longTermCfgSPorts_ != sPorts ||
-        longTermCfgUPorts_ != uPorts)
+    if (!longTermOutBuf_ || longTermOutBuf_.getSize() < outBytes)
     {
         // CopyDst is needed so uploadLongTermBatch can writeBuffer into
         // this same buffer for the chunked spec-batch pass.
         longTermOutBuf_ =
             makeBuffer(outBytes,
                        WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
-        longTermCfgNLinks_ = nActiveLinks;
-        longTermCfgSPorts_ = sPorts;
-        longTermCfgUPorts_ = uPorts;
     }
     const uint64_t sWBytes = sWLen * sizeof(float) * 2;
     const uint64_t uWBytes = uWLen * sizeof(float) * 2;
@@ -3108,12 +3144,14 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
         matFieldPrePipeline_ = makePipeline("mat_field_precompute_kernel");
         assert(matFieldPrePipeline_ && "missing mat_field_precompute_kernel in WGSL");
     }
-    if (!matFieldPreBuf_ || matFieldPreCfgNLinks_ < nActiveLinks)
+    // Grow-only on BYTES: a link-count tracker cannot tell that the same
+    // count needs more room at a different per-link size -- the hazard that
+    // used to require an explicit capacity reset between dispatches.
+    // 481 cluster-ray slots x MAT_FIELD_PRE_STRIDE(=11) vec2f per link.
+    const uint64_t fpBytesFused = uint64_t(nActiveLinks) * 481u * 11u * sizeof(float) * 2;
+    if (!matFieldPreBuf_ || matFieldPreBuf_.getSize() < fpBytesFused)
     {
-        // 481 cluster-ray slots x MAT_FIELD_PRE_STRIDE(=11) vec2f per link.
-        matFieldPreBuf_ = makeBuffer(uint64_t(nActiveLinks) * 481u * 11u * sizeof(float) * 2,
-                                     WGPUBufferUsage_Storage);
-        matFieldPreCfgNLinks_ = nActiveLinks;
+        matFieldPreBuf_ = makeBuffer(fpBytesFused, WGPUBufferUsage_Storage);
     }
     if (!longTermPipeline_)
     {
@@ -3124,14 +3162,13 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     // channelMatrixBuf_ alloc
     const uint64_t cmBytesPerLink = uint64_t(uSize) * sSize * kMatMaxPages * sizeof(float) * 2;
     const uint64_t cmTotalBytes = cmBytesPerLink * nActiveLinks;
-    if (!channelMatrixBuf_ || channelMatrixCfgUSize_ != uSize || channelMatrixCfgSSize_ != sSize ||
-        channelMatrixCfgNLinks_ < nActiveLinks)
+    // Grow-only on BYTES rather than on (uSize, sSize, nLinks): byte size is
+    // the only thing correctness depends on, and comparing shapes reallocated
+    // on every bucket whose geometry differed from the previous one.
+    if (!channelMatrixBuf_ || channelMatrixBuf_.getSize() < cmTotalBytes)
     {
         channelMatrixBuf_ =
             makeBuffer(cmTotalBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-        channelMatrixCfgUSize_ = uSize;
-        channelMatrixCfgSSize_ = sSize;
-        channelMatrixCfgNLinks_ = nActiveLinks;
     }
 
     // genChannelMatrix uniform
@@ -3179,15 +3216,11 @@ SlsChanWgpu::genChannelMatrixAndLongTermFused(uint32_t nActiveLinks,
     // longTermOutBuf_ alloc
     const uint64_t ltTotalBytes =
         uint64_t(nActiveLinks) * sPorts * uPorts * kMatMaxPages * sizeof(float) * 2;
-    if (!longTermOutBuf_ || longTermCfgNLinks_ < nActiveLinks || longTermCfgSPorts_ != sPorts ||
-        longTermCfgUPorts_ != uPorts)
+    if (!longTermOutBuf_ || longTermOutBuf_.getSize() < ltTotalBytes)
     {
         longTermOutBuf_ =
             makeBuffer(ltTotalBytes,
                        WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
-        longTermCfgNLinks_ = nActiveLinks;
-        longTermCfgSPorts_ = sPorts;
-        longTermCfgUPorts_ = uPorts;
     }
 
     // weight buffers
@@ -3409,12 +3442,6 @@ SlsChanWgpu::uploadLongTermBatch(const std::complex<float>* hostData,
         longTermOutBuf_ =
             makeBuffer(bytes,
                        WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst);
-        // Only update capacity tracking when we actually reallocate; keeping
-        // longTermCfgNLinks_ at the high-water mark prevents genLongTerm from
-        // reallocating the buffer again on the next tick's first chunk.
-        longTermCfgNLinks_ = nLinks;
-        longTermCfgSPorts_ = sPorts;
-        longTermCfgUPorts_ = uPorts;
     }
     queue_.writeBuffer(longTermOutBuf_, 0, hostData, bytes);
 }
@@ -3590,9 +3617,11 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
     const uint64_t redOutBytes =
         uint64_t(totalBatchSlots) * nLinks * numRb * rxtx * 2u * sizeof(float);
     const uint64_t powOutBytes = 2ull * totalBatchSlots * nLinks * numRb * sizeof(float);
+    // Byte capacity alone. The (nLinks, numRb, nSlots) equality tests that used
+    // to be ORed in here reallocated all four buffers whenever any dimension
+    // changed, even when the existing ones were already large enough.
     if (!reduceBatchOutBuf_ || reduceBatchOutBuf_.getSize() < redOutBytes || !powBatchOutBuf_ ||
-        powBatchOutBuf_.getSize() < powOutBytes || reduceBatchCfgNLinks_ != nLinks ||
-        reduceBatchCfgNumRb_ != numRb || reduceBatchCfgNSlots_ != totalBatchSlots)
+        powBatchOutBuf_.getSize() < powOutBytes)
     {
         reduceBatchOutBuf_ =
             makeBuffer(redOutBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -3602,9 +3631,6 @@ SlsChanWgpu::genSpecBatch(uint32_t nLinks,
             makeBuffer(powOutBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
         powBatchStagingBuf_ =
             makeBuffer(powOutBytes, WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead);
-        reduceBatchCfgNLinks_ = nLinks;
-        reduceBatchCfgNumRb_ = numRb;
-        reduceBatchCfgNSlots_ = totalBatchSlots;
     }
 
     // Per-tick inputs -- realloc on size grow, re-upload otherwise.
@@ -3728,7 +3754,8 @@ SlsChanWgpu::computeInterfCov(const std::vector<float>& chanFlat,
     wgpu::Buffer cfgBuf =
         makeBuffer(sizeof(cfg), WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst, &cfg);
     // chanFlat can be empty (0 interferers); the binding still needs >=1 element.
-    const uint64_t chanBytes = std::max<uint64_t>(chanFlat.size() * sizeof(float), 2 * sizeof(float));
+    const uint64_t chanBytes =
+        std::max<uint64_t>(chanFlat.size() * sizeof(float), 2 * sizeof(float));
     wgpu::Buffer chanBuf = makeBuffer(chanBytes,
                                       WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
                                       chanFlat.empty() ? nullptr : chanFlat.data());
@@ -3739,7 +3766,8 @@ SlsChanWgpu::computeInterfCov(const std::vector<float>& chanFlat,
     const uint64_t outElems = static_cast<uint64_t>(nRxPorts) * nRxPorts * nRb; // complex
     const uint64_t outBytes = outElems * 2 * sizeof(float);
     wgpu::Buffer outBuf = makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    wgpu::Buffer stagingBuf = makeBuffer(outBytes, WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+    wgpu::Buffer stagingBuf =
+        makeBuffer(outBytes, WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
 
     auto layout = interfCovPipeline_.getBindGroupLayout(0);
     std::vector<wgpu::BindGroupEntry> entries(4, wgpu::Default);
@@ -3815,7 +3843,8 @@ SlsChanWgpu::computeInterfCovBatch(const std::vector<float>& chanFlat,
     const uint64_t outElems = static_cast<uint64_t>(nChunks) * nRxPorts * nRxPorts * nRb;
     const uint64_t outBytes = outElems * 2 * sizeof(float);
     wgpu::Buffer outBuf = makeBuffer(outBytes, WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
-    wgpu::Buffer stagingBuf = makeBuffer(outBytes, WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+    wgpu::Buffer stagingBuf =
+        makeBuffer(outBytes, WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
 
     auto layout = interfCovBatchPipeline_.getBindGroupLayout(0);
     std::vector<wgpu::BindGroupEntry> entries(5, wgpu::Default);

@@ -232,6 +232,29 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
         uint32_t sKeyOverride{0};
     };
 
+    /**
+     * Build every link's channel on the GPU up front, with no CPU draw.
+     *
+     * A link only enters the GPU pipeline once it already has a cached
+     * ChannelMatrix, and the only thing that creates one is the CPU
+     * ThreeGppChannelModel::GetNewChannel -- so in the normal flow every link
+     * pays exactly one full CPU draw (~3.5 ms) before the GPU ever sees it.
+     * Across a topology that is the single largest CPU item in a run: 5,628
+     * draws / 19.9 s at one ring, ~150k draws / 199 s at three.
+     *
+     * Call this once after the topology exists and before Simulator::Run().
+     * It runs the same pipeline UpdateChannel does, but sourcing links from
+     * the caller's list instead of from the (still empty) matrix cache, and
+     * populates m_channelMatrixMap / m_channelParamsMap from the GPU output.
+     * Every subsequent GetChannel then hits.
+     *
+     * @param links The BS->UE links to build (s = gNB side, u = UE side).
+     * @param txPsd Representative PSD, so the spectrum batch can run on the
+     *              first refresh instead of waiting for the first PRX eval.
+     */
+    void PrecomputeChannels(const std::vector<UncachedBatchLink>& links,
+                            Ptr<const SpectrumValue> txPsd);
+
     /// @return per-link isotropic received power in the same order as @p links,
     ///         or an empty vector if the GPU path is unavailable.
     std::vector<double> ComputeUncachedBatch(const std::vector<UncachedBatchLink>& links,
@@ -622,6 +645,157 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
                                                 uint8_t numTxPorts,
                                                 bool isReverse) const;
 
+    /**
+     * Release the element-level values of a link's cached ChannelMatrix,
+     * keeping its (rows, cols, pages) shape.
+     *
+     * The per-link ChannelMatrix is by far the largest thing this model
+     * retains: uElems x sElems x numClusters complex<double>, which is
+     * 192 KB per link for an 8x8 dual-polarised gNB against a 1x2
+     * dual-polarised UE over ~24 clusters. In steady state on the GPU
+     * path those values are never read -- PRX gets its long-term
+     * component from m_gpuLongTermMap and its spectrum matrix from
+     * m_gpuChanSpctMap, and every other consumer only queries the shape
+     * (GetNumPages() for the cluster count, GetNumRows()/GetNumCols()
+     * for the port geometry). Dropping the storage is what makes 3-ring,
+     * 10-UE-per-sector runs fit in memory.
+     *
+     * The single consumer that does read values is
+     * ThreeGppSpectrumPropagationLossModel::CalcLongTerm, which PRX only
+     * calls when GetCachedLongTerm misses. EnsureMatrixValues() restores
+     * the values before any such miss is reported, so a released matrix
+     * is never observable to it.
+     *
+     * Links that EnsureMatrixValues() has had to re-draw more than
+     * MezMatrixRedrawLimit times are left alone: for those, releasing does
+     * not save memory over the long run, it just buys a CPU re-draw on the
+     * next evaluation. In a sectorised deployment that self-selects the
+     * BS-to-BS links, which are the ones the CPU path keeps reading, while
+     * the far more numerous GPU-served BS-to-UE links -- whose values are
+     * never read -- stay released for free.
+     *
+     * @param matrixKey Antenna-pair key, for the re-draw bookkeeping.
+     * @param matrix The cached matrix to strip (no-op when null).
+     */
+    void ReleaseMatrixValues(uint64_t matrixKey, const Ptr<ChannelMatrix>& matrix) const;
+
+    /**
+     * Whether ReleaseMatrixValues() would release this link.
+     *
+     * Lets the refresh pipeline skip work whose only consumer is storage it
+     * is about to drop: for a link that will be released, both the GPU->host
+     * matrix readback and the float->double copy into the ns-3 matrix are
+     * pure waste. Eliding them is what makes releasing cheaper than keeping
+     * the matrix, rather than a memory-for-time trade.
+     *
+     * @param matrixKey Antenna-pair key.
+     * @return true when a release would actually drop this link's values.
+     */
+    bool WillReleaseMatrixValues(uint64_t matrixKey) const;
+
+    /**
+     * Resolve the GPU cache refresh period.
+     *
+     * MezRefreshPeriod defaults to a negative sentinel meaning "match
+     * ns3::ThreeGppChannelModel::UpdatePeriod". Tying the two together is
+     * what lets this model stand in for the CPU channel model without the
+     * caller configuring anything extra: a refresh slower than the channel's
+     * update period serves a stale channel, and a faster one burns GPU work
+     * re-deriving a channel that has not changed.
+     *
+     * @return the period to schedule PeriodicRefresh at; zero disables it.
+     */
+    Time EffectiveRefreshPeriod() const;
+
+    /**
+     * Release the element-level values of every cached ChannelMatrix that
+     * the GPU pipeline does not serve.
+     *
+     * ReleaseMatrixValues() only reaches links the GPU built a long-term
+     * component for, i.e. BS-to-UE links. Everything else keeps its full
+     * matrix, and in a sectorised hexagonal deployment the "everything
+     * else" is dominated by BS-to-BS pairs: the spectrum channel evaluates
+     * every device pair within range, so each gNB pair gets a
+     * 128x128-element matrix (4 MiB at 16 clusters) and the count grows as
+     * C(nCells, 2) -- 210 pairs / 0.8 GB at one ring, 1596 pairs / 6.2 GB
+     * at three. That is the largest single item at scale.
+     *
+     * Those links are served by the CPU path, so their values are read by
+     * CalcLongTerm whenever PRX's own long-term cache misses, and
+     * EnsureMatrixValues() then redraws them. That trade turned out to be a
+     * bad one, which is why MezMatrixSweepInterval defaults to zero (sweep
+     * off): the BS-to-BS matrices are precisely the expensive ones to draw --
+     * measured at ~54 ms each against ~3.5 ms for a BS-to-UE link -- so at one
+     * ring the sweep cost 27 s of re-draws to save 0.8 GB. Enable it only when
+     * memory matters more than time.
+     *
+     * Driven from EnsureBatchFresh rather than UpdateChannel: with a static
+     * channel (UpdatePeriod=0) UpdateChannel fires exactly once, so a sweep
+     * hung off it would never see steady state. Rate-limited to one sweep per
+     * MezMatrixSweepInterval ticks, since it is linear in the number of
+     * cached links.
+     */
+    void ReleaseIdleMatrixValues() const;
+
+    /**
+     * Drop every CPU-miss (D-3b) spectrum entry and rewind the arena offset.
+     *
+     * TryGenSpecCpuMiss hands each new (link, beam-pair) key a region carved
+     * from a monotonically increasing offset that is never returned. With a
+     * static channel the key set is bounded and that is harmless, but once the
+     * channel moves the beam pairs keep changing and the arena grows without
+     * limit -- 7.4 GB at 3 rings / 570 UEs / 10 ms versus 2.3 GB static.
+     *
+     * Called at the top of UpdateChannel: every entry is keyed to the channel
+     * state that refresh is about to replace, so they are all dead already.
+     * The backing vectors keep their capacity, so the next period reuses the
+     * same pages instead of faulting in new ones.
+     */
+    void ReclaimCpuMissArena();
+
+    /**
+     * Re-materialise the element-level values of a link's ChannelMatrix
+     * that ReleaseMatrixValues() previously dropped.
+     *
+     * Called on every GetCachedLongTerm miss path: a miss means PRX is
+     * about to run the CPU CalcLongTerm against this matrix, which reads
+     * it element by element. The values are rebuilt with the base-class
+     * CPU draw (ThreeGppChannelModel::GetNewChannel) in the caller's
+     * (sAnt, uAnt) orientation, which is the orientation CalcLongTerm
+     * asserts on. Only m_channel is replaced -- m_generatedTime is left
+     * alone because PRX has already captured it for its own long-term
+     * cache validity check.
+     *
+     * This is the same CPU fallback the model already takes when
+     * GetNewChannel evicts a stale entry, so the realisation differs
+     * from the GPU draw exactly as it does there. No-op when the matrix
+     * still holds its values.
+     *
+     * @param channelMatrix The matrix PRX is about to use.
+     * @param sAnt The transmit-side antenna, in PRX's orientation.
+     * @param uAnt The receive-side antenna, in PRX's orientation.
+     */
+    void EnsureMatrixValues(Ptr<const ChannelMatrix> channelMatrix,
+                            Ptr<const PhasedArrayModel> sAnt,
+                            Ptr<const PhasedArrayModel> uAnt) const;
+
+    /**
+     * Print a per-container byte breakdown of everything this model
+     * retains, including the GPU back-end's cumulative device-buffer
+     * total, to stderr. No-op unless the MEZ_MEM environment variable is
+     * set to 1; rate-limited to one line per 25 ms of simulated time.
+     *
+     * Scaling this model to large topologies is a memory problem before
+     * it is a throughput problem -- a 3-ring, 10-UE-per-sector run has
+     * tens of thousands of cached links -- and the totals are spread
+     * across the ns-3 channel caches, the GPU mirror caches and the flat
+     * spectrum arrays. This attributes them so the next reduction can be
+     * aimed rather than guessed at.
+     *
+     * @param label Call-site tag printed with the breakdown.
+     */
+    void DumpMemoryBreakdown(const char* label) const;
+
     // ── GPU back-end handle ───────────────────────────────────────────
     std::unique_ptr<SlsChanWgpu> m_wgpuChannel;
     /// Most-recent GPU-enabled instance, for GetActiveGpuInstance() (Lever B).
@@ -634,10 +808,10 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     std::optional<Time> m_lastMezBatchTime;
 
     // Phase D: periodic-refresh state.
-    // Period at which PeriodicRefresh runs. Defaults to the channel
-    // update period (m_updatePeriod) on the base, but is decoupled --
-    // setting MezRefreshPeriod=0 disables the periodic loop and falls
-    // back to the on-demand EnsureBatchFresh path.
+    // Period at which PeriodicRefresh runs. Negative (the attribute default)
+    // means "match m_updatePeriod" -- see EffectiveRefreshPeriod(). Setting
+    // MezRefreshPeriod=0 disables the periodic loop and falls back to the
+    // on-demand EnsureBatchFresh path.
     Time m_refreshPeriod;
     bool m_periodicRefreshScheduled = false;
 
@@ -834,10 +1008,41 @@ class ThreeGppChannelModelWgpuMezanine : public ThreeGppChannelModel
     uint32_t m_batchM{1};
     /// Duration of one NR slot for M>1 lookahead. Default 0.5 ms (mu=1).
     Time m_slotDuration{MicroSeconds(500)};
+    /// When set, CollectRefreshTopology uses these descriptors instead of
+    /// deriving them from the cached matrices. Non-owning; valid only for the
+    /// duration of a PrecomputeChannels call.
+    const std::vector<LinkDescriptor>* m_seedDescriptors{nullptr};
+
+    /// When true, UE<->UE and BS<->BS links also enter the GPU pipeline
+    /// instead of falling back to a CPU draw. See MezModelAllLinkClasses.
+    bool m_modelAllLinkClasses{false};
+
     /// When true, skip GPU batch dispatch and all cache lookups/writes.
     /// Set during phases (initial attachment, REM maps) that use temporary
     /// antenna objects so they do not pollute the batch cache.
     bool m_bypassGpuBatch{false};
+
+    /// Per-link count of EnsureMatrixValues() re-draws. A link that keeps
+    /// being asked for its values is not worth releasing: releasing it just
+    /// buys a CPU re-draw on the next evaluation. See m_matRedrawLimit.
+    mutable std::unordered_map<uint64_t, uint32_t> m_matRedrawCount;
+    /// Re-draws after which a link stops being released. Zero disables the
+    /// adaptive behaviour (always release).
+    uint32_t m_matRedrawLimit{2};
+
+    /// Ticks remaining before the next ReleaseIdleMatrixValues() sweep.
+    mutable int32_t m_matSweepCountdown{0};
+    /// Ticks between full sweeps of the channel-matrix cache; zero disables
+    /// the sweep. See the MezMatrixSweepInterval attribute for why the
+    /// default is off.
+    uint32_t m_matSweepInterval{0};
+
+    /// When true, a link's element-level ChannelMatrix values are released
+    /// as soon as the GPU has produced its long-term component, and
+    /// re-materialised on demand. See ReleaseMatrixValues(). Forced off
+    /// under MEZ_DIAG_H=1, whose audits compare the CPU and GPU matrices
+    /// element by element.
+    bool m_freeMatrixValues{true};
 
     /// True after a full LSP/cluster pipeline run with m_updatePeriod=0
     /// (static channel). Cleared on topology changes. Enables Path A/B

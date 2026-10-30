@@ -47,7 +47,7 @@ namespace detail
 inline PhaseStats&
 getOrCreate(const char* name)
 {
-    static std::array<PhaseStats, 64> table;
+    static std::array<PhaseStats, 128> table;
     for (auto& s : table)
     {
         const char* nm = s.name;
@@ -81,10 +81,10 @@ struct AutoDumper
     }
 };
 
-inline std::array<PhaseStats, 64>&
+inline std::array<PhaseStats, 128>&
 table()
 {
-    static std::array<PhaseStats, 64> t;
+    static std::array<PhaseStats, 128> t;
     return t;
 }
 

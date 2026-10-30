@@ -173,6 +173,41 @@ class ValArray : public SimpleRefCount<ValArray<T>>
      */
     size_t GetSize() const;
     /**
+     * @brief Whether the element storage is currently allocated.
+     *
+     * Dimensions are tracked independently of the element storage, so an
+     * array whose storage has been released by ReleaseValues() still
+     * reports its original GetNumRows() / GetNumCols() / GetNumPages().
+     * Use this to tell a shape-only array apart from a populated one.
+     *
+     * @returns true when the storage holds GetNumRows() * GetNumCols() *
+     *          GetNumPages() elements, false after ReleaseValues()
+     */
+    bool HasValues() const;
+    /**
+     * @brief Release the element storage, keeping the dimensions.
+     *
+     * Frees the underlying std::valarray while leaving GetNumRows(),
+     * GetNumCols() and GetNumPages() untouched, so consumers that only
+     * need the shape keep working. Element access (operator(),
+     * GetPagePtr(), GetValues()) is invalid until the storage is
+     * restored with RestoreValues(); guard it with HasValues().
+     *
+     * Intended for caches that keep a large array addressable by shape
+     * long after its contents have been consumed -- see
+     * ThreeGppChannelModelWgpuMezanine, which drops the per-link
+     * element-level channel matrix once the GPU has produced the
+     * long-term component from it.
+     */
+    void ReleaseValues();
+    /**
+     * @brief Re-allocate the element storage released by ReleaseValues().
+     *
+     * Restores GetNumRows() * GetNumCols() * GetNumPages() zero-initialized
+     * elements. No-op when the storage is already allocated.
+     */
+    void RestoreValues();
+    /**
      * @brief Access operator, with bound-checking in debug profile
      * @param rowIndex The index of the row
      * @param colIndex The index of the column
@@ -394,6 +429,32 @@ inline size_t
 ValArray<T>::GetSize() const
 {
     return m_values.size();
+}
+
+template <class T>
+inline bool
+ValArray<T>::HasValues() const
+{
+    return m_values.size() == m_numRows * m_numCols * m_numPages;
+}
+
+template <class T>
+inline void
+ValArray<T>::ReleaseValues()
+{
+    // std::valarray::resize(0) is specified to deallocate, unlike
+    // std::vector::resize, so no shrink-to-fit dance is needed.
+    m_values.resize(0);
+}
+
+template <class T>
+inline void
+ValArray<T>::RestoreValues()
+{
+    if (!HasValues())
+    {
+        m_values.resize(m_numRows * m_numCols * m_numPages);
+    }
 }
 
 template <class T>

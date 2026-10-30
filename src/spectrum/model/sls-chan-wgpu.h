@@ -10,7 +10,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <map>
+#include <source_location>
 #include <string>
+#include <utility>
 #include <vector>
 
 // HDF5 include (optional, conditional on SLS_CHAN_HDF5)
@@ -921,7 +924,42 @@ class SlsChanWgpu
     void saveSlsChanToHdf5(const std::string& filename, const SceneMeta& meta);
 #endif
 
+    /// Per-call-site device-buffer allocation totals, keyed by the source
+    /// line in this file that called makeBuffer. Device buffers are the
+    /// back-end's dominant memory cost at scale and most call sites are
+    /// per-dispatch temporaries, so attributing them by line is what makes
+    /// pooling targetable rather than guesswork.
+    struct BufferSiteStat
+    {
+        uint64_t bytes{0}; ///< cumulative bytes requested at this site
+        uint64_t count{0}; ///< number of buffers created at this site
+    };
+
+    /// @return per-source-line allocation totals, ordered by descending bytes
+    std::vector<std::pair<uint32_t, BufferSiteStat>> bufferSiteStats() const;
+
+    /// Total bytes requested from makeBuffer over this back-end's lifetime.
+    /// Buffers are recreated rather than resized, so this is a cumulative
+    /// figure and an upper bound on live device memory, not current usage.
+    /// Consumed by ThreeGppChannelModelWgpuMezanine::DumpMemoryBreakdown,
+    /// which needs it because on an integrated GPU these buffers come out
+    /// of system RAM and land in the process working set.
+    uint64_t gpuBytesAllocated() const
+    {
+        return gpuBytesAllocated_;
+    }
+
+    /// Number of device buffers created over this back-end's lifetime.
+    uint64_t gpuBuffersAllocated() const
+    {
+        return gpuBuffersAllocated_;
+    }
+
   private:
+    uint64_t gpuBytesAllocated_{0};   ///< see gpuBytesAllocated()
+    uint64_t gpuBuffersAllocated_{0}; ///< see gpuBuffersAllocated()
+    std::map<uint32_t, BufferSiteStat> bufferSiteStats_; ///< see bufferSiteStats()
+
     // Keep the instance alive for the lifetime of the device. Dawn's
     // `Instance::processEvents()` is the only way to fire
     // `AllowProcessEvents`-mode callbacks (mapAsync, onSubmittedWorkDone).
@@ -966,7 +1004,10 @@ class SlsChanWgpu
     uint64_t crnCacheCorrKey_ = 0;
     bool crnCacheValid_ = false;
 
-    wgpu::Buffer makeBuffer(uint64_t size, wgpu::BufferUsage usage, const void* data = nullptr);
+    wgpu::Buffer makeBuffer(uint64_t size,
+                            wgpu::BufferUsage usage,
+                            const void* data = nullptr,
+                            std::source_location loc = std::source_location::current());
     void waitIdle();
 #ifdef WEBGPU_BACKEND_DAWN
     // Pump Dawn's event queue. Used inside busy-wait loops on
@@ -1001,6 +1042,10 @@ class SlsChanWgpu
     // with offsets pre-baked to address into the combined data buffer
     // (so losOffs[i] is in [0, lossSize), nlosOffs[i] in [losSize,
     // losSize+nlosSize), etc).
+    /// Fixed-size per-grid uniforms for generateCRN's dispatchGrid. Created
+    /// once and rewritten per grid; see the comment at their use site.
+    wgpu::Buffer crnGenUniBuf_;
+    wgpu::Buffer crnNormUniBuf_;
     wgpu::Buffer crnDataBuf_;
     wgpu::Buffer crnOffsetsBuf_;
     wgpu::Buffer stagingBuf_;
@@ -1073,11 +1118,7 @@ class SlsChanWgpu
     // components AND the ray-invariant geometry/polarisation hoisted out of the
     // matrix kernel's per-element loop. MAT_FIELD_PRE_STRIDE (=11) vec2f/slot.
     wgpu::Buffer matFieldPreBuf_;
-    uint32_t matFieldPreCfgNLinks_{0};
     wgpu::Buffer matrixDispatchBuf_;
-    uint32_t channelMatrixCfgUSize_{0};
-    uint32_t channelMatrixCfgSSize_{0};
-    uint32_t channelMatrixCfgNLinks_{0};
 
     // gen_long_term_kernel scratch. Bindings live in @group(0) at 50..56.
     wgpu::ComputePipeline longTermPipeline_;
@@ -1088,9 +1129,6 @@ class SlsChanWgpu
     wgpu::Buffer longTermStartUBuf_;  // [uPorts] u32
     wgpu::Buffer longTermOutBuf_;     // per-link [uPorts*sPorts*kMatMaxPages] vec2f
     wgpu::Buffer longTermStagingBuf_; // persistent readback staging for readLongTermInto
-    uint32_t longTermCfgNLinks_{0};
-    uint32_t longTermCfgSPorts_{0};
-    uint32_t longTermCfgUPorts_{0};
     uint32_t longTermCfgSPortElems_{0};
     uint32_t longTermCfgUPortElems_{0};
 
@@ -1128,9 +1166,6 @@ class SlsChanWgpu
     // alongside the per-port H; consumed by 1-rx-port fast-path evals.
     wgpu::Buffer powBatchOutBuf_;
     wgpu::Buffer powBatchStagingBuf_;
-    uint32_t reduceBatchCfgNLinks_{0};
-    uint32_t reduceBatchCfgNumRb_{0};
-    uint32_t reduceBatchCfgNSlots_{0};
     // Small-scale cell/UT param buffers (separate from large-scale ones)
     wgpu::Buffer ssCellParamsBuf_; // bindings 23
     wgpu::Buffer ssUtParamsBuf_;   // binding  24

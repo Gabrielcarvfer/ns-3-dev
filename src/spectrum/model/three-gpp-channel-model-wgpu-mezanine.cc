@@ -13,6 +13,7 @@
 #include "sls-phase-timer.h"
 
 #include "ns3/abort.h"
+#include "ns3/boolean.h"
 #include "ns3/double.h"
 #include "ns3/log.h"
 #include "ns3/mobility-model.h"
@@ -321,9 +322,15 @@ ThreeGppChannelModelWgpuMezanine::GetTypeId()
             // least this often.
             // Set 0 to disable the periodic loop entirely.
             .AddAttribute("MezRefreshPeriod",
-                          "Period at which mezanine refreshes the GPU "
-                          "channel caches independent of PRX events.",
-                          TimeValue(MilliSeconds(100)),
+                          "Period at which the mezanine refreshes the GPU channel caches. "
+                          "A negative value (the default) means: match "
+                          "ns3::ThreeGppChannelModel::UpdatePeriod. Keeping the two in "
+                          "step is what makes the mezanine a drop-in replacement for the "
+                          "CPU channel model -- refreshing more slowly than the channel "
+                          "changes serves a stale channel (and makes the GPU look "
+                          "misleadingly fast), while refreshing faster wastes GPU work. "
+                          "Set explicitly only to decouple them deliberately.",
+                          TimeValue(Seconds(-1)),
                           MakeTimeAccessor(&ThreeGppChannelModelWgpuMezanine::m_refreshPeriod),
                           MakeTimeChecker())
             .AddAttribute("MezUcPeriod",
@@ -349,7 +356,60 @@ ThreeGppChannelModelWgpuMezanine::GetTypeId()
                           "spacing 30 kHz). Set to 1 ms for mu=0.",
                           TimeValue(MicroSeconds(500)),
                           MakeTimeAccessor(&ThreeGppChannelModelWgpuMezanine::m_slotDuration),
-                          MakeTimeChecker());
+                          MakeTimeChecker())
+            .AddAttribute(
+                "MezFreeMatrixValues",
+                "Release the element-level values of each link's cached "
+                "ChannelMatrix once the GPU has produced its long-term "
+                "component, keeping only the matrix shape. The values are "
+                "re-materialised on demand whenever a consumer needs them, "
+                "so this trades a rare CPU re-draw for the bulk of the "
+                "model's memory: the matrix is uElems * sElems * numClusters "
+                "complex<double> per link (192 KB for an 8x8 dual-polarised "
+                "gNB against a 1x2 dual-polarised UE), and dominates "
+                "everything else the model retains. Forced off under "
+                "MEZ_DIAG_H=1.",
+                BooleanValue(true),
+                MakeBooleanAccessor(&ThreeGppChannelModelWgpuMezanine::m_freeMatrixValues),
+                MakeBooleanChecker())
+            .AddAttribute(
+                "MezMatrixSweepInterval",
+                "Simulator ticks between full sweeps of the channel-matrix cache, "
+                "releasing the values of links the GPU pipeline does not serve. Zero "
+                "(the default) disables the sweep: those links are the BS-to-BS pairs, "
+                "whose matrices the CPU path reads back, and re-drawing one costs "
+                "~54 ms against ~3.5 ms for a BS-to-UE link -- far more than the memory "
+                "is worth. Set non-zero to trade that CPU time for the extra memory "
+                "(C(nCells, 2) matrices of 4 MiB each). Ignored when "
+                "MezFreeMatrixValues is false.",
+                UintegerValue(0),
+                MakeUintegerAccessor(&ThreeGppChannelModelWgpuMezanine::m_matSweepInterval),
+                MakeUintegerChecker<uint32_t>(0, 4096))
+            .AddAttribute(
+                "MezMatrixRedrawLimit",
+                "Number of on-demand re-draws after which a link's channel matrix "
+                "stops being released by MezFreeMatrixValues. Releasing a matrix that "
+                "is read back every evaluation costs a CPU re-draw and saves nothing, "
+                "so this keeps the free saving on GPU-served links (whose values are "
+                "never read) while leaving the CPU-served ones resident. Zero always "
+                "releases.",
+                UintegerValue(2),
+                MakeUintegerAccessor(&ThreeGppChannelModelWgpuMezanine::m_matRedrawLimit),
+                MakeUintegerChecker<uint32_t>(0, 1024))
+            .AddAttribute(
+                "MezModelAllLinkClasses",
+                "Also run UE-to-UE and BS-to-BS links through the GPU pipeline, instead "
+                "of leaving them to a CPU channel draw. Measured at one ring, those are "
+                "66% of the cached links (62% UE-to-UE, 4% BS-to-BS) and each costs a "
+                "full CPU draw on every cache miss. The price is the (site, ut) cross "
+                "product: every UE also becomes a site, so the LSP/cluster grid grows "
+                "from nBS x nUE to (nBS+nUE)^2 -- 6x at one ring, 12x and ~4.7 GB of "
+                "extra cluster output at three. Off by default for that reason. Note "
+                "this changes each link's grid slot and therefore its channel "
+                "realisation, so results differ from a run with it off.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&ThreeGppChannelModelWgpuMezanine::m_modelAllLinkClasses),
+                MakeBooleanChecker());
     return tid;
 }
 
@@ -371,11 +431,10 @@ ThreeGppChannelModelWgpuMezanine::PeriodicRefresh()
         UpdateChannel();
         m_lastUCSimTime = now;
     }
-    if (!m_refreshPeriod.IsZero())
+    const Time refresh = EffectiveRefreshPeriod();
+    if (!refresh.IsZero())
     {
-        Simulator::Schedule(m_refreshPeriod,
-                            &ThreeGppChannelModelWgpuMezanine::PeriodicRefresh,
-                            this);
+        Simulator::Schedule(refresh, &ThreeGppChannelModelWgpuMezanine::PeriodicRefresh, this);
     }
     else
     {
@@ -506,6 +565,44 @@ struct MezThreadScratch
 };
 
 thread_local MezThreadScratch g_mezScratch;
+
+/// GetNewChannel fast-path accounting. gpuHit = served from the GPU-built
+/// matrix; cpuFallback = fell through to the base class's CPU draw;
+/// staleErase = a cached entry was rejected as stale/shape-mismatched.
+struct GncStats
+{
+    uint64_t gpuHit{0};
+    uint64_t staleErase{0};
+    uint64_t cpuFallback{0};
+    /// CollectRefreshTopology accounting: how many cached matrices were
+    /// swept, and how many never reached the GPU pipeline because they are
+    /// not BS->UE links (UE-UE / BS-BS pairs are excluded by design).
+    uint64_t sweptMatrices{0};
+    uint64_t skippedNotBsToUe{0};
+    uint64_t descriptorsBuilt{0};
+    /// Split of the skipped set, to size what extending the pipeline to those
+    /// link classes would actually buy. The (site, ut) grid is a full cross
+    /// product, so the cost of admitting a class scales with the SQUARE of the
+    /// node count on each side, while the benefit scales with the number of
+    /// links that really exist -- which the MaxDistance gate keeps sparse.
+    uint64_t skippedUeToUe{0};
+    uint64_t skippedBsToBs{0};
+};
+
+thread_local GncStats g_gncStats;
+
+/// GetChannel cache accounting (see the counters in the GetChannel override).
+struct GcStats
+{
+    uint64_t hit{0};
+    uint64_t missNoMat{0};
+    uint64_t missNoPar{0};
+    uint64_t missUnaligned{0};
+    uint64_t missTime{0};
+    uint64_t missAntenna{0};
+};
+
+thread_local GcStats g_gcStats;
 
 } // namespace
 
@@ -1189,6 +1286,7 @@ ThreeGppChannelModelWgpuMezanine::BuildWorkspaceFromDescriptors(
 bool
 ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
 {
+    SLS_PHASE_SCOPE("Mez::CollectRefreshTopology");
     // Sim-topology adapter over BuildWorkspaceFromDescriptors: sweep the
     // cached channel matrices, classify each node BS/UE by NetDevice type,
     // and resolve every gNB->UE link into a LinkDescriptor. The UT velocity
@@ -1219,6 +1317,14 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         return isBs;
     };
 
+    // Seeded path: the caller supplied the geometry directly, so there is no
+    // need to (and no point in) deriving it from the matrix cache -- which is
+    // exactly what is still empty at that point.
+    if (m_seedDescriptors)
+    {
+        return BuildWorkspaceFromDescriptors(ws, *m_seedDescriptors);
+    }
+
     std::vector<LinkDescriptor> descriptors;
     descriptors.reserve(m_channelMatrixMap.size());
 
@@ -1239,9 +1345,39 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         // Classify by NetDevice type name rather than height: indoor UEs
         // sit at per-floor heights and defeat a z comparison. Excluded
         // links keep working through the PRX CPU fallbacks.
-        if (!nodeIsBs(txNodeId) || nodeIsBs(rxNodeId))
+        ++g_gncStats.sweptMatrices;
+        // Link classes other than BS->UE: UE<->UE (UEs reach each other on the
+        // shared channel) and BS<->BS. Measured at one ring, per refresh:
+        // 1,707 BS->UE, 3,149 UE<->UE, 203 BS<->BS -- so the classes excluded
+        // here are 66% of the cache, and each excluded link costs a full CPU
+        // draw on every GetChannel miss.
+        //
+        // Admitting them costs grid, not correctness: the transmitter side of
+        // a UE<->UE link simply registers in the site table as well as the ut
+        // table (the two are separate maps, so a node may appear in both), and
+        // the bucket loop already handles the resulting (2,2) / (128,128)
+        // geometries in their own dispatches. What it does cost is the (site,
+        // ut) CROSS PRODUCT: nSite x nUt goes from 21x84 to 105x105 at one
+        // ring, and 57x570 to 627x627 at three -- 12x the LSP/cluster grid and
+        // ~4.7 GB more cluster output, to serve a few thousand extra links.
+        // Hence off by default; see the MezModelAllLinkClasses attribute.
+        const bool txBs = nodeIsBs(txNodeId);
+        const bool rxBs = nodeIsBs(rxNodeId);
+        if (!txBs || rxBs)
         {
-            continue;
+            ++g_gncStats.skippedNotBsToUe;
+            if (txBs && rxBs)
+            {
+                ++g_gncStats.skippedBsToBs;
+            }
+            else if (!txBs && !rxBs)
+            {
+                ++g_gncStats.skippedUeToUe;
+            }
+            if (!m_modelAllLinkClasses)
+            {
+                continue;
+            }
         }
 
         const uint64_t paramsKey = GetKey(txNodeId, rxNodeId);
@@ -1280,6 +1416,7 @@ ThreeGppChannelModelWgpuMezanine::CollectRefreshTopology(RefreshWorkspace& ws)
         d.uAnt = uAntIt->second;
         d.condition = m_channelConditionModel->GetChannelCondition(sMob, uMob);
         d.uVelocity = paramsSameDirection ? params->m_rxSpeed : params->m_txSpeed;
+        ++g_gncStats.descriptorsBuilt;
         descriptors.push_back(std::move(d));
     }
 
@@ -2341,6 +2478,24 @@ ThreeGppChannelModelWgpuMezanine::GenerateMatricesAndLongTerm(RefreshWorkspace& 
                 return (e && e[0] == '1' && e[1] == '\0');
             }();
             bool skipMatReadback = ws.liteUncached;
+            // Every link in this chunk will have its values released as soon as
+            // the GPU long-term component exists, so reading the per-element
+            // matrix back would only fill storage we immediately drop.
+            // genLongTerm still reads channelMatrixBuf_ on the GPU, so the
+            // long-term output is unaffected.
+            if (!skipMatReadback && ltCanDispatch && bw.bucketLinkIdxs)
+            {
+                skipMatReadback = true;
+                for (uint32_t i = 0; i < chunkLen; ++i)
+                {
+                    const size_t rl = (*bw.bucketLinkIdxs)[chunkStart + i];
+                    if (!WillReleaseMatrixValues(ws.runtimeLinks[rl].matrixKey))
+                    {
+                        skipMatReadback = false;
+                        break;
+                    }
+                }
+            }
             if (!skipMatReadback && s_skipMatCopy && bw.bucketLinkIdxs)
             {
                 skipMatReadback = true;
@@ -2561,6 +2716,9 @@ ThreeGppChannelModelWgpuMezanine::PopulateChannelMaps(RefreshWorkspace& ws, Buck
                 entryRef.gpuLinkIdx = static_cast<uint32_t>(ctx.lspReadIdx);
                 entryRef.ltUPorts = ltUPorts;
                 entryRef.ltSPorts = ltSPorts;
+
+                // See the equivalent call on the full path below.
+                ReleaseMatrixValues(ctx.matrixKey, existMat);
             }
         }
     }
@@ -2837,10 +2995,24 @@ ThreeGppChannelModelWgpuMezanine::PopulateChannelMaps(RefreshWorkspace& ws, Buck
                 const char* e = std::getenv("MEZ_SKIP_MATCOPY");
                 return (e && e[0] == '1' && e[1] == '\0');
             }();
-            const bool firstFill = matrix->m_channel.GetValues().size() == linkCells &&
+            // A matrix released by MezFreeMatrixValues has no storage to
+            // probe, and by construction has been filled at least once
+            // before (that is what made it releasable), so it is never a
+            // first fill.
+            const bool released = !matrix->m_channel.HasValues();
+            // When the long-term component for this link is about to be built
+            // on the GPU, the values below get released again at the end of
+            // this iteration -- so materialising them first is pure waste.
+            const bool ltWillBeBuilt = !longTermFlat.empty() && ctx.sAnt && ctx.uAnt;
+            const bool willRelease = ltWillBeBuilt && WillReleaseMatrixValues(ctx.matrixKey);
+            const bool firstFill = !released && matrix->m_channel.GetValues().size() == linkCells &&
                                    matrix->m_channel(0, 0, 0) == std::complex<double>{};
-            if (!skipMatCopy || firstFill)
+            if (!willRelease && (!skipMatCopy || firstFill))
             {
+                // Give the copy below somewhere to write. Cheap relative
+                // to the GPU readback that produced matFlat, and dropped
+                // again by ReleaseMatrixValues once longTerm is built.
+                matrix->m_channel.RestoreValues();
                 const std::complex<float>* __restrict__ src = matFlat.data() + linkBase;
                 std::complex<double>* __restrict__ dst = matrix->m_channel.GetPagePtr(0);
                 for (size_t k = 0; k < linkCells; ++k)
@@ -2921,6 +3093,14 @@ ThreeGppChannelModelWgpuMezanine::PopulateChannelMaps(RefreshWorkspace& ws, Buck
                 entryRef.gpuLinkIdx = static_cast<uint32_t>(ctx.lspReadIdx);
                 entryRef.ltUPorts = ltUPorts;
                 entryRef.ltSPorts = ltSPorts;
+
+                // The long-term component for this link now exists on the
+                // GPU side, so nothing reads the element-level matrix
+                // until a GetCachedLongTerm miss -- and EnsureMatrixValues
+                // rebuilds it before any such miss is reported. Dropping
+                // the storage here is the model's single largest memory
+                // saving.
+                ReleaseMatrixValues(ctx.matrixKey, matrixRef);
             }
         }
     }
@@ -4322,6 +4502,16 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     }
 #endif
 
+    // Reclaim the D-3b CPU-miss arena. Each new (link, beam-pair) key claims a
+    // region from a running offset that was never given back, so with a moving
+    // channel -- where the beam pair keeps changing -- it grew without bound
+    // (7.4 GB at 3 rings / 570 UEs / 10 ms, against 2.3 GB with a static
+    // channel). Every entry in it is keyed to the channel state this refresh is
+    // about to replace, so it is all dead the moment we start: drop the entries
+    // and rewind the offset, bounding the arena to one refresh period's misses.
+    // The flat storage itself is kept so the next period reuses the pages.
+    ReclaimCpuMissArena();
+
     // EnsureBatchFresh drives this synchronously at the start of every
     // tick now (see the override above), so the historical 10 ms
     // self-rescheduling loop is no longer needed.
@@ -4399,6 +4589,8 @@ ThreeGppChannelModelWgpuMezanine::UpdateChannel()
     mezPrintMem("post-UpdateChannel");
 
     RunDiagnosticAudits(ws);
+    ReleaseIdleMatrixValues();
+    DumpMemoryBreakdown("post-UC");
 
     NS_LOG_DEBUG("Updated GPU-backed channel params + matrix caches.");
 }
@@ -4415,6 +4607,7 @@ ThreeGppChannelModelWgpuMezanine::RunUncachedGpuBatch(const std::vector<LinkDesc
                                                       uint32_t& numRbOut,
                                                       bool txPort0Only)
 {
+    SLS_PHASE_SCOPE("Mez::UncachedBatch");
     numRbOut = 0;
     if (links.empty())
     {
@@ -4428,6 +4621,11 @@ ThreeGppChannelModelWgpuMezanine::RunUncachedGpuBatch(const std::vector<LinkDesc
         // init failed) -- caller falls back to the CPU path.
         return {};
     }
+
+    // Initial association sweeps every (gNB, UE, beam) triple through here
+    // before the first EnsureBatchFresh, so this is the only visibility into
+    // the attach phase's memory profile.
+    DumpMemoryBreakdown("uncached-batch");
 
     // Capture the RB centre frequencies from the representative PSD.
     CaptureRbFreqs(txPsd);
@@ -4699,6 +4897,7 @@ ThreeGppChannelModelWgpuMezanine::ComputeUncachedBatch(const std::vector<Uncache
 void
 ThreeGppChannelModelWgpuMezanine::ClearChannelCaches()
 {
+    SLS_PHASE_SCOPE("Mez::ClearChannelCaches");
     // Base-class channel caches.
     m_channelMatrixMap.clear();
     m_channelParamsMap.clear();
@@ -4753,6 +4952,14 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
     }
     m_lastMezBatchTime = now;
 
+    // Both of these belong on the tick clock rather than in UpdateChannel:
+    // with a static channel (UpdatePeriod=0) UpdateChannel fires exactly
+    // once, so anything hung off it never sees steady state. Matrices drawn
+    // by the CPU path during the previous tick's evals are released here,
+    // and the breakdown samples where the eval-path caches actually grow.
+    ReleaseIdleMatrixValues();
+    DumpMemoryBreakdown("tick");
+
     // 1. LSP draw (base class GPU kernel; fills m_gpuLspCache).
     ThreeGppChannelModel::EnsureBatchFresh();
     // Bypass GPU batch dispatch during initial-attachment / REM-map phases.
@@ -4802,8 +5009,11 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
         // it, EnsureBatchFresh fires on every unique NS-3 tick (~6000/s), each
         // call creating D3D12/WARP staging buffers that accumulate ~50 GB/s.
         //
-        // effectivePeriod: use m_updatePeriod when >0, else 100 ms (matches the
-        // default m_refreshPeriod so the handoff to PeriodicRefresh is seamless).
+        // effectivePeriod: use m_updatePeriod when >0, else 100 ms. With
+        // m_updatePeriod=0 the channel is static, EffectiveRefreshPeriod() is
+        // also zero and PeriodicRefresh never arms, so this path owns the
+        // cadence for the whole run -- 100 ms being the 3GPP coherence time
+        // the periodic loop used to default to.
         const Time effectivePeriod = m_updatePeriod.IsZero() ? MilliSeconds(100) : m_updatePeriod;
         const bool timeToUpdate =
             (m_lastUCSimTime < Seconds(0.0)) || ((now - m_lastUCSimTime) >= effectivePeriod);
@@ -4820,12 +5030,11 @@ ThreeGppChannelModelWgpuMezanine::EnsureBatchFresh()
     // EnsureBatchFresh fires. At sim start the channel maps are empty
     // so we have nothing to refresh; once the first PRX call populates
     // them, mez owns the channel-update cadence from then on.
-    if (!m_periodicRefreshScheduled && !m_refreshPeriod.IsZero() && !m_channelMatrixMap.empty())
+    const Time refresh = EffectiveRefreshPeriod();
+    if (!m_periodicRefreshScheduled && !refresh.IsZero() && !m_channelMatrixMap.empty())
     {
         m_periodicRefreshScheduled = true;
-        Simulator::Schedule(m_refreshPeriod,
-                            &ThreeGppChannelModelWgpuMezanine::PeriodicRefresh,
-                            this);
+        Simulator::Schedule(refresh, &ThreeGppChannelModelWgpuMezanine::PeriodicRefresh, this);
     }
 }
 
@@ -4850,12 +5059,15 @@ ThreeGppChannelModelWgpuMezanine::GetChannel(Ptr<const MobilityModel> aMob,
 
     auto matIt = m_channelMatrixMap.find(matrixKey);
     auto parIt = m_channelParamsMap.find(paramsKey);
-    static thread_local uint64_t miss_no_mat_entry = 0;
-    static thread_local uint64_t miss_no_par_entry = 0;
-    static thread_local uint64_t miss_unaligned = 0;
-    static thread_local uint64_t miss_time = 0;
-    static thread_local uint64_t miss_antenna = 0;
-    static thread_local uint64_t hit_total = 0;
+    // Shared with DumpMemoryBreakdown: GetChannel is where the mezanine's
+    // cache actually serves PRX, so its hit rate -- not GetNewChannel's -- is
+    // the measure of how much channel work is offloaded.
+    auto& miss_no_mat_entry = g_gcStats.missNoMat;
+    auto& miss_no_par_entry = g_gcStats.missNoPar;
+    auto& miss_unaligned = g_gcStats.missUnaligned;
+    auto& miss_time = g_gcStats.missTime;
+    auto& miss_antenna = g_gcStats.missAntenna;
+    auto& hit_total = g_gcStats.hit;
     if (matIt != m_channelMatrixMap.end() && parIt != m_channelParamsMap.end())
     {
         const Ptr<const ChannelMatrix> cachedMatrix = matIt->second;
@@ -4928,9 +5140,12 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
     // per-eval budget at DenseAmimoIntel scale) to a hash hit.
     const uint64_t matrixKey =
         MatrixBasedChannelModel::GetKey(sAntenna->GetId(), uAntenna->GetId());
-    static thread_local uint64_t gnc_gpu_hit = 0;
-    static thread_local uint64_t gnc_stale_erase = 0;
-    static thread_local uint64_t gnc_cpu_fallback = 0;
+    // File-scope (see g_gncStats) so DumpMemoryBreakdown can report how often
+    // the GPU-built matrix actually serves GetNewChannel -- the single most
+    // useful number for judging how much of the channel work is offloaded.
+    auto& gnc_gpu_hit = g_gncStats.gpuHit;
+    auto& gnc_stale_erase = g_gncStats.staleErase;
+    auto& gnc_cpu_fallback = g_gncStats.cpuFallback;
 
     if (auto it = m_channelMatrixMap.find(matrixKey); it != m_channelMatrixMap.end())
     {
@@ -4995,6 +5210,440 @@ ThreeGppChannelModelWgpuMezanine::GetNewChannel(Ptr<const ThreeGppChannelParams>
                                                uMob,
                                                sAntenna,
                                                uAntenna);
+}
+
+/// Whether releasing element-level matrix values is allowed at all.
+/// MEZ_DIAG_H=1 turns on audits that compare the GPU matrix against a CPU
+/// re-draw element by element, so the values have to stay resident there.
+static bool
+MezMatValuesReleasable()
+{
+    static const bool diagH = []() {
+        const char* e = std::getenv("MEZ_DIAG_H");
+        return e && e[0] == '1';
+    }();
+    return !diagH;
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::DumpMemoryBreakdown(const char* label) const
+{
+    static const bool memDump = []() {
+        const char* e = std::getenv("MEZ_MEM");
+        return e && e[0] == '1';
+    }();
+    if (!memDump)
+    {
+        return;
+    }
+    // One line per 25 ms of simulated time; the tick call site fires far
+    // too often to print unthrottled.
+    // One line per 25 ms of simulated time. Initial association runs entirely
+    // at t=0, so exempt it -- otherwise the whole attach phase collapses to a
+    // single line and its memory profile is invisible.
+    static std::optional<Time> lastDump;
+    const Time now = Simulator::Now();
+    const bool atAttach = now.IsZero();
+    if (!atAttach && lastDump.has_value() && now - *lastDump < MilliSeconds(25))
+    {
+        return;
+    }
+    lastDump = now;
+    constexpr double kMiB = 1.0 / (1024.0 * 1024.0);
+    auto cplxD = sizeof(std::complex<double>);
+
+    // ns-3 channel caches (shared with the CPU base class).
+    size_t matBytes = 0;
+    size_t matReleased = 0;
+    for (const auto& [key, m] : m_channelMatrixMap)
+    {
+        if (!m)
+        {
+            continue;
+        }
+        matBytes += m->m_channel.GetSize() * cplxD;
+        matReleased += m->m_channel.HasValues() ? 0 : 1;
+    }
+    size_t parBytes = 0;
+    for (const auto& [key, p] : m_channelParamsMap)
+    {
+        auto tp = DynamicCast<const ThreeGppChannelParams>(p);
+        if (!tp)
+        {
+            continue;
+        }
+        auto vec2d = [](const Double2DVector& v) {
+            size_t b = v.capacity() * sizeof(DoubleVector);
+            for (const auto& r : v)
+            {
+                b += r.capacity() * sizeof(double);
+            }
+            return b;
+        };
+        auto vec3d = [&vec2d](const Double3DVector& v) {
+            size_t b = v.capacity() * sizeof(Double2DVector);
+            for (const auto& r : v)
+            {
+                b += vec2d(r);
+            }
+            return b;
+        };
+        parBytes += vec2d(tp->m_rayAoaRadian) + vec2d(tp->m_rayAodRadian) +
+                    vec2d(tp->m_rayZoaRadian) + vec2d(tp->m_rayZodRadian) +
+                    vec3d(tp->m_clusterPhase) + vec2d(tp->m_crossPolarizationPowerRatios) +
+                    vec2d(tp->m_angle);
+        parBytes += tp->m_cachedDelaySincos.GetSize() * cplxD;
+        for (const auto& s : tp->m_cachedAngleSincos)
+        {
+            parBytes += s.capacity() * sizeof(std::pair<double, double>);
+        }
+    }
+
+    // GPU mirror caches.
+    size_t ltBytes = 0;
+    for (const auto& [key, e] : m_gpuLongTermMap)
+    {
+        ltBytes += e.longTerm ? e.longTerm->GetSize() * cplxD : 0;
+    }
+    const size_t specHBytes =
+        (m_specHFlat.capacity() + m_specHCpuFlat.capacity()) * sizeof(std::complex<float>);
+    const size_t specPowBytes = (m_specPowFlat.capacity() + m_specPowRevFlat.capacity() +
+                                 m_specPowCpuFlat.capacity() + m_specPowCpuRevFlat.capacity()) *
+                                sizeof(float);
+    const size_t spctMapBytes = m_gpuChanSpctMap.size() * sizeof(GpuChanSpctEntry);
+
+    // Per-refresh scratch. Sized for the largest chunk seen so far and
+    // never shrunk, so it is a persistent cost even between refreshes.
+    const auto& sc = g_mezScratch;
+    const size_t scratchBytes =
+        (sc.matFlat.capacity() + sc.longTermFlat.capacity() + sc.chunkDoppler.capacity() +
+         sc.chunkBatchH.capacity()) *
+            sizeof(std::complex<float>) +
+        (sc.chunkDelays.capacity() + sc.chunkBatchPow.capacity() + sc.bucketDelaysFlat.capacity()) *
+            sizeof(float) +
+        sc.bucketSpatialProj.capacity() * sizeof(double) +
+        sc.bktChunkLinks.capacity() * sizeof(ActiveLink);
+
+    // Largest single cached matrix, to tell a uniform per-link cost apart
+    // from a handful of outsized entries, plus a shape histogram of the
+    // entries still holding values -- those are the ones the release did
+    // not reach, and their geometry says why.
+    size_t maxMatBytes = 0;
+    std::map<std::tuple<size_t, size_t, size_t>, size_t> shapeHist;
+    for (const auto& [key, m] : m_channelMatrixMap)
+    {
+        if (m && m->m_channel.HasValues())
+        {
+            maxMatBytes = std::max(maxMatBytes, m->m_channel.GetSize() * cplxD);
+            ++shapeHist[{m->m_channel.GetNumRows(),
+                         m->m_channel.GetNumCols(),
+                         m->m_channel.GetNumPages()}];
+        }
+    }
+
+    const uint64_t gpuBytes = m_wgpuChannel ? m_wgpuChannel->gpuBytesAllocated() : 0;
+    const size_t total = matBytes + parBytes + ltBytes + specHBytes + specPowBytes + spctMapBytes +
+                         scratchBytes + size_t(gpuBytes);
+
+    std::fprintf(stderr,
+                 "[MEZ_MEM] %-16s links=%zu (matValues released=%zu) params=%zu ltEntries=%zu "
+                 "spctEntries=%zu | chanMatrix=%.0f MiB (max entry %.2f MiB) chanParams=%.0f MiB "
+                 "gpuLongTerm=%.0f MiB specH=%.0f MiB specPow=%.0f MiB spctMeta=%.0f MiB "
+                 "scratch=%.0f MiB gpuBuffers=%.0f MiB (%llu allocs) | "
+                 "tracked total=%.0f MiB\n",
+                 label,
+                 m_channelMatrixMap.size(),
+                 matReleased,
+                 m_channelParamsMap.size(),
+                 m_gpuLongTermMap.size(),
+                 m_gpuChanSpctMap.size(),
+                 matBytes * kMiB,
+                 maxMatBytes * kMiB,
+                 parBytes * kMiB,
+                 ltBytes * kMiB,
+                 specHBytes * kMiB,
+                 specPowBytes * kMiB,
+                 spctMapBytes * kMiB,
+                 scratchBytes * kMiB,
+                 double(gpuBytes) * kMiB,
+                 (unsigned long long)(m_wgpuChannel ? m_wgpuChannel->gpuBuffersAllocated() : 0),
+                 total * kMiB);
+    std::fprintf(stderr,
+                 "[MEZ_MEM]   GetNewChannel: gpuHit=%llu cpuFallback=%llu staleErase=%llu "
+                 "(%.1f%% offloaded) | topology sweep: matrices=%llu notBsToUe=%llu "
+                 "(ue-ue=%llu bs-bs=%llu ue->bs=%llu) descriptors=%llu\n",
+                 (unsigned long long)g_gncStats.gpuHit,
+                 (unsigned long long)g_gncStats.cpuFallback,
+                 (unsigned long long)g_gncStats.staleErase,
+                 (g_gncStats.gpuHit + g_gncStats.cpuFallback) > 0
+                     ? 100.0 * double(g_gncStats.gpuHit) /
+                           double(g_gncStats.gpuHit + g_gncStats.cpuFallback)
+                     : 0.0,
+                 (unsigned long long)g_gncStats.sweptMatrices,
+                 (unsigned long long)g_gncStats.skippedNotBsToUe,
+                 (unsigned long long)g_gncStats.skippedUeToUe,
+                 (unsigned long long)g_gncStats.skippedBsToBs,
+                 (unsigned long long)(g_gncStats.skippedNotBsToUe - g_gncStats.skippedUeToUe -
+                                      g_gncStats.skippedBsToBs),
+                 (unsigned long long)g_gncStats.descriptorsBuilt);
+    {
+        const uint64_t gcTot = g_gcStats.hit + g_gcStats.missNoMat + g_gcStats.missNoPar +
+                               g_gcStats.missUnaligned + g_gcStats.missTime +
+                               g_gcStats.missAntenna;
+        std::fprintf(stderr,
+                     "[MEZ_MEM]   GetChannel: hit=%llu (%.1f%%) miss noMat=%llu noPar=%llu "
+                     "unaligned=%llu time=%llu antenna=%llu\n",
+                     (unsigned long long)g_gcStats.hit,
+                     gcTot ? 100.0 * double(g_gcStats.hit) / double(gcTot) : 0.0,
+                     (unsigned long long)g_gcStats.missNoMat,
+                     (unsigned long long)g_gcStats.missNoPar,
+                     (unsigned long long)g_gcStats.missUnaligned,
+                     (unsigned long long)g_gcStats.missTime,
+                     (unsigned long long)g_gcStats.missAntenna);
+    }
+    if (m_wgpuChannel)
+    {
+        // Top device-buffer call sites. Most are per-dispatch temporaries, so
+        // this ranks the candidates for pooling.
+        const auto sites = m_wgpuChannel->bufferSiteStats();
+        for (size_t i = 0; i < sites.size() && i < 8; ++i)
+        {
+            std::fprintf(stderr,
+                         "[MEZ_MEM]   gpu buffers from sls-chan-wgpu.cc:%u -> %llu allocs, "
+                         "%.0f MiB\n",
+                         sites[i].first,
+                         (unsigned long long)sites[i].second.count,
+                         double(sites[i].second.bytes) * kMiB);
+        }
+    }
+    for (const auto& [shape, n] : shapeHist)
+    {
+        const auto [r, c, pg] = shape;
+        std::fprintf(stderr,
+                     "[MEZ_MEM]   retained shape uElems=%zu sElems=%zu clusters=%zu -> %zu "
+                     "links, %.0f MiB\n",
+                     r,
+                     c,
+                     pg,
+                     n,
+                     double(n * r * c * pg * cplxD) * kMiB);
+    }
+}
+
+Time
+ThreeGppChannelModelWgpuMezanine::EffectiveRefreshPeriod() const
+{
+    // Negative sentinel: follow the channel's own update period, so a caller
+    // that sets ns3::ThreeGppChannelModel::UpdatePeriod gets a matching GPU
+    // refresh cadence without having to know this class exists.
+    return m_refreshPeriod.IsNegative() ? m_updatePeriod : m_refreshPeriod;
+}
+
+bool
+ThreeGppChannelModelWgpuMezanine::WillReleaseMatrixValues(uint64_t matrixKey) const
+{
+    if (!m_freeMatrixValues || !MezMatValuesReleasable())
+    {
+        return false;
+    }
+    if (m_matRedrawLimit == 0)
+    {
+        return true;
+    }
+    // Hot link: it keeps being read back, so releasing it only pays for
+    // another re-draw. Leave it resident.
+    const auto it = m_matRedrawCount.find(matrixKey);
+    return it == m_matRedrawCount.end() || it->second < m_matRedrawLimit;
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::ReleaseMatrixValues(uint64_t matrixKey,
+                                                      const Ptr<ChannelMatrix>& matrix) const
+{
+    if (!matrix || !WillReleaseMatrixValues(matrixKey))
+    {
+        return;
+    }
+    matrix->m_channel.ReleaseValues();
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::PrecomputeChannels(
+    const std::vector<UncachedBatchLink>& links,
+    Ptr<const SpectrumValue> txPsd)
+{
+    if (links.empty() || !m_wgpuChannel)
+    {
+        return;
+    }
+    SLS_PHASE_SCOPE("Mez::PrecomputeChannels");
+
+    // Seed the RB layout first so the very first UpdateChannel can run the
+    // spectrum batch instead of falling back to per-link CPU contraction.
+    CaptureRbFreqs(txPsd);
+
+    std::vector<LinkDescriptor> descriptors;
+    descriptors.reserve(links.size());
+    for (const auto& l : links)
+    {
+        if (!l.sMob || !l.uMob || !l.sAnt || !l.uAnt)
+        {
+            continue;
+        }
+        // Register the antennas so BuildWorkspaceFromDescriptors can resolve
+        // them by id; normally GetNewChannel does this, and it has not run.
+        m_antennaIdToObjectMap[l.sKeyOverride ? l.sKeyOverride : l.sAnt->GetId()] = l.sAnt;
+        m_antennaIdToObjectMap[l.uAnt->GetId()] = l.uAnt;
+
+        LinkDescriptor d;
+        d.sMob = l.sMob;
+        d.uMob = l.uMob;
+        d.sAnt = l.sAnt;
+        d.uAnt = l.uAnt;
+        d.condition = m_channelConditionModel->GetChannelCondition(l.sMob, l.uMob);
+        d.uVelocity = l.uMob->GetVelocity();
+        descriptors.push_back(std::move(d));
+    }
+    if (descriptors.empty())
+    {
+        return;
+    }
+
+    // Drive the normal refresh through the seeded descriptor list. UpdateChannel
+    // populates the ns-3 caches from GPU output, so no CPU draw is needed for
+    // any of these links -- now or later.
+    m_seedDescriptors = &descriptors;
+    UpdateChannel();
+    m_seedDescriptors = nullptr;
+    // UpdateChannel's own simtime gate must not suppress the first real
+    // refresh just because this seeding run already fired at t=0.
+    m_lastUCSimTime = Seconds(-1.0);
+    m_lastMezBatchTime.reset();
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::ReclaimCpuMissArena()
+{
+    if (m_cpuMissNextOffset == 0 && m_cpuMissPowOffset == 0)
+    {
+        return;
+    }
+    for (auto it = m_gpuChanSpctMap.begin(); it != m_gpuChanSpctMap.end();)
+    {
+        it = it->second.cpuSection ? m_gpuChanSpctMap.erase(it) : std::next(it);
+    }
+    m_cpuMissNextOffset = 0;
+    m_cpuMissPowOffset = 0;
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::ReleaseIdleMatrixValues() const
+{
+    if (!m_freeMatrixValues || !MezMatValuesReleasable())
+    {
+        return;
+    }
+    // Disabled by default -- see the MezMatrixSweepInterval attribute. The
+    // sweep reaches the links the GPU does not serve, and re-drawing those on
+    // demand costs far more than the memory it frees: they are the BS-to-BS
+    // pairs, whose 128x128-element matrices take ~54 ms each to draw on the
+    // CPU versus ~3.5 ms for a BS-to-UE link.
+    if (m_matSweepInterval == 0)
+    {
+        return;
+    }
+    // O(cached links) per sweep, and the call site fires every tick, so run it
+    // on a coarser clock: memory grows by at most the matrices drawn within one
+    // interval, while the scan cost stops scaling with (links x ticks).
+    if (m_matSweepCountdown-- > 0)
+    {
+        return;
+    }
+    m_matSweepCountdown = static_cast<int32_t>(m_matSweepInterval);
+
+    SLS_PHASE_SCOPE("Mez::ReleaseIdleMatrixValues");
+    for (auto& [key, matrix] : m_channelMatrixMap)
+    {
+        ReleaseMatrixValues(key, matrix);
+    }
+}
+
+void
+ThreeGppChannelModelWgpuMezanine::EnsureMatrixValues(Ptr<const ChannelMatrix> channelMatrix,
+                                                     Ptr<const PhasedArrayModel> sAnt,
+                                                     Ptr<const PhasedArrayModel> uAnt) const
+{
+    if (!channelMatrix || channelMatrix->m_channel.HasValues())
+    {
+        return;
+    }
+    SLS_PHASE_SCOPE("Mez::EnsureMatrixValues");
+    auto* matrix = const_cast<ChannelMatrix*>(PeekPointer(channelMatrix));
+    if (sAnt && uAnt)
+    {
+        ++m_matRedrawCount[MatrixBasedChannelModel::GetKey(sAnt->GetId(), uAnt->GetId())];
+    }
+
+    // Rebuild from the cached params for this link. Without them (or
+    // without endpoints, or without antennas to size the draw) there is
+    // nothing to redraw from; fall back to zero-filled storage, which at
+    // least keeps CalcLongTerm's element access in bounds rather than
+    // reading freed memory.
+    const uint64_t paramsKey = MatrixBasedChannelModel::GetKey(channelMatrix->m_nodeIds.first,
+                                                               channelMatrix->m_nodeIds.second);
+    auto parIt = m_channelParamsMap.find(paramsKey);
+    auto epIt = m_linkEndpoints.find(paramsKey);
+    if (!sAnt || !uAnt || parIt == m_channelParamsMap.end() || !parIt->second ||
+        epIt == m_linkEndpoints.end())
+    {
+        NS_LOG_WARN("Mez: cannot re-materialise released matrix values for link "
+                    << paramsKey << "; zero-filling");
+        matrix->m_channel.RestoreValues();
+        return;
+    }
+
+    // Orient the mobilities to match the antennas the caller handed us:
+    // ThreeGppChannelModel::GetNewChannel builds the matrix as
+    // (uAnt elements, sAnt elements, clusters), which is exactly the
+    // shape PRX::CalcLongTerm asserts on.
+    const auto& ep = epIt->second;
+    Ptr<const MobilityModel> sMob = (ep.aAntenna == sAnt) ? ep.aMob : ep.bMob;
+    Ptr<const MobilityModel> uMob = (ep.aAntenna == sAnt) ? ep.bMob : ep.aMob;
+    if (!sMob || !uMob)
+    {
+        matrix->m_channel.RestoreValues();
+        return;
+    }
+
+    auto params = DynamicCast<const ThreeGppChannelParams>(parIt->second);
+    if (!params)
+    {
+        matrix->m_channel.RestoreValues();
+        return;
+    }
+    Ptr<const ChannelCondition> cond = m_channelConditionModel->GetChannelCondition(sMob, uMob);
+    // Select scenario parameters under the same canonical (node-id) ordering
+    // the base class uses in GetChannel, so the redrawn matrix is drawn from
+    // the same table the original draw used.
+    Ptr<const MobilityModel> aMobOrdered = sMob;
+    Ptr<const MobilityModel> bMobOrdered = uMob;
+    if (aMobOrdered->GetObject<Node>()->GetId() > bMobOrdered->GetObject<Node>()->GetId())
+    {
+        std::swap(aMobOrdered, bMobOrdered);
+    }
+    Ptr<const ParamsTable> table3gpp = GetThreeGppTable(aMobOrdered, bMobOrdered, cond);
+    Ptr<ChannelMatrix> fresh =
+        ThreeGppChannelModel::GetNewChannel(params, table3gpp, sMob, uMob, sAnt, uAnt);
+    if (!fresh || !fresh->m_channel.HasValues())
+    {
+        matrix->m_channel.RestoreValues();
+        return;
+    }
+    // Only the values move across. m_generatedTime in particular must not
+    // change: PRX captured it for its own long-term cache validity check
+    // before calling us, and bumping it here would silently invalidate
+    // every other consumer's freshness test for this link.
+    matrix->m_channel = std::move(fresh->m_channel);
 }
 
 Ptr<const MatrixBasedChannelModel::Complex3DVector>
@@ -5088,11 +5737,19 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(Ptr<const ChannelMatrix> cha
         }
     };
 
+    // Every miss below hands PRX back to its CPU CalcLongTerm, which reads
+    // the channel matrix element by element -- so a matrix whose values
+    // MezFreeMatrixValues released has to be re-materialised first.
+    auto ltMiss = [&](int reason) -> Ptr<const Complex3DVector> {
+        ltRecord(reason);
+        EnsureMatrixValues(channelMatrix, sAnt, uAnt);
+        return nullptr;
+    };
+
     auto it = m_gpuLongTermMap.find(key);
     if (it == m_gpuLongTermMap.end())
     {
-        ltRecord(1);
-        return nullptr;
+        return ltMiss(1);
     }
     const GpuLongTermEntry& entry = it->second;
     // Validity: the cached longTerm was computed from THIS
@@ -5102,8 +5759,7 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(Ptr<const ChannelMatrix> cha
     // is ~1 in 1.8e19 -- fine for any realistic sim.
     if (!channelMatrix || entry.generatedTime != channelMatrix->m_generatedTime)
     {
-        ltRecord(2);
-        return nullptr;
+        return ltMiss(2);
     }
     // PRX::CalcBeamformingGain iterates the doppler loop up to
     // channelMatrix->m_channel.GetNumPages() and asserts that the
@@ -5114,13 +5770,11 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(Ptr<const ChannelMatrix> cha
     // case so PRX falls back to CalcLongTerm.
     if (!entry.longTerm || entry.longTerm->GetNumPages() < channelMatrix->m_channel.GetNumPages())
     {
-        ltRecord(3);
-        return nullptr;
+        return ltMiss(3);
     }
     if (entry.sWSize != sW.GetSize() || entry.uWSize != uW.GetSize())
     {
-        ltRecord(4);
-        return nullptr;
+        return ltMiss(4);
     }
     // Validate port-count dimensions against the CURRENT antenna model.
     // The cached longTerm has shape (entry.ltUPorts, entry.ltSPorts,
@@ -5135,13 +5789,11 @@ ThreeGppChannelModelWgpuMezanine::GetCachedLongTerm(Ptr<const ChannelMatrix> cha
     const auto curUPorts = static_cast<uint16_t>(uAnt->GetNumPorts());
     if (entry.ltSPorts != curSPorts || entry.ltUPorts != curUPorts)
     {
-        ltRecord(5);
-        return nullptr;
+        return ltMiss(5);
     }
     if (entry.sWHash != HashComplexVector(sW) || entry.uWHash != HashComplexVector(uW))
     {
-        ltRecord(6);
-        return nullptr;
+        return ltMiss(6);
     }
     ltRecord(0);
     return entry.longTerm;
