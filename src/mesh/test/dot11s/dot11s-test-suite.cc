@@ -7,12 +7,18 @@
  */
 #include "ns3/dot11s-mac-header.h"
 #include "ns3/hwmp-rtable.h"
+#include "ns3/ie-dot11s-id.h"
 #include "ns3/ie-dot11s-peer-management.h"
+#include "ns3/mesh-information-element-vector.h"
+#include "ns3/mgt-action-headers.h"
 #include "ns3/mgt-headers.h"
 #include "ns3/packet.h"
 #include "ns3/peer-link-frame.h"
 #include "ns3/simulator.h"
 #include "ns3/test.h"
+
+#include <iomanip>
+#include <sstream>
 
 using namespace ns3;
 using namespace dot11s;
@@ -265,6 +271,109 @@ PeerLinkFrameStartTest::DoRun()
 /**
  * @ingroup mesh-test
  *
+ * @brief Mesh Peering Open and Confirm frames of Linux (mac80211), whose Mesh
+ * Peering Management element has the format of IEEE 802.11-2020 9.4.2.102, and the
+ * elements of ns-3 in that format.
+ */
+struct PeerLinkFrameLinuxTest : public TestCase
+{
+    PeerLinkFrameLinuxTest()
+        : TestCase("Mesh peering frames of Linux and IEEE 802.11-2020 format")
+    {
+    }
+
+    /**
+     * Deserialize the body of a Self-protected Action frame.
+     *
+     * @param hex the frame body, from the Category field
+     * @return the packet
+     */
+    static Ptr<Packet> FromHex(std::string hex)
+    {
+        std::vector<uint8_t> bytes;
+        for (std::size_t k = 0; k < hex.size(); k += 2)
+        {
+            bytes.push_back(static_cast<uint8_t>(std::stoi(hex.substr(k, 2), nullptr, 16)));
+        }
+        return Create<Packet>(bytes.data(), bytes.size());
+    }
+
+    /**
+     * Serialize an element.
+     *
+     * @param element the element
+     * @return its octets, as hex
+     */
+    static std::string ToHex(const WifiInformationElement& element)
+    {
+        Buffer buffer;
+        buffer.AddAtStart(element.GetSerializedSize());
+        element.Serialize(buffer.Begin());
+        std::vector<uint8_t> bytes(buffer.GetSize());
+        buffer.CopyData(bytes.data(), bytes.size());
+        std::ostringstream os;
+        for (auto b : bytes)
+        {
+            os << std::hex << std::setw(2) << std::setfill('0') << +b;
+        }
+        return os.str();
+    }
+
+    void DoRun() override
+    {
+        // a Mesh Peering Open of Linux 6.12: Capability, Supported Rates, Mesh ID,
+        // Mesh Configuration and Mesh Peering Management (protocol 0, local link 0x453e)
+        auto open = FromHex("0f01000001088c129824b048606c72046d657368710701010001000009"
+                            "750400003e45");
+        WifiActionHeader action;
+        open->RemoveHeader(action);
+        NS_TEST_EXPECT_MSG_EQ(action.GetAction().selfProtectedAction,
+                              WifiActionHeader::PEER_LINK_OPEN,
+                              "Not a Mesh Peering Open");
+        PeerLinkOpenStart openStart;
+        open->RemoveHeader(openStart);
+        NS_TEST_EXPECT_MSG_EQ(openStart.GetFields().meshId.IsEqual(IeMeshId("mesh")),
+                              true,
+                              "Wrong Mesh ID");
+        MeshInformationElementVector elements;
+        open->RemoveHeader(elements, open->GetSize());
+        auto peering =
+            DynamicCast<IePeerManagement>(elements.FindFirst(IE_MESH_PEERING_MANAGEMENT));
+        NS_TEST_ASSERT_MSG_NE(peering, nullptr, "No Mesh Peering Management element");
+        NS_TEST_EXPECT_MSG_EQ(peering->GetLocalLinkId(), 0x453e, "Wrong local link ID");
+
+        // a Mesh Peering Confirm of Linux: AID 1, Mesh ID before Mesh Configuration,
+        // local link 0x453e, peer link 0xbeea
+        auto confirm = FromHex("0f020000010001088c129824b048606c72046d657368710701010001000009"
+                               "750600003e45eabe");
+        confirm->RemoveHeader(action);
+        PeerLinkConfirmStart confirmStart;
+        confirm->RemoveHeader(confirmStart);
+        NS_TEST_EXPECT_MSG_EQ(confirmStart.GetFields().aid, 1, "Wrong AID");
+        MeshInformationElementVector confirmElements;
+        confirm->RemoveHeader(confirmElements, confirm->GetSize());
+        peering = DynamicCast<IePeerManagement>(
+            confirmElements.FindFirst(IE_MESH_PEERING_MANAGEMENT));
+        NS_TEST_ASSERT_MSG_NE(peering, nullptr, "No Mesh Peering Management element");
+        NS_TEST_EXPECT_MSG_EQ(peering->GetLocalLinkId(), 0x453e, "Wrong local link ID");
+        NS_TEST_EXPECT_MSG_EQ(peering->GetPeerLinkId(), 0xbeea, "Wrong peer link ID");
+
+        // the elements of ns-3, in the format of Linux
+        IePeerManagement element;
+        element.SetPeerOpen(0x453e);
+        NS_TEST_EXPECT_MSG_EQ(ToHex(element), "750400003e45", "Wrong Open element");
+        element.SetPeerConfirm(0x453e, 0xbeea);
+        NS_TEST_EXPECT_MSG_EQ(ToHex(element), "750600003e45eabe", "Wrong Confirm element");
+        element.SetPeerClose(0x453e, 0xbeea, REASON11S_MESH_CAPABILITY_POLICY_VIOLATION);
+        NS_TEST_EXPECT_MSG_EQ(ToHex(element).substr(0, 16),
+                              "750800003e45eabe",
+                              "Wrong Close element");
+    }
+};
+
+/**
+ * @ingroup mesh-test
+ *
  * @brief Dot11s Test Suite
  */
 class Dot11sTestSuite : public TestSuite
@@ -279,6 +388,7 @@ Dot11sTestSuite::Dot11sTestSuite()
     AddTestCase(new MeshHeaderTest, TestCase::Duration::QUICK);
     AddTestCase(new HwmpRtableTest, TestCase::Duration::QUICK);
     AddTestCase(new PeerLinkFrameStartTest, TestCase::Duration::QUICK);
+    AddTestCase(new PeerLinkFrameLinuxTest, TestCase::Duration::QUICK);
 }
 
 static Dot11sTestSuite g_dot11sTestSuite; ///< the test suite
