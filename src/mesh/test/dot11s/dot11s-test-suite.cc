@@ -6,6 +6,8 @@
  * Author: Pavel Boyko <boyko@iitp.ru>
  */
 #include "ns3/dot11s-mac-header.h"
+#include "ns3/hwmp-protocol-mac.h"
+#include "ns3/hwmp-protocol.h"
 #include "ns3/hwmp-rtable.h"
 #include "ns3/ie-dot11s-id.h"
 #include "ns3/ie-dot11s-peer-management.h"
@@ -490,6 +492,35 @@ struct BeaconMeshConfigurationTest : public TestCase
 /**
  * @ingroup mesh-test
  *
+ * @brief HWMP receives (QoS) Null frames, which have no Mesh Control field: Linux
+ * (mac80211) sends them to its mesh peers.
+ */
+struct HwmpNullFrameTest : public TestCase
+{
+    HwmpNullFrameTest()
+        : TestCase("HWMP and QoS Null frames of mesh peers")
+    {
+    }
+
+    void DoRun() override
+    {
+        auto hwmp = Create<HwmpProtocolMac>(1, CreateObject<HwmpProtocol>());
+        WifiMacHeader header(WIFI_MAC_QOSDATA_NULL);
+        header.SetDsFrom();
+        header.SetDsTo();
+        header.SetAddr1(Mac48Address("00:00:00:00:00:04"));
+        header.SetAddr2(Mac48Address("00:00:00:00:00:01"));
+        header.SetAddr3(Mac48Address("00:00:00:00:00:04"));
+        header.SetAddr4(Mac48Address("00:00:00:00:00:01"));
+        NS_TEST_EXPECT_MSG_EQ(hwmp->Receive(Create<Packet>(), header),
+                              false,
+                              "QoS Null frame not dropped");
+    }
+};
+
+/**
+ * @ingroup mesh-test
+ *
  * @brief Dot11s Test Suite
  */
 class Dot11sTestSuite : public TestSuite
@@ -507,6 +538,7 @@ Dot11sTestSuite::Dot11sTestSuite()
     AddTestCase(new PeerLinkFrameLinuxTest, TestCase::Duration::QUICK);
     AddTestCase(new BeaconWithoutTimingTest, TestCase::Duration::QUICK);
     AddTestCase(new BeaconMeshConfigurationTest, TestCase::Duration::QUICK);
+    AddTestCase(new HwmpNullFrameTest, TestCase::Duration::QUICK);
 }
 
 static Dot11sTestSuite g_dot11sTestSuite; ///< the test suite
