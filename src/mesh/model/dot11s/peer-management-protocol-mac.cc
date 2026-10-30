@@ -264,6 +264,11 @@ PeerManagementProtocolMac::UpdateBeacon(MeshWifiBeacon& beacon) const
         beacon.AddInformationElement(beaconTiming);
     }
     beacon.AddInformationElement(m_protocol->GetMeshId());
+    // IEEE 802.11-2020 9.3.3.2: the beacons of a mesh STA carry the Mesh
+    // Configuration element, by which peers check that they can peer (as Linux does)
+    auto meshConfig = Create<IeConfiguration>();
+    meshConfig->SetNeighborCount(m_protocol->GetNumberOfLinks());
+    beacon.AddInformationElement(meshConfig);
     m_protocol->NotifyBeaconSent(m_ifIndex, beacon.GetBeaconInterval());
 }
 
