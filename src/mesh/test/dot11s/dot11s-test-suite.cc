@@ -11,6 +11,7 @@
 #include "ns3/ie-dot11s-peer-management.h"
 #include "ns3/mesh-helper.h"
 #include "ns3/mesh-information-element-vector.h"
+#include "ns3/mesh-point-device.h"
 #include "ns3/mgt-action-headers.h"
 #include "ns3/mgt-headers.h"
 #include "ns3/mobility-helper.h"
@@ -19,6 +20,9 @@
 #include "ns3/peer-management-protocol.h"
 #include "ns3/simulator.h"
 #include "ns3/test.h"
+#include "ns3/wifi-net-device.h"
+#include "ns3/wifi-phy.h"
+#include "ns3/wifi-psdu.h"
 #include "ns3/yans-wifi-helper.h"
 
 #include <iomanip>
@@ -413,6 +417,79 @@ struct BeaconWithoutTimingTest : public TestCase
 /**
  * @ingroup mesh-test
  *
+ * @brief The beacons of a mesh point carry the Mesh Configuration element (IEEE
+ * 802.11-2020 9.3.3.2), without which Linux (mac80211) does not peer: HWMP, airtime
+ * metric, no congestion control, neighbor offset synchronization, no authentication.
+ */
+struct BeaconMeshConfigurationTest : public TestCase
+{
+    BeaconMeshConfigurationTest()
+        : TestCase("Mesh Configuration element in beacons")
+    {
+    }
+
+    /**
+     * Callback invoked when the PHY of the mesh point starts transmitting a PSDU.
+     *
+     * @param psduMap the PSDU map
+     * @param txVector the TX vector
+     * @param txPowerW the TX power in Watts
+     */
+    void Tx(WifiConstPsduMap psduMap, WifiTxVector txVector, double txPowerW)
+    {
+        auto psdu = psduMap.begin()->second;
+        if (!psdu->GetHeader(0).IsBeacon())
+        {
+            return;
+        }
+        auto packet = psdu->GetPayload(0);
+        std::vector<uint8_t> body(packet->GetSize());
+        packet->CopyData(body.data(), body.size());
+        m_beacons++;
+        // the elements follow the Timestamp, Beacon Interval and Capability fields
+        for (std::size_t k = 12; k + 2 <= body.size(); k += 2 + body[k + 1])
+        {
+            if (body[k] == IE_MESH_CONFIGURATION && body[k + 1] == 7)
+            {
+                m_meshConfig = std::vector<uint8_t>(body.begin() + k + 2, body.begin() + k + 7);
+            }
+        }
+    }
+
+    void DoRun() override
+    {
+        NodeContainer nodes(2);
+        MobilityHelper mobility;
+        mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+        mobility.Install(nodes);
+        YansWifiPhyHelper phy;
+        phy.SetChannel(YansWifiChannelHelper::Default().Create());
+        MeshHelper mesh = MeshHelper::Default();
+        mesh.SetStackInstaller("ns3::Dot11sStack");
+        NetDeviceContainer devices = mesh.Install(phy, nodes);
+        auto interface = DynamicCast<WifiNetDevice>(
+            DynamicCast<MeshPointDevice>(devices.Get(0))->GetInterfaces().front());
+        interface->GetPhy()->TraceConnectWithoutContext(
+            "PhyTxPsduBegin",
+            MakeCallback(&BeaconMeshConfigurationTest::Tx, this));
+        Simulator::Stop(Seconds(1));
+        Simulator::Run();
+        Simulator::Destroy();
+        NS_TEST_ASSERT_MSG_GT(m_beacons, 0, "No beacon sent");
+        // Active Path Selection Protocol, Metric, Congestion Control, Synchronization
+        // and Authentication Protocol identifiers
+        NS_TEST_EXPECT_MSG_EQ((m_meshConfig == std::vector<uint8_t>{1, 1, 0, 1, 0}),
+                              true,
+                              "No or wrong Mesh Configuration element in beacons");
+    }
+
+    uint32_t m_beacons{0};             ///< beacons sent
+    std::vector<uint8_t> m_meshConfig; ///< identifiers of the Mesh Configuration element
+};
+
+/**
+ * @ingroup mesh-test
+ *
  * @brief Dot11s Test Suite
  */
 class Dot11sTestSuite : public TestSuite
@@ -429,6 +506,7 @@ Dot11sTestSuite::Dot11sTestSuite()
     AddTestCase(new PeerLinkFrameStartTest, TestCase::Duration::QUICK);
     AddTestCase(new PeerLinkFrameLinuxTest, TestCase::Duration::QUICK);
     AddTestCase(new BeaconWithoutTimingTest, TestCase::Duration::QUICK);
+    AddTestCase(new BeaconMeshConfigurationTest, TestCase::Duration::QUICK);
 }
 
 static Dot11sTestSuite g_dot11sTestSuite; ///< the test suite
