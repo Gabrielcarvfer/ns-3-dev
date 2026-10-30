@@ -41,6 +41,7 @@ build_lib(
     helper/mesh-stack-installer.h
     model/dot11s/airtime-metric.h
     model/dot11s/dot11s-mac-header.h
+    model/dot11s/hwmp-protocol-mac.h
     model/dot11s/hwmp-protocol.h
     model/dot11s/hwmp-rtable.h
     model/dot11s/ie-dot11s-beacon-timing.h

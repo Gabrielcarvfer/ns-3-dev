@@ -201,6 +201,13 @@ HwmpProtocolMac::Receive(Ptr<Packet> packet, const WifiMacHeader& header)
     NS_LOG_FUNCTION(this << packet << header);
     if (header.IsData())
     {
+        if (!header.HasData())
+        {
+            // (QoS) Null frames, e.g. sent by Linux (mac80211) to its mesh peers, have
+            // neither frame body nor Mesh Control field
+            NS_LOG_DEBUG("Data frame without frame body: drop");
+            return false;
+        }
         return ReceiveData(packet, header);
     }
     else
