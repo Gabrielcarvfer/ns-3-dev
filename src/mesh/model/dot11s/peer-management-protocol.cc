@@ -190,7 +190,8 @@ PeerManagementProtocol::ReceiveBeacon(uint32_t interface,
         }
     }
     peerLink->SetBeaconInformation(Simulator::Now(), beaconInterval);
-    if (GetBeaconCollisionAvoidance())
+    // the Beacon Timing element is optional: e.g., Linux (mac80211) does not send it
+    if (GetBeaconCollisionAvoidance() && timingElement)
     {
         peerLink->SetBeaconTimingElement(*PeekPointer(timingElement));
     }
