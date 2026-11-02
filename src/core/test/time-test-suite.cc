@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -551,14 +552,14 @@ TimeInputOutputTestCase::DoRun()
 /**
  * @ingroup core-tests
  * @brief Checks that integer unit conversions whose result does not fit in
- *        int64_t wrap around in a well-defined (two's-complement) manner.
+ *        int64_t saturate to the int64_t limits.
  *
  * Time::ToInteger() multiplies the raw value by an integer unit-conversion
  * factor. When the mathematical result exceeds the range of int64_t, the
- * operation must wrap around deterministically rather than invoke signed
- * integer overflow, which is undefined behavior (and is trapped by the
- * undefined-behavior sanitizer). This test pins down that wrapped result for
- * both positive and negative times.
+ * operation must saturate rather than invoke signed integer overflow, which
+ * is undefined behavior (and is trapped by the undefined-behavior sanitizer).
+ * This test pins down that saturated result for both positive and negative
+ * times.
  */
 class TimeToIntegerOverflowTestCase : public TestCase
 {
@@ -576,7 +577,7 @@ class TimeToIntegerOverflowTestCase : public TestCase
 };
 
 TimeToIntegerOverflowTestCase::TimeToIntegerOverflowTestCase()
-    : TestCase("Integer unit conversion overflow wraps without undefined behavior")
+    : TestCase("Integer unit conversion overflow saturates without undefined behavior")
 {
 }
 
@@ -591,22 +592,151 @@ TimeToIntegerOverflowTestCase::DoRun()
                           Time::FS,
                           "test precondition: resolution must be coarser than fs");
 
-    // 10000 s == 1e19 fs. That exceeds INT64_MAX (~9.22e18) but is below 2^64,
-    // so the femtosecond count cannot be represented exactly in the signed
-    // 64-bit return value and instead wraps around modulo 2^64. This documents
-    // the (intentional, well-defined) behavior of the integer Get*() accessors.
-    const uint64_t totalFemtos = 10000000000000000000ULL; // 1e19 fs, > INT64_MAX, < 2^64
+    // 10000 s == 1e19 fs. That exceeds INT64_MAX (~9.22e18), so the
+    // femtosecond count cannot be represented in the signed 64-bit return
+    // value and instead saturates. This documents the behavior of the integer
+    // Get*() accessors.
 
-    // Positive time: +1e19 wraps to 1e19 - 2^64 == -8446744073709551616.
+    // Positive time: +1e19 saturates to INT64_MAX.
     NS_TEST_ASSERT_MSG_EQ(Seconds(10000).GetFemtoSeconds(),
-                          static_cast<int64_t>(totalFemtos),
-                          "femtosecond overflow of a positive Time must wrap modulo 2^64");
+                          std::numeric_limits<int64_t>::max(),
+                          "femtosecond overflow of a positive Time must saturate to INT64_MAX");
 
-    // Negative time: -1e19 wraps to 2^64 - 1e19 == +8446744073709551616,
-    // confirming the sign is handled consistently by the wraparound.
+    // Negative time: -1e19 saturates to INT64_MIN.
     NS_TEST_ASSERT_MSG_EQ(Seconds(-10000).GetFemtoSeconds(),
-                          -static_cast<int64_t>(totalFemtos),
-                          "femtosecond overflow of a negative Time must wrap modulo 2^64");
+                          std::numeric_limits<int64_t>::min(),
+                          "femtosecond overflow of a negative Time must saturate to INT64_MIN");
+}
+
+/**
+ * @ingroup core-tests
+ * @brief Checks that Time arithmetic and conversions saturate to Time::Max()
+ *        and Time::Min() instead of overflowing, and that the limits are
+ *        printed as numbers and read back.
+ */
+class TimeOverflowSaturatesTestCase : public TestCase
+{
+  public:
+    /**
+     * @brief Constructor for TimeOverflowSaturatesTestCase.
+     */
+    TimeOverflowSaturatesTestCase();
+
+  private:
+    /**
+     * @brief DoRun for TimeOverflowSaturatesTestCase.
+     */
+    void DoRun() override;
+};
+
+TimeOverflowSaturatesTestCase::TimeOverflowSaturatesTestCase()
+    : TestCase("Time overflow saturates to Time::Max() and Time::Min()")
+{
+}
+
+void
+TimeOverflowSaturatesTestCase::DoRun()
+{
+    // The values below assume the default nanosecond resolution.
+    NS_TEST_ASSERT_MSG_EQ(Time::GetResolution(), Time::NS, "test precondition: ns resolution");
+    const Time max = Time::Max();
+    const Time min = Time::Min();
+    constexpr int64_t int64Max = std::numeric_limits<int64_t>::max();
+    constexpr int64_t int64Min = std::numeric_limits<int64_t>::min();
+
+    // Addition and subtraction.
+    NS_TEST_EXPECT_MSG_EQ(max + NanoSeconds(1), max, "Max + 1 ns");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(1) + max, max, "1 s + Max");
+    NS_TEST_EXPECT_MSG_EQ(min - NanoSeconds(1), min, "Min - 1 ns");
+    NS_TEST_EXPECT_MSG_EQ(min + min, min, "Min + Min");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(1) - min, max, "1 s - Min");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(-1) - max, min, "-1 s - Max");
+    NS_TEST_EXPECT_MSG_EQ(max - Seconds(1), TimeStep(int64Max - 1000000000), "Max - 1 s");
+    Time t = max;
+    t += Seconds(1);
+    NS_TEST_EXPECT_MSG_EQ(t, max, "Max += 1 s");
+    t = min;
+    t -= Seconds(1);
+    NS_TEST_EXPECT_MSG_EQ(t, min, "Min -= 1 s");
+
+    // Multiplication and division.
+    NS_TEST_EXPECT_MSG_EQ(Seconds(1) * int64Max, max, "1 s * INT64_MAX");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(-1) * int64Max, min, "-1 s * INT64_MAX");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(-1) * int64Min, max, "-1 s * INT64_MIN");
+    NS_TEST_EXPECT_MSG_EQ(max * 2U, max, "Max * 2U");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(-1) * std::numeric_limits<uint64_t>::max(),
+                          min,
+                          "-1 s * UINT64_MAX");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(3) * 2, Seconds(6), "3 s * 2");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(1) * int64x64_t(1e12), max, "1 s * 1e12");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(1) * -1e12, min, "1 s * -1e12");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(1) / int64x64_t(1e-12), max, "1 s / 1e-12");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(3) * 0.5, MilliSeconds(1500), "3 s * 0.5");
+    NS_TEST_EXPECT_MSG_EQ(min / -1, max, "Min / -1");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(3) / -1, Seconds(-3), "3 s / -1");
+    NS_TEST_EXPECT_MSG_EQ(Div(min, TimeStep(-1)), int64Max, "Div (Min, -1)");
+    NS_TEST_EXPECT_MSG_EQ(min % TimeStep(-1), Time(), "Min % -1");
+    NS_TEST_EXPECT_MSG_EQ(Rem(Seconds(7), Seconds(2)), Seconds(1), "Rem (7 s, 2 s)");
+    NS_TEST_EXPECT_MSG_EQ(Abs(min), max, "Abs (Min)");
+    NS_TEST_EXPECT_MSG_EQ(Abs(Seconds(-2)), Seconds(2), "Abs (-2 s)");
+
+    // Creation from values in other units.
+    NS_TEST_EXPECT_MSG_EQ(Seconds(1e12), max, "1e12 s");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(-1e12), min, "-1e12 s");
+    NS_TEST_EXPECT_MSG_EQ(Years(1000), max, "1000 y");
+    NS_TEST_EXPECT_MSG_EQ(Seconds(int64x64_t(1e12)), max, "int64x64_t 1e12 s");
+    NS_TEST_EXPECT_MSG_EQ(MilliSeconds(int64Max), max, "INT64_MAX ms");
+    NS_TEST_EXPECT_MSG_EQ(MilliSeconds(int64Min), min, "INT64_MIN ms");
+    NS_TEST_EXPECT_MSG_EQ(MicroSeconds(-15360), NanoSeconds(-15360000), "negative us");
+    NS_TEST_EXPECT_MSG_EQ(Time(1e30), max, "Time (1e30)");
+    NS_TEST_EXPECT_MSG_EQ(Time(-1e30), min, "Time (-1e30)");
+    NS_TEST_EXPECT_MSG_EQ(Time(int64x64_t(int64Max) + int64x64_t(0.75)),
+                          max,
+                          "Time (INT64_MAX + 0.75)");
+    // 2^70 fs, exact in a double, is beyond int64x64_t but fits once in ns.
+    NS_TEST_EXPECT_MSG_EQ(Time("1180591620717411303424fs"),
+                          NanoSeconds(1180591620717411),
+                          "2^70 fs, beyond int64x64_t");
+    NS_TEST_EXPECT_MSG_EQ(Time("1e30s"), max, "1e30 s");
+
+    // Conversion to other units.
+    NS_TEST_EXPECT_MSG_EQ(Seconds(2).GetFemtoSeconds(), 2000000000000000, "2 s in fs");
+    NS_TEST_EXPECT_MSG_EQ_TOL(max.ToDouble(Time::FS), 9.223372036854775807e24, 1e10, "Max in fs");
+    NS_TEST_EXPECT_MSG_EQ(max.To(Time::FS), int64x64_t(int64Max), "Max To fs");
+    NS_TEST_EXPECT_MSG_EQ_TOL(max.GetSeconds(), 9.223372036854775807e9, 1e-3, "Max in s");
+
+    // The limits print as their exact number of time steps, tagged.
+    std::ostringstream os;
+    os << max << " " << min << " " << max.As(Time::S) << " " << min.As(Time::AUTO);
+    NS_TEST_EXPECT_MSG_EQ(os.str(),
+                          "+9223372036854775807ns (max) -9223372036854775808ns (min) "
+                          "+9223372036854775807ns (max) -9223372036854775808ns (min)",
+                          "printing of the limits");
+
+    // They read back as the same Time, alone or followed by other values.
+    std::istringstream is(os.str() + " 3s");
+    std::array<Time, 5> read;
+    for (auto& value : read)
+    {
+        is >> value;
+    }
+    NS_TEST_EXPECT_MSG_EQ(read[0], max, "reading Max");
+    NS_TEST_EXPECT_MSG_EQ(read[1], min, "reading Min");
+    NS_TEST_EXPECT_MSG_EQ(read[2], max, "reading Max as s");
+    NS_TEST_EXPECT_MSG_EQ(read[3], min, "reading Min as AUTO");
+    NS_TEST_EXPECT_MSG_EQ(read[4], Seconds(3), "reading a Time after the limits");
+    NS_TEST_EXPECT_MSG_EQ(Time("+9223372036854775807ns"), max, "Max without its tag");
+
+    // And they survive a round trip through an attribute value.
+    for (const auto& limit : {max, min})
+    {
+        TimeValue value(limit);
+        TimeValue copy;
+        NS_TEST_EXPECT_MSG_EQ(copy.DeserializeFromString(value.SerializeToString(nullptr), nullptr),
+                              true,
+                              "deserializing " << value.SerializeToString(nullptr));
+        NS_TEST_EXPECT_MSG_EQ(copy.Get(), limit, "attribute round trip");
+    }
 }
 
 /**
@@ -622,6 +752,7 @@ static class TimeTestSuite : public TestSuite
         AddTestCase(new TimeWithSignTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TimeInputOutputTestCase(), TestCase::Duration::QUICK);
         AddTestCase(new TimeToIntegerOverflowTestCase(), TestCase::Duration::QUICK);
+        AddTestCase(new TimeOverflowSaturatesTestCase(), TestCase::Duration::QUICK);
         // This should be last, since it changes the resolution
         AddTestCase(new TimeSimpleTestCase(), TestCase::Duration::QUICK);
     }

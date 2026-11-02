@@ -131,7 +131,15 @@ Time::Time(const std::string& s)
 {
     NS_LOG_FUNCTION(this << &s);
     std::string::size_type n = s.find_first_not_of("+-0123456789.eE");
-    if (n != std::string::npos)
+    if (s.ends_with(" (max)"))
+    {
+        *this = Time::Max();
+    }
+    else if (s.ends_with(" (min)"))
+    {
+        *this = Time::Min();
+    }
+    else if (n != std::string::npos)
     { // Found non-numeric
         std::istringstream iss;
         iss.str(s.substr(0, n));
@@ -436,6 +444,15 @@ operator<<(std::ostream& os, const TimeWithUnit& timeU)
 {
     std::string label;
     Time::Unit unit = timeU.m_unit;
+    // The limits are printed as their exact number of time steps, so they are
+    // still numbers to programs reading them and read back as the same Time,
+    // with a tag for human readers.
+    const bool isMax = timeU.m_time == Time::Max();
+    const bool isMin = timeU.m_time == Time::Min();
+    if (isMax || isMin)
+    {
+        unit = Time::GetResolution();
+    }
 
     if (unit == Time::AUTO)
     {
@@ -496,8 +513,6 @@ operator<<(std::ostream& os, const TimeWithUnit& timeU)
         break;
     }
 
-    double v = timeU.m_time.ToDouble(unit);
-
     // Note: we must copy the "original" format flags because we have to modify them.
     // std::ios_base::showpos is to print the "+" in front of the number for positive,
     // std::ios_base::right is to add (eventual) extra space in front of the number.
@@ -506,7 +521,15 @@ operator<<(std::ostream& os, const TimeWithUnit& timeU)
 
     std::ios_base::fmtflags ff = os.flags();
 
-    os << std::showpos << std::right << v << label;
+    os << std::showpos << std::right;
+    if (isMax || isMin)
+    {
+        os << timeU.m_time.GetTimeStep() << label << (isMax ? " (max)" : " (min)");
+    }
+    else
+    {
+        os << timeU.m_time.ToDouble(unit) << label;
+    }
 
     // And here we have to restore what we changed.
     if (!(ff & std::ios_base::showpos))
@@ -530,6 +553,13 @@ operator>>(std::istream& is, Time& time)
 {
     std::string value;
     is >> value;
+    // Time::Max() and Time::Min() are printed with a " (max)" or " (min)" tag.
+    if (is && !is.eof() && (is >> std::ws).peek() == '(')
+    {
+        std::string tag;
+        is >> tag;
+        value += " " + tag;
+    }
     time = Time(value);
     return is;
 }

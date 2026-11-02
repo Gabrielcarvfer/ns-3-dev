@@ -47,6 +47,7 @@ but other contemporaneous versions may also work.
 
 ### Bugs fixed
 
+- (core) `Time` arithmetic and unit conversions no longer invoke undefined behavior on overflow; they saturate to `Time::Max()` and `Time::Min()`. The limits are now printed as numbers tagged `(max)`/`(min)` and read back exactly.
 - (mesh) #682 Mesh regression tests no longer compare against reference PCAP files; they now check HWMP, peer management and FLAME behavior through trace sources.
 
 ## Release 3.49

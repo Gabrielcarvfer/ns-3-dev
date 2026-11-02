@@ -32,6 +32,9 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### Changed behavior
 
+* (core) `Time` arithmetic (`+`, `-`, `+=`, `-=`, `*`, `/`, `%`, `Div()`, `Rem()`, `Abs()`) and conversions (`Seconds()` and the other unit functions, `Time(double)`, `Time(int64x64_t)`, `ToInteger()`, `To()`, `ToDouble()` and the `Get*()` accessors) now saturate to `Time::Max()` or `Time::Min()` (or to the limits of the result type) when the result is out of range, instead of wrapping around or invoking undefined behavior. For example, `Simulator::Now() + Time::Max()` is `Time::Max()`, and `Seconds(10000).GetFemtoSeconds()` is `INT64_MAX` instead of a wrapped negative value. A `Time` created from NaN is 0, and asserts in debug builds.
+* (core) `Time::Max()` and `Time::Min()` are printed as their exact number of time steps followed by ' (max)' or ' (min)', e.g. `+9223372036854775807ns (max)` at the default resolution, whatever unit is passed to `Time::As()`. `operator>>` and `Time(std::string)` read these back, so `TimeValue` attributes holding the limits round-trip.
+
 ## Changes from ns-3.48 to ns-3.49
 
 ### New API

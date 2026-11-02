@@ -90,6 +90,13 @@ class TimeWithUnit;
  * resolution.  Therefore the maximum possible duration of your simulation
  * if you use picoseconds is 2^64 ps = 2^24 s = 7 months, whereas,
  * had you used nanoseconds, you could have run for 584 years.
+ *
+ * Arithmetic and conversions whose result is out of that range saturate to
+ * Time::Max() or Time::Min() instead of overflowing, so Time::Max() can be
+ * used as an infinite time: for example, `Simulator::Now() + Time::Max()` is
+ * Time::Max().  Times created from NaN are 0 (and assert in debug builds).
+ * Time::Max() and Time::Min() are printed as their exact number of time
+ * steps, tagged "(max)" or "(min)", and read back by operator>>().
  */
 class CORE_EXPORT Time
 {
@@ -173,7 +180,7 @@ class CORE_EXPORT Time
      * @param [in] v The value.
      */
     explicit inline Time(double v)
-        : m_data(llround(v))
+        : m_data(StepsSaturated(v))
     {
         if (MarkingTimes())
         {
@@ -236,7 +243,7 @@ class CORE_EXPORT Time
     }
 
     explicit inline Time(const int64x64_t& v)
-        : m_data(v.Round())
+        : m_data(StepsSaturated(v))
     {
         if (MarkingTimes())
         {
@@ -503,15 +510,13 @@ class CORE_EXPORT Time
 
         NS_ASSERT_MSG(info->isValid, "Attempted a conversion from an unavailable unit.");
 
+        // Negative values, e.g. MicroSeconds(-1), arrive here converted to uint64_t.
+        auto v = static_cast<int64_t>(value);
         if (info->fromMul)
         {
-            value *= info->factor;
+            return Time(MulSaturated(v, info->factor));
         }
-        else
-        {
-            value /= info->factor;
-        }
-        return Time(value);
+        return Time(v / info->factor);
     }
 
     inline static Time FromDouble(double value, Unit unit)
@@ -521,7 +526,28 @@ class CORE_EXPORT Time
         {
             return Time();
         }
+        NS_ASSERT_MSG(!std::isnan(value), "Attempted to create a Time from NaN.");
+        if (std::isnan(value))
+        {
+            return Time();
+        }
 
+        Information* info = PeekInformation(unit);
+
+        NS_ASSERT_MSG(info->isValid, "Attempted a conversion from an unavailable unit.");
+
+        const long double estimate = info->fromMul ? static_cast<long double>(value) * info->factor
+                                                   : static_cast<long double>(value) / info->factor;
+        int64_t saturated;
+        if (Saturate(estimate, saturated))
+        {
+            return Time(saturated);
+        }
+        if (std::fabs(value) >= 0x1p63)
+        {
+            // Too large for int64x64_t, but in range once divided by the factor.
+            return Time(static_cast<int64_t>(std::llroundl(estimate)));
+        }
         return From(int64x64_t(value), unit);
     }
 
@@ -542,6 +568,11 @@ class CORE_EXPORT Time
         int64x64_t retval = value;
         if (info->fromMul)
         {
+            int64_t saturated;
+            if (Saturate(static_cast<long double>(value.GetDouble()) * info->factor, saturated))
+            {
+                return Time(saturated);
+            }
             retval *= info->timeFrom;
         }
         else
@@ -556,6 +587,9 @@ class CORE_EXPORT Time
     /**
      * @name Get Times as Numbers in Specified Units
      * Get the Time as integers or doubles in the indicated unit.
+     *
+     * Values that do not fit in the result saturate to its largest or
+     * smallest value.
      *
      * @{
      */
@@ -577,24 +611,11 @@ class CORE_EXPORT Time
 
         NS_ASSERT_MSG(info->isValid, "Attempted a conversion to an unavailable unit.");
 
-        int64_t v = m_data;
         if (info->toMul)
         {
-            // Perform the multiplication in unsigned arithmetic to avoid signed
-            // integer overflow (undefined behavior) when the converted value does
-            // not fit in int64_t. The wraparound result matches both the previous
-            // behavior on two's-complement platforms and the FromInteger() path,
-            // which already multiplies in unsigned arithmetic.
-            // If there is no overflow, static_cast<int64_t> recovers the correct
-            // signed result via two's-complement bit reinterpretation.
-            v = static_cast<int64_t>(static_cast<uint64_t>(v) *
-                                     static_cast<uint64_t>(info->factor));
+            return MulSaturated(m_data, info->factor);
         }
-        else
-        {
-            v /= info->factor;
-        }
-        return v;
+        return m_data / info->factor;
     }
 
     inline double ToDouble(Unit unit) const
@@ -605,6 +626,20 @@ class CORE_EXPORT Time
             return 0;
         }
 
+        Information* info = PeekInformation(unit);
+
+        NS_ASSERT_MSG(info->isValid, "Attempted a conversion to an unavailable unit.");
+
+        if (info->toMul)
+        {
+            // A double holds values that To() cannot.
+            const long double estimate = static_cast<long double>(m_data) * info->factor;
+            int64_t saturated;
+            if (Saturate(estimate, saturated))
+            {
+                return static_cast<double>(estimate);
+            }
+        }
         return To(unit).GetDouble();
     }
 
@@ -623,6 +658,11 @@ class CORE_EXPORT Time
         int64x64_t retval(m_data);
         if (info->toMul)
         {
+            int64_t saturated;
+            if (Saturate(static_cast<long double>(m_data) * info->factor, saturated))
+            {
+                return saturated;
+            }
             retval *= info->timeTo;
         }
         else
@@ -670,6 +710,147 @@ class CORE_EXPORT Time
     typedef void (*TracedCallback)(Time value);
 
   private:
+    /**
+     * Check whether a value, estimated in floating point, is out of the
+     * int64_t range of a Time.
+     *
+     * Values within a few rounding errors of the limits count as out of range
+     * too, so an exact computation done after this check cannot overflow.
+     *
+     * @param [in] estimate The estimated value.
+     * @param [out] saturated The limit the value saturates to, if out of range.
+     * @return \c true if the value is out of range.
+     */
+    static bool Saturate(long double estimate, int64_t& saturated)
+    {
+        constexpr long double limit = 0x1p63L * (1 - 0x1p-50L);
+        if (estimate >= limit)
+        {
+            saturated = std::numeric_limits<int64_t>::max();
+            return true;
+        }
+        if (estimate <= -limit)
+        {
+            saturated = std::numeric_limits<int64_t>::min();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Add two values, saturating to the int64_t limits.
+     * @param [in] lhs The first value.
+     * @param [in] rhs The second value.
+     * @return The saturated sum.
+     */
+    static int64_t AddSaturated(int64_t lhs, int64_t rhs)
+    {
+        constexpr int64_t max = std::numeric_limits<int64_t>::max();
+        constexpr int64_t min = std::numeric_limits<int64_t>::min();
+        if (rhs > 0 && lhs > max - rhs)
+        {
+            return max;
+        }
+        if (rhs < 0 && lhs < min - rhs)
+        {
+            return min;
+        }
+        return lhs + rhs;
+    }
+
+    /**
+     * Subtract two values, saturating to the int64_t limits.
+     * @param [in] lhs The first value.
+     * @param [in] rhs The value subtracted.
+     * @return The saturated difference.
+     */
+    static int64_t SubSaturated(int64_t lhs, int64_t rhs)
+    {
+        constexpr int64_t max = std::numeric_limits<int64_t>::max();
+        constexpr int64_t min = std::numeric_limits<int64_t>::min();
+        if (rhs < 0 && lhs > max + rhs)
+        {
+            return max;
+        }
+        if (rhs > 0 && lhs < min + rhs)
+        {
+            return min;
+        }
+        return lhs - rhs;
+    }
+
+    /**
+     * Multiply a value by an integer, saturating to the int64_t limits.
+     * @tparam T The integer type of the multiplier.
+     * @param [in] lhs The value.
+     * @param [in] rhs The multiplier.
+     * @return The saturated product.
+     */
+    template <class T>
+    static int64_t MulSaturated(int64_t lhs, T rhs)
+    {
+        constexpr int64_t max = std::numeric_limits<int64_t>::max();
+        constexpr int64_t min = std::numeric_limits<int64_t>::min();
+        if (lhs == 0 || rhs == 0)
+        {
+            return 0;
+        }
+        if constexpr (std::is_unsigned_v<T>)
+        {
+            if (rhs > static_cast<std::make_unsigned_t<int64_t>>(max))
+            {
+                // Any nonzero value times rhs is out of range.
+                return lhs < 0 ? min : max;
+            }
+        }
+        const auto factor = static_cast<int64_t>(rhs);
+        const bool overflows = lhs > 0 ? (factor > 0 ? lhs > max / factor : factor < min / lhs)
+                                       : (factor > 0 ? lhs < min / factor : lhs < max / factor);
+        if (overflows)
+        {
+            return (lhs < 0) != (factor < 0) ? min : max;
+        }
+        return lhs * factor;
+    }
+
+    /**
+     * Round a value in the current unit to time steps, saturating.
+     * @param [in] value The value; NaN gives 0.
+     * @return The saturated number of time steps.
+     */
+    static int64_t StepsSaturated(double value)
+    {
+        NS_ASSERT_MSG(!std::isnan(value), "Attempted to create a Time from NaN.");
+        int64_t saturated;
+        if (std::isnan(value))
+        {
+            return 0;
+        }
+        if (Saturate(value, saturated))
+        {
+            return saturated;
+        }
+        return llround(value);
+    }
+
+    /**
+     * Round a value in the current unit to time steps, saturating.
+     * @param [in] value The value.
+     * @return The saturated number of time steps.
+     */
+    static int64_t StepsSaturated(const int64x64_t& value)
+    {
+        if (value >= int64x64_t(std::numeric_limits<int64_t>::max()))
+        {
+            return std::numeric_limits<int64_t>::max();
+        }
+        if (value <= int64x64_t(std::numeric_limits<int64_t>::min()))
+        {
+            return std::numeric_limits<int64_t>::min();
+        }
+        return value.Round();
+    }
+
     /** How to convert between other units and the current unit. */
     struct Information
     {
@@ -939,7 +1120,7 @@ static bool g_TimeStaticInit [[maybe_unused]] = Time::StaticInit();
 inline Time
 operator+(const Time& lhs, const Time& rhs)
 {
-    return Time(lhs.m_data + rhs.m_data);
+    return Time(Time::AddSaturated(lhs.m_data, rhs.m_data));
 }
 
 /**
@@ -951,7 +1132,7 @@ operator+(const Time& lhs, const Time& rhs)
 inline Time
 operator-(const Time& lhs, const Time& rhs)
 {
-    return Time(lhs.m_data - rhs.m_data);
+    return Time(Time::SubSaturated(lhs.m_data, rhs.m_data));
 }
 
 /**
@@ -963,6 +1144,11 @@ operator-(const Time& lhs, const Time& rhs)
 inline Time
 operator*(const Time& lhs, const int64x64_t& rhs)
 {
+    int64_t saturated;
+    if (Time::Saturate(static_cast<long double>(lhs.m_data) * rhs.GetDouble(), saturated))
+    {
+        return Time(saturated);
+    }
     int64x64_t res = lhs.m_data;
     res *= rhs;
     return Time(res);
@@ -995,7 +1181,7 @@ operator*(const Time& lhs, T rhs)
 {
     static_assert(!std::is_same_v<T, bool>, "Multiplying a Time by a boolean is not supported");
 
-    return Time(lhs.m_data * rhs);
+    return Time(Time::MulSaturated(lhs.m_data, rhs));
 }
 
 // Leave undocumented
@@ -1061,6 +1247,12 @@ operator/(const Time& lhs, const Time& rhs)
 inline Time
 operator/(const Time& lhs, const int64x64_t& rhs)
 {
+    NS_ASSERT_MSG(rhs != 0, "Attempted to divide a Time by zero.");
+    int64_t saturated;
+    if (Time::Saturate(static_cast<long double>(lhs.m_data) / rhs.GetDouble(), saturated))
+    {
+        return Time(saturated);
+    }
     int64x64_t res = lhs.m_data;
     res /= rhs;
     return Time(res);
@@ -1080,7 +1272,17 @@ std::enable_if_t<std::is_integral_v<T>, Time>
 operator/(const Time& lhs, T rhs)
 {
     static_assert(!std::is_same_v<T, bool>, "Dividing a Time by a boolean is not supported");
+    NS_ASSERT_MSG(rhs != 0, "Attempted to divide a Time by zero.");
 
+    if constexpr (std::is_signed_v<T>)
+    {
+        if (rhs == -1)
+        {
+            // -Time::Min() overflows.
+            return lhs.m_data == std::numeric_limits<int64_t>::min() ? Time::Max()
+                                                                     : Time(-lhs.m_data);
+        }
+    }
     return Time(lhs.m_data / rhs);
 }
 
@@ -1108,13 +1310,15 @@ operator/(const Time& lhs, T rhs)
 inline Time
 operator%(const Time& lhs, const Time& rhs)
 {
-    return Time(lhs.m_data % rhs.m_data);
+    NS_ASSERT_MSG(!rhs.IsZero(), "Attempted to divide a Time by zero.");
+    // Time::Min() % -1 overflows; the remainder of a division by -1 is 0.
+    return rhs.m_data == -1 ? Time() : Time(lhs.m_data % rhs.m_data);
 }
 
 inline Time
 Rem(const Time& lhs, const Time& rhs)
 {
-    return Time(lhs.m_data % rhs.m_data);
+    return lhs % rhs;
 }
 
 /** @} */
@@ -1142,6 +1346,14 @@ Rem(const Time& lhs, const Time& rhs)
 inline int64_t
 Div(const Time& lhs, const Time& rhs)
 {
+    NS_ASSERT_MSG(!rhs.IsZero(), "Attempted to divide a Time by zero.");
+    if (rhs.m_data == -1)
+    {
+        // -Time::Min() overflows.
+        return lhs.m_data == std::numeric_limits<int64_t>::min()
+                   ? std::numeric_limits<int64_t>::max()
+                   : -lhs.m_data;
+    }
     return lhs.m_data / rhs.m_data;
 }
 
@@ -1154,7 +1366,7 @@ Div(const Time& lhs, const Time& rhs)
 inline Time&
 operator+=(Time& lhs, const Time& rhs)
 {
-    lhs.m_data += rhs.m_data;
+    lhs.m_data = Time::AddSaturated(lhs.m_data, rhs.m_data);
     return lhs;
 }
 
@@ -1167,7 +1379,7 @@ operator+=(Time& lhs, const Time& rhs)
 inline Time&
 operator-=(Time& lhs, const Time& rhs)
 {
-    lhs.m_data -= rhs.m_data;
+    lhs.m_data = Time::SubSaturated(lhs.m_data, rhs.m_data);
     return lhs;
 }
 
@@ -1179,6 +1391,11 @@ operator-=(Time& lhs, const Time& rhs)
 inline Time
 Abs(const Time& time)
 {
+    if (time.m_data == std::numeric_limits<int64_t>::min())
+    {
+        // -Time::Min() overflows.
+        return Time::Max();
+    }
     return Time((time.m_data < 0) ? -time.m_data : time.m_data);
 }
 
