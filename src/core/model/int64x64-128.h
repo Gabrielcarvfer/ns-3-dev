@@ -109,11 +109,16 @@ class int64x64_t
         const long double round = 0.5;
         flo = flo * HP_MAX_64 + round;
         int128_t hi = fhi;
-        const uint64_t lo = flo;
+        uint64_t lo = 0;
         if (flo >= HP_MAX_64)
         {
-            // conversion to uint64 rolled over
+            // Rounding carried into the integer part; converting flo to
+            // uint64_t would overflow.
             ++hi;
+        }
+        else
+        {
+            lo = flo;
         }
         _v = hi << 64;
         _v |= lo;
