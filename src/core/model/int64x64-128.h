@@ -108,13 +108,10 @@ class int64x64_t
         //   TestSuite int64x64
         const long double round = 0.5;
         flo = flo * HP_MAX_64 + round;
-        int128_t hi = fhi;
-        const uint64_t lo = flo;
-        if (flo >= HP_MAX_64)
-        {
-            // conversion to uint64 rolled over
-            ++hi;
-        }
+        // Converting flo to uint64_t is undefined if rounding carried it to HP_MAX_64.
+        const bool carry = flo >= HP_MAX_64;
+        const int128_t hi = static_cast<int128_t>(fhi) + carry;
+        const uint64_t lo = carry ? 0 : static_cast<uint64_t>(flo);
         _v = hi << 64;
         _v |= lo;
         _v = negative ? -_v : _v;

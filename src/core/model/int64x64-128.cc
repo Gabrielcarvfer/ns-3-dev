@@ -119,7 +119,9 @@ int64x64_t::Div(const int64x64_t& o)
     uint128_t a;
     uint128_t b;
     bool negative = output_sign(_v, o._v, a, b);
-    int128_t result = Udiv(a, b);
+    // Negate as unsigned, like Mul(): a quotient of 2^127 (e.g. the minimum
+    // value divided by 1) is not a valid int128_t.
+    uint128_t result = Udiv(a, b);
     _v = negative ? -result : result;
 }
 
