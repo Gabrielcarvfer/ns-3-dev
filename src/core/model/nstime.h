@@ -90,6 +90,14 @@ class TimeWithUnit;
  * resolution.  Therefore the maximum possible duration of your simulation
  * if you use picoseconds is 2^64 ps = 2^24 s = 7 months, whereas,
  * had you used nanoseconds, you could have run for 584 years.
+ *
+ * Arithmetic and conversions whose result is out of that range saturate to
+ * Time::Max() or Time::Min() instead of overflowing, so Time::Max() can be
+ * used as an infinite time: for example, `Simulator::Now() + Time::Max()` is
+ * Time::Max().  Times created from NaN are 0 (and assert in debug builds).
+ * Printing with As() converts to a double in the requested unit, in any unit
+ * and for any value; being a double, the printed value is not expected to
+ * read back as exactly the same Time.
  */
 class CORE_EXPORT Time
 {
@@ -173,7 +181,7 @@ class CORE_EXPORT Time
      * @param [in] v The value.
      */
     explicit inline Time(double v)
-        : m_data(llround(v))
+        : m_data(StepsSaturated(v))
     {
         if (MarkingTimes())
         {
@@ -236,7 +244,7 @@ class CORE_EXPORT Time
     }
 
     explicit inline Time(const int64x64_t& v)
-        : m_data(v.Round())
+        : m_data(StepsSaturated(v))
     {
         if (MarkingTimes())
         {
@@ -501,17 +509,13 @@ class CORE_EXPORT Time
 
         Information* info = PeekInformation(unit);
 
-        NS_ASSERT_MSG(info->isValid, "Attempted a conversion from an unavailable unit.");
-
+        // Negative values, e.g. MicroSeconds(-1), arrive here converted to uint64_t.
+        auto v = static_cast<int64_t>(value);
         if (info->fromMul)
         {
-            value *= info->factor;
+            return Time(MulSaturated(v, info->factor));
         }
-        else
-        {
-            value /= info->factor;
-        }
-        return Time(value);
+        return Time(v / info->factor);
     }
 
     inline static Time FromDouble(double value, Unit unit)
@@ -521,7 +525,25 @@ class CORE_EXPORT Time
         {
             return Time();
         }
+        NS_ASSERT_MSG(!std::isnan(value), "Attempted to create a Time from NaN.");
+        if (std::isnan(value))
+        {
+            return Time();
+        }
 
+        Information* info = PeekInformation(unit);
+
+        if (std::fabs(value) >= 0x1p63)
+        {
+            // Beyond int64x64_t.  Multiplying by the unit factor only moves the
+            // value further out of range; dividing may bring it back in range.
+            if (info->fromMul)
+            {
+                return Time(value < 0 ? std::numeric_limits<int64_t>::min()
+                                      : std::numeric_limits<int64_t>::max());
+            }
+            return Time(StepsSaturated(static_cast<long double>(value) / info->factor));
+        }
         return From(int64x64_t(value), unit);
     }
 
@@ -535,14 +557,12 @@ class CORE_EXPORT Time
 
         Information* info = PeekInformation(unit);
 
-        NS_ASSERT_MSG(info->isValid, "Attempted a conversion from an unavailable unit.");
-
         // DO NOT REMOVE this temporary variable. It's here
         // to work around a compiler bug in gcc 3.4
         int64x64_t retval = value;
         if (info->fromMul)
         {
-            retval *= info->timeFrom;
+            retval = MulSaturated(value, info->factor);
         }
         else
         {
@@ -556,6 +576,9 @@ class CORE_EXPORT Time
     /**
      * @name Get Times as Numbers in Specified Units
      * Get the Time as integers or doubles in the indicated unit.
+     *
+     * Integer results that do not fit in the result type saturate to its
+     * largest or smallest value.
      *
      * @{
      */
@@ -575,26 +598,11 @@ class CORE_EXPORT Time
 
         Information* info = PeekInformation(unit);
 
-        NS_ASSERT_MSG(info->isValid, "Attempted a conversion to an unavailable unit.");
-
-        int64_t v = m_data;
         if (info->toMul)
         {
-            // Perform the multiplication in unsigned arithmetic to avoid signed
-            // integer overflow (undefined behavior) when the converted value does
-            // not fit in int64_t. The wraparound result matches both the previous
-            // behavior on two's-complement platforms and the FromInteger() path,
-            // which already multiplies in unsigned arithmetic.
-            // If there is no overflow, static_cast<int64_t> recovers the correct
-            // signed result via two's-complement bit reinterpretation.
-            v = static_cast<int64_t>(static_cast<uint64_t>(v) *
-                                     static_cast<uint64_t>(info->factor));
+            return MulSaturated(m_data, info->factor);
         }
-        else
-        {
-            v /= info->factor;
-        }
-        return v;
+        return m_data / info->factor;
     }
 
     inline double ToDouble(Unit unit) const
@@ -605,6 +613,13 @@ class CORE_EXPORT Time
             return 0;
         }
 
+        Information* info = PeekInformation(unit);
+
+        if (info->toMul && MulOverflows(m_data, info->factor))
+        {
+            // Beyond int64x64_t, but a double holds it.
+            return static_cast<double>(static_cast<long double>(m_data) * info->factor);
+        }
         return To(unit).GetDouble();
     }
 
@@ -618,12 +633,10 @@ class CORE_EXPORT Time
 
         Information* info = PeekInformation(unit);
 
-        NS_ASSERT_MSG(info->isValid, "Attempted a conversion to an unavailable unit.");
-
         int64x64_t retval(m_data);
         if (info->toMul)
         {
-            retval *= info->timeTo;
+            retval = int64x64_t(MulSaturated(m_data, info->factor));
         }
         else
         {
@@ -655,6 +668,9 @@ class CORE_EXPORT Time
      * @endcode
      * will print ``+3140.0ms``
      *
+     * The value is printed as a double, so it has limited precision and is
+     * not expected to read back as exactly the same Time.
+     *
      * @param [in] unit The unit to use.
      * @return The Time with embedded unit.
      * @hidecaller
@@ -670,6 +686,175 @@ class CORE_EXPORT Time
     typedef void (*TracedCallback)(Time value);
 
   private:
+    /**
+     * Check whether the product of two integers overflows int64_t.
+     *
+     * @param [in] a The first factor.
+     * @param [in] b The second factor.
+     * @return @c true if `a * b` is out of the int64_t range.
+     */
+    static constexpr bool MulOverflows(int64_t a, int64_t b)
+    {
+        using Limits = std::numeric_limits<int64_t>;
+        if (a == 0 || b == 0)
+        {
+            return false;
+        }
+        if (a > 0)
+        {
+            if (b > 0)
+            {
+                return a > Limits::max() / b;
+            }
+            return b < Limits::min() / a;
+        }
+        if (b > 0)
+        {
+            return a < Limits::min() / b;
+        }
+        // Both negative; avoids negating either operand.
+        return a < Limits::max() / b;
+    }
+
+    /**
+     * Multiply two integers, saturating to the int64_t limits.
+     * @param [in] lhs The first factor.
+     * @param [in] rhs The second factor.
+     * @return The saturated product.
+     */
+    static constexpr int64_t MulSaturated(int64_t lhs, int64_t rhs)
+    {
+        if (MulOverflows(lhs, rhs))
+        {
+            return (lhs < 0) != (rhs < 0) ? std::numeric_limits<int64_t>::min()
+                                          : std::numeric_limits<int64_t>::max();
+        }
+        return lhs * rhs;
+    }
+
+    /**
+     * Multiply an integer by an integer of any type, saturating to the
+     * int64_t limits.
+     * @tparam T The integer type of the multiplier.
+     * @param [in] lhs The first factor.
+     * @param [in] rhs The second factor.
+     * @return The saturated product.
+     */
+    template <class T>
+    static constexpr int64_t MulSaturated(int64_t lhs, T rhs)
+    {
+        if constexpr (std::is_unsigned_v<T>)
+        {
+            if (rhs > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+            {
+                // Any nonzero value times rhs is out of range.
+                return lhs == 0  ? 0
+                       : lhs < 0 ? std::numeric_limits<int64_t>::min()
+                                 : std::numeric_limits<int64_t>::max();
+            }
+        }
+        return MulSaturated(lhs, static_cast<int64_t>(rhs));
+    }
+
+    /**
+     * Multiply a fixed-point value by an integer, saturating to the int64_t
+     * limits of the integer part, using integer arithmetic only.
+     *
+     * @param [in] value The fixed-point factor.
+     * @param [in] factor The integer factor.
+     * @return The saturated product.
+     */
+    static int64x64_t MulSaturated(const int64x64_t& value, int64_t factor)
+    {
+        constexpr int64_t max = std::numeric_limits<int64_t>::max();
+        constexpr int64_t min = std::numeric_limits<int64_t>::min();
+        const bool negative = (value < 0) != (factor < 0);
+        const int64x64_t limit(negative ? min : max);
+        if (value.GetHigh() == min)
+        {
+            // |value| is within 1 of 2^63, so the product fits only for factor 1.
+            return factor == 1 ? value : limit;
+        }
+        // |value| = integer + fraction, with 0 <= fraction < 1, so the product
+        // is out of range if integer * factor is.
+        const int64x64_t magnitude = value < 0 ? -value : value;
+        const int64_t integer = magnitude.GetHigh();
+        if (MulOverflows(integer, factor))
+        {
+            return limit;
+        }
+        const int64_t scaled = integer * factor;
+        // |fraction * factor| < 2^63, so this product cannot overflow.
+        int64x64_t fraction(0, magnitude.GetLow());
+        fraction *= int64x64_t(factor);
+        // The integer part of the sum is exactly scaled + fraction.GetHigh(),
+        // since the fractional part of fraction is less than 1.
+        const int64_t carry = fraction.GetHigh();
+        if ((carry > 0 && scaled > max - carry) || (carry < 0 && scaled < min - carry))
+        {
+            return limit;
+        }
+        const int64x64_t product = int64x64_t(scaled) + fraction;
+        if (value < 0)
+        {
+            // -product overflows only if product is exactly -2^63.
+            return product == int64x64_t(min) ? limit : -product;
+        }
+        return product;
+    }
+
+    /**
+     * Round a value in the current unit to time steps, saturating.
+     * @param [in] value The value; NaN gives 0.
+     * @return The saturated number of time steps.
+     */
+    static int64_t StepsSaturated(long double value)
+    {
+        NS_ASSERT_MSG(!std::isnan(value), "Attempted to create a Time from NaN.");
+        if (std::isnan(value))
+        {
+            return 0;
+        }
+        // A long double has 64 significant bits, so 2^63 - 0.5 is the smallest
+        // value rounding to 2^63, and -2^63 - 1 the largest rounding below -2^63.
+        if (value >= 0x1p63L - 0.5L)
+        {
+            return std::numeric_limits<int64_t>::max();
+        }
+        if (value < -0x1p63L)
+        {
+            return std::numeric_limits<int64_t>::min();
+        }
+        return std::llround(value);
+    }
+
+    /**
+     * Round a value in the current unit to time steps, saturating.
+     * @param [in] value The value.
+     * @return The saturated number of time steps.
+     */
+    static int64_t StepsSaturated(const int64x64_t& value)
+    {
+        constexpr int64_t max = std::numeric_limits<int64_t>::max();
+        constexpr int64_t min = std::numeric_limits<int64_t>::min();
+        constexpr uint64_t half = 1ULL << 63; // 0.5 in the fractional part
+        // value = high + low / 2^64 (two's complement), so only the values
+        // closest to the limits can round out of the int64_t range.
+        const int64_t high = value.GetHigh();
+        const uint64_t low = value.GetLow();
+        if (high == max && low >= half)
+        {
+            // Rounds up to 2^63.
+            return max;
+        }
+        if (high == min && low <= half)
+        {
+            // Rounds to -2^63, whose magnitude Round() cannot represent.
+            return min;
+        }
+        return value.Round();
+    }
+
     /** How to convert between other units and the current unit. */
     struct Information
     {
@@ -707,7 +892,9 @@ class CORE_EXPORT Time
      */
     static inline Information* PeekInformation(Unit timeUnit)
     {
-        return &(PeekResolution()->info[timeUnit]);
+        Information* info = &(PeekResolution()->info[timeUnit]);
+        NS_ASSERT_MSG(info->isValid, "Attempted a conversion with an unavailable unit.");
+        return info;
     }
 
     /**
@@ -939,6 +1126,16 @@ static bool g_TimeStaticInit [[maybe_unused]] = Time::StaticInit();
 inline Time
 operator+(const Time& lhs, const Time& rhs)
 {
+    constexpr int64_t max = std::numeric_limits<int64_t>::max();
+    constexpr int64_t min = std::numeric_limits<int64_t>::min();
+    if (rhs.m_data > 0 && lhs.m_data > max - rhs.m_data)
+    {
+        return Time(max);
+    }
+    if (rhs.m_data < 0 && lhs.m_data < min - rhs.m_data)
+    {
+        return Time(min);
+    }
     return Time(lhs.m_data + rhs.m_data);
 }
 
@@ -951,6 +1148,16 @@ operator+(const Time& lhs, const Time& rhs)
 inline Time
 operator-(const Time& lhs, const Time& rhs)
 {
+    constexpr int64_t max = std::numeric_limits<int64_t>::max();
+    constexpr int64_t min = std::numeric_limits<int64_t>::min();
+    if (rhs.m_data < 0 && lhs.m_data > max + rhs.m_data)
+    {
+        return Time(max);
+    }
+    if (rhs.m_data > 0 && lhs.m_data < min + rhs.m_data)
+    {
+        return Time(min);
+    }
     return Time(lhs.m_data - rhs.m_data);
 }
 
@@ -963,9 +1170,7 @@ operator-(const Time& lhs, const Time& rhs)
 inline Time
 operator*(const Time& lhs, const int64x64_t& rhs)
 {
-    int64x64_t res = lhs.m_data;
-    res *= rhs;
-    return Time(res);
+    return Time(Time::MulSaturated(rhs, lhs.m_data));
 }
 
 /**
@@ -995,7 +1200,7 @@ operator*(const Time& lhs, T rhs)
 {
     static_assert(!std::is_same_v<T, bool>, "Multiplying a Time by a boolean is not supported");
 
-    return Time(lhs.m_data * rhs);
+    return Time(Time::MulSaturated(lhs.m_data, rhs));
 }
 
 // Leave undocumented
@@ -1061,6 +1266,26 @@ operator/(const Time& lhs, const Time& rhs)
 inline Time
 operator/(const Time& lhs, const int64x64_t& rhs)
 {
+    NS_ASSERT_MSG(rhs != 0, "Attempted to divide a Time by zero.");
+    constexpr int64_t max = std::numeric_limits<int64_t>::max();
+    constexpr int64_t min = std::numeric_limits<int64_t>::min();
+    // The quotient is out of range only when |rhs| < 1, or when it is -Time::Min().
+    const int64_t high = rhs.GetHigh();
+    const uint64_t low = rhs.GetLow();
+    if (high == 0 || (high == -1 && low != 0))
+    {
+        // |rhs| = fraction / 2^64, so |lhs / rhs| >= 2^63 iff 2 |lhs| >= fraction.
+        const uint64_t fraction = high == 0 ? low : -low;
+        const uint64_t magnitude = lhs.m_data < 0 ? -static_cast<uint64_t>(lhs.m_data) : lhs.m_data;
+        if (magnitude >= fraction / 2 + fraction % 2)
+        {
+            return Time((lhs.m_data < 0) != (high < 0) ? min : max);
+        }
+    }
+    else if (lhs.m_data == min && rhs == int64x64_t(-1))
+    {
+        return Time(max);
+    }
     int64x64_t res = lhs.m_data;
     res /= rhs;
     return Time(res);
@@ -1080,7 +1305,17 @@ std::enable_if_t<std::is_integral_v<T>, Time>
 operator/(const Time& lhs, T rhs)
 {
     static_assert(!std::is_same_v<T, bool>, "Dividing a Time by a boolean is not supported");
+    NS_ASSERT_MSG(rhs != 0, "Attempted to divide a Time by zero.");
 
+    if constexpr (std::is_signed_v<T>)
+    {
+        if (rhs == -1)
+        {
+            // -Time::Min() overflows.
+            return lhs.m_data == std::numeric_limits<int64_t>::min() ? Time::Max()
+                                                                     : Time(-lhs.m_data);
+        }
+    }
     return Time(lhs.m_data / rhs);
 }
 
@@ -1108,13 +1343,15 @@ operator/(const Time& lhs, T rhs)
 inline Time
 operator%(const Time& lhs, const Time& rhs)
 {
-    return Time(lhs.m_data % rhs.m_data);
+    NS_ASSERT_MSG(!rhs.IsZero(), "Attempted to divide a Time by zero.");
+    // Time::Min() % -1 overflows; the remainder of a division by -1 is 0.
+    return rhs.m_data == -1 ? Time() : Time(lhs.m_data % rhs.m_data);
 }
 
 inline Time
 Rem(const Time& lhs, const Time& rhs)
 {
-    return Time(lhs.m_data % rhs.m_data);
+    return lhs % rhs;
 }
 
 /** @} */
@@ -1142,6 +1379,14 @@ Rem(const Time& lhs, const Time& rhs)
 inline int64_t
 Div(const Time& lhs, const Time& rhs)
 {
+    NS_ASSERT_MSG(!rhs.IsZero(), "Attempted to divide a Time by zero.");
+    if (rhs.m_data == -1)
+    {
+        // -Time::Min() overflows.
+        return lhs.m_data == std::numeric_limits<int64_t>::min()
+                   ? std::numeric_limits<int64_t>::max()
+                   : -lhs.m_data;
+    }
     return lhs.m_data / rhs.m_data;
 }
 
@@ -1154,7 +1399,7 @@ Div(const Time& lhs, const Time& rhs)
 inline Time&
 operator+=(Time& lhs, const Time& rhs)
 {
-    lhs.m_data += rhs.m_data;
+    lhs = lhs + rhs;
     return lhs;
 }
 
@@ -1167,7 +1412,7 @@ operator+=(Time& lhs, const Time& rhs)
 inline Time&
 operator-=(Time& lhs, const Time& rhs)
 {
-    lhs.m_data -= rhs.m_data;
+    lhs = lhs - rhs;
     return lhs;
 }
 
@@ -1179,6 +1424,11 @@ operator-=(Time& lhs, const Time& rhs)
 inline Time
 Abs(const Time& time)
 {
+    if (time.m_data == std::numeric_limits<int64_t>::min())
+    {
+        // -Time::Min() overflows.
+        return Time::Max();
+    }
     return Time((time.m_data < 0) ? -time.m_data : time.m_data);
 }
 

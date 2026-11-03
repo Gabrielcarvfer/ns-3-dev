@@ -32,6 +32,8 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### Changed behavior
 
+* (core) `Time` arithmetic (`+`, `-`, `+=`, `-=`, `*`, `/`, `%`, `Div()`, `Rem()`, `Abs()`) and conversions (`Seconds()` and the other unit functions, `Time(double)`, `Time(int64x64_t)`, `ToInteger()`, `To()` and the `Get*()` accessors) now saturate to `Time::Max()` or `Time::Min()` (or to the limits of the result type) when the result is out of range, instead of wrapping around or invoking undefined behavior. For example, `Simulator::Now() + Time::Max()` is `Time::Max()`, and `Seconds(10000).GetFemtoSeconds()` is `INT64_MAX` instead of a wrapped negative value. A `Time` created from NaN is 0, and asserts in debug builds. `ToDouble()`, and therefore `Time::As()`, return the true value as a double in any unit, e.g. `Time::Max().As(Time::FS)` prints `+9.22337e+24fs`.
+
 ## Changes from ns-3.48 to ns-3.49
 
 ### New API
