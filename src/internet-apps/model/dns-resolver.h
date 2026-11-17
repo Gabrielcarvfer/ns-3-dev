@@ -61,6 +61,10 @@ class UniformRandomVariable;
  * capped by MaxNegativeTtl. Failures are cached for FailureTtl, doubled after each
  * consecutive failure up to five minutes (RFC 9520).
  *
+ * If the ResolveNodeNames attribute is set, names of the form node-<id> (e.g., "node-3") are
+ * resolved locally to the addresses of the node with that ID, excluding loopback and IPv6
+ * link-local addresses, without querying the servers.
+ *
  * The result is reported to a callback with the list of addresses (Ipv6Address entries
  * first, then Ipv4Address entries). The list is empty if the resolution failed.
  */
@@ -288,6 +292,17 @@ class DnsResolver : public Object
      * @param type Record type.
      */
     void StartQuery(uint64_t lookup, const std::string& name, DnsHeader::RecordType type);
+
+    /**
+     * Resolve a name of the form node-<id> to the addresses of the node with that ID,
+     * excluding loopback, IPv6 link-local and addresses of interfaces that are down.
+     *
+     * @param name Host name.
+     * @param family Address family to resolve.
+     * @param lookup Lookup to fill with the addresses.
+     * @return True if the name is a node name of an existing node.
+     */
+    bool ResolveNodeName(const std::string& name, AddressFamily family, Lookup& lookup);
 
     /**
      * Pick a random query ID that is not in use.
@@ -522,6 +537,7 @@ class DnsResolver : public Object
     Time m_failureTtl;              ///< Initial cache lifetime of failures
     uint32_t m_maxCacheEntries;     ///< Maximum number of cache entries
     uint16_t m_ednsUdpPayloadSize;  ///< Advertised EDNS(0) UDP payload size (0 disables EDNS)
+    bool m_resolveNodeNames;        ///< True if node-<id> names are resolved locally
     Time m_noEdnsTime;              ///< How long a server rejecting EDNS(0) is remembered
 
     Ptr<Socket> m_udpSocket;                       ///< Shared UDP socket for IPv4 servers

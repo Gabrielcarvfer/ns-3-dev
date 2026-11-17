@@ -1562,6 +1562,42 @@ class DnsResolverIpv6ServerTestCase : public DnsResolverTestBase
 /**
  * @ingroup dns-resolver-test
  * @ingroup tests
+ * @brief Test the local resolution of node-<id> names.
+ */
+class DnsResolverNodeNamesTestCase : public DnsResolverTestBase
+{
+  public:
+    DnsResolverNodeNamesTestCase()
+        : DnsResolverTestBase("Check resolution of node names")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        Setup();
+        m_resolver->SetAttribute("ResolveNodeNames", BooleanValue(true));
+        ScheduleResolve(Seconds(1), "any", "node-1", DnsResolver::ANY);
+        ScheduleResolve(Seconds(1), "ipv4", "Node-1.", DnsResolver::IPV4);
+        ScheduleResolve(Seconds(1), "self", "node-0", DnsResolver::IPV4);
+        ScheduleResolve(Seconds(1), "missing", "node-2", DnsResolver::IPV4);
+        Simulator::Stop(Seconds(10));
+        Simulator::Run();
+
+        std::ostringstream expected;
+        expected << m_server6 << " 10.0.0.2 " << SERVFAIL_SERVER;
+        NS_TEST_EXPECT_MSG_EQ(Result("any"), expected.str(), "Wrong node addresses");
+        NS_TEST_EXPECT_MSG_EQ(Result("ipv4"), "10.0.0.2 10.0.0.3", "Wrong IPv4 node addresses");
+        NS_TEST_EXPECT_MSG_EQ(Result("self"), "10.0.0.1", "Wrong own addresses");
+        NS_TEST_EXPECT_MSG_EQ(m_server->m_queries["node-1/1/udp"], 0, "Node name sent to server");
+        NS_TEST_EXPECT_MSG_GT(m_server->m_queries["node-2/1/udp"], 0, "Unknown node not queried");
+        Teardown();
+    }
+};
+
+/**
+ * @ingroup dns-resolver-test
+ * @ingroup tests
  * @brief Test corner cases: failure caching and backoff, server list changes mid-query, late
  * responses, shared queries, cache eviction and the CacheEnabled attribute.
  */
@@ -1735,6 +1771,7 @@ class DnsResolverTestSuite : public TestSuite
         AddTestCase(new DnsResolverCacheLimitsTestCase, TestCase::Duration::QUICK);
         AddTestCase(new DnsResolverTcpTestCase, TestCase::Duration::QUICK);
         AddTestCase(new DnsResolverIpv6ServerTestCase, TestCase::Duration::QUICK);
+        AddTestCase(new DnsResolverNodeNamesTestCase, TestCase::Duration::QUICK);
         AddTestCase(new DnsResolverRobustnessTestCase, TestCase::Duration::QUICK);
     }
 };

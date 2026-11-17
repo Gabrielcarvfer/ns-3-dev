@@ -12,8 +12,11 @@
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
 #include "ns3/ipv4-address.h"
+#include "ns3/ipv4.h"
 #include "ns3/ipv6-address.h"
+#include "ns3/ipv6.h"
 #include "ns3/log.h"
+#include "ns3/node-list.h"
 #include "ns3/node.h"
 #include "ns3/packet.h"
 #include "ns3/random-variable-stream.h"
@@ -138,6 +141,12 @@ DnsResolver::GetTypeId()
                           TimeValue(Minutes(10)),
                           MakeTimeAccessor(&DnsResolver::m_noEdnsTime),
                           MakeTimeChecker(Time(0)))
+            .AddAttribute("ResolveNodeNames",
+                          "Resolve names of the form node-<id> locally, to the non-loopback "
+                          "addresses of the node with that ID, without querying the servers",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&DnsResolver::m_resolveNodeNames),
+                          MakeBooleanChecker())
             .AddTraceSource(
                 "Resolved",
                 "Result of a resolution: the host name and its addresses (empty on failure)",
@@ -398,6 +407,10 @@ DnsResolver::Resolve(const std::string& name, ResolveCallback callback, AddressF
             lookup.ipv6 = {literal};
         }
     }
+    else if (m_resolveNodeNames && ResolveNodeName(name, family, lookup))
+    {
+        NS_LOG_INFO("Resolved node name " << name);
+    }
     else if (!IsValidHostName(name))
     {
         NS_LOG_WARN("Invalid host name " << name);
@@ -462,6 +475,63 @@ bool
 DnsResolver::CacheEntry::IsExpired() const
 {
     return expiry <= Simulator::Now();
+}
+
+bool
+DnsResolver::ResolveNodeName(const std::string& name, AddressFamily family, Lookup& lookup)
+{
+    const std::string prefix = "node-";
+    const std::string normalized = DnsHeader::NormalizeName(name);
+    if (normalized.size() <= prefix.size() || normalized.compare(0, prefix.size(), prefix) != 0 ||
+        normalized.find_first_not_of("0123456789", prefix.size()) != std::string::npos)
+    {
+        return false;
+    }
+    const uint64_t nodeId = std::stoull(normalized.substr(prefix.size()));
+    if (nodeId >= NodeList::GetNNodes())
+    {
+        return false;
+    }
+
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    if (auto ipv4 = node->GetObject<Ipv4>(); ipv4 && family != IPV6)
+    {
+        for (uint32_t i = 0; i < ipv4->GetNInterfaces(); i++)
+        {
+            if (!ipv4->IsUp(i))
+            {
+                continue;
+            }
+            for (uint32_t j = 0; j < ipv4->GetNAddresses(i); j++)
+            {
+                const Ipv4Address address = ipv4->GetAddress(i, j).GetLocal();
+                if (!address.IsLocalhost())
+                {
+                    lookup.ipv4.emplace_back(address);
+                }
+            }
+        }
+    }
+    if (auto ipv6 = node->GetObject<Ipv6>(); ipv6 && family != IPV4)
+    {
+        for (uint32_t i = 0; i < ipv6->GetNInterfaces(); i++)
+        {
+            if (!ipv6->IsUp(i))
+            {
+                continue;
+            }
+            for (uint32_t j = 0; j < ipv6->GetNAddresses(i); j++)
+            {
+                // Link-local addresses are useless without an interface scope
+                const Ipv6Address address = ipv6->GetAddress(i, j).GetAddress();
+                if (!address.IsLocalhost() && !address.IsLinkLocal())
+                {
+                    lookup.ipv6.emplace_back(address);
+                }
+            }
+        }
+    }
+    return true;
 }
 
 uint16_t

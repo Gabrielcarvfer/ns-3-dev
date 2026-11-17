@@ -559,6 +559,13 @@ Host names
   case-insensitively. IPv4 addresses in dotted-decimal notation (without leading zeros) and IPv6
   addresses are returned immediately, without a query, if they match the requested family.
 
+Node names
+  If the ``ResolveNodeNames`` attribute is true (false by default), names of the form
+  ``node-<id>`` (e.g., ``node-3``) are resolved locally, without a query, to the addresses
+  currently assigned to the node with that ID. Loopback addresses, IPv6 link-local addresses and
+  addresses of interfaces that are down are excluded. Names of nodes that do not exist are sent
+  to the servers as usual.
+
 Transport
   Queries are sent over UDP, on IPv4 or IPv6 depending on the server address. Each query uses a
   random source port in the dynamic range 49152-65535 (:rfc:`5452`); if no free port is found
@@ -646,4 +653,4 @@ Validation
 
 The ``dns-resolver`` test suite checks ``DnsHeader`` serialization on valid and malformed
 messages, the parsing of crafted responses, and end-to-end resolution through a simulated DNS
-server, covering failover, caching, the EDNS(0) and TCP fallbacks, and IPv6 servers.
+server, covering failover, caching, the EDNS(0) and TCP fallbacks, IPv6 servers and node names.
