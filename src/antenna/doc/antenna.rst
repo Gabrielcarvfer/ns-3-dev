@@ -152,6 +152,66 @@ Derived classes must implement the following functions:
 The class ``PhasedArrayModel`` also assumes that all antenna elements are equal, a typical key assumption which allows to model the PAA field pattern as the sum of the array factor, given by the geometry of the location of the antenna elements, and the element field pattern.
 Any class derived from ``AntennaModel`` is a valid antenna element for the ``PhasedArrayModel``, allowing for a great flexibility of the framework.
 
+.. _phased-array-beamforming-conventions:
+
+Beamforming vector conventions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The beamforming vector set with ``SetBeamformingVector`` holds the complex weight
+applied to each antenna element. The same vector is used when the array transmits
+and when it receives: the transmitted signal of element :math:`i` is the port signal
+multiplied by :math:`w_i`, and the received port signal is the plain weighted sum
+:math:`\sum_i w_i r_i` of the element signals :math:`r_i`, without any conjugation.
+
+With the element locations :math:`\bar{r}_i` normalized to the wavelength and
+:math:`\hat{u}` the unit vector of a direction, the class provides:
+
+* ``GetSteeringVector(Angles)``, with entries
+
+  .. math::
+
+    a_i(\hat{u}) = \exp \left( -j 2 \pi \, \bar{r}_i \cdot \hat{u} \right)
+
+* ``GetBeamformingVector(Angles)``, the steering vector scaled so that the
+  elements of each antenna port have unit total power, i.e., each entry has
+  magnitude :math:`1 / \sqrt{N_{e}}`, where :math:`N_{e}` is the number of elements
+  per port. The squared norm of the whole vector is then the number of ports.
+
+A plane wave departing towards, or arriving from, the direction :math:`\hat{u}`
+has phase :math:`\exp(+j 2 \pi \, \bar{r}_i \cdot \hat{u})` at element :math:`i`
+(Eq. 7.5-22 of 3GPP TR 38.901 [:ref:`5<antennaRef5>`]). The weights above are the
+conjugate of this array response, so they add the element contributions in phase.
+Therefore ``GetBeamformingVector(Angles)`` points the beam towards the given
+direction at either end of a link, and a device can keep a single vector for both
+its transmissions and its receptions.
+
+This is the transpose convention, as opposed to the Hermitian one in which the
+receive weights are conjugated when they are applied. It is the one of the TXRU
+virtualization of Section 5.2.2 of 3GPP TR 36.897 [:ref:`8<antennaRef8>`], where
+the signal of a port is the plain weighted sum of the signals of its elements and
+the weights steering a column of elements have the same negative phase.
+
+Users that compute their own weights should follow the same convention:
+
+* a matched (maximum ratio) receive weight is the conjugate of the array response
+  of the incoming wave, and not the response itself;
+* if the weights are derived from a singular value decomposition
+  :math:`\mathbf{H} = \mathbf{U} \mathbf{\Sigma} \mathbf{V}^H` of the channel between
+  two arrays, the transmit weights are the right singular vector :math:`\mathbf{v}_1`
+  and the receive weights are the conjugate :math:`\mathbf{u}_1^*` of the left
+  singular vector. Storing :math:`\mathbf{u}_1` as is points the receive beam at the
+  mirror image of the intended direction with respect to the array, which only
+  coincides with it at boresight.
+
+The channel models of the spectrum module apply the vectors accordingly, see the
+description of ``ThreeGppSpectrumPropagationLossModel``.
+
+.. note::
+
+   Up to ns-3.49, ``GetBeamformingVector(Angles)`` returned the conjugate of the
+   steering vector, and the 3GPP channel model conjugated the weights of one end of
+   the link. Weights computed for these releases may need to be conjugated.
+
 .. _3gpp-antenna-model:
 
 Uniform Planar Array (UPA)
