@@ -823,6 +823,111 @@ and the vector returned by ``PhasedArrayModel::GetBeamformingVector(Angles)``,
 with entries proportional to :math:`\exp(-j 2 \pi \hat{r} \cdot \bar{d} / \lambda_0)`,
 points the beam towards the given direction for both transmission and reception.
 
+The convention has the following consequences:
+
+* Reciprocity: a pair of beamforming vectors yields the same long term component
+  (transposed across the ports) in both link directions, regardless of which node
+  was the "s" node when the channel matrix was generated. With single-port
+  arrays the received power is then the same in both directions. The reason is
+  detailed below.
+* Matched reception: the model uses the transpose, and not the Hermitian
+  transpose, of the receive vector, so the conjugation of a matched receiver
+  belongs to the stored vector. Given the singular value
+  decomposition :math:`\mathbf{H}_{u,s} = \mathbf{U} \mathbf{\Sigma} \mathbf{V}^H`,
+  the long term component reaches the largest singular value :math:`\sigma_1` with
+  :math:`\mathbf{w}_s = \mathbf{v}_1` and :math:`\mathbf{w}_u = \mathbf{u}_1^*`, as
+  :math:`(\mathbf{u}_1^*)^T \mathbf{H}_{u,s} \mathbf{v}_1 = \mathbf{u}_1^H \mathbf{H}_{u,s} \mathbf{v}_1 = \sigma_1`.
+  Using :math:`\mathbf{u}_1` as the receive weights yields
+  :math:`\mathbf{u}_1^T \mathbf{H}_{u,s} \mathbf{v}_1` instead, which is in general
+  much smaller.
+* Line of sight: for a single plane wave the channel is the outer product
+  :math:`\mathbf{a}_u \mathbf{a}_s^T` of the array responses of both ends, whose
+  entries have the positive phase above, so that :math:`\mathbf{v}_1` and
+  :math:`\mathbf{u}_1^*` are both proportional to the conjugate of an array
+  response. This is the vector returned by
+  ``PhasedArrayModel::GetBeamformingVector(Angles)`` for the direction of the
+  other node.
+* Normalization: the model does not normalize the vectors. With the unit power
+  per port of ``PhasedArrayModel::GetBeamformingVector(Angles)``, a pair of
+  single-port arrays with :math:`N_s` and :math:`N_u` elements pointing at each
+  other over a line of sight path has a gain of :math:`N_s N_u` over a pair of
+  single elements.
+
+The transmit and the receive roles of a link can be swapped without changing
+the result because the model treats both ends in the same way. Each ray of
+Eq. 7.5-22 of [TR38901]_ contributes to the entry of the channel matrix between
+the element :math:`u` of one array and the element :math:`s` of the other the term
+
+.. math::
+
+  h_{u,s} = c \, \exp(j 2 \pi \, \bar{r}_u \cdot \hat{d}_u / \lambda_0) \,
+            \exp(j 2 \pi \, \bar{r}_s \cdot \hat{d}_s / \lambda_0)
+
+where :math:`c` gathers the power, the polarization and the initial phases of the
+ray, and :math:`\hat{d}_u` and :math:`\hat{d}_s` are the directions of the ray at
+each array. The two array terms have the same form and the same sign: each one
+depends only on the location of the element and on the direction of the ray at
+that array, and not on whether the ray departs from it or arrives at it. When the
+transmitter and the receiver are swapped the ray is travelled backwards, the
+directions at each array are the same, and so is the term; only the roles of the
+indices are exchanged. The channel of the opposite direction is therefore the
+transpose :math:`\mathbf{H}_{u,s}^T`, which is what the model returns from the
+single channel matrix it stores for each pair of arrays.
+
+As the weights are applied to the elements without any conjugation, the
+contribution of a ray to the long term component is
+
+.. math::
+
+  \sum_u \sum_s w_u \, h_{u,s} \, w_s = c \,
+  \left( \sum_u w_u \exp(j 2 \pi \, \bar{r}_u \cdot \hat{d}_u / \lambda_0) \right)
+  \left( \sum_s w_s \exp(j 2 \pi \, \bar{r}_s \cdot \hat{d}_s / \lambda_0) \right)
+
+that is, the ray coefficient multiplied by the array factor of each end towards
+the direction of the ray. The expression is symmetric: nothing in it tells the
+transmitter from the receiver, so that
+
+.. math::
+
+  \mathbf{w}_u^T \mathbf{H}_{u,s} \mathbf{w}_s = \mathbf{w}_s^T \mathbf{H}_{u,s}^T \mathbf{w}_u
+
+and each array has the same beam pattern when it transmits and when it receives.
+The long term component is thus a bilinear form of the two vectors, and not the
+sesquilinear form :math:`\mathbf{w}_u^H \mathbf{H}_{u,s} \mathbf{w}_s` of a
+Hermitian combiner. In the latter, the array factor of the conjugated end would be
+:math:`\sum_u w_u^* \exp(j 2 \pi \, \bar{r}_u \cdot \hat{d}_u / \lambda_0)`, which is that of
+the mirrored direction :math:`-\hat{d}_u`. The beam pattern of a device would then
+depend on its role in the link, and the same pair of vectors could not be used in
+both directions.
+
+The transpose convention is the one of the antenna array models of 3GPP. The
+TXRU virtualization of Section 5.2.2 of [TR36897]_ defines the signal of an
+antenna port as the plain weighted sum of the signals of its elements, and gives
+as weights of a column of :math:`K` elements steered to the electrical tilt
+:math:`\theta_{etilt}`
+
+.. math::
+
+  w_k = \frac{1}{\sqrt{K}} \exp \left( -j \frac{2 \pi}{\lambda_0} (k-1) d_V \cos \theta_{etilt} \right)
+
+that is, the conjugate of the array response, normalized to unit power, as
+returned by ``PhasedArrayModel::GetBeamformingVector(Angles)``. The channel of a
+port is then the sum over its elements of the weights multiplied by the channel
+coefficients of the elements, without conjugation (see Eqs. 5, 9 and 27 of
+[Nadeem2019]_). The transposition of the channel matrix between the two link
+directions is the usual statement of the reciprocity of the propagation channel
+in time division duplex systems: "reciprocity implies that the reverse channel
+matrix is equal to the transpose of the forward channel matrix" [Marzetta2006]_.
+
+.. note::
+
+   Up to ns-3.49, the long term component was
+   :math:`\mathbf{w}_u^H \mathbf{H}_{u,s} \mathbf{w}_s`, with the conjugated vector
+   being that of the "u" node of the stored channel matrix and not necessarily
+   that of the receiver. Vectors with entries proportional to
+   :math:`\exp(-j 2 \pi \hat{r} \cdot \bar{d} / \lambda_0)` at both ends therefore
+   pointed one of the two beams at the mirror image of the intended direction.
+
 2. Retrieve the channel matrix and the channel params
 The ``ThreeGppSpectrumPropagationLossModel`` relies on the ``ThreeGppChannelModel`` class
 to obtain the channel matrix and channel parameters.
@@ -1353,6 +1458,13 @@ References
 
 .. [TR36897] 3GPP. 2015. TR 36.897. Study on elevation beamforming / Full-Dimension (FD)
    Multiple Input Multiple Output (MIMO) for LTE. V13.0.0. (2015-06)
+
+.. [Nadeem2019] Qurrat-Ul-Ain Nadeem, Abla Kammoun, Mohamed-Slim Alouini.
+   "Elevation Beamforming with Full Dimension MIMO Architectures in 5G Systems:
+   A Tutorial". 2019. Available: https://arxiv.org/abs/1805.00225
+
+.. [Marzetta2006] Thomas L. Marzetta. "How Much Training is Required for Multiuser
+   MIMO?". Fortieth Asilomar Conference on Signals, Systems and Computers. 2006.
 
 
 Two-Ray fading model
