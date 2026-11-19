@@ -3082,9 +3082,9 @@ ThreeGppLosBlockageAttenuationTest::DoRun()
  * @ingroup spectrum-tests
  *
  * Test case for ThreeGppChannelModel::WrapAngles: an inclination outside
- * [0, pi] must be mirrored through the pole (2 pi - theta, phi + pi), so a
- * ray just past the nadir stays near the nadir and a negative inclination
- * stays near the zenith.
+ * [0, pi] must be reflected into it (2 pi - theta) with the azimuth kept, as in
+ * TR 38.901 Sec. 7.5 Step 7, so a ray just past the nadir stays near the nadir
+ * and a negative inclination stays near the zenith.
  */
 class ThreeGppChannelWrapAnglesTest : public TestCase
 {
@@ -3108,14 +3108,14 @@ ThreeGppChannelWrapAnglesTest::DoRun()
     auto [az, incl] = ThreeGppChannelModel::WrapAngles(0.3, 1.0);
     NS_TEST_ASSERT_MSG_EQ_TOL(az, 0.3, tol, "azimuth changed inside the range");
     NS_TEST_ASSERT_MSG_EQ_TOL(incl, 1.0, tol, "inclination changed inside the range");
-    // Just past the nadir: stays just above the nadir, on the opposite azimuth.
+    // Just past the nadir: stays just above the nadir, at the same azimuth.
     std::tie(az, incl) = ThreeGppChannelModel::WrapAngles(0.3, M_PI + 0.2);
     NS_TEST_ASSERT_MSG_EQ_TOL(incl, M_PI - 0.2, tol, "inclination past the nadir");
-    NS_TEST_ASSERT_MSG_EQ_TOL(az, 0.3 + M_PI, tol, "azimuth past the nadir");
+    NS_TEST_ASSERT_MSG_EQ_TOL(az, 0.3, tol, "azimuth past the nadir");
     // Just above the zenith (negative inclination): stays near the zenith.
     std::tie(az, incl) = ThreeGppChannelModel::WrapAngles(0.3, -0.2);
     NS_TEST_ASSERT_MSG_EQ_TOL(incl, 0.2, tol, "negative inclination");
-    NS_TEST_ASSERT_MSG_EQ_TOL(az, 0.3 + M_PI, tol, "azimuth of a negative inclination");
+    NS_TEST_ASSERT_MSG_EQ_TOL(az, 0.3, tol, "azimuth of a negative inclination");
     // Azimuth wraps into [0, 2 pi).
     std::tie(az, incl) = ThreeGppChannelModel::WrapAngles(-0.3, 1.0);
     NS_TEST_ASSERT_MSG_EQ_TOL(az, 2 * M_PI - 0.3, tol, "negative azimuth");

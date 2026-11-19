@@ -62,6 +62,7 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (spectrum) The departure angle spreads (ASD and ZSD) of the satellite links of the NTN scenarios of `ThreeGppChannelModel` are now zero, as required by NOTE 8 of TR 38.811 Tables 6.7.2-1a to 6.7.2-8b. The mean of their logarithm was set to the smallest positive double instead of minus infinity, which made both spreads 1 degree.
 * (spectrum) With the `InterUeSpatialConsistency` attribute of the channel condition model enabled, the LSPs of the `NTN-Rural` scenario of `ThreeGppChannelModel` are spatially correlated over the distances of TR 38.811 Tables 6.7.2-7a to 6.7.2-8b (the RMa ones of TR 38.901, with an NLOS SF distance of 120 m as in `ThreeGppNTNRuralPropagationLossModel`), instead of the UMa ones.
 * (spectrum) `ThreeGppChannelModel` now scales the cluster azimuths of links with 15 clusters (the Indoor-Office LOS links) with the C_phi of 1.211 of TR 38.901 Table 7.5-2, instead of 1.221, so their azimuth spreads are about 1% larger.
+* (spectrum) `ThreeGppChannelModel::WrapAngles` reflects an out-of-range inclination into [0, pi] keeping the azimuth, as in TR 38.901 Sec. 7.5 Step 7, instead of also rotating the azimuth by pi; ray azimuths of rays whose zenith angle crosses 0 or 180 degrees change.
 
 ## Changes from ns-3.48 to ns-3.49
 

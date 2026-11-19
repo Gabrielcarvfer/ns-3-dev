@@ -5169,12 +5169,9 @@ ThreeGppChannelModel::WrapAngles(double azimuthRad, double inclinationRad)
     inclinationRad = WrapTo2Pi(inclinationRad);
     if (inclinationRad > M_PI)
     {
-        // An inclination past the pole is the direction mirrored through it:
-        // (theta, phi) with theta in (pi, 2 pi) is (2 pi - theta, phi + pi).
-        // Subtracting pi instead sent a ray just past the nadir to just below
-        // the zenith, i.e. into the wrong hemisphere.
+        // TR 38.901 Sec. 7.5 Step 7: a zenith angle in [180, 360] deg is set to
+        // 360 deg minus itself, the azimuth being kept.
         inclinationRad = 2 * M_PI - inclinationRad;
-        azimuthRad += M_PI;
     }
 
     azimuthRad = WrapTo2Pi(azimuthRad);

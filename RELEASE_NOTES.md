@@ -71,6 +71,7 @@ but other contemporaneous versions may also work.
 - (spectrum) The departure angle spreads of the satellite links of the NTN scenarios of `ThreeGppChannelModel` are now zero (TR 38.811 Table 6.7.2 NOTE 8), instead of 1 degree.
 - (spectrum) With `LargeBandwidthArrayModeling` enabled, `ThreeGppChannelModel` no longer produces a non-finite channel when an intra-cluster spread is zero, as the cluster ASD of the NTN Dense Urban and Suburban scenarios and the departure spreads of a satellite: such a spread no longer weights the ray powers of TR 38.901 Equation 7.6-6, instead of dividing by zero.
 - (spectrum) The cluster azimuths of the `ThreeGppChannelModel` links with 15 clusters (Indoor-Office LOS) now use the C_phi of 1.211 of TR 38.901 Table 7.5-2; they used 1.221.
+- (spectrum) `ThreeGppChannelModel::WrapAngles` now keeps the azimuth of a ray whose zenith angle is reflected into [0, 180] degrees, as in TR 38.901 Sec. 7.5 Step 7; it rotated the azimuth by 180 degrees, which narrowed the azimuth spreads of links with wide zenith spreads, such as the Indoor-Office LOS arrival spread.
 
 ## Release 3.49
 
