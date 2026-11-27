@@ -96,6 +96,8 @@ BUILD_PROFILE_SUFFIX = ""
 VERSION = ""
 PYTHON = ""
 VALGRIND_FOUND = True
+# Set the NS_PERFORMANCE environment variable to run performance examples
+NS_PERFORMANCE = os.environ.get("NS_PERFORMANCE", "0") not in ("", "0")
 
 #
 # This will be given a prefix and a suffix when the ns3 config file is

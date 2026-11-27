@@ -413,6 +413,15 @@ NSC_ENABLED variable that was defined up until ns-3.35:
 
     ("tcp-nsc-lfn", "NSC_ENABLED == True", "NSC_ENABLED == False", "QUICK"),
 
+Performance examples, which take long to run and are only useful to measure
+the simulator speed, use the ``NS_PERFORMANCE`` condition. It is true when
+the ``NS_PERFORMANCE`` environment variable is set to a value other than ``0``.
+They are usually also classified as ``"TAKES_FOREVER"``, so both are needed to run them:
+
+.. sourcecode:: bash
+
+    NS_PERFORMANCE=1 ./test.py --fullness=TAKES_FOREVER
+
 Each entry in the Python list of examples to run contains the tuple
 ``(example_name, do_run, fullness)``, where, as for the C++ examples,
 
