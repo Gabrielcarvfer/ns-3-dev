@@ -1222,7 +1222,7 @@ RoutingProtocol::RoutingTableComputation()
     const AssociationSet& associationSet = m_state.GetAssociationSet();
 
     // Clear HNA routing table
-    for (uint32_t i = 0; i < m_hnaRoutingTable->GetNRoutes(); i++)
+    while (m_hnaRoutingTable->GetNRoutes() > 0)
     {
         m_hnaRoutingTable->RemoveRoute(0);
     }

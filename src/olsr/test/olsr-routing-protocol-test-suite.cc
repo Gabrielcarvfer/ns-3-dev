@@ -8,10 +8,18 @@
  *          Gustavo J. A. M. Carneiro <gjc@inescporto.pt>
  */
 
+#include "ns3/internet-stack-helper.h"
+#include "ns3/ipv4-address-helper.h"
 #include "ns3/ipv4-header.h"
+#include "ns3/olsr-helper.h"
 #include "ns3/olsr-repositories.h"
 #include "ns3/olsr-routing-protocol.h"
+#include "ns3/simple-net-device-helper.h"
+#include "ns3/simulator.h"
 #include "ns3/test.h"
+
+#include <optional>
+#include <vector>
 
 /**
  * @ingroup olsr
@@ -167,6 +175,115 @@ OlsrMprTestCase::DoRun()
  * @ingroup olsr-test
  * @ingroup tests
  *
+ * Check that the route to a network is removed after the gateway announcing it
+ * through HNA messages withdraws it, while the network is otherwise static.
+ */
+class OlsrHnaWithdrawalTestCase : public TestCase
+{
+  public:
+    OlsrHnaWithdrawalTestCase();
+    void DoRun() override;
+
+  private:
+    /**
+     * Run a simulation where the gateway withdraws one of the networks.
+     *
+     * @param withdrawn The network the gateway withdraws.
+     */
+    void RunWithdrawal(const Ipv4Address& withdrawn);
+
+    /**
+     * Check which of the networks have a route.
+     *
+     * @param withdrawn The network the gateway has withdrawn, if any.
+     */
+    void CheckRoutes(std::optional<Ipv4Address> withdrawn);
+
+    /// Networks announced by the gateway
+    const std::vector<Ipv4Address> m_networks{"172.16.1.0", "172.16.2.0"};
+    const Ipv4Mask m_mask{"255.255.255.0"};   ///< Mask of the networks announced by the gateway
+    const Time m_withdrawalTime{Seconds(40)}; ///< Time the gateway withdraws the network
+    const Time m_checkBefore{Seconds(39)};    ///< Time of the check before the withdrawal
+    const Time m_checkAfter{Seconds(80)};     ///< Time of the check after the withdrawal
+    Ptr<RoutingProtocol> m_protocol;          ///< OLSR of the node the routes are checked on
+};
+
+OlsrHnaWithdrawalTestCase::OlsrHnaWithdrawalTestCase()
+    : TestCase("Check the removal of the route to a withdrawn HNA network")
+{
+}
+
+void
+OlsrHnaWithdrawalTestCase::CheckRoutes(std::optional<Ipv4Address> withdrawn)
+{
+    for (const auto& network : m_networks)
+    {
+        Ipv4Header header;
+        header.SetDestination(network);
+        Socket::SocketErrno error;
+        Ptr<Ipv4Route> route = m_protocol->RouteOutput(nullptr, header, nullptr, error);
+        NS_TEST_EXPECT_MSG_EQ((route != nullptr),
+                              (network != withdrawn),
+                              "Unexpected route to " << network << " at " << Simulator::Now());
+    }
+}
+
+void
+OlsrHnaWithdrawalTestCase::DoRun()
+{
+    for (const auto& network : m_networks)
+    {
+        RunWithdrawal(network);
+    }
+}
+
+void
+OlsrHnaWithdrawalTestCase::RunWithdrawal(const Ipv4Address& withdrawn)
+{
+    NodeContainer nodes(3);
+    SimpleNetDeviceHelper simple;
+    NetDeviceContainer devices = simple.Install(nodes);
+
+    InternetStackHelper internet;
+    OlsrHelper olsrHelper;
+    internet.SetRoutingHelper(olsrHelper);
+    internet.Install(nodes);
+    olsrHelper.AssignStreams(nodes, 1);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.0.0.0", "255.255.255.0");
+    address.Assign(devices);
+
+    m_protocol = nodes.Get(0)->GetObject<RoutingProtocol>();
+    Ptr<RoutingProtocol> gateway = nodes.Get(2)->GetObject<RoutingProtocol>();
+    NS_TEST_ASSERT_MSG_NE(m_protocol, nullptr, "OLSR is not installed");
+    NS_TEST_ASSERT_MSG_NE(gateway, nullptr, "OLSR is not installed on the gateway");
+
+    for (const auto& network : m_networks)
+    {
+        gateway->AddHostNetworkAssociation(network, m_mask);
+    }
+    Simulator::Schedule(m_withdrawalTime,
+                        &RoutingProtocol::RemoveHostNetworkAssociation,
+                        gateway,
+                        withdrawn,
+                        m_mask);
+    Simulator::Schedule(m_checkBefore,
+                        &OlsrHnaWithdrawalTestCase::CheckRoutes,
+                        this,
+                        std::optional<Ipv4Address>());
+    Simulator::Schedule(m_checkAfter, &OlsrHnaWithdrawalTestCase::CheckRoutes, this, withdrawn);
+
+    Simulator::Stop(m_checkAfter);
+    Simulator::Run();
+    m_protocol = nullptr;
+    Simulator::Destroy();
+}
+
+/**
+ * @ingroup olsr-test
+ * @ingroup tests
+ *
  * OLSR protocol test suite
  */
 class OlsrProtocolTestSuite : public TestSuite
@@ -179,6 +296,7 @@ OlsrProtocolTestSuite::OlsrProtocolTestSuite()
     : TestSuite("routing-olsr", Type::UNIT)
 {
     AddTestCase(new OlsrMprTestCase(), TestCase::Duration::QUICK);
+    AddTestCase(new OlsrHnaWithdrawalTestCase(), TestCase::Duration::QUICK);
 }
 
 static OlsrProtocolTestSuite g_olsrProtocolTestSuite; //!< Static variable for test initialization
