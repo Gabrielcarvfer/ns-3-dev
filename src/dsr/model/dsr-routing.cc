@@ -64,6 +64,7 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <vector>
 
 namespace ns3
 {
@@ -566,6 +567,15 @@ DsrRouting::DoDispose()
             }
         }
     }
+    m_ipv4 = nullptr;
+    m_ip = nullptr;
+    m_ipv4Route = nullptr;
+    m_downTarget.Nullify();
+    m_options.clear();
+    m_routeCache = nullptr;
+    m_rreqTable = nullptr;
+    m_passiveBuffer = nullptr;
+    m_priorityQueue.clear();
     IpL4Protocol::DoDispose();
 }
 
@@ -846,8 +856,9 @@ DsrRouting::CheckSendBuffer()
              * Peek data to get the option type as well as length and segmentsLeft field
              */
             uint32_t size = copyP->GetSize();
-            auto data = new uint8_t[size];
-            copyP->CopyData(data, size);
+            std::vector<uint8_t> buffer(size);
+            copyP->CopyData(buffer.data(), size);
+            const uint8_t* data = buffer.data();
 
             uint8_t optionType = 0;
             optionType = *(data);
@@ -1121,8 +1132,9 @@ DsrRouting::PromiscReceive(Ptr<NetDevice> device,
          * Peek data to get the option type as well as length and segmentsLeft field
          */
         uint32_t size = pktMinusIpHdr->GetSize();
-        auto data = new uint8_t[size];
-        pktMinusIpHdr->CopyData(data, size);
+        std::vector<uint8_t> buffer(size);
+        pktMinusIpHdr->CopyData(buffer.data(), size);
+        const uint8_t* data = buffer.data();
         uint8_t optionType = 0;
         optionType = *(data);
 
@@ -1903,8 +1915,9 @@ DsrRouting::SendPacketFromBuffer(const DsrOptionSRHeader& sourceRoute,
              * Peek data to get the option type as well as length and segmentsLeft field
              */
             uint32_t size = copyP->GetSize();
-            auto data = new uint8_t[size];
-            copyP->CopyData(data, size);
+            std::vector<uint8_t> buffer(size);
+            copyP->CopyData(buffer.data(), size);
+            const uint8_t* data = buffer.data();
 
             uint8_t optionType = 0;
             optionType = *(data);
@@ -3336,8 +3349,9 @@ DsrRouting::Receive(Ptr<Packet> p, const Ipv4Header& ip, Ptr<Ipv4Interface> inco
      * Peek data to get the option type as well as length and segmentsLeft field
      */
     uint32_t size = p->GetSize();
-    auto data = new uint8_t[size];
-    p->CopyData(data, size);
+    std::vector<uint8_t> buffer(size);
+    p->CopyData(buffer.data(), size);
+    const uint8_t* data = buffer.data();
 
     uint8_t optionType = 0;
     uint8_t optionLength = 0;

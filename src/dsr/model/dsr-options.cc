@@ -49,6 +49,7 @@
 #include <ctime>
 #include <list>
 #include <map>
+#include <vector>
 
 namespace ns3
 {
@@ -1271,8 +1272,9 @@ DsrOptionSR::Process(Ptr<Packet> packet,
 
         // Get the option type value
         uint32_t size = p->GetSize();
-        auto data = new uint8_t[size];
-        p->CopyData(data, size);
+        std::vector<uint8_t> buffer(size);
+        p->CopyData(buffer.data(), size);
+        const uint8_t* data = buffer.data();
         uint8_t optionType = 0;
         optionType = *(data);
         // When the option type is 160, means there is ACK request header after the source route,
@@ -1436,8 +1438,9 @@ DsrOptionRerr::Process(Ptr<Packet> packet,
                          << (uint32_t)protocol << isPromisc);
     Ptr<Packet> p = packet->Copy();
     uint32_t size = p->GetSize();
-    auto data = new uint8_t[size];
-    p->CopyData(data, size);
+    std::vector<uint8_t> buffer(size);
+    p->CopyData(buffer.data(), size);
+    const uint8_t* data = buffer.data();
     uint8_t errorType = *(data + 2);
     /*
      * Get the node from Ip address and get the dsr extension object
