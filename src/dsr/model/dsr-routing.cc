@@ -547,7 +547,8 @@ DsrRouting::DoDispose()
 {
     NS_LOG_FUNCTION_NOARGS();
     m_node = nullptr;
-    for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); i++)
+    const uint32_t nInterfaces = m_ipv4 ? m_ipv4->GetNInterfaces() : 0;
+    for (uint32_t i = 0; i < nInterfaces; i++)
     {
         // Disable layer 2 link state monitoring (if possible)
         Ptr<NetDevice> dev = m_ipv4->GetNetDevice(i);
